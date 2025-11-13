@@ -213,9 +213,9 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
           </DndContext>
         ) : (
           <div className="grid gap-2">
-            {items.map((item) => (
-              <ItemPreview key={item.id} item={item} />
-            ))}
+              {items.map((item, index) => (
+                <ItemPreview key={item.id ?? `preview-${index}`} item={item} />
+              ))}
           </div>
         )}
 

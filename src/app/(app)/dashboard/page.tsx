@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { KpiCards, type IconName } from './_components/kpi-cards';
 
 type BasicJob = {
   id: string;
@@ -48,31 +48,27 @@ export default async function DashboardPage() {
   ).length;
   const followUpsDue = activeJobs.filter((job) => ageInDays(job.created_at, now) >= FOLLOW_UP_THRESHOLD_DAYS).length;
 
-  const stats = [
+  const stats: Array<{ label: string; value: number; helper: string; icon: IconName }> = [
     {
       label: 'Jobs this month',
       value: jobsThisMonth,
       helper:
         jobsThisMonth >= MONTHLY_TARGET
           ? 'Monthly goal met'
-          : `${MONTHLY_TARGET - jobsThisMonth} jobs to monthly goal`,
-      progress: Math.min(Math.round((jobsThisMonth / MONTHLY_TARGET) * 100), 100),
+          : `${MONTHLY_TARGET - jobsThisMonth} jobs to go`,
+      icon: 'jobs',
     },
     {
-      label: 'Completed',
+      label: 'Reports generated',
       value: completedCount,
-      helper: totalJobs ? `${completionRate}% completion rate` : 'Start by creating your first job',
-      progress: completionRate,
+      helper: totalJobs ? `${completionRate}% completion rate` : 'Create your first job to begin',
+      icon: 'reports',
     },
     {
-      label: 'Pending sign-off',
+      label: 'Clients awaiting sign-off',
       value: pendingSignoffs,
-      helper: pendingSignoffs ? `${pendingSignoffs} client signatures outstanding` : 'All signatures captured',
-    },
-    {
-      label: 'Follow-ups due',
-      value: followUpsDue,
-      helper: followUpsDue ? `${followUpsDue} visits to schedule` : 'No follow-ups pending',
+      helper: pendingSignoffs ? `${pendingSignoffs} signatures outstanding` : 'All signatures captured',
+      icon: 'clients',
     },
   ];
 
@@ -81,46 +77,28 @@ export default async function DashboardPage() {
     .slice(0, 6);
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-10">
-      <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-muted">Welcome back, {user.email}</h1>
-          <p className="text-sm text-muted-foreground/70">
-            Track field activity, client signatures, and compliance reports in one place.
-          </p>
+    <div className="mx-auto w-full max-w-6xl space-y-8 px-4 pb-16 pt-6 font-sans text-gray-900 md:pt-10">
+      <section className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-gray-500">Overview</p>
+            <h1 className="mt-2 text-2xl font-semibold text-[var(--brand)]">Welcome back, {user.email}</h1>
+            <p className="text-sm text-gray-500">
+              Track field activity, client signatures, and compliance reports in one place.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="secondary" asChild className="rounded-full border border-[var(--muted)] px-5 py-2">
+              <Link href="/clients">View clients</Link>
+            </Button>
+            <Button asChild className="rounded-full bg-[var(--accent)] px-5 py-2 text-white hover:bg-[var(--brand)]">
+              <Link href="/jobs">New job</Link>
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" asChild>
-            <Link href="/clients">View clients</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/jobs">New job</Link>
-          </Button>
+        <div className="mt-6">
+          <KpiCards stats={stats} />
         </div>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border border-white/10">
-            <CardHeader>
-              <CardDescription className="text-xs uppercase tracking-wide text-muted-foreground/60">
-                {stat.label}
-              </CardDescription>
-              <CardTitle className="text-3xl font-semibold text-muted">{stat.value}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground/70">{stat.helper}</p>
-              {typeof stat.progress === 'number' ? (
-                <div className="space-y-1.5">
-                  <Progress value={stat.progress} aria-hidden />
-                  <span className="inline-block text-xs text-muted-foreground/60">
-                    {stat.progress}% of target
-                  </span>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        ))}
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[2fr,1fr]">
