@@ -36,20 +36,19 @@ interface ChecklistItemCardProps {
   nextItemId: string | null;
 }
 
-type ChecklistStatus = Database['public']['Tables']['job_checklist']['Row']['status'];
-type StatusValue = NonNullable<ChecklistStatus>;
-
-const statuses: { value: StatusValue; label: string }[] = [
+type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
+const resultOptions = [
   { value: 'pass', label: 'Pass' },
   { value: 'fail', label: 'Fail' },
   { value: 'pending', label: 'Pending' },
-];
+] as const;
+type ResultValue = (typeof resultOptions)[number]['value'];
 
 export function ChecklistItemCard({ jobId, item, photos, nextItemId }: ChecklistItemCardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const { setStatus: setProgressStatus } = useJobProgress();
-  const [status, setStatusState] = useState<StatusValue>((item.status ?? 'pending') as StatusValue);
+  const [status, setStatusState] = useState<ResultValue>((item.result ?? 'pending') as ResultValue);
   const [note, setNote] = useState(item.note ?? '');
   const [noteFocused, setNoteFocused] = useState(false);
   const [optimisticPhotos, setOptimisticPhotos] = useState<GalleryPhoto[]>([]);
@@ -62,8 +61,8 @@ export function ChecklistItemCard({ jobId, item, photos, nextItemId }: Checklist
   const label = item.label ?? 'Checklist item';
 
   useEffect(() => {
-    setStatusState((item.status ?? 'pending') as StatusValue);
-  }, [item.status]);
+    setStatusState((item.result ?? 'pending') as ResultValue);
+  }, [item.result]);
 
   useEffect(() => {
     setNote(item.note ?? '');
@@ -97,7 +96,7 @@ export function ChecklistItemCard({ jobId, item, photos, nextItemId }: Checklist
     });
   }, [nextItemId]);
 
-  const handleStatusSelection = (nextStatus: StatusValue) => {
+  const handleStatusSelection = (nextStatus: ResultValue) => {
     if (nextStatus === status) {
       focusNextCard();
       return;
@@ -112,7 +111,7 @@ export function ChecklistItemCard({ jobId, item, photos, nextItemId }: Checklist
     startTransition(() => {
       void (async () => {
         try {
-          await updateChecklistItem({ jobId, itemId: item.id, status: nextStatus });
+          await updateChecklistItem({ jobId, itemId: item.id, result: nextStatus });
           schedulePulseReset();
         } catch (error) {
           setStatusState(previousStatus);
@@ -261,7 +260,7 @@ export function ChecklistItemCard({ jobId, item, photos, nextItemId }: Checklist
           {item.note ? <p className="text-sm text-muted-foreground/70">{item.note}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          {statuses.map((option) => {
+          {resultOptions.map((option) => {
             const isActive = status === option.value;
             return (
               <Button

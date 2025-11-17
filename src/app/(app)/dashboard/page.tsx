@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { listJobs } from '@/server/jobs';
 import { listVisibleTemplates } from '@/server/templates';
 import type { TemplateModel } from '@/types/template';
@@ -26,7 +26,7 @@ const PENDING_THRESHOLD_DAYS = 1;
 const FOLLOW_UP_THRESHOLD_DAYS = 7;
 
 export default async function DashboardPage() {
-  const supabase = await supabaseServer();
+  const supabase = await supabaseServerReadOnly();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -43,9 +43,7 @@ export default async function DashboardPage() {
   const completedCount = completedJobs.length;
   const totalJobs = allJobs.length;
   const completionRate = totalJobs === 0 ? 0 : Math.round((completedCount / totalJobs) * 100);
-  const pendingSignoffs = activeJobs.filter(
-    (job) => ageInDays(job.created_at, now) >= PENDING_THRESHOLD_DAYS,
-  ).length;
+  const awaitingSignatures = allJobs.filter((job) => job.status === 'awaiting_signatures').length;
   const followUpsDue = activeJobs.filter((job) => ageInDays(job.created_at, now) >= FOLLOW_UP_THRESHOLD_DAYS).length;
 
   const stats: Array<{ label: string; value: number; helper: string; icon: IconName }> = [
@@ -66,8 +64,8 @@ export default async function DashboardPage() {
     },
     {
       label: 'Clients awaiting sign-off',
-      value: pendingSignoffs,
-      helper: pendingSignoffs ? `${pendingSignoffs} signatures outstanding` : 'All signatures captured',
+      value: awaitingSignatures,
+      helper: awaitingSignatures ? `${awaitingSignatures} signatures outstanding` : 'All signatures captured',
       icon: 'clients',
     },
   ];
@@ -92,7 +90,7 @@ export default async function DashboardPage() {
               <Link href="/clients">View clients</Link>
             </Button>
             <Button asChild className="rounded-full bg-[var(--accent)] px-5 py-2 text-white hover:bg-[var(--brand)]">
-              <Link href="/jobs">New job</Link>
+              <Link href="/jobs/new/client">New job</Link>
             </Button>
           </div>
         </div>
@@ -195,7 +193,7 @@ export default async function DashboardPage() {
           <CardContent className="space-y-4">
             <MilestoneItem
               title="Sign-off reminders"
-              value={pendingSignoffs}
+              value={awaitingSignatures}
               description="Send a link to clients awaiting signature."
               href="/jobs"
             />
@@ -238,6 +236,12 @@ function formatDate(dateString: string) {
 function getStatusMeta(job: BasicJob, reference: Date) {
   if (job.status === 'completed') {
     return { label: 'PASS', variant: 'brand' as const, className: '' };
+  }
+  if (job.status === 'awaiting_signatures') {
+    return { label: 'SIGN', variant: 'outline' as const, className: 'border-amber-400 text-amber-500' };
+  }
+  if (job.status === 'awaiting_report') {
+    return { label: 'AI', variant: 'outline' as const, className: 'border-sky-400 text-sky-500' };
   }
   if (ageInDays(job.created_at, reference) >= FOLLOW_UP_THRESHOLD_DAYS) {
     return {

@@ -4,10 +4,12 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
-const supabaseServerMock = vi.hoisted(() => vi.fn());
+const supabaseServerActionMock = vi.hoisted(() => vi.fn());
+const supabaseServerReadOnlyMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/supabaseServer', () => ({
-  supabaseServer: supabaseServerMock,
+  supabaseServerAction: supabaseServerActionMock,
+  supabaseServerReadOnly: supabaseServerReadOnlyMock,
 }));
 
 const openaiMock = {
@@ -40,7 +42,7 @@ describe('server actions', () => {
   it('createJob throws when unauthorized', async () => {
     const supabase = baseSupabase();
     supabase.auth.getUser.mockResolvedValue({ data: { user: null }, error: null });
-    supabaseServerMock.mockResolvedValue(supabase);
+    supabaseServerActionMock.mockResolvedValue(supabase);
 
     await expect(
       createJob({ client_name: 'Test', address: '123', template_id: '00000000-0000-0000-0000-000000000000' }),
@@ -86,7 +88,7 @@ describe('server actions', () => {
           insert: jobInsert,
         };
       }
-      if (table === 'job_checklist') {
+      if (table === 'job_items') {
         return {
           insert: checklistInsert,
         };
@@ -94,7 +96,7 @@ describe('server actions', () => {
       throw new Error(`Unexpected table ${table}`);
     });
 
-    supabaseServerMock.mockResolvedValue(supabase);
+    supabaseServerActionMock.mockResolvedValue(supabase);
 
     await createJob({
       client_name: 'Client',
@@ -107,10 +109,12 @@ describe('server actions', () => {
     expect(payload).toEqual([
       {
         job_id: 'job-1',
+        template_item_id: null,
         label: 'Inspect pipe',
-        status: 'pending',
+        result: 'pending',
         note: null,
-        user_id: user.id,
+        photos: null,
+        position: null,
       },
     ]);
   });
@@ -119,7 +123,7 @@ describe('server actions', () => {
     const supabase = baseSupabase();
     const updateMock = vi.fn();
     supabase.from.mockReturnValue({ update: updateMock });
-    supabaseServerMock.mockResolvedValue(supabase);
+    supabaseServerActionMock.mockResolvedValue(supabase);
 
     await expect(updateChecklistItem({ jobId: '00000000-0000-0000-0000-000000000000', itemId: 'item-1' })).resolves.toBeUndefined();
     expect(updateMock).not.toHaveBeenCalled();
@@ -139,7 +143,7 @@ describe('server actions', () => {
       throw new Error(`Unexpected table ${table}`);
     });
     supabase.storage.from.mockReturnValue({ createSignedUrl: vi.fn() });
-    supabaseServerMock.mockResolvedValue(supabase);
+    supabaseServerActionMock.mockResolvedValue(supabase);
 
     await expect(createReportSignedUrl('b4ddf2a3-0d7d-4c02-a218-1bcfdc7c9e07')).rejects.toThrow('Report not found');
   });

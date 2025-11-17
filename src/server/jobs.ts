@@ -5,12 +5,11 @@ import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
-import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseServerAction, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { photoPath, reportPath, signaturePath } from '@/lib/storage';
-import { getOpenAIClient } from '@/lib/openai';
 import type { Database } from '@/lib/database.types';
-import type { TemplateItem } from '@/types/template';
+import type { TemplateItem, TemplateModel } from '@/types/template';
 import type {
   JobChecklistItem,
   JobPhoto,
@@ -18,20 +17,80 @@ import type {
   JobReport,
   JobDetailPayload,
 } from '@/types/job-detail';
+import type { JobWizardState, ClientSummary } from '@/types/job-wizard';
+import { generateReport as aiGenerateReport, generatePDF, type PdfAsset } from '@/lib/reporting';
 
 const JobId = z.string().uuid();
 const PhotoId = z.string().uuid();
+const ClientId = z.string().uuid();
+const TemplateId = z.string().uuid();
+const JobDetailsSchema = z.object({
+  title: z.string().min(3, 'Title is required'),
+  scheduled_for: z.string().min(3, 'Select a scheduled date'),
+  technician_name: z.string().min(2, 'Technician required'),
+  notes: z.string().optional(),
+});
+const ReportEmailSchema = z.object({
+  email: z.string().email(),
+  name: z.string().optional(),
+});
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
-type JobChecklistRow = Database['public']['Tables']['job_checklist']['Row'];
-type JobChecklistStatus = JobChecklistRow['status'];
+type JobChecklistRow = Database['public']['Tables']['job_items']['Row'];
+type JobChecklistResult = JobChecklistRow['result'];
 type PhotoRow = Database['public']['Tables']['photos']['Row'];
 type SignatureRow = Database['public']['Tables']['signatures']['Row'];
 type ReportRow = Database['public']['Tables']['reports']['Row'];
 type TemplateRow = Database['public']['Tables']['templates']['Row'];
+type ClientRow = Database['public']['Tables']['clients']['Row'];
+type ReportDeliveryRow = Database['public']['Tables']['report_deliveries']['Row'];
+const CLIENT_TABLES = ['clients', 'contacts'] as const;
+type ClientLike = {
+  id: string;
+  name: string;
+  organization: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  user_id: string | null;
+};
+
+const jobColumns =
+  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, technician_name';
+const parseTemplateItems = (items: TemplateRow['items']): TemplateItem[] =>
+  Array.isArray(items) ? (items as unknown as TemplateItem[]) : [];
+const templateFromRow = (row: TemplateRow): TemplateModel => ({
+  id: row.id,
+  name: row.name,
+  trade_type: row.trade_type,
+  is_public: !!row.is_public,
+  created_by: row.created_by,
+  created_at: row.created_at,
+  items: parseTemplateItems(row.items),
+});
+
+async function requireUser(options: { write?: boolean } = {}) {
+  const sb = options.write ? await supabaseServerAction() : await supabaseServerReadOnly();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  return { sb, user };
+}
+
+async function fetchOwnedJob(jobId: string, options?: { write?: boolean }) {
+  const { sb, user } = await requireUser(options);
+  const typedJobId = jobId as JobRow['id'];
+  const { data, error } = await sb.from('jobs').select(jobColumns).eq('id', typedJobId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Job not found');
+  if (data.user_id && data.user_id !== user.id) throw new Error('Unauthorized');
+  return { sb, user, job: data };
+}
 
 export async function listJobs() {
-  const sb = await supabaseServer();
+  const sb = await supabaseServerReadOnly();
   const {
     data: { user },
     error: userErr,
@@ -39,8 +98,8 @@ export async function listJobs() {
   if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
+    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id',
     'id, client_name, address, status, created_at, user_id',
-    'id, client_name, address, status, created_at',
   ];
 
   let rows: Record<string, unknown>[] = [];
@@ -89,7 +148,7 @@ export async function createJob(form: FormData | Record<string, unknown>) {
         })
       : schema.parse(form);
 
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
   const {
     data: { user },
     error: userErr,
@@ -122,20 +181,20 @@ export async function createJob(form: FormData | Record<string, unknown>) {
     .single();
   if (jobErr || !job) throw new Error(jobErr?.message ?? 'Failed to create job');
 
-  const templateItems = Array.isArray(templateRow.items)
-    ? (templateRow.items as unknown as TemplateItem[])
-    : [];
+  const templateItems = parseTemplateItems(templateRow.items);
   if (templateItems.length) {
     const checklistRows = templateItems.map(
-      (item): Database['public']['Tables']['job_checklist']['Insert'] => ({
+      (item): Database['public']['Tables']['job_items']['Insert'] => ({
         job_id: job.id,
+        template_item_id: item.id ?? null,
         label: String(item.label ?? 'Checklist item'),
-        status: 'pending',
+        result: 'pending',
         note: null,
-        user_id: user.id,
+        position: null,
+        photos: null,
       }),
     );
-    const { error: clErr } = await sb.from('job_checklist').insert(checklistRows);
+    const { error: clErr } = await sb.from('job_items').insert(checklistRows);
     if (clErr) throw new Error(clErr.message);
   }
 
@@ -143,10 +202,36 @@ export async function createJob(form: FormData | Record<string, unknown>) {
   return { jobId: job.id };
 }
 
+export async function createJobDraftFromClient(clientId: string) {
+  ClientId.parse(clientId);
+  const { sb, user } = await requireUser({ write: true });
+
+  const clientRecord = await fetchClientForJob(sb, clientId);
+  if (!clientRecord) throw new Error('Client not found');
+  if (clientRecord.user_id && clientRecord.user_id !== user.id) throw new Error('Unauthorized');
+
+  const { data: job, error: jobErr } = await sb
+    .from('jobs')
+    .insert({
+      client_id: clientRecord.id,
+      client_name: clientRecord.name,
+      address: clientRecord.address,
+      status: 'draft',
+      user_id: user.id,
+      title: `${clientRecord.name} inspection`,
+    })
+    .select('id')
+    .single();
+  if (jobErr || !job) throw new Error(jobErr?.message ?? 'Could not start job');
+
+  revalidatePath('/jobs');
+  return { jobId: job.id };
+}
+
 
 export async function getJobWithChecklist(jobId: string) {
   JobId.parse(jobId);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerReadOnly();
 
   const {
     data: { user },
@@ -155,8 +240,8 @@ export async function getJobWithChecklist(jobId: string) {
   if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
+    'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, technician_name',
     'id, client_name, address, status, created_at, template_id, user_id, notes',
-    'id, client_name, address, status, created_at, template_id, user_id',
   ];
 
   let job: Record<string, unknown> | null = null;
@@ -184,10 +269,10 @@ export async function getJobWithChecklist(jobId: string) {
 
   const [{ data: items, error: itemsErr }, { data: photos, error: photosErr }] = await Promise.all([
     sb
-      .from('job_checklist')
-      .select('id, job_id, label, status, note, created_at, user_id')
+      .from('job_items')
+      .select('id, job_id, template_item_id, label, result, note, photos, position')
       .eq('job_id', typedJobId)
-      .order('created_at', { ascending: true }),
+      .order('position', { ascending: true }),
     sb
       .from('photos')
       .select('id, job_id, checklist_id, storage_path, caption, created_at')
@@ -214,11 +299,12 @@ export async function getJobWithChecklist(jobId: string) {
   const checklistItems: JobChecklistItem[] = (items ?? []).map((item) => ({
     id: item.id,
     job_id: (item.job_id ?? jobId) as string,
+    template_item_id: item.template_item_id ?? null,
     label: item.label ?? 'Checklist item',
-    status: (item.status as JobChecklistStatus) ?? 'pending',
+    result: (item.result as JobChecklistResult) ?? 'pending',
     note: item.note ?? null,
-    created_at: item.created_at ?? null,
-    user_id: item.user_id,
+    photos: (Array.isArray(item.photos) ? item.photos : null) as string[] | null,
+    position: typeof item.position === 'number' ? item.position : null,
   }));
 
   const photoItems: JobPhoto[] = (photos ?? []).map((photo) => ({
@@ -250,10 +336,14 @@ export async function getJobWithChecklist(jobId: string) {
   const payload: JobDetailPayload = {
     job: {
       id: jobData.id,
+      client_id: jobData.client_id ?? null,
       client_name: jobData.client_name ?? null,
       address: jobData.address ?? null,
+      title: jobData.title ?? null,
       status: jobData.status ?? null,
       created_at: jobData.created_at ?? null,
+      scheduled_for: jobData.scheduled_for ?? null,
+      technician_name: jobData.technician_name ?? null,
       template_id: jobData.template_id ?? null,
       user_id: jobOwner ?? null,
       notes,
@@ -267,23 +357,133 @@ export async function getJobWithChecklist(jobId: string) {
   return payload;
 }
 
+export async function setJobTemplate(jobId: string, templateId: string) {
+  JobId.parse(jobId);
+  TemplateId.parse(templateId);
+  const { sb, user, job } = await fetchOwnedJob(jobId, { write: true });
+
+  const typedTemplateId = templateId as TemplateRow['id'];
+  const { data: template, error: tmplErr } = await sb
+    .from('templates')
+    .select('id, name, trade_type, is_public, items, created_by')
+    .eq('id', typedTemplateId)
+    .maybeSingle();
+  if (tmplErr) throw new Error(tmplErr.message);
+  if (!template) throw new Error('Template not found');
+
+  const isOwner = template.created_by === user.id;
+  if (!template.is_public && !isOwner) throw new Error('You do not have access to that template');
+
+  const templateItems = parseTemplateItems(template.items);
+  const typedJobId = jobId as NonNullable<JobChecklistRow['job_id']>;
+
+  await sb.from('job_items').delete().eq('job_id', typedJobId);
+
+  if (templateItems.length) {
+    const checklistRows = templateItems.map(
+      (item): Database['public']['Tables']['job_items']['Insert'] => ({
+        job_id: typedJobId,
+        template_item_id: item.id ?? null,
+        label: item.label ?? 'Checklist item',
+        result: 'pending',
+        note: null,
+        position: null,
+        photos: null,
+      }),
+    );
+    const { error: insertErr } = await sb.from('job_items').insert(checklistRows);
+    if (insertErr) throw new Error(insertErr.message);
+  }
+
+  const { error: updateErr } = await sb
+    .from('jobs')
+    .update({ template_id: template.id, status: job.status === 'draft' ? 'draft' : job.status })
+    .eq('id', jobId as JobRow['id']);
+  if (updateErr) throw new Error(updateErr.message);
+
+  revalidatePath(`/jobs/new/${jobId}/template`);
+  return { jobId, items: templateItems.length };
+}
+
+export async function saveJobDetails(jobId: string, form: FormData | Record<string, unknown>) {
+  JobId.parse(jobId);
+  const payload =
+    form instanceof FormData
+      ? JobDetailsSchema.parse({
+          title: form.get('title'),
+          scheduled_for: form.get('scheduled_for'),
+          technician_name: form.get('technician_name'),
+          notes: form.get('notes') ?? undefined,
+        })
+      : JobDetailsSchema.parse(form);
+
+  const { sb } = await fetchOwnedJob(jobId, { write: true });
+  const typedJobId = jobId as JobRow['id'];
+  const { error } = await sb
+    .from('jobs')
+    .update({
+      title: payload.title,
+      scheduled_for: payload.scheduled_for,
+      technician_name: payload.technician_name,
+      notes: payload.notes ?? null,
+      status: 'active',
+    })
+    .eq('id', typedJobId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/jobs/new/${jobId}/details`);
+}
+
+export async function getJobWizardState(jobId: string): Promise<JobWizardState> {
+  const detail = await getJobWithChecklist(jobId);
+  const sb = await supabaseServerReadOnly();
+
+  const [clientRecord, templateRow] = await Promise.all([
+    detail.job.client_id ? fetchClientForJob(sb, detail.job.client_id) : Promise.resolve(null),
+    detail.job.template_id
+      ? sb
+          .from('templates')
+          .select('id, name, trade_type, is_public, created_by, created_at, updated_at, items')
+          .eq('id', detail.job.template_id as TemplateRow['id'])
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (templateRow?.error) throw new Error(templateRow.error.message);
+
+  const client: ClientSummary | null = clientRecord
+    ? {
+        id: clientRecord.id,
+        name: clientRecord.name,
+        organization: clientRecord.organization,
+        email: clientRecord.email,
+        phone: clientRecord.phone,
+        address: clientRecord.address,
+      }
+    : null;
+
+  const template = templateRow?.data ? templateFromRow(templateRow.data as TemplateRow) : null;
+
+  return { ...detail, client, template };
+}
+
 export async function updateChecklistItem(params: {
   jobId: string;
   itemId: string;
-  status?: JobChecklistStatus;
+  result?: JobChecklistResult;
   note?: string;
 }) {
   JobId.parse(params.jobId);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
 
   const patch: Record<string, unknown> = {};
-  if (params.status) patch.status = params.status;
+  if (params.result) patch.result = params.result;
   if (typeof params.note === 'string') patch.note = params.note.length ? params.note : null;
 
   if (!Object.keys(patch).length) return;
 
   const typedItemId = params.itemId as JobChecklistRow['id'];
-  const { error } = await sb.from('job_checklist').update(patch).eq('id', typedItemId);
+  const { error } = await sb.from('job_items').update(patch).eq('id', typedItemId);
   if (error) throw new Error(error.message);
 
   revalidatePath(`/jobs/${params.jobId}`);
@@ -291,7 +491,7 @@ export async function updateChecklistItem(params: {
 
 export async function uploadPhoto(params: { jobId: string; itemId: string; file: File; caption?: string }) {
   JobId.parse(params.jobId);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
   const typedJobId = params.jobId as PhotoRow['job_id'];
 
   const bytes = await params.file.arrayBuffer();
@@ -319,7 +519,7 @@ export async function uploadPhoto(params: { jobId: string; itemId: string; file:
 export async function deletePhoto(params: { jobId: string; photoId: string; storagePath: string }) {
   JobId.parse(params.jobId);
   PhotoId.parse(params.photoId);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
   const typedJobId = params.jobId as JobRow['id'];
   const typedPhotoId = params.photoId as PhotoRow['id'];
 
@@ -345,7 +545,7 @@ export async function deletePhoto(params: { jobId: string; photoId: string; stor
 
 export async function saveSignatures(params: { jobId: string; plumber?: string | null; client?: string | null }) {
   JobId.parse(params.jobId);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
 
   const toBuffer = (dataUrl: string) => Buffer.from(dataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
 
@@ -396,157 +596,81 @@ export async function saveSignatures(params: { jobId: string; plumber?: string |
   const { error: upsertErr } = await sb.from('signatures').upsert(payload, { onConflict: 'job_id' });
   if (upsertErr) throw new Error(upsertErr.message);
 
+  const plumberSigned = !!payload.plumber_sig_path;
+  const clientSigned = !!payload.client_sig_path;
+  const nextStatus = plumberSigned && clientSigned ? 'awaiting_report' : 'awaiting_signatures';
+
+  await sb
+    .from('jobs')
+    .update({ status: nextStatus })
+    .eq('id', params.jobId as JobRow['id']);
+
   revalidatePath(`/jobs/${params.jobId}`);
+  revalidatePath(`/jobs/new/${params.jobId}/summary`);
 }
 
-export async function generateReport(jobId: string) {
+export async function finalizeJobReport(jobId: string) {
   JobId.parse(jobId);
-  const sb = await supabaseServer();
+  const { sb } = await requireUser({ write: true });
   const typedJobId = jobId as JobRow['id'];
-
   const detail = await getJobWithChecklist(jobId);
 
-  const checklistSummary = detail.items.map((item) => ({
-    label: item.label,
-    status: item.status ?? 'pending',
-    note: item.note ?? '',
-  }));
+  const jobPayload = {
+    id: detail.job.id,
+    title: detail.job.title,
+    client_name: detail.job.client_name,
+    address: detail.job.address,
+    scheduled_for: detail.job.scheduled_for,
+    technician_name: detail.job.technician_name,
+  };
 
-  const openai = getOpenAIClient();
-  let summary = 'Inspection completed.';
-  try {
-    const completion = await openai.responses.create({
-      model: 'gpt-4o-mini',
-      input: [
-        {
-          role: 'system',
-          content:
-            'You are an assistant producing concise, professional summaries for plumbing inspection reports.',
-        },
-        {
-          role: 'user',
-          content: `Summarize these plumbing inspection results in 2–4 professional sentences: ${JSON.stringify(
-            checklistSummary,
-          )}`,
-        },
-      ],
-    });
-    summary = completion.output_text?.trim() || summary;
-  } catch (error) {
-    console.error('OpenAI summary failed', error);
-  }
-
-  const pdfLib = await import('pdf-lib');
-  const pdfDoc = await pdfLib.PDFDocument.create();
-  const font = await pdfDoc.embedFont(pdfLib.StandardFonts.Helvetica);
-  const page = pdfDoc.addPage([595, 842]);
-  const { height } = page.getSize();
-
-  let cursorY = height - 60;
-  page.drawText('PlumbLog Report', { x: 40, y: cursorY, size: 18, font });
-  cursorY -= 30;
-  const jobClient = detail.job.client_name ?? 'Client';
-  const jobAddress = detail.job.address ?? 'No address provided';
-  const createdLabel = detail.job.created_at ? new Date(detail.job.created_at).toLocaleString() : 'Unknown';
-
-  page.drawText(`Client: ${jobClient}`, { x: 40, y: cursorY, size: 12, font });
-  cursorY -= 18;
-  page.drawText(`Address: ${jobAddress}`, { x: 40, y: cursorY, size: 12, font });
-  cursorY -= 18;
-  page.drawText(`Created: ${createdLabel}`, { x: 40, y: cursorY, size: 12, font });
-  cursorY -= 24;
-  page.drawText('Summary', { x: 40, y: cursorY, size: 14, font });
-  cursorY -= 18;
-  summary.split(/\n|(?<=\.)\s+/).filter(Boolean).forEach((line) => {
-    page.drawText(line, { x: 40, y: cursorY, size: 12, font });
-    cursorY -= 16;
+  const summary = await aiGenerateReport({
+    job: jobPayload,
+    checklist: detail.items,
   });
 
-  cursorY -= 24;
-  page.drawText('Checklist', { x: 40, y: cursorY, size: 14, font });
-  cursorY -= 18;
-  detail.items.forEach((item) => {
-    if (cursorY < 80) {
-      cursorY = height - 60;
-    }
-    const statusLabel = (item.status ?? 'pending').toUpperCase();
-    page.drawText(`${item.label} — ${statusLabel}`, { x: 40, y: cursorY, size: 12, font });
-    cursorY -= 16;
-    if (item.note) {
-      page.drawText(`Note: ${item.note}`, { x: 60, y: cursorY, size: 11, font });
-      cursorY -= 16;
-    }
-  });
+  const itemMap = new Map(detail.items.map((item) => [item.id, item.label]));
 
-  const embedImage = async (bucket: 'photos' | 'signatures', path: string) => {
+  const loadAsset = async (bucket: 'photos' | 'signatures', path: string): Promise<PdfAsset | null> => {
     const { data } = await sb.storage.from(bucket).createSignedUrl(path, 60 * 60);
     if (!data?.signedUrl) return null;
     const response = await fetch(data.signedUrl);
     if (!response.ok) return null;
-    const buffer = await response.arrayBuffer();
-    try {
-      return await pdfDoc.embedPng(buffer);
-    } catch {
-      return await pdfDoc.embedJpg(buffer);
-    }
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    const header = response.headers.get('content-type') ?? 'image/jpeg';
+    const mime: PdfAsset['mimeType'] = header.includes('png') ? 'image/png' : 'image/jpeg';
+    return { kind: bucket === 'photos' ? 'photo' : 'signature', label: 'Asset', data: buffer, mimeType: mime };
   };
 
-  const photoRows = detail.photos;
-  if (photoRows.length) {
-    const photoPage = pdfDoc.addPage([595, 842]);
-    let x = 40;
-    let y = 780;
-    photoPage.drawText('Photos', { x, y, size: 16, font });
-    y -= 40;
-
-    for (const photo of photoRows) {
-      const image = await embedImage('photos', photo.storage_path);
-      if (!image) continue;
-      const dims = image.scaleToFit(160, 120);
-      photoPage.drawImage(image, { x, y: y - dims.height, width: dims.width, height: dims.height });
-      x += 180;
-      if (x > 440) {
-        x = 40;
-        y -= 140;
-        if (y < 120) {
-          y = 780;
-          photoPage.drawText('Photos (cont.)', { x, y, size: 16, font });
-          y -= 40;
-        }
-      }
-    }
+  const assets: PdfAsset[] = [];
+  for (const photo of detail.photos) {
+    const asset = await loadAsset('photos', photo.storage_path);
+    if (!asset) continue;
+    const label =
+      photo.caption ?? (photo.checklist_id ? itemMap.get(photo.checklist_id) ?? 'Checklist Photo' : 'Photo');
+    assets.push({ ...asset, label });
   }
 
-  const signatureRows = [];
   if (detail.signatures?.plumber_sig_path) {
-    signatureRows.push({ label: 'Plumber', path: detail.signatures.plumber_sig_path });
+    const asset = await loadAsset('signatures', detail.signatures.plumber_sig_path);
+    if (asset) {
+      assets.push({ ...asset, kind: 'signature', label: 'Engineer signature' });
+    }
   }
   if (detail.signatures?.client_sig_path) {
-    signatureRows.push({ label: 'Client', path: detail.signatures.client_sig_path });
-  }
-
-  if (signatureRows.length) {
-    const sigPage = pdfDoc.addPage([595, 400]);
-    let y = 360;
-    sigPage.drawText('Signatures', { x: 40, y, size: 16, font });
-    y -= 40;
-
-    for (const signature of signatureRows) {
-      const image = await embedImage('signatures', signature.path);
-      if (!image) continue;
-      const dims = image.scaleToFit(200, 120);
-      sigPage.drawText(signature.label, { x: 40, y, size: 12, font });
-      sigPage.drawImage(image, {
-        x: 40,
-        y: y - dims.height - 10,
-        width: dims.width,
-        height: dims.height,
-      });
-      y -= dims.height + 60;
+    const asset = await loadAsset('signatures', detail.signatures.client_sig_path);
+    if (asset) {
+      assets.push({ ...asset, kind: 'signature', label: 'Client signature' });
     }
   }
 
-  const pdfBytes = await pdfDoc.save();
+  const pdfBytes = await generatePDF({
+    job: jobPayload,
+    summary,
+    checklist: detail.items,
+    assets,
+  });
+
   const storagePath = reportPath(jobId);
   const { error: uploadErr } = await sb.storage.from('reports').upload(storagePath, pdfBytes, {
     contentType: 'application/pdf',
@@ -556,7 +680,14 @@ export async function generateReport(jobId: string) {
 
   const { error: upsertErr } = await sb
     .from('reports')
-    .upsert({ job_id: jobId as ReportRow['job_id'], storage_path: storagePath, generated_at: new Date().toISOString() }, { onConflict: 'job_id' });
+    .upsert(
+      {
+        job_id: jobId as ReportRow['job_id'],
+        storage_path: storagePath,
+        generated_at: new Date().toISOString(),
+      },
+      { onConflict: 'job_id' },
+    );
   if (upsertErr) throw new Error(upsertErr.message);
 
   await sb.from('jobs').update({ status: 'completed', notes: summary }).eq('id', typedJobId);
@@ -564,16 +695,17 @@ export async function generateReport(jobId: string) {
   revalidatePath('/dashboard');
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/reports/${jobId}`);
+  revalidatePath(`/jobs/new/${jobId}/ai`);
 
   const { data: signed, error: signedErr } = await sb.storage.from('reports').createSignedUrl(storagePath, 60 * 60 * 24);
   if (signedErr || !signed?.signedUrl) throw new Error(signedErr?.message ?? 'Unable to create report link');
 
-  return { storagePath, signedUrl: signed.signedUrl };
+  return { storagePath, signedUrl: signed.signedUrl, summary };
 }
 
 export async function createReportSignedUrl(jobId: string) {
   JobId.parse(jobId);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
   const typedJobId = jobId as ReportRow['job_id'];
 
   const { data: report, error } = await sb
@@ -588,4 +720,74 @@ export async function createReportSignedUrl(jobId: string) {
   if (signedErr || !data?.signedUrl) throw new Error(signedErr?.message ?? 'Unable to create link');
 
   return data.signedUrl;
+}
+
+export async function sendReportEmail(jobId: string, payload: FormData | Record<string, unknown>) {
+  JobId.parse(jobId);
+  const body =
+    payload instanceof FormData
+      ? ReportEmailSchema.parse({
+          email: payload.get('email'),
+          name: payload.get('name') ?? undefined,
+        })
+      : ReportEmailSchema.parse(payload);
+
+  const { sb, user } = await requireUser({ write: true });
+
+  const { data: report, error: reportErr } = await sb
+    .from('reports')
+    .select('storage_path')
+    .eq('job_id', jobId as ReportRow['job_id'])
+    .maybeSingle();
+  if (reportErr) throw new Error(reportErr.message);
+  if (!report?.storage_path) throw new Error('Generate a report before sending');
+
+  const { error } = await sb.from('report_deliveries').insert({
+    job_id: jobId as ReportDeliveryRow['job_id'],
+    recipient_email: body.email,
+    recipient_name: body.name ?? null,
+    status: 'queued',
+    storage_path: report.storage_path,
+    user_id: user.id,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/reports/${jobId}`);
+  return { ok: true };
+}
+async function fetchClientForJob(
+  sb: Awaited<ReturnType<typeof supabaseServerReadOnly>> | Awaited<ReturnType<typeof supabaseServerAction>>,
+  clientId: string,
+) {
+  let lastErr: PostgrestError | null = null;
+  for (const table of CLIENT_TABLES) {
+    const columns =
+      table === 'clients'
+        ? 'id, name, organization, email, phone, address, user_id'
+        : 'id, name, email, phone, address, user_id';
+    const { data, error } = await (sb as any)
+      .from(table)
+      .select(columns)
+      .eq('id', clientId)
+      .maybeSingle();
+    if (error) {
+      if (error.code === '42P01') {
+        lastErr = error;
+        continue;
+      }
+      throw new Error(error.message);
+    }
+    if (!data) continue;
+    return {
+      id: data.id,
+      name: data.name,
+      organization: table === 'clients' ? data.organization ?? null : null,
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      address: data.address ?? null,
+      user_id: data.user_id ?? null,
+    } as ClientLike;
+  }
+  if (lastErr) throw new Error(lastErr.message);
+  return null;
 }

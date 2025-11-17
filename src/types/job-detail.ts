@@ -1,15 +1,16 @@
 import type { Database } from '@/lib/database.types';
 
-export type JobChecklistStatus = Database['public']['Tables']['job_checklist']['Row']['status'];
+export type JobChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
 
 export interface JobChecklistItem {
   id: string;
   job_id: string;
+  template_item_id: string | null;
   label: string;
-  status: JobChecklistStatus;
+  result: JobChecklistResult;
   note: string | null;
-  created_at: string | null;
-  user_id: string;
+  photos: string[] | null;
+  position: number | null;
 }
 
 export interface JobPhoto {
@@ -35,10 +36,14 @@ export interface JobReport {
 export interface JobDetailPayload {
   job: {
     id: string;
+    client_id: string | null;
     client_name: string | null;
     address: string | null;
+    title: string | null;
     status: string | null;
     created_at: string | null;
+    scheduled_for: string | null;
+    technician_name: string | null;
     template_id: string | null;
     user_id: string | null;
     notes: string | null;

@@ -8,7 +8,7 @@ export function JobProgressBar({ total }: { total: number }) {
   const { statuses } = useJobProgress();
 
   const completed = useMemo(() => {
-    return Object.values(statuses).filter((status) => status !== 'pending').length;
+    return Object.values(statuses).filter((status) => status && status !== 'pending').length;
   }, [statuses]);
 
   const percent = total === 0 ? 0 : Math.round((completed / total) * 100);

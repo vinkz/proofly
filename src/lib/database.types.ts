@@ -4,499 +4,556 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[]
+  | Json[];
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
-  }
+    PostgrestVersion: '15.1.0';
+  };
   public: {
     Tables: {
-      contacts: {
-        Row: {
-          address: string | null
-          created_at: string | null
-          email: string | null
-          id: string
-          name: string
-          phone: string | null
-          user_id: string | null
-        }
-        Insert: {
-          address?: string | null
-          created_at?: string | null
-          email?: string | null
-          id?: string
-          name: string
-          phone?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          address?: string | null
-          created_at?: string | null
-          email?: string | null
-          id?: string
-          name?: string
-          phone?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
       job_checklist: {
         Row: {
-          created_at: string | null
-          id: string
-          job_id: string | null
-          label: string | null
-          note: string | null
-          status: string | null
-          user_id: string
-        }
+          id: string;
+          job_id: string;
+          template_item_id: string | null;
+          label: string;
+          status: Database['public']['Enums']['job_item_status'];
+          note: string | null;
+          photo_path: string | null;
+          user_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
         Insert: {
-          created_at?: string | null
-          id?: string
-          job_id?: string | null
-          label?: string | null
-          note?: string | null
-          status?: string | null
-          user_id: string
-        }
+          id?: string;
+          job_id: string;
+          template_item_id?: string | null;
+          label?: string;
+          status?: Database['public']['Enums']['job_item_status'];
+          note?: string | null;
+          photo_path?: string | null;
+          user_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
         Update: {
-          created_at?: string | null
-          id?: string
-          job_id?: string | null
-          label?: string | null
-          note?: string | null
-          status?: string | null
-          user_id?: string
-        }
+          id?: string;
+          job_id?: string;
+          template_item_id?: string | null;
+          label?: string;
+          status?: Database['public']['Enums']['job_item_status'];
+          note?: string | null;
+          photo_path?: string | null;
+          user_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "job_checklist_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
+            foreignKeyName: 'job_items_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
           },
-        ]
-      }
-      jobs: {
+        ];
+      };
+      clients: {
         Row: {
-          address: string | null
-          client_name: string | null
-          contact_id: string | null
-          created_at: string | null
-          id: string
-          notes: string | null
-          status: string | null
-          template_id: string | null
-          user_id: string | null
-        }
+          id: string;
+          user_id: string | null;
+          name: string;
+          organization: string | null;
+          email: string | null;
+          phone: string | null;
+          address: string | null;
+          created_at: string;
+          updated_at: string;
+        };
         Insert: {
-          address?: string | null
-          client_name?: string | null
-          contact_id?: string | null
-          created_at?: string | null
-          id?: string
-          notes?: string | null
-          status?: string | null
-          template_id?: string | null
-          user_id?: string | null
-        }
+          id?: string;
+          user_id?: string | null;
+          name: string;
+          organization?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
         Update: {
-          address?: string | null
-          client_name?: string | null
-          contact_id?: string | null
-          created_at?: string | null
-          id?: string
-          notes?: string | null
-          status?: string | null
-          template_id?: string | null
-          user_id?: string | null
-        }
+          id?: string;
+          user_id?: string | null;
+          name?: string;
+          organization?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "jobs_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
+            foreignKeyName: 'clients_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
           },
-          {
-            foreignKeyName: "jobs_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "templates"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      photos: {
-        Row: {
-          caption: string | null
-          checklist_id: string | null
-          created_at: string | null
-          geo_lat: number | null
-          geo_lng: number | null
-          id: string
-          job_id: string | null
-          shot_at: string | null
-          storage_path: string
-        }
-        Insert: {
-          caption?: string | null
-          checklist_id?: string | null
-          created_at?: string | null
-          geo_lat?: number | null
-          geo_lng?: number | null
-          id?: string
-          job_id?: string | null
-          shot_at?: string | null
-          storage_path: string
-        }
-        Update: {
-          caption?: string | null
-          checklist_id?: string | null
-          created_at?: string | null
-          geo_lat?: number | null
-          geo_lng?: number | null
-          id?: string
-          job_id?: string | null
-          shot_at?: string | null
-          storage_path?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "photos_checklist_id_fkey"
-            columns: ["checklist_id"]
-            isOneToOne: false
-            referencedRelation: "job_checklist"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "photos_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      profiles: {
-        Row: {
-          company_name: string | null
-          created_at: string | null
-          id: string
-          logo_url: string | null
-          trade_type: string | null
-        }
-        Insert: {
-          company_name?: string | null
-          created_at?: string | null
-          id: string
-          logo_url?: string | null
-          trade_type?: string | null
-        }
-        Update: {
-          company_name?: string | null
-          created_at?: string | null
-          id?: string
-          logo_url?: string | null
-          trade_type?: string | null
-        }
-        Relationships: []
-      }
-      reminders: {
-        Row: {
-          contact_id: string | null
-          created_at: string | null
-          due_date: string
-          id: string
-          job_id: string | null
-          kind: string | null
-          sent_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          contact_id?: string | null
-          created_at?: string | null
-          due_date: string
-          id?: string
-          job_id?: string | null
-          kind?: string | null
-          sent_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          contact_id?: string | null
-          created_at?: string | null
-          due_date?: string
-          id?: string
-          job_id?: string | null
-          kind?: string | null
-          sent_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "reminders_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "contacts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "reminders_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      reports: {
-        Row: {
-          generated_at: string | null
-          job_id: string
-          storage_path: string
-        }
-        Insert: {
-          generated_at?: string | null
-          job_id: string
-          storage_path: string
-        }
-        Update: {
-          generated_at?: string | null
-          job_id?: string
-          storage_path?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "reports_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: true
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      signatures: {
-        Row: {
-          client_sig_path: string | null
-          job_id: string
-          plumber_sig_path: string | null
-          signed_at: string | null
-        }
-        Insert: {
-          client_sig_path?: string | null
-          job_id: string
-          plumber_sig_path?: string | null
-          signed_at?: string | null
-        }
-        Update: {
-          client_sig_path?: string | null
-          job_id?: string
-          plumber_sig_path?: string | null
-          signed_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "signatures_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: true
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+        ];
+      };
       templates: {
         Row: {
-          created_at: string | null
-          created_by: string | null
-          id: string
-          is_public: boolean | null
-          items: Json
-          name: string
-          trade_type: string
-        }
+          id: string;
+          created_by: string | null;
+          name: string;
+          trade_type: string;
+          is_public: boolean;
+          items: Json;
+          created_at: string;
+          updated_at: string | null;
+        };
         Insert: {
-          created_at?: string | null
-          created_by?: string | null
-          id?: string
-          is_public?: boolean | null
-          items: Json
-          name: string
-          trade_type: string
-        }
+          id?: string;
+          created_by?: string | null;
+          name: string;
+          trade_type: string;
+          is_public?: boolean;
+          items?: Json;
+          created_at?: string;
+          updated_at?: string | null;
+        };
         Update: {
-          created_at?: string | null
-          created_by?: string | null
-          id?: string
-          is_public?: boolean | null
-          items?: Json
-          name?: string
-          trade_type?: string
-        }
-        Relationships: []
-      }
-      usage_counters: {
+          id?: string;
+          created_by?: string | null;
+          name?: string;
+          trade_type?: string;
+          is_public?: boolean;
+          items?: Json;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'templates_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      template_items: {
         Row: {
-          month_key: string
-          reports_generated: number | null
-          updated_at: string | null
-          user_id: string
-        }
+          id: string;
+          template_id: string;
+          label: string;
+          field_type: Database['public']['Enums']['template_item_type'];
+          is_required: boolean;
+          allow_photo: boolean;
+          position: number;
+          created_at: string;
+          updated_at: string;
+        };
         Insert: {
-          month_key: string
-          reports_generated?: number | null
-          updated_at?: string | null
-          user_id: string
-        }
+          id?: string;
+          template_id: string;
+          label: string;
+          field_type?: Database['public']['Enums']['template_item_type'];
+          is_required?: boolean;
+          allow_photo?: boolean;
+          position?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
         Update: {
-          month_key?: string
-          reports_generated?: number | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
-    }
+          id?: string;
+          template_id?: string;
+          label?: string;
+          field_type?: Database['public']['Enums']['template_item_type'];
+          is_required?: boolean;
+          allow_photo?: boolean;
+          position?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'template_items_template_id_fkey';
+            columns: ['template_id'];
+            isOneToOne: false;
+            referencedRelation: 'templates';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      jobs: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          client_id: string | null;
+          client_name: string;
+          address: string | null;
+          title: string | null;
+          status: Database['public']['Enums']['job_status'];
+          template_id: string | null;
+          scheduled_for: string | null;
+          technician_name: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          client_id?: string | null;
+          client_name: string;
+          address?: string | null;
+          title?: string | null;
+          status?: Database['public']['Enums']['job_status'];
+          template_id?: string | null;
+          scheduled_for?: string | null;
+          technician_name?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          client_id?: string | null;
+          client_name?: string;
+          address?: string | null;
+          title?: string | null;
+          status?: Database['public']['Enums']['job_status'];
+          template_id?: string | null;
+          scheduled_for?: string | null;
+          technician_name?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'jobs_client_id_fkey';
+            columns: ['client_id'];
+            isOneToOne: false;
+            referencedRelation: 'clients';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'jobs_template_id_fkey';
+            columns: ['template_id'];
+            isOneToOne: false;
+            referencedRelation: 'templates';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'jobs_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      job_items: {
+        Row: {
+          id: string;
+          job_id: string;
+          template_item_id: string | null;
+          label: string;
+          result: string | null;
+          note: string | null;
+          photos: Json | null;
+          position: number | null;
+        };
+        Insert: {
+          id?: string;
+          job_id: string;
+          template_item_id?: string | null;
+          label: string;
+          result?: string | null;
+          note?: string | null;
+          photos?: Json | null;
+          position?: number | null;
+        };
+        Update: {
+          id?: string;
+          job_id?: string;
+          template_item_id?: string | null;
+          label?: string;
+          result?: string | null;
+          note?: string | null;
+          photos?: Json | null;
+          position?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'job_items_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'job_items_template_item_id_fkey';
+            columns: ['template_item_id'];
+            isOneToOne: false;
+            referencedRelation: 'template_items';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      photos: {
+        Row: {
+          id: string;
+          job_id: string | null;
+          checklist_id: string | null;
+          storage_path: string;
+          caption: string | null;
+          geo_lat: number | null;
+          geo_lng: number | null;
+          shot_at: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          job_id?: string | null;
+          checklist_id?: string | null;
+          storage_path: string;
+          caption?: string | null;
+          geo_lat?: number | null;
+          geo_lng?: number | null;
+          shot_at?: string | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          job_id?: string | null;
+          checklist_id?: string | null;
+          storage_path?: string;
+          caption?: string | null;
+          geo_lat?: number | null;
+          geo_lng?: number | null;
+          shot_at?: string | null;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'photos_checklist_id_fkey';
+            columns: ['checklist_id'];
+            isOneToOne: false;
+            referencedRelation: 'job_items';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'photos_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      reports: {
+        Row: {
+          job_id: string;
+          storage_path: string;
+          generated_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          job_id: string;
+          storage_path: string;
+          generated_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          job_id?: string;
+          storage_path?: string;
+          generated_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'reports_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: true;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      report_deliveries: {
+        Row: {
+          id: string;
+          job_id: string;
+          recipient_email: string;
+          recipient_name: string | null;
+          status: string;
+          storage_path: string | null;
+          user_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          job_id: string;
+          recipient_email: string;
+          recipient_name?: string | null;
+          status?: string;
+          storage_path?: string | null;
+          user_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          job_id?: string;
+          recipient_email?: string;
+          recipient_name?: string | null;
+          status?: string;
+          storage_path?: string | null;
+          user_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'report_deliveries_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'report_deliveries_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      signatures: {
+        Row: {
+          job_id: string;
+          plumber_sig_path: string | null;
+          client_sig_path: string | null;
+          signed_at: string | null;
+        };
+        Insert: {
+          job_id: string;
+          plumber_sig_path?: string | null;
+          client_sig_path?: string | null;
+          signed_at?: string | null;
+        };
+        Update: {
+          job_id?: string;
+          plumber_sig_path?: string | null;
+          client_sig_path?: string | null;
+          signed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'signatures_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: true;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
+    Functions: Record<string, never>;
     Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-}
+      job_status: 'draft' | 'active' | 'awaiting_signatures' | 'awaiting_report' | 'completed';
+      job_item_status: 'pending' | 'pass' | 'fail';
+      template_item_type: 'toggle' | 'text' | 'number' | 'note';
+    };
+    CompositeTypes: Record<string, never>;
+  };
+};
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
-
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>;
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof DatabaseWithoutInternals, 'public'>];
 
 export type Tables<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  PublicTableNameOrOptions extends
+    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+    ? keyof (DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables'] &
+        DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Views'])
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
+> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? (DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables'] &
+      DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Views'])[TableName] extends {
+      Row: infer R;
     }
-    ? R
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
+      ? R
+      : never
+  : PublicTableNameOrOptions extends keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+    ? (DefaultSchema['Tables'] & DefaultSchema['Views'])[PublicTableNameOrOptions] extends {
+        Row: infer R;
       }
       ? R
       : never
-    : never
+    : never;
 
 export type TablesInsert<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  PublicTableNameOrOptions extends keyof DefaultSchema['Tables'] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+    ? keyof DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables']
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
+> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables'][TableName] extends {
+      Insert: infer I;
     }
     ? I
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
+  : PublicTableNameOrOptions extends keyof DefaultSchema['Tables']
+    ? DefaultSchema['Tables'][PublicTableNameOrOptions] extends {
+        Insert: infer I;
       }
       ? I
       : never
-    : never
+    : never;
 
 export type TablesUpdate<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+  PublicTableNameOrOptions extends keyof DefaultSchema['Tables'] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+    ? keyof DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables']
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
+> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables'][TableName] extends {
+      Update: infer U;
     }
     ? U
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
+  : PublicTableNameOrOptions extends keyof DefaultSchema['Tables']
+    ? DefaultSchema['Tables'][PublicTableNameOrOptions] extends {
+        Update: infer U;
       }
       ? U
       : never
-    : never
+    : never;
 
 export type Enums<
-  DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+  PublicEnumNameOrOptions extends keyof DefaultSchema['Enums'] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends PublicEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+    ? keyof DatabaseWithoutInternals[PublicEnumNameOrOptions['schema']]['Enums']
     : never = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
-
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
-
-export const Constants = {
-  public: {
-    Enums: {},
-  },
-} as const
+> = PublicEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[PublicEnumNameOrOptions['schema']]['Enums'][EnumName]
+  : PublicEnumNameOrOptions extends keyof DefaultSchema['Enums']
+    ? DefaultSchema['Enums'][PublicEnumNameOrOptions]
+    : never;

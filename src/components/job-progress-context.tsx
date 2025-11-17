@@ -4,12 +4,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import type { Database } from '@/lib/database.types';
 
-type ChecklistStatus = Database['public']['Tables']['job_checklist']['Row']['status'];
-type ProgressState = Record<string, ChecklistStatus | null>;
+type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
+type ProgressState = Record<string, ChecklistResult | null>;
 
 interface JobProgressContextValue {
   statuses: ProgressState;
-  setStatus: (itemId: string, status: ChecklistStatus | null) => void;
+  setStatus: (itemId: string, status: ChecklistResult | null) => void;
 }
 
 const JobProgressContext = createContext<JobProgressContextValue | null>(null);
@@ -27,7 +27,7 @@ export function JobProgressProvider({
     setStatuses(initialStatuses);
   }, [initialStatuses]);
 
-  const setStatus = useCallback((itemId: string, status: ChecklistStatus | null) => {
+  const setStatus = useCallback((itemId: string, status: ChecklistResult | null) => {
     setStatuses((prev) => {
       if (prev[itemId] === status) return prev;
       return { ...prev, [itemId]: status };

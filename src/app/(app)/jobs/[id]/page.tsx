@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { notFound, redirect } from 'next/navigation';
 
-import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getJobWithChecklist } from '@/server/jobs';
 import type { JobDetailPayload } from '@/types/job-detail';
 import { ChecklistItemCard } from '@/components/checklist-item-card';
@@ -14,7 +14,7 @@ import { JobProgressBar } from '@/components/job-progress-bar';
 import type { Database } from '@/lib/database.types';
 import { isUUID } from '@/lib/ids';
 
-type ChecklistStatus = Database['public']['Tables']['job_checklist']['Row']['status'];
+type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: jobId } = await params;
@@ -43,7 +43,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const jobStatus = job.status ?? 'pending';
   const createdLabel = job.created_at ? new Date(job.created_at).toLocaleString() : 'Unknown';
 
-  const supabase = await supabaseServer();
+  const supabase = await supabaseServerReadOnly();
 
   const photosWithUrls = await Promise.all(
     photos.map(async (photo) => {
@@ -86,7 +86,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const generalPhotos = photosByChecklist.general ?? [];
 
   const initialStatuses = Object.fromEntries(
-    items.map((item) => [item.id, (item.status ?? 'pending') as ChecklistStatus]),
+    items.map((item) => [item.id, (item.result ?? 'pending') as ChecklistResult]),
   );
 
   return (

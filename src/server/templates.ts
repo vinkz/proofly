@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { supabaseServer } from '@/lib/supabaseServer';
+import { supabaseServerReadOnly, supabaseServerAction } from '@/lib/supabaseServer';
 import { TemplateSchema } from '@/lib/schema/template';
 import type { TemplateModel, TemplateItem } from '@/types/template';
 import type { Tables, Json } from '@/lib/database.types';
@@ -25,22 +25,40 @@ const toTemplateModel = (row: Tables<'templates'>): TemplateModel => ({
   is_public: !!row.is_public,
   created_by: row.created_by ?? null,
   created_at: row.created_at ?? null,
+  updated_at: row.updated_at ?? null,
   items: parseTemplateItems(row.items),
 });
 
 export async function listVisibleTemplates(trade: string = 'plumbing'): Promise<TemplateModel[]> {
-  const sb = await supabaseServer();
+  const sb = await supabaseServerReadOnly();
   const {
     data: { user },
   } = await sb.auth.getUser();
 
-  const { data, error } = await sb
-    .from('templates')
-    .select('id, name, trade_type, is_public, created_by, created_at, items')
-    .eq('trade_type', trade)
-    .order('created_at', { ascending: false });
+  const selectVariants = [
+    'id, name, trade_type, is_public, created_by, created_at, updated_at, items',
+    'id, name, trade_type, is_public, created_by, created_at, items',
+  ];
 
-  if (error) throw new Error(error.message);
+  let data: Tables<'templates'>[] | null = null;
+  let lastError: Error | null = null;
+
+  for (const columns of selectVariants) {
+    const response = await sb
+      .from('templates')
+      .select(columns)
+      .eq('trade_type', trade)
+      .order('created_at', { ascending: false });
+    if (response.error) {
+      lastError = new Error(response.error.message);
+      if (response.error.code === '42703') continue;
+      throw lastError;
+    }
+    data = response.data as unknown as Tables<'templates'>[];
+    break;
+  }
+
+  if (!data && lastError) throw lastError;
 
   return (data ?? [])
     .filter((row) => row.is_public || row.created_by === user?.id)
@@ -49,23 +67,34 @@ export async function listVisibleTemplates(trade: string = 'plumbing'): Promise<
 
 export async function getTemplate(id: string): Promise<TemplateModel> {
   TemplateId.parse(id);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerReadOnly();
 
-  const { data, error } = await sb
-    .from('templates')
-    .select('id, name, trade_type, is_public, created_by, created_at, items')
-    .eq('id', id)
-    .single();
+  const selectVariants = [
+    'id, name, trade_type, is_public, created_by, created_at, updated_at, items',
+    'id, name, trade_type, is_public, created_by, created_at, items',
+  ];
 
-  if (error || !data) {
-    throw new Error(error?.message ?? 'Template not found');
+  for (const columns of selectVariants) {
+    const response = await sb
+      .from('templates')
+      .select(columns)
+      .eq('id', id)
+      .maybeSingle();
+    if (response.error) {
+      if (response.error.code === '42703') continue;
+      throw new Error(response.error.message);
+    }
+    if (!response.data) {
+      continue;
+    }
+    return toTemplateModel(response.data as unknown as Tables<'templates'>);
   }
 
-  return toTemplateModel(data);
+  throw new Error('Template not found');
 }
 
 export async function createTemplate(payload: unknown) {
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
   const {
     data: { user },
   } = await sb.auth.getUser();
@@ -97,7 +126,7 @@ export async function createTemplate(payload: unknown) {
 
 export async function duplicateTemplate(id: string) {
   TemplateId.parse(id);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
   const {
     data: { user },
   } = await sb.auth.getUser();
@@ -136,7 +165,7 @@ export async function duplicateTemplate(id: string) {
 
 export async function updateTemplateMeta(id: string, meta: { name: string; trade_type: string }) {
   TemplateId.parse(id);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
 
   const { error } = await sb.from('templates').update({ name: meta.name, trade_type: meta.trade_type }).eq('id', id);
 
@@ -146,7 +175,7 @@ export async function updateTemplateMeta(id: string, meta: { name: string; trade
 
 export async function updateTemplateItems(id: string, items: unknown) {
   TemplateId.parse(id);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
 
   const parsed = TemplateSchema.shape.items.parse(items);
   const normalized = parsed.map((item) => ({
@@ -164,7 +193,7 @@ export async function updateTemplateItems(id: string, items: unknown) {
 
 export async function deleteTemplate(id: string) {
   TemplateId.parse(id);
-  const sb = await supabaseServer();
+  const sb = await supabaseServerAction();
 
   const { error } = await sb.from('templates').delete().eq('id', id);
   if (error) throw new Error(error.message);
