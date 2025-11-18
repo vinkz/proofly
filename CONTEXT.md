@@ -1,134 +1,153 @@
-# Proofly – Context & Development Guide (Codex Source of Truth)
+# Proofly – Context & Development Guide 
 
-## 🧭 Overview
-Proofly is a **Next.js 15 (App Router)** + **Supabase SSR 0.7** + **Tailwind CSS 4** SaaS platform built to empower **solo tradespeople** (starting with plumbers) to achieve compliance, document their work, and generate client-ready AI reports.
+##  Purpose & Mission
 
-Proofly should feel **trustworthy, mobile-first, simple, and professional** — like Notion meets Shopify Admin for tradespeople.  
-The app must **minimize friction**, allowing users to finish compliance tasks in minutes.
+Empower solo and small-team tradespeople—starting with plumbers—to **achieve compliance**, deliver **professional reports**, and **reduce admin time** using lightweight, AI-driven digital tools. Proofly eliminates manual paperwork and lowers legal and operational risks by transforming field reporting into a seamless, mobile-first experience that builds trust with clients and regulators.
 
----
+##  Product Concept
 
-## ⚙️ Technical Stack
+Proofly is a **micro‑SaaS** platform built for independent plumbers, gas engineers, electricians, drainage specialists, and small contractors who face daily compliance demands and documentation pressure.
 
-| Layer | Tech |
-|-------|------|
-| Frontend | Next.js 15 App Router (TypeScript, React 19) |
-| UI | Tailwind 4, Framer Motion, lucide-react icons, shadcn/ui components |
-| Backend | Supabase (Postgres, Auth, Storage) |
-| Auth | Magic link (email OTP) via Supabase SSR helpers |
-| AI | OpenAI GPT-4o-mini for PDF summaries |
-| PDF | `pdf-lib` for in-app generation |
-| Forms | React Hook Form + Zod validation |
-| Charts | Recharts for dashboard KPIs |
-| Tests | Vitest for unit tests |
-| Hosting | Vercel (Next.js server actions + static routes) |
+Using a **7-step smart workflow**, Proofly lets users:
 
----
+* Create or customise compliance templates
+* Capture photos and signatures in the field
+* Generate branded, AI-summarised PDF reports
+* Deliver reports instantly via email or WhatsApp
+* Store and track all jobs securely in the cloud
 
-## 🧠 Core Architecture
+### 🔧 Trade-Aware Onboarding (Key Innovation)
 
-### Folder Structure
+During signup, users specify their:
 
-src/
-├ app/
-│ ├ (marketing)/page.tsx → Landing page
-│ ├ (auth)/login/page.tsx → Supabase magic link
-│ ├ (app)/layout.tsx → App shell (RequireAuth + sidebar + header)
-│ ├ (app)/dashboard/page.tsx → User dashboard
-│ ├ (app)/jobs/[id]/page.tsx → Job detail + checklist flow
-│ ├ (app)/templates/[id]/page.tsx → Template editor
-│ ├ (app)/reports/[jobId]/page.tsx → PDF viewer
-│ ├ (app)/clients/[id]/page.tsx → Client details
-│ └ (app)/settings/page.tsx → Preferences & account
-├ components/ → Shared UI components
-├ lib/ → Supabase + util helpers
-├ server/ → Server actions
-├ types/ → Shared types (JobDetail, TemplateItem, etc.)
-└ docs/CONTEXT.md → This file
+* Trade (plumber, gas engineer, electrician, heating, drainage, etc.)
+* Certifications (Gas Safe, WRAS, CPS, NVQ levels, etc.)
+* Typical work domains
 
+Proofly then **personalises the entire system**:
+
+* Relevant templates only
+* Trade-specific terminology
+* Auto‑suggested checklists
+* Legal/regulatory variations
+
+This creates **zero setup friction** and makes the app feel tailor‑made from minute one.
 
 ---
 
-## 🎨 Design System
+## Core Features
 
-**Theme keywords:** trustworthy · clean · light industrial · modern SaaS · field-ready
+### 1. Personalised Trade-Aware Onboarding
 
-| Token | Example Value | Description |
-|--------|----------------|-------------|
-| `--brand` | `#1E3A8A` | Core brand blue |
-| `--accent` | `#2563EB` | Action blue |
-| `--muted` | `#F3F4F6` | Neutral surface |
-| `--surface` | `#FFFFFF` | Background |
-| `--danger` | `#DC2626` | Error |
-| `--success` | `#16A34A` | Success |
+* Choose trade + certifications
+* UI, templates, and workflows adapt instantly
+* Removes clutter, increases trust and speed
 
-Typography: `font-sans` (Inter, system default)  
-Components: use rounded-xl, drop shadows (`shadow-card`), and plenty of white space.  
-Icons: lucide-react (`CheckSquare`, `Wrench`, `FileText`, `Users`, `Settings`).  
-Animations: subtle fade/slide via Framer Motion (0.2–0.3s duration).  
+### 2. Customisable Compliance Checklists
 
----
+* Drag-and-drop template builder
+* Preloaded trade-specific templates
+* Each checklist item supports notes, photos, and pass/fail
 
-## 🧰 Core Features (Functional Requirements)
+### 3. Photo & Signature Capture
 
-| Module | Functionality |
-|--------|----------------|
-| **Dashboard** | KPI cards (Jobs this month, Completed, Pending), sparkline charts, quick links. |
-| **Jobs** | Create from template → checklist flow → capture photos & signatures → generate report. |
-| **Templates** | Drag-and-drop form builder for trade workflows (editable JSON schema). |
-| **Reports** | View generated PDF; share via link/email. |
-| **Clients** | Manage clients, contact info, and follow-ups. |
-| **Reminders** | Background jobs (via Supabase cron) to remind clients or users. |
-| **Auth** | Magic link OTP → redirects to /dashboard if logged in. |
-| **AI Summary** | Generate PDF summaries of job notes/photos using GPT-4o-mini. |
+* Attach real‑time, on‑site proof for every job
+* Dual signatures: engineer + client
 
----
+### 4. Instant AI-Generated PDF Reports
 
-## 🧩 Coding Conventions
+* Professional, branded client reports
+* AI summarises inspection results into clear, compliant narratives
 
-- TypeScript strict mode enabled.  
-- All server functions must await `supabaseServer()`.  
-- Prefer server actions (`'use server'`) over API routes.  
-- UI components are client components with `"use client"`.  
-- Don’t hardcode paths — use constants from `/src/lib/routes.ts`.  
-- All DB operations typed via `Database["public"]["Tables"]`.  
-- Use Zod for validation.  
-- Use `NavLink` for navigation; highlight active route with `usePathname()`.
+### 5. Cloud Storage & Sharing
+
+* Secure record archive
+* One‑tap email / WhatsApp delivery
+
+### 6. Automated Service Reminders
+
+* Send follow-ups for compliance maintenance
+* Helps drive repeat business
+
+### 7. Visual Dashboard
+
+* Track job volume, compliance rates, templates used, and top clients
 
 ---
 
-## 💅 UX Style Guide
+##  Target User
 
-- **Mobile first:** every page must work perfectly on 360–400px width.  
-- **Minimal inputs:** prefer toggles, checkboxes, and prefilled fields.  
-- **Visual clarity:** strong hierarchy, clear icons, and whitespace.  
-- **Fast completion:** fewest taps possible from job → report.  
-- **Trust feel:** brand colors + crisp sans-serif + subtle depth.
+* Independent tradespeople (plumbers, gas engineers, electricians)
+* Small teams (1–5 engineers)
+* Businesses needing compliance documentation
+* Users who value speed over admin-heavy software
 
-**Inspiration:** Notion, Linear, Fieldwire, Stripe Dashboard.  
-**No clutter, no marketing fluff.**
+Focus: **UK market first**, expanding to similar regulated trades globally.
 
 ---
 
-## 🚀 Future Extensions
+##  Market Position & Differentiators
 
-- Stripe integration for subscriptions.  
-- Template marketplace.  
-- AI-driven auto-fill for repeated job data.  
-- Offline mode (PWA caching).  
-- “Proof mode”: share job progress live via secure link.
+* **Trade-aware personalisation**—unique advantage
+* **Compliance-first** rather than full CRM or scheduling software
+* **Lightweight and affordable** for solo operators
+* **AI-augmented workflow** massively reduces time to produce reports
+* **Fastest onboarding** in the sector
 
 ---
 
-## 🧩 Developer Workflow
+##  Technical Stack
 
-1. Read this file before major Codex prompts.  
-2. Always import `supabaseServer` for server components and `supabaseBrowser` for client components.  
-3. Keep designs modular — e.g., checklist items, job cards, KPI cards, etc.  
-4. Run local tests:
+Same as previous version, with no changes:
 
-   ```bash
-   pnpm exec tsc --noEmit
-   pnpm lint
-   pnpm dev
+* Next.js 15 App Router, Supabase SSR, Tailwind 4, OpenAI GPT-4o-mini, pdf-lib, etc.
 
+---
+
+##  Design System (Updated)
+
+The action button color should be updated to a **green** that complements Proofly’s core blue.
+
+### Brand Colors
+
+* `--brand`: **#1E3A8A** (primary blue)
+* `--accent`: **#2563EB** (secondary blue)
+* `--action`: **#16A34A** (green for primary actions)
+* `--muted`: #F3F4F6
+* `--surface`: #FFFFFF
+* `--danger`: #DC2626
+* `--success`: #16A34A
+
+Use `bg-[--action]` for primary buttons.
+
+### Styling Principles
+
+* Mobile-first
+* Minimal inputs, maximise automation
+* Use rounded-xl, subtle shadows, clean typography
+* Framer Motion micro-animations for fluidity
+
+---
+
+##  Developer Workflow
+
+* Use server actions (`"use server"`) for backend operations
+* Keep components modular
+* Use Zod for validation
+* Run:
+
+  ```bash
+  pnpm exec tsc --noEmit
+  pnpm lint
+  pnpm dev
+  ```
+
+---
+
+##  Future Extensions
+
+* Stripe subscriptions
+* Template marketplace
+* Offline mode (PWA)
+* “Proof Mode” live job viewer
+* AI-driven auto-complete for job details

@@ -71,9 +71,9 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
 
         <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
           <div className="rounded-2xl border border-white/20 bg-white/70 p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
               Findings summary
-            </h2>
+          </h2>
             <ul className="mt-3 grid gap-3 text-sm text-muted-foreground/80">
               {failedItems.map((item) => (
                 <li key={item.id} className="rounded-xl border border-red-100 bg-red-50 p-3">

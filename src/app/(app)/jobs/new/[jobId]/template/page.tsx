@@ -21,9 +21,9 @@ export default async function TemplateStepPage({ params }: { params: Promise<{ j
       <div className="space-y-6">
         <div>
           <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step 2</p>
-          <h1 className="text-2xl font-semibold text-muted">Choose a template</h1>
+          <h1 className="text-2xl font-semibold text-muted">Choose a workflow</h1>
           <p className="text-sm text-muted-foreground/70">
-            Attach a checklist to generate the inspection workflow for this job.
+            Attach a workflow to generate the inspection checklist for this job.
           </p>
         </div>
         <TemplateSection jobId={jobId} label="My templates" templates={myTemplates} />

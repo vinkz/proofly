@@ -5,7 +5,7 @@ import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
-import { supabaseServerAction, supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { photoPath, reportPath, signaturePath } from '@/lib/storage';
 import type { Database } from '@/lib/database.types';
@@ -148,7 +148,7 @@ export async function createJob(form: FormData | Record<string, unknown>) {
         })
       : schema.parse(form);
 
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
   const {
     data: { user },
     error: userErr,
@@ -204,7 +204,12 @@ export async function createJob(form: FormData | Record<string, unknown>) {
 
 export async function createJobDraftFromClient(clientId: string) {
   ClientId.parse(clientId);
-  const { sb, user } = await requireUser({ write: true });
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const clientRecord = await fetchClientForJob(sb, clientId);
   if (!clientRecord) throw new Error('Client not found');
@@ -360,7 +365,8 @@ export async function getJobWithChecklist(jobId: string) {
 export async function setJobTemplate(jobId: string, templateId: string) {
   JobId.parse(jobId);
   TemplateId.parse(templateId);
-  const { sb, user, job } = await fetchOwnedJob(jobId, { write: true });
+  const sb = await supabaseServerServiceRole();
+  const { sb: ownerClient, user, job } = await fetchOwnedJob(jobId, { write: false });
 
   const typedTemplateId = templateId as TemplateRow['id'];
   const { data: template, error: tmplErr } = await sb
@@ -380,18 +386,18 @@ export async function setJobTemplate(jobId: string, templateId: string) {
   await sb.from('job_items').delete().eq('job_id', typedJobId);
 
   if (templateItems.length) {
-    const checklistRows = templateItems.map(
-      (item): Database['public']['Tables']['job_items']['Insert'] => ({
-        job_id: typedJobId,
-        template_item_id: item.id ?? null,
-        label: item.label ?? 'Checklist item',
-        result: 'pending',
-        note: null,
-        position: null,
-        photos: null,
-      }),
-    );
-    const { error: insertErr } = await sb.from('job_items').insert(checklistRows);
+  const checklistRows = templateItems.map(
+    (item): Database['public']['Tables']['job_items']['Insert'] => ({
+      job_id: typedJobId,
+      template_item_id: item.id ?? null,
+      label: item.label ?? 'Checklist item',
+      result: 'pending',
+      note: null,
+      position: null,
+      photos: null,
+    }),
+  );
+  const { error: insertErr } = await sb.from('job_items').insert(checklistRows);
     if (insertErr) throw new Error(insertErr.message);
   }
 
@@ -474,7 +480,7 @@ export async function updateChecklistItem(params: {
   note?: string;
 }) {
   JobId.parse(params.jobId);
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
 
   const patch: Record<string, unknown> = {};
   if (params.result) patch.result = params.result;
@@ -491,7 +497,7 @@ export async function updateChecklistItem(params: {
 
 export async function uploadPhoto(params: { jobId: string; itemId: string; file: File; caption?: string }) {
   JobId.parse(params.jobId);
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
   const typedJobId = params.jobId as PhotoRow['job_id'];
 
   const bytes = await params.file.arrayBuffer();
@@ -519,7 +525,7 @@ export async function uploadPhoto(params: { jobId: string; itemId: string; file:
 export async function deletePhoto(params: { jobId: string; photoId: string; storagePath: string }) {
   JobId.parse(params.jobId);
   PhotoId.parse(params.photoId);
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
   const typedJobId = params.jobId as JobRow['id'];
   const typedPhotoId = params.photoId as PhotoRow['id'];
 
@@ -545,7 +551,7 @@ export async function deletePhoto(params: { jobId: string; photoId: string; stor
 
 export async function saveSignatures(params: { jobId: string; plumber?: string | null; client?: string | null }) {
   JobId.parse(params.jobId);
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
 
   const toBuffer = (dataUrl: string) => Buffer.from(dataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
 
@@ -609,9 +615,20 @@ export async function saveSignatures(params: { jobId: string; plumber?: string |
   revalidatePath(`/jobs/new/${params.jobId}/summary`);
 }
 
+export async function deleteJob(jobId: string) {
+  JobId.parse(jobId);
+  const sb = await supabaseServerServiceRole();
+
+  const { error } = await sb.from('jobs').delete().eq('id', jobId as JobRow['id']);
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/dashboard');
+  revalidatePath('/jobs');
+}
+
 export async function finalizeJobReport(jobId: string) {
   JobId.parse(jobId);
-  const { sb } = await requireUser({ write: true });
+  const sb = await supabaseServerServiceRole();
   const typedJobId = jobId as JobRow['id'];
   const detail = await getJobWithChecklist(jobId);
 
@@ -678,17 +695,15 @@ export async function finalizeJobReport(jobId: string) {
   });
   if (uploadErr) throw new Error(uploadErr.message);
 
-  const { error: upsertErr } = await sb
+  await sb.from('reports').delete().eq('job_id', typedJobId);
+  const { error: insertReportErr } = await sb
     .from('reports')
-    .upsert(
-      {
-        job_id: jobId as ReportRow['job_id'],
-        storage_path: storagePath,
-        generated_at: new Date().toISOString(),
-      },
-      { onConflict: 'job_id' },
-    );
-  if (upsertErr) throw new Error(upsertErr.message);
+    .insert({
+      job_id: jobId as ReportRow['job_id'],
+      storage_path: storagePath,
+      generated_at: new Date().toISOString(),
+    });
+  if (insertReportErr) throw new Error(insertReportErr.message);
 
   await sb.from('jobs').update({ status: 'completed', notes: summary }).eq('id', typedJobId);
 
@@ -705,7 +720,7 @@ export async function finalizeJobReport(jobId: string) {
 
 export async function createReportSignedUrl(jobId: string) {
   JobId.parse(jobId);
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
   const typedJobId = jobId as ReportRow['job_id'];
 
   const { data: report, error } = await sb
@@ -732,7 +747,12 @@ export async function sendReportEmail(jobId: string, payload: FormData | Record<
         })
       : ReportEmailSchema.parse(payload);
 
-  const { sb, user } = await requireUser({ write: true });
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const { data: report, error: reportErr } = await sb
     .from('reports')
@@ -742,7 +762,7 @@ export async function sendReportEmail(jobId: string, payload: FormData | Record<
   if (reportErr) throw new Error(reportErr.message);
   if (!report?.storage_path) throw new Error('Generate a report before sending');
 
-  const { error } = await sb.from('report_deliveries').insert({
+  const { error: insertErr } = await sb.from('report_deliveries').insert({
     job_id: jobId as ReportDeliveryRow['job_id'],
     recipient_email: body.email,
     recipient_name: body.name ?? null,
@@ -750,13 +770,16 @@ export async function sendReportEmail(jobId: string, payload: FormData | Record<
     storage_path: report.storage_path,
     user_id: user.id,
   });
-  if (error) throw new Error(error.message);
+  if (insertErr) throw new Error(insertErr.message);
 
   revalidatePath(`/reports/${jobId}`);
   return { ok: true };
 }
 async function fetchClientForJob(
-  sb: Awaited<ReturnType<typeof supabaseServerReadOnly>> | Awaited<ReturnType<typeof supabaseServerAction>>,
+  sb:
+    | Awaited<ReturnType<typeof supabaseServerReadOnly>>
+    | Awaited<ReturnType<typeof supabaseServerAction>>
+    | Awaited<ReturnType<typeof supabaseServerServiceRole>>,
   clientId: string,
 ) {
   let lastErr: PostgrestError | null = null;

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { supabaseServerAction, supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { Database } from '@/lib/database.types';
 import type { PostgrestError } from '@supabase/supabase-js';
 import type { ClientListItem } from '@/types/client';
@@ -112,7 +112,7 @@ export async function createClient(payload: FormData | Record<string, unknown>) 
         })
       : ClientSchema.parse(payload);
 
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
   const {
     data: { user },
     error,
@@ -225,4 +225,37 @@ export async function getClientDetail(id: string) {
     jobs: jobs ?? [],
     reports,
   };
+}
+
+export async function deleteClient(id: string) {
+  ClientId.parse(id);
+  const readClient = await supabaseServerReadOnly();
+  const {
+    data: { user },
+    error,
+  } = await readClient.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const sb = await supabaseServerServiceRole();
+  const tables = CLIENT_TABLES;
+  let lastErr: PostgrestError | null = null;
+
+  for (const table of tables) {
+    const { error: delErr } = await (sb as any)
+      .from(table)
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
+    if (delErr) {
+      if (delErr.code === '42P01') {
+        lastErr = delErr;
+        continue;
+      }
+      throw new Error(delErr.message);
+    }
+  }
+
+  if (lastErr) throw new Error(lastErr.message);
+
+  revalidatePath('/clients');
 }

@@ -9,7 +9,7 @@ import { PageFade } from './_components/page-fade';
 const links = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/jobs', label: 'Jobs' },
-  { href: '/templates', label: 'Templates' },
+  { href: '/templates', label: 'Workflows' },
   { href: '/clients', label: 'Clients' },
   { href: '/reports', label: 'Reports' },
   { href: '/settings', label: 'Settings' },

@@ -4,6 +4,7 @@ import { getClientDetail } from '@/server/clients';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { isUUID } from '@/lib/ids';
 import { ShareReportLinkButton } from '@/components/report/share-link-button';
+import { DeleteClientButton } from '@/components/clients/delete-client-button';
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -25,8 +26,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     <div className="space-y-6">
       <header className="rounded-3xl border border-white/20 bg-white/80 p-6 shadow-sm">
         <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Client</p>
-        <h1 className="text-3xl font-semibold text-muted">{detail.client.name}</h1>
-        <p className="text-sm text-muted-foreground/70">{detail.client.organization ?? 'Individual'}</p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold text-muted">{detail.client.name}</h1>
+            <p className="text-sm text-muted-foreground/70">{detail.client.organization ?? 'Individual'}</p>
+          </div>
+          <DeleteClientButton clientId={detail.client.id} />
+        </div>
         <div className="mt-4 grid gap-3 text-sm text-muted-foreground/80 md:grid-cols-3">
           {detail.client.email ? <p>{detail.client.email}</p> : null}
           {detail.client.phone ? <p>{detail.client.phone}</p> : null}

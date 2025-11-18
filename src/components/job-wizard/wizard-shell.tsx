@@ -8,7 +8,7 @@ import type { JobDetailPayload } from '@/types/job-detail';
 
 const steps = [
   { id: 'client', label: 'Client' },
-  { id: 'template', label: 'Template' },
+  { id: 'template', label: 'Workflow' },
   { id: 'details', label: 'Job details' },
   { id: 'inspection', label: 'Inspection' },
   { id: 'summary', label: 'Summary & signatures' },
@@ -105,17 +105,17 @@ export function WizardShell({ jobId, currentStep, job, client, template, childre
             )}
           </InfoCard>
 
-          <InfoCard title="Template" description="Inspection blueprint">
+          <InfoCard title="Workflow" description="Inspection blueprint">
             {template ? (
               <div className="space-y-1 text-sm text-muted-foreground">
                 <p className="text-base font-semibold text-muted">{template.name}</p>
                 <p>{template.items.length} checklist items</p>
                 <p className="text-xs text-muted-foreground/70">
-                  {template.is_public ? 'Public template' : 'My template'}
+                  {template.is_public ? 'Public workflow' : 'My workflow'}
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground/70">Choose a template to generate the inspection flow.</p>
+              <p className="text-sm text-muted-foreground/70">Choose a workflow to generate the inspection flow.</p>
             )}
           </InfoCard>
 

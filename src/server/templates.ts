@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { supabaseServerReadOnly, supabaseServerAction } from '@/lib/supabaseServer';
+import { supabaseServerReadOnly, supabaseServerAction, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import { TemplateSchema } from '@/lib/schema/template';
 import type { TemplateModel, TemplateItem } from '@/types/template';
 import type { Tables, Json } from '@/lib/database.types';
@@ -94,7 +94,7 @@ export async function getTemplate(id: string): Promise<TemplateModel> {
 }
 
 export async function createTemplate(payload: unknown) {
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
   const {
     data: { user },
   } = await sb.auth.getUser();
@@ -126,7 +126,7 @@ export async function createTemplate(payload: unknown) {
 
 export async function duplicateTemplate(id: string) {
   TemplateId.parse(id);
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
   const {
     data: { user },
   } = await sb.auth.getUser();
@@ -165,7 +165,7 @@ export async function duplicateTemplate(id: string) {
 
 export async function updateTemplateMeta(id: string, meta: { name: string; trade_type: string }) {
   TemplateId.parse(id);
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
 
   const { error } = await sb.from('templates').update({ name: meta.name, trade_type: meta.trade_type }).eq('id', id);
 
@@ -175,7 +175,7 @@ export async function updateTemplateMeta(id: string, meta: { name: string; trade
 
 export async function updateTemplateItems(id: string, items: unknown) {
   TemplateId.parse(id);
-  const sb = await supabaseServerAction();
+  const sb = await supabaseServerServiceRole();
 
   const parsed = TemplateSchema.shape.items.parse(items);
   const normalized = parsed.map((item) => ({

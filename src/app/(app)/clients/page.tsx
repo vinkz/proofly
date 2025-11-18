@@ -1,5 +1,6 @@
 import { listClients } from '@/server/clients';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { DeleteClientButton } from '@/components/clients/delete-client-button';
 import { Button } from '@/components/ui/button';
 
 export default async function ClientsPage() {
@@ -49,7 +50,7 @@ export default async function ClientsPage() {
             <a
               key={client.id}
               href={`/clients/${client.id}`}
-              className="rounded-3xl border border-white/20 bg-white/80 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+              className="group rounded-3xl border border-white/20 bg-white/80 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -59,6 +60,11 @@ export default async function ClientsPage() {
                 <div className="text-right">
                   <p className="text-3xl font-bold text-[var(--accent)]">{stats.open}</p>
                   <p className="text-xs text-muted-foreground/60">Open jobs</p>
+                </div>
+              </div>
+              <div className="mt-3 flex justify-end">
+                <div onClick={(e) => e.preventDefault()}>
+                  <DeleteClientButton clientId={client.id} />
                 </div>
               </div>
               <div className="mt-4 grid gap-2 text-xs text-muted-foreground/70">

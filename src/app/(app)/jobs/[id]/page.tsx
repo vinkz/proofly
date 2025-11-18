@@ -11,6 +11,7 @@ import { GenerateReportButton } from '@/components/report/generate-report-button
 import { ShareReportLinkButton } from '@/components/report/share-link-button';
 import { JobProgressProvider } from '@/components/job-progress-context';
 import { JobProgressBar } from '@/components/job-progress-bar';
+import { DeleteJobButton } from '@/components/jobs/delete-job-button';
 import type { Database } from '@/lib/database.types';
 import { isUUID } from '@/lib/ids';
 
@@ -122,6 +123,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               </Link>
             ) : null}
             {report?.storage_path ? <ShareReportLinkButton jobId={jobId} /> : null}
+            <DeleteJobButton jobId={jobId} />
           </div>
         </div>
 

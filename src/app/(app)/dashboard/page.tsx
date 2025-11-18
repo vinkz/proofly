@@ -18,6 +18,8 @@ type BasicJob = {
   address: string;
   status: string;
   created_at: string;
+  title?: string | null;
+  scheduled_for?: string | null;
 };
 
 const DAY_IN_MS = 86_400_000;
@@ -74,6 +76,15 @@ export default async function DashboardPage() {
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 6);
 
+  const currentJob =
+    activeJobs.length > 0
+      ? [...activeJobs].sort((a, b) => {
+          const aDate = a.scheduled_for ? new Date(a.scheduled_for).getTime() : new Date(a.created_at).getTime();
+          const bDate = b.scheduled_for ? new Date(b.scheduled_for).getTime() : new Date(b.created_at).getTime();
+          return aDate - bDate;
+        })[0]
+      : null;
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8 px-4 pb-16 pt-6 font-sans text-gray-900 md:pt-10">
       <section className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
@@ -94,8 +105,39 @@ export default async function DashboardPage() {
             </Button>
           </div>
         </div>
-        <div className="mt-6">
-          <KpiCards stats={stats} />
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {currentJob ? (
+            <section className="rounded-2xl border border-white/10 bg-[var(--surface)]/95 p-5 shadow-md backdrop-blur">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Current job</p>
+                  <h2 className="text-xl font-semibold text-muted">
+                    {currentJob.title || currentJob.client_name || 'Active job'}
+                  </h2>
+                  <p className="text-sm text-muted-foreground/70">{currentJob.address}</p>
+                  <p className="text-xs text-muted-foreground/60">
+                    {currentJob.scheduled_for
+                      ? `Scheduled ${formatDateTime(currentJob.scheduled_for)}`
+                      : `Opened ${formatDate(currentJob.created_at)}`}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-muted-foreground/70">
+                    Stage: {friendlyStage(currentJob.status)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="brand" className="uppercase">
+                    {currentJob.status}
+                  </Badge>
+                  <Button asChild>
+                    <Link href={`/jobs/${currentJob.id}`}>Open job</Link>
+                  </Button>
+                </div>
+              </div>
+            </section>
+          ) : null}
+          <div className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-4">
+            <KpiCards stats={stats} />
+          </div>
         </div>
       </section>
 
@@ -204,9 +246,9 @@ export default async function DashboardPage() {
               href="/reports"
             />
             <MilestoneItem
-              title="Templates to review"
+              title="Workflows to review"
               value={templates.length}
-              description="Keep your inspection templates up to date."
+              description="Keep your inspection workflows up to date."
               href="/templates"
             />
           </CardContent>
@@ -233,6 +275,15 @@ function formatDate(dateString: string) {
   });
 }
 
+function formatDateTime(dateString: string) {
+  return new Date(dateString).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+  });
+}
+
 function getStatusMeta(job: BasicJob, reference: Date) {
   if (job.status === 'completed') {
     return { label: 'PASS', variant: 'brand' as const, className: '' };
@@ -251,6 +302,23 @@ function getStatusMeta(job: BasicJob, reference: Date) {
     };
   }
   return { label: 'PENDING', variant: 'muted' as const, className: '' };
+}
+
+function friendlyStage(status: string | null | undefined) {
+  switch (status) {
+    case 'draft':
+      return 'Drafting';
+    case 'active':
+      return 'Inspection in progress';
+    case 'awaiting_signatures':
+      return 'Awaiting signatures';
+    case 'awaiting_report':
+      return 'Generating report';
+    case 'completed':
+      return 'Completed';
+    default:
+      return 'Pending';
+  }
 }
 
 function MilestoneItem({

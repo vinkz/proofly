@@ -134,7 +134,7 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Edit Template</h1>
+        <h1 className="text-xl font-semibold">Edit Workflow</h1>
         <div className="flex gap-2">
           {canEdit ? (
             <Button variant="outline" onClick={handleDelete} disabled={isDeleting}>
@@ -147,14 +147,14 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
         </div>
       </div>
 
-      {isPublic ? (
-        <p className="rounded border border-dashed bg-emerald-50 p-3 text-sm text-emerald-700">
-          This is a public template. Duplicate it to make your own editable copy.
-        </p>
-      ) : null}
+          {isPublic ? (
+            <p className="rounded border border-dashed bg-emerald-50 p-3 text-sm text-emerald-700">
+              This is a public workflow. Duplicate it to make your own editable copy.
+            </p>
+          ) : null}
 
       <section className="rounded border p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">Template Details</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">Workflow Details</h2>
         <div className="mt-4 space-y-3">
           <div>
             <label className="block text-sm font-medium">Template name</label>

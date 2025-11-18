@@ -13,8 +13,8 @@ export default async function TemplatesPage() {
     <main className="mx-auto max-w-5xl space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Template library</p>
-          <h1 className="text-3xl font-semibold text-muted">Templates</h1>
+          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Workflow library</p>
+          <h1 className="text-3xl font-semibold text-muted">Workflows</h1>
           <p className="text-sm text-muted-foreground/70">Build reusable inspection checklists for every trade.</p>
         </div>
         <NewTemplateButton />
@@ -22,8 +22,8 @@ export default async function TemplatesPage() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-semibold text-muted">My templates</h2>
-          <p className="text-xs text-muted-foreground/60">Editable templates only visible to your team.</p>
+          <h2 className="text-lg font-semibold text-muted">My workflows</h2>
+          <p className="text-xs text-muted-foreground/60">Editable workflows only visible to your team.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           {myTemplates.map((template) => (
@@ -40,8 +40,8 @@ export default async function TemplatesPage() {
       <section className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-muted">Public templates</h2>
-                <p className="text-xs text-muted-foreground/60">Copy Proofly best-practice templates.</p>
+              <h2 className="text-lg font-semibold text-muted">Public workflows</h2>
+              <p className="text-xs text-muted-foreground/60">Copy Proofly best-practice workflows.</p>
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">

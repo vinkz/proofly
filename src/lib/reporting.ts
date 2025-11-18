@@ -30,13 +30,18 @@ export interface PdfPayload {
 }
 
 export async function generateReport(data: ReportJobPayload): Promise<string> {
-  const openai = getOpenAIClient();
+  const apiKey = process.env.OPENAI_API_KEY;
   const checklistSummary = data.checklist.map((item) => ({
     label: item.label,
     result: item.result ?? 'pending',
     note: item.note ?? '',
   }));
 
+  if (!apiKey) {
+    return 'Inspection completed. (AI summary unavailable – set OPENAI_API_KEY to enable.)';
+  }
+
+  const openai = getOpenAIClient();
   const completion = await openai.responses.create({
     model: 'gpt-4o-mini',
     input: [

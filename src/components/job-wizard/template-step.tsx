@@ -38,7 +38,7 @@ export function TemplateSection({ jobId, label, templates }: TemplateSectionProp
   return (
     <section className="space-y-3">
       <div>
-        <p className="text-sm font-semibold text-muted">{label}</p>
+        <p className="text-sm font-semibold text-muted">{label.replace('Template', 'Workflow')}</p>
         <p className="text-xs text-muted-foreground/70">Select to generate a checklist.</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">

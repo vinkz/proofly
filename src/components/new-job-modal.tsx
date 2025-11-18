@@ -120,19 +120,19 @@ export default function NewJobModal({ templates }: { templates: TemplateModel[] 
           <div>
             <div className="flex items-center justify-between">
               <label htmlFor="template_id" className="block text-sm font-medium text-gray-700">
-                Template
+                Workflow
               </label>
               <Link href="/templates" className="text-xs text-emerald-600 underline">
-                Manage templates
+                Manage workflows
               </Link>
             </div>
             {templates.length === 0 ? (
               <p className="mt-1 text-sm text-gray-500">
-                No templates available yet. Contact an admin or create a template to get started.
+                No workflows available yet. Contact an admin or create a workflow to get started.
               </p>
             ) : (
               <Select id="template_id" disabled={isPending} {...register('template_id')}>
-                <option value="">Select a template</option>
+                <option value="">Select a workflow</option>
                 {templates.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.name}

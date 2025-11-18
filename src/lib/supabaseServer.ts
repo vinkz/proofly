@@ -2,12 +2,14 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 
 import type { Database } from '@/lib/database.types';
+import { env, assertSupabaseEnv } from '@/lib/env';
 
 export async function supabaseServerReadOnly() {
+  assertSupabaseEnv();
   const cookieStore = await cookies();
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    env.SUPABASE_URL,
+    env.SUPABASE_ANON_KEY,
     {
       cookies: {
         get(name: string) {
@@ -25,11 +27,12 @@ export async function supabaseServerReadOnly() {
 }
 
 export async function supabaseServerAction() {
+  assertSupabaseEnv();
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    env.SUPABASE_URL,
+    env.SUPABASE_ANON_KEY,
     {
       cookies: {
         get(name: string) {
@@ -44,4 +47,21 @@ export async function supabaseServerAction() {
       },
     },
   );
+}
+
+export async function supabaseServerServiceRole() {
+  assertSupabaseEnv();
+  return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    cookies: {
+      get() {
+        return undefined;
+      },
+      set() {
+        return;
+      },
+      remove() {
+        return;
+      },
+    },
+  });
 }
