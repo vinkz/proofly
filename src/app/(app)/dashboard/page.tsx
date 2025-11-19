@@ -74,6 +74,11 @@ export default async function DashboardPage() {
         })[0]
       : null;
 
+  const displayName =
+    profile?.full_name && profile.full_name.trim().length
+      ? profile.full_name.trim().split(/\s+/)[0]
+      : user.email;
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8 px-4 pb-16 pt-6 font-sans text-gray-900 md:pt-10">
       <section className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
@@ -81,7 +86,7 @@ export default async function DashboardPage() {
           <div>
             <p className="text-xs uppercase tracking-wide text-gray-500">Overview</p>
             <h1 className="mt-2 text-2xl font-semibold text-[var(--brand)]">
-              Welcome back, {profile?.full_name || user.email}
+              Welcome back, {displayName}
             </h1>
             <p className="text-sm text-gray-500">
               Track field activity, client signatures, and compliance reports in one place.

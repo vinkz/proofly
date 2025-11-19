@@ -34,7 +34,7 @@ export default async function RootPage() {
   const needsOnboarding = onboardingComplete !== true && (trades.length === 0 || certs.length === 0);
 
   if (needsOnboarding) {
-    redirect('/onboarding/trades');
+    redirect('/signup/step1');
   }
 
   redirect('/dashboard');

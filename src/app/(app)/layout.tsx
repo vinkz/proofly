@@ -42,14 +42,15 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                     </span>
                     <span className="hidden text-xs font-medium text-gray-500 sm:inline">Field compliance</span>
                   </Link>
+                </div>
+                <div className="ml-auto flex items-center gap-3">
                   <details className="relative md:hidden">
                     <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-white/20 bg-white/70 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path d="M4 7h16M4 12h16M4 17h16" strokeWidth={2} strokeLinecap="round" />
                       </svg>
-                      Menu
                     </summary>
-                    <div className="absolute left-0 mt-3 w-64 rounded-2xl border border-white/10 bg-[var(--surface)] p-3 shadow-xl">
+                    <div className="absolute right-0 mt-3 w-64 rounded-2xl border border-white/10 bg-[var(--surface)] p-3 shadow-xl">
                       <nav className="flex flex-col gap-1">
                         {links.map((link) => (
                           <NavLink key={link.href} href={link.href}>
@@ -59,17 +60,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                       </nav>
                     </div>
                   </details>
-                </div>
-                <div className="ml-auto flex items-center gap-3">
                   <details className="group relative">
                     <summary className="flex cursor-pointer list-none items-center rounded-full bg-[var(--muted)] px-3 py-1 text-sm font-semibold text-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
                       <span className="sr-only">Open user menu</span>
                       <div className="mr-2 h-8 w-8 rounded-full bg-[var(--accent)] text-center text-sm font-bold text-white">
                         PL
                       </div>
-                      <svg className="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path d="M6 9l6 6 6-6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
                     </summary>
                     <div className="absolute right-0 mt-3 w-48 rounded-xl border border-white/10 bg-[var(--surface)] p-3 text-sm shadow-lg">
                       <p className="font-semibold text-gray-800">Alex Morgan</p>

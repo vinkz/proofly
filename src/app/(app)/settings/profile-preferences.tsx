@@ -35,9 +35,19 @@ export function ProfilePreferences({
   const handleSave = () => {
     startTransition(async () => {
       try {
-        await updateProfileBasics({ full_name: fullName, date_of_birth: dob, profession });
-        await updateTradeTypes(trades);
-        await updateCertifications(certs);
+        await updateProfileBasics({
+          full_name: fullName.trim() || undefined,
+          date_of_birth: dob.trim() || undefined,
+          profession: profession.trim() || undefined,
+        });
+        const tradesChanged = trades.sort().join(',') !== initialTrades.sort().join(',');
+        const certsChanged = certs.sort().join(',') !== initialCerts.sort().join(',');
+        if (tradesChanged && trades.length > 0) {
+          await updateTradeTypes(trades);
+        }
+        if (certsChanged) {
+          await updateCertifications(certs);
+        }
         await markOnboardingComplete();
         pushToast({ title: 'Profile updated', description: 'Preferences saved.', variant: 'success' });
       } catch (error) {

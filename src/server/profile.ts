@@ -100,11 +100,17 @@ export async function updateProfileBasics(payload: {
   date_of_birth?: string;
   profession?: string;
 }) {
-  const schema = z.object({
-    full_name: z.string().min(2).optional(),
-    date_of_birth: z.string().min(4).optional(),
-    profession: z.string().min(2).optional(),
-  });
+  const schema = z
+    .object({
+      full_name: z.string().min(2).optional(),
+      date_of_birth: z.string().min(4).optional(),
+      profession: z.string().min(2).optional(),
+    })
+    .transform((data) => ({
+      full_name: data.full_name?.trim(),
+      date_of_birth: data.date_of_birth?.trim() || undefined,
+      profession: data.profession?.trim(),
+    }));
   const parsed = schema.parse(payload);
   const { sb, user } = await requireUser({ write: true });
   await upsertProfile(sb, user.id, {

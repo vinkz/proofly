@@ -11,9 +11,10 @@
 - `supabase/` and `scripts/`: Supabase config and DevOps helpers (includes a legacy mobile tunnel script if ever needed).
 
 ## Agent Responsibilities
-- OnboardingAgent: Owns trade/cert onboarding flows under `src/app/(onboarding)`, using shadcn UI, guarded redirects, and server actions to persist profile data.
+- AuthAgent: Handles login (password + magic link), password reset, password change, and signup wizard. Routes: `/login`, `/forgot-password`, `/reset-password`, `/signup/step1-3`. Server actions: `signInWithPassword`, `signInWithMagicLink`, `userHasPassword`, `changePassword`, `requestPasswordReset`, `applyPasswordReset`, `completeSignupWizard`.
+- SignupAgent: Owns multi-step signup under `src/app/(auth)/signup` (steps: account details, personal/professional details, trade/cert selection) using shadcn UI and zod validation; finalizes via `completeSignupWizard` (auth signUp + profile upsert, onboarding_complete=true) then redirects to `/dashboard`.
 - TemplateAgent: Filters templates by `profiles.trade_types` or `is_general`, keeps template metadata (`is_general`, `trade_type`) in sync, and wires template pickers/lists to those rules.
-- ProfileAgent: Maintains `profiles` table fields (`trade_types`, `certifications`, `onboarding_complete`), updates via `src/server/profile.ts`, and enforces onboarding guards (`RequireAuth`, onboarding layout).
+- ProfileAgent: Maintains `profiles` table fields (`trade_types`, `certifications`, `onboarding_complete`, personal basics) via `src/server/profile.ts`, enforces guards in `RequireAuth` (redirects incomplete users to `/signup/step1`).
 
 ## Architecture Overview
 - Next.js App Router with mixed server/client components; pages and layouts live in `src/app`.
@@ -38,11 +39,8 @@
 - Primary CTAs use the `--action` green; secondary actions use brand/neutral blues. Favor rounded-xl, subtle shadows, and mobile-first spacing.
 
 ## Auth & Onboarding
-- Auth is Supabase magic-link via `signInWithOtp` (see `src/app/login/page.tsx`); `shouldCreateUser: true` supports sign-in and sign-up with the same flow.
-- Environment: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (and server keys) must be set; `/env-check` helps verify.
-- After login, users land in the App Router (`/dashboard` etc.); keep onboarding copy trade-aware per CONTEXT.md.
-- Auth helpers include `userHasPassword` (checks identities for email/password) and password updates respect whether a user had a password: require current password if present, otherwise allow setting a first password (see `src/server/auth.ts`, `src/server/password.ts`, `src/app/(app)/settings/password-section.tsx`).
-- Forgot/reset password flow: `requestPasswordReset` sends reset email with redirect to `/reset-password`; `applyPasswordReset` exchanges the code then updates the password. UI routes: `/forgot-password`, `/reset-password`, and login links the flow.
+- Auth supports magic-link (`signInWithOtp`) and password login, plus password change and reset flows; environment requires Supabase keys and `NEXT_PUBLIC_SITE_URL` for reset redirects.
+- Unified signup + onboarding is handled by the wizard at `/signup/step1-3`; incomplete profiles redirect there. Auth helpers include `userHasPassword`, `completeSignupWizard`, `changePassword`, `requestPasswordReset`, and `applyPasswordReset`.
 
 ## Testing Guidelines
 - Framework: Vitest; place specs in `tests/` with `*.test.ts`.

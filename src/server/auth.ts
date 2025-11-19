@@ -14,6 +14,7 @@ const SignUpSchema = CredentialsSchema.extend({
   full_name: z.string().min(2, 'Name is required'),
   date_of_birth: z.string().min(4, 'Date of birth is required'),
   profession: z.string().min(2, 'Profession is required'),
+  business_name: z.string().optional(),
   trade_types: z.array(z.string()).min(1, 'Select at least one trade'),
   certifications: z.array(z.string()).optional().default([]),
 });
@@ -48,6 +49,13 @@ export async function signUpWithPassword(payload: unknown) {
     email: body.email,
     password: body.password,
     options: {
+      data: {
+        full_name: body.full_name,
+        profession: body.profession,
+        business_name: body.business_name ?? null,
+        trade_types: body.trade_types,
+        certifications: body.certifications,
+      },
       emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/api/auth/callback` || undefined,
     },
   });

@@ -61,8 +61,8 @@ export default function LoginPage() {
           <h1 className="text-3xl font-bold text-[var(--brand)] sm:text-4xl">Log in</h1>
           <p className="text-sm text-muted-foreground/80">
             Use your password or get a magic link to continue. Need an account?{' '}
-            <Link href="/signup" className="font-semibold text-[var(--accent)] underline underline-offset-4">
-              Sign up
+            <Link href="/signup/step1" className="font-semibold text-[var(--accent)] underline underline-offset-4">
+              Start signup
             </Link>
             .
           </p>

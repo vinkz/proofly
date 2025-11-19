@@ -39,7 +39,7 @@ export default async function RequireAuth({ children }: { children: ReactNode })
     onboardingComplete !== true && (tradeTypes.length === 0 || certifications.length === 0);
 
   if (needsOnboarding) {
-    redirect('/onboarding/trades');
+    redirect('/signup/step1');
   }
 
   return <>{children}</>;
