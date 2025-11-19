@@ -2,6 +2,7 @@ type ColumnType =
   | 'uuid'
   | 'text'
   | 'varchar'
+  | 'integer'
   | 'timestamp'
   | 'boolean'
   | 'jsonb';
@@ -48,10 +49,12 @@ export const clientsTable: TableDefinition<{
 
 export const templatesTable: TableDefinition<{
   id: Column<string>;
-  created_by: Column<string>;
+  user_id: Column<string>;
   name: Column<string>;
   trade_type: Column<string>;
+  description: Column<string | null>;
   is_public: Column<boolean>;
+  is_general: Column<boolean>;
   items: Column<unknown>;
   created_at: Column<string>;
 }> = {
@@ -59,10 +62,12 @@ export const templatesTable: TableDefinition<{
   primaryKey: 'id',
   columns: {
     id: column({ dataType: 'uuid' }),
-    created_by: column({ dataType: 'uuid' }),
+    user_id: column({ dataType: 'uuid' }),
     name: column({ dataType: 'text' }),
     trade_type: column({ dataType: 'text' }),
+    description: column({ dataType: 'text', optional: true }),
     is_public: column({ dataType: 'boolean', defaultValue: false }),
+    is_general: column({ dataType: 'boolean', defaultValue: false }),
     items: column({
       dataType: 'jsonb',
       description: 'Array of template items (id, label, required, photo)',
@@ -114,10 +119,13 @@ export const jobItemsTable: TableDefinition<{
   id: Column<string>;
   job_id: Column<string>;
   label: Column<string>;
-  status: Column<string>;
+  result: Column<string>;
   note: Column<string>;
+  photos: Column<unknown>;
+  position: Column<number>;
   user_id: Column<string>;
   created_at: Column<string>;
+  updated_at: Column<string>;
 }> = {
   name: 'job_checklist',
   primaryKey: 'id',
@@ -128,39 +136,50 @@ export const jobItemsTable: TableDefinition<{
       references: { table: jobsTable.name, column: jobsTable.primaryKey as string },
     }),
     label: column({ dataType: 'text' }),
-    status: column({ dataType: 'text', description: 'pending | pass | fail' }),
+    result: column({ dataType: 'text', description: 'pending | pass | fail' }),
     note: column({ dataType: 'text', optional: true }),
-    user_id: column({ dataType: 'uuid' }),
+    photos: column({ dataType: 'jsonb', optional: true }),
+    position: column({ dataType: 'integer', optional: true }),
+    user_id: column({ dataType: 'uuid', optional: true }),
     created_at: column({ dataType: 'timestamp' }),
+    updated_at: column({ dataType: 'timestamp' }),
   },
 };
 
 export const reportsTable: TableDefinition<{
+  id: Column<string>;
   job_id: Column<string>;
   storage_path: Column<string>;
   generated_at: Column<string>;
+  created_at: Column<string>;
+  updated_at: Column<string>;
 }> = {
   name: 'reports',
-  primaryKey: 'job_id',
+  primaryKey: 'id',
   columns: {
+    id: column({ dataType: 'uuid' }),
     job_id: column({
       dataType: 'uuid',
       references: { table: jobsTable.name, column: jobsTable.primaryKey as string },
     }),
     storage_path: column({ dataType: 'text' }),
     generated_at: column({ dataType: 'timestamp' }),
+    created_at: column({ dataType: 'timestamp' }),
+    updated_at: column({ dataType: 'timestamp' }),
   },
 };
 
 export const reportDeliveriesTable: TableDefinition<{
   id: Column<string>;
   job_id: Column<string>;
+  report_id: Column<string>;
   recipient_email: Column<string>;
   recipient_name: Column<string>;
   status: Column<string>;
-  storage_path: Column<string>;
+  last_error: Column<string>;
+  sent_at: Column<string>;
   created_at: Column<string>;
-  user_id: Column<string>;
+  updated_at: Column<string>;
 }> = {
   name: 'report_deliveries',
   primaryKey: 'id',
@@ -170,12 +189,17 @@ export const reportDeliveriesTable: TableDefinition<{
       dataType: 'uuid',
       references: { table: jobsTable.name, column: jobsTable.primaryKey as string },
     }),
+    report_id: column({
+      dataType: 'uuid',
+      references: { table: reportsTable.name, column: reportsTable.primaryKey as string },
+    }),
     recipient_email: column({ dataType: 'text' }),
     recipient_name: column({ dataType: 'text', optional: true }),
     status: column({ dataType: 'text', defaultValue: 'queued' }),
-    storage_path: column({ dataType: 'text', optional: true }),
+    last_error: column({ dataType: 'text', optional: true }),
+    sent_at: column({ dataType: 'timestamp', optional: true }),
     created_at: column({ dataType: 'timestamp' }),
-    user_id: column({ dataType: 'uuid', optional: true }),
+    updated_at: column({ dataType: 'timestamp' }),
   },
 };
 

@@ -47,6 +47,7 @@ export function TemplateSection({ jobId, label, templates }: TemplateSectionProp
             <p className="text-lg font-semibold text-muted">{template.name}</p>
             <p className="text-xs text-muted-foreground/60">
               {template.items.length} items · {template.trade_type}
+              {template.is_general ? ' · General' : ''}
             </p>
             <p className="mt-2 text-sm text-muted-foreground/80">
               {template.is_public ? 'Proofly public template' : 'My template'}

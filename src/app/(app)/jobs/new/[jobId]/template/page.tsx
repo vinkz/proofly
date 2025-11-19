@@ -12,7 +12,7 @@ export default async function TemplateStepPage({ params }: { params: Promise<{ j
     notFound();
   }
 
-  const [state, templates] = await Promise.all([getJobWizardState(jobId), listVisibleTemplates('plumbing')]);
+  const [state, templates] = await Promise.all([getJobWizardState(jobId), listVisibleTemplates()]);
   const myTemplates = templates.filter((template) => !template.is_public);
   const publicTemplates = templates.filter((template) => template.is_public);
 

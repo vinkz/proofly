@@ -7,7 +7,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const supabase = await supabaseServerReadOnly();
   const { data } = await supabase
     .from('reports')
-    .select('job_id, storage_path, generated_at, jobs:jobs(client_name, title, status, scheduled_for)')
+    .select('id, job_id, storage_path, generated_at, created_at, jobs:jobs(client_name, title, status, scheduled_for)')
     .order('generated_at', { ascending: false });
   const reports = (data ?? []).filter((report) => {
     if (!query) return true;

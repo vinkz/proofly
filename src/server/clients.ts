@@ -214,7 +214,7 @@ export async function getClientDetail(id: string) {
   if (jobIds.length) {
     const { data: reportRows, error: reportErr } = await sb
       .from('reports')
-      .select('job_id, storage_path, generated_at, created_at, updated_at')
+      .select('id, job_id, storage_path, generated_at, created_at, updated_at')
       .in('job_id', jobIds as ReportRow['job_id'][]);
     if (reportErr) throw new Error(reportErr.message);
     reports = reportRows ?? [];

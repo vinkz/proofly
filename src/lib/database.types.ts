@@ -103,41 +103,94 @@ export type Database = {
           },
         ];
       };
+      profiles: {
+        Row: {
+          id: string;
+          trade_types: string[];
+          certifications: string[];
+          onboarding_complete: boolean | null;
+          created_at: string | null;
+          updated_at: string | null;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          date_of_birth?: string | null;
+          profession?: string | null;
+        };
+        Insert: {
+          id: string;
+          trade_types?: string[];
+          certifications?: string[];
+          onboarding_complete?: boolean | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          date_of_birth?: string | null;
+          profession?: string | null;
+        };
+        Update: {
+          id?: string;
+          trade_types?: string[];
+          certifications?: string[];
+          onboarding_complete?: boolean | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+          full_name?: string | null;
+          avatar_url?: string | null;
+          date_of_birth?: string | null;
+          profession?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'profiles_id_fkey';
+            columns: ['id'];
+            isOneToOne: true;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       templates: {
         Row: {
           id: string;
-          created_by: string | null;
+          user_id: string | null;
           name: string;
           trade_type: string;
+          description: string | null;
           is_public: boolean;
+          is_general: boolean;
           items: Json;
           created_at: string;
           updated_at: string | null;
         };
         Insert: {
           id?: string;
-          created_by?: string | null;
+          user_id?: string | null;
           name: string;
           trade_type: string;
+          description?: string | null;
           is_public?: boolean;
+          is_general?: boolean;
           items?: Json;
           created_at?: string;
           updated_at?: string | null;
         };
         Update: {
           id?: string;
-          created_by?: string | null;
+          user_id?: string | null;
           name?: string;
           trade_type?: string;
+          description?: string | null;
           is_public?: boolean;
+          is_general?: boolean;
           items?: Json;
           created_at?: string;
           updated_at?: string | null;
         };
         Relationships: [
           {
-            foreignKeyName: 'templates_created_by_fkey';
-            columns: ['created_by'];
+            foreignKeyName: 'templates_user_id_fkey';
+            columns: ['user_id'];
             isOneToOne: false;
             referencedRelation: 'users';
             referencedColumns: ['id'];
@@ -149,9 +202,8 @@ export type Database = {
           id: string;
           template_id: string;
           label: string;
-          field_type: Database['public']['Enums']['template_item_type'];
+          help_text: string | null;
           is_required: boolean;
-          allow_photo: boolean;
           position: number;
           created_at: string;
           updated_at: string;
@@ -160,9 +212,8 @@ export type Database = {
           id?: string;
           template_id: string;
           label: string;
-          field_type?: Database['public']['Enums']['template_item_type'];
+          help_text?: string | null;
           is_required?: boolean;
-          allow_photo?: boolean;
           position?: number;
           created_at?: string;
           updated_at?: string;
@@ -171,9 +222,8 @@ export type Database = {
           id?: string;
           template_id?: string;
           label?: string;
-          field_type?: Database['public']['Enums']['template_item_type'];
+          help_text?: string | null;
           is_required?: boolean;
-          allow_photo?: boolean;
           position?: number;
           created_at?: string;
           updated_at?: string;
@@ -199,6 +249,9 @@ export type Database = {
           status: Database['public']['Enums']['job_status'];
           template_id: string | null;
           scheduled_for: string | null;
+          completed_at: string | null;
+          engineer_signature_path: string | null;
+          client_signature_path: string | null;
           technician_name: string | null;
           notes: string | null;
           created_at: string;
@@ -214,6 +267,9 @@ export type Database = {
           status?: Database['public']['Enums']['job_status'];
           template_id?: string | null;
           scheduled_for?: string | null;
+          completed_at?: string | null;
+          engineer_signature_path?: string | null;
+          client_signature_path?: string | null;
           technician_name?: string | null;
           notes?: string | null;
           created_at?: string;
@@ -229,6 +285,9 @@ export type Database = {
           status?: Database['public']['Enums']['job_status'];
           template_id?: string | null;
           scheduled_for?: string | null;
+          completed_at?: string | null;
+          engineer_signature_path?: string | null;
+          client_signature_path?: string | null;
           technician_name?: string | null;
           notes?: string | null;
           created_at?: string;
@@ -268,6 +327,8 @@ export type Database = {
           note: string | null;
           photos: Json | null;
           position: number | null;
+          created_at: string | null;
+          updated_at: string | null;
         };
         Insert: {
           id?: string;
@@ -278,6 +339,8 @@ export type Database = {
           note?: string | null;
           photos?: Json | null;
           position?: number | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
         Update: {
           id?: string;
@@ -288,6 +351,8 @@ export type Database = {
           note?: string | null;
           photos?: Json | null;
           position?: number | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
         Relationships: [
           {
@@ -359,25 +424,28 @@ export type Database = {
       };
       reports: {
         Row: {
+          id: string;
           job_id: string;
           storage_path: string;
           generated_at: string;
-          created_at: string;
-          updated_at: string;
+          created_at: string | null;
+          updated_at: string | null;
         };
         Insert: {
+          id?: string;
           job_id: string;
           storage_path: string;
           generated_at?: string;
-          created_at?: string;
-          updated_at?: string;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
         Update: {
+          id?: string;
           job_id?: string;
           storage_path?: string;
           generated_at?: string;
-          created_at?: string;
-          updated_at?: string;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
         Relationships: [
           {
@@ -393,35 +461,38 @@ export type Database = {
         Row: {
           id: string;
           job_id: string;
+          report_id: string;
           recipient_email: string;
           recipient_name: string | null;
           status: string;
-          storage_path: string | null;
-          user_id: string | null;
-          created_at: string;
-          updated_at: string;
+          last_error: string | null;
+          sent_at: string | null;
+          created_at: string | null;
+          updated_at: string | null;
         };
         Insert: {
           id?: string;
           job_id: string;
+          report_id: string;
           recipient_email: string;
           recipient_name?: string | null;
           status?: string;
-          storage_path?: string | null;
-          user_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
+          last_error?: string | null;
+          sent_at?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
         Update: {
           id?: string;
           job_id?: string;
+          report_id?: string;
           recipient_email?: string;
           recipient_name?: string | null;
           status?: string;
-          storage_path?: string | null;
-          user_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
+          last_error?: string | null;
+          sent_at?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
         };
         Relationships: [
           {
@@ -432,10 +503,10 @@ export type Database = {
             referencedColumns: ['id'];
           },
           {
-            foreignKeyName: 'report_deliveries_user_id_fkey';
-            columns: ['user_id'];
+            foreignKeyName: 'report_deliveries_report_id_fkey';
+            columns: ['report_id'];
             isOneToOne: false;
-            referencedRelation: 'users';
+            referencedRelation: 'reports';
             referencedColumns: ['id'];
           },
         ];

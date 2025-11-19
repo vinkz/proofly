@@ -43,6 +43,9 @@ export interface JobDetailPayload {
     status: string | null;
     created_at: string | null;
     scheduled_for: string | null;
+    completed_at: string | null;
+    engineer_signature_path: string | null;
+    client_signature_path: string | null;
     technician_name: string | null;
     template_id: string | null;
     user_id: string | null;

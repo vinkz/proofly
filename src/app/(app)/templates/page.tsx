@@ -5,7 +5,7 @@ import NewTemplateButton from '@/components/templates/new-template-button';
 import { DuplicateTemplateInline } from '@/components/templates/duplicate-template-inline';
 
 export default async function TemplatesPage() {
-  const templates = await listVisibleTemplates('plumbing');
+  const templates = await listVisibleTemplates();
   const myTemplates = templates.filter((template) => !template.is_public);
   const publicTemplates = templates.filter((template) => template.is_public);
 
@@ -38,22 +38,22 @@ export default async function TemplatesPage() {
       </section>
 
       <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-              <h2 className="text-lg font-semibold text-muted">Public workflows</h2>
-              <p className="text-xs text-muted-foreground/60">Copy Proofly best-practice workflows.</p>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              {publicTemplates.map((template) => (
-                <TemplateCard key={template.id} template={template} showDuplicate />
-              ))}
-              {publicTemplates.length === 0 ? (
-                <p className="rounded-3xl border border-dashed border-white/30 p-6 text-sm text-muted-foreground/70">
-                  No public templates available.
-                </p>
-              ) : null}
-            </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-muted">Public workflows</h2>
+            <p className="text-xs text-muted-foreground/60">Copy Proofly best-practice workflows.</p>
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {publicTemplates.map((template) => (
+            <TemplateCard key={template.id} template={template} showDuplicate />
+          ))}
+          {publicTemplates.length === 0 ? (
+            <p className="rounded-3xl border border-dashed border-white/30 p-6 text-sm text-muted-foreground/70">
+              No public templates available.
+            </p>
+          ) : null}
+        </div>
       </section>
     </main>
   );
@@ -71,6 +71,11 @@ function TemplateCard({
       <Link href={`/templates/${template.id}`} className="block">
         <p className="text-lg font-semibold text-muted">{template.name}</p>
         <p className="text-xs text-muted-foreground/60">{template.trade_type}</p>
+        {template.is_general ? (
+          <span className="mt-2 inline-flex rounded-full bg-[var(--muted)] px-3 py-1 text-[11px] font-semibold uppercase text-[var(--brand)]">
+            General workflow
+          </span>
+        ) : null}
         <p className="mt-2 text-sm text-muted-foreground/80">{template.items.length} checklist items</p>
       </Link>
       {showDuplicate ? (

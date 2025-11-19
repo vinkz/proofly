@@ -23,7 +23,7 @@ interface KpiCardProps {
 
 export function KpiCards({ stats }: KpiCardProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <>
       {stats.map(({ label, value, helper, icon }) => {
         const Icon = ICONS[icon];
         return (
@@ -45,6 +45,6 @@ export function KpiCards({ stats }: KpiCardProps) {
           </motion.div>
         );
       })}
-    </div>
+    </>
   );
 }

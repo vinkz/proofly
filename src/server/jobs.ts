@@ -56,7 +56,7 @@ type ClientLike = {
 };
 
 const jobColumns =
-  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, technician_name';
+  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name';
 const parseTemplateItems = (items: TemplateRow['items']): TemplateItem[] =>
   Array.isArray(items) ? (items as unknown as TemplateItem[]) : [];
 const templateFromRow = (row: TemplateRow): TemplateModel => ({
@@ -64,8 +64,11 @@ const templateFromRow = (row: TemplateRow): TemplateModel => ({
   name: row.name,
   trade_type: row.trade_type,
   is_public: !!row.is_public,
-  created_by: row.created_by,
+  is_general: !!(row as { is_general?: boolean }).is_general,
+  user_id: (row as { user_id?: string | null }).user_id ?? (row as { created_by?: string | null }).created_by ?? null,
+  description: (row as { description?: string | null }).description ?? null,
   created_at: row.created_at,
+  updated_at: row.updated_at ?? null,
   items: parseTemplateItems(row.items),
 });
 
@@ -98,7 +101,7 @@ export async function listJobs() {
   if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
-    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id',
+    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, completed_at, engineer_signature_path, client_signature_path',
     'id, client_name, address, status, created_at, user_id',
   ];
 
@@ -157,12 +160,12 @@ export async function createJob(form: FormData | Record<string, unknown>) {
 
   const { data: template, error: tmplErr } = await sb
     .from('templates')
-    .select('id, name, items, is_public, created_by')
+    .select('id, name, items, is_public, is_general, user_id')
     .eq('id', input.template_id)
     .single();
   if (tmplErr || !template) throw new Error(tmplErr?.message ?? 'Template not found');
   const templateRow = template as TemplateRow;
-  const ownerId = templateRow.created_by;
+  const ownerId = (templateRow as { user_id?: string | null }).user_id ?? null;
   const isPublic = templateRow.is_public ?? false;
   if (!isPublic && ownerId !== user.id) {
     throw new Error('You do not have access to this template');
@@ -245,7 +248,7 @@ export async function getJobWithChecklist(jobId: string) {
   if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
-    'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, technician_name',
+    'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name',
     'id, client_name, address, status, created_at, template_id, user_id, notes',
   ];
 
@@ -348,6 +351,9 @@ export async function getJobWithChecklist(jobId: string) {
       status: jobData.status ?? null,
       created_at: jobData.created_at ?? null,
       scheduled_for: jobData.scheduled_for ?? null,
+      completed_at: (job as { completed_at?: string | null }).completed_at ?? null,
+      engineer_signature_path: (job as { engineer_signature_path?: string | null }).engineer_signature_path ?? null,
+      client_signature_path: (job as { client_signature_path?: string | null }).client_signature_path ?? null,
       technician_name: jobData.technician_name ?? null,
       template_id: jobData.template_id ?? null,
       user_id: jobOwner ?? null,
@@ -371,13 +377,15 @@ export async function setJobTemplate(jobId: string, templateId: string) {
   const typedTemplateId = templateId as TemplateRow['id'];
   const { data: template, error: tmplErr } = await sb
     .from('templates')
-    .select('id, name, trade_type, is_public, items, created_by')
+    .select('id, name, trade_type, description, is_public, is_general, user_id, items')
     .eq('id', typedTemplateId)
     .maybeSingle();
   if (tmplErr) throw new Error(tmplErr.message);
   if (!template) throw new Error('Template not found');
 
-  const isOwner = template.created_by === user.id;
+  const templateOwner =
+    (template as { user_id?: string | null }).user_id ?? (template as { created_by?: string | null }).created_by ?? null;
+  const isOwner = templateOwner === user.id;
   if (!template.is_public && !isOwner) throw new Error('You do not have access to that template');
 
   const templateItems = parseTemplateItems(template.items);
@@ -386,18 +394,18 @@ export async function setJobTemplate(jobId: string, templateId: string) {
   await sb.from('job_items').delete().eq('job_id', typedJobId);
 
   if (templateItems.length) {
-  const checklistRows = templateItems.map(
-    (item): Database['public']['Tables']['job_items']['Insert'] => ({
-      job_id: typedJobId,
-      template_item_id: item.id ?? null,
-      label: item.label ?? 'Checklist item',
-      result: 'pending',
-      note: null,
-      position: null,
-      photos: null,
-    }),
-  );
-  const { error: insertErr } = await sb.from('job_items').insert(checklistRows);
+    const checklistRows = templateItems.map(
+      (item, index): Database['public']['Tables']['job_items']['Insert'] => ({
+        job_id: typedJobId,
+        template_item_id: item.id ?? null,
+        label: item.label ?? 'Checklist item',
+        result: 'pending',
+        note: null,
+        position: index,
+        photos: null,
+      }),
+    );
+    const { error: insertErr } = await sb.from('job_items').insert(checklistRows);
     if (insertErr) throw new Error(insertErr.message);
   }
 
@@ -449,7 +457,7 @@ export async function getJobWizardState(jobId: string): Promise<JobWizardState> 
     detail.job.template_id
       ? sb
           .from('templates')
-          .select('id, name, trade_type, is_public, created_by, created_at, updated_at, items')
+          .select('id, name, trade_type, description, is_public, is_general, user_id, created_at, updated_at, items')
           .eq('id', detail.job.template_id as TemplateRow['id'])
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -756,7 +764,7 @@ export async function sendReportEmail(jobId: string, payload: FormData | Record<
 
   const { data: report, error: reportErr } = await sb
     .from('reports')
-    .select('storage_path')
+    .select('id, storage_path')
     .eq('job_id', jobId as ReportRow['job_id'])
     .maybeSingle();
   if (reportErr) throw new Error(reportErr.message);
@@ -764,11 +772,10 @@ export async function sendReportEmail(jobId: string, payload: FormData | Record<
 
   const { error: insertErr } = await sb.from('report_deliveries').insert({
     job_id: jobId as ReportDeliveryRow['job_id'],
+    report_id: report.id as ReportDeliveryRow['report_id'],
     recipient_email: body.email,
     recipient_name: body.name ?? null,
     status: 'queued',
-    storage_path: report.storage_path,
-    user_id: user.id,
   });
   if (insertErr) throw new Error(insertErr.message);
 

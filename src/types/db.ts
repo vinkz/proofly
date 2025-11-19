@@ -17,8 +17,10 @@ export interface Template {
   id: string;
   name: string;
   trade_type: string;
+  description?: string | null;
   is_public?: boolean | null;
-  created_by?: string | null;
+  is_general?: boolean | null;
+  user_id?: string | null;
   items: TemplateItem[];
 }
 
@@ -26,6 +28,6 @@ export interface ChecklistItem {
   id: string;
   job_id: string;
   label: string;
-  status: 'pending' | 'pass' | 'fail';
+  result: 'pending' | 'pass' | 'fail';
   note?: string | null;
 }
