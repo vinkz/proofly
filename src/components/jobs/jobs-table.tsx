@@ -85,18 +85,9 @@ export default function JobsTable({ jobs }: { jobs: JobRow[] }) {
 }
 
 function resumeHref(job: JobRow) {
-  switch (job.status) {
-    case 'draft':
-      return `/jobs/new/${job.id}/template`;
-    case 'awaiting_signatures':
-      return `/jobs/new/${job.id}/summary`;
-    case 'awaiting_report':
-      return `/jobs/new/${job.id}/ai`;
-    case 'completed':
-      return `/reports/${job.id}`;
-    default:
-      return `/jobs/${job.id}`;
-  }
+  const certificateType = (job as { certificate_type?: string | null }).certificate_type ?? 'general-works';
+  if (job.status === 'completed') return `/jobs/${job.id}/pdf`;
+  return `/wizard/create/${certificateType}?jobId=${job.id}`;
 }
 
 function StatusBadge({ status }: { status: string }) {

@@ -4,9 +4,6 @@ import { redirect } from 'next/navigation';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import { listJobs } from '@/server/jobs';
-import { listVisibleTemplates } from '@/server/templates';
-import type { TemplateModel } from '@/types/template';
-import NewJobModal from '@/components/new-job-modal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -34,7 +31,7 @@ export default async function DashboardPage() {
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups, templates] = await Promise.all([getProfile(), listJobs(), listVisibleTemplates()]);
+  const [{ profile }, jobGroups] = await Promise.all([getProfile(), listJobs()]);
   const activeJobs = jobGroups.active as BasicJob[];
   const completedJobs = jobGroups.completed as BasicJob[];
   const allJobs: BasicJob[] = [...activeJobs, ...completedJobs];
@@ -89,7 +86,7 @@ export default async function DashboardPage() {
               Welcome back, {displayName}
             </h1>
             <p className="text-sm text-gray-500">
-              Track field activity, client signatures, and compliance reports in one place.
+              Track field activity, client signatures, and certificates in one place.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -97,7 +94,7 @@ export default async function DashboardPage() {
               <Link href="/clients">View clients</Link>
             </Button>
             <Button asChild className="rounded-full bg-[var(--accent)] px-5 py-2 text-white hover:bg-[var(--brand)]">
-              <Link href="/jobs/new/client">New job</Link>
+              <Link href="/jobs">New certificate</Link>
             </Button>
           </div>
         </div>
@@ -126,10 +123,10 @@ export default async function DashboardPage() {
             {recentJobs.length === 0 ? (
               <EmptyState
                 title="No jobs on record yet"
-                description="Create a job to generate your first field checklist and capture compliance evidence."
+                description="Create a certificate to capture field evidence and send PDFs."
                 cta={
                   <Button asChild>
-                    <Link href="/jobs">Create job</Link>
+                    <Link href="/jobs">Create certificate</Link>
                   </Button>
                 }
               />
@@ -213,17 +210,9 @@ export default async function DashboardPage() {
               description="Schedule technicians for unresolved findings."
               href="/reports"
             />
-            <MilestoneItem
-              title="Workflows to review"
-              value={templates.length}
-              description="Keep your inspection workflows up to date."
-              href="/templates"
-            />
           </CardContent>
         </Card>
       </section>
-
-      <NewJobModal templates={templates as TemplateModel[]} />
     </div>
   );
 }
@@ -249,7 +238,7 @@ function CurrentJobTile({ job }: { job: BasicJob }) {
         </Badge>
       </div>
       <div className="mt-4 flex items-center justify-between">
-        <span className="text-xs font-semibold text-muted-foreground/80">Open to continue workflow</span>
+        <span className="text-xs font-semibold text-muted-foreground/80">Open to continue certificate</span>
         <Link
           href={`/jobs/${job.id}`}
           className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-[var(--brand)] transition hover:bg-white/10"

@@ -61,7 +61,7 @@ export default function SignupStep2Page() {
       step={2}
       total={3}
       title="Tell us about your work"
-      description="We tailor workflows and reports to your profession."
+      description="We tailor certificates and reports to your profession."
     >
       <div className="space-y-3">
         <label className="block text-sm font-semibold text-muted">
@@ -91,7 +91,7 @@ export default function SignupStep2Page() {
             type="text"
             value={form.business_name}
             onChange={update('business_name')}
-            placeholder="Proofly Plumbing Co."
+            placeholder="CertNow Plumbing Co."
             className="mt-2"
             disabled={isPending}
           />

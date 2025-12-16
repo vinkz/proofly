@@ -7,8 +7,7 @@ import { PageFade } from './_components/page-fade';
 
 const links = [
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/jobs', label: 'Jobs' },
-  { href: '/templates', label: 'Workflows' },
+  { href: '/jobs', label: 'Certificates' },
   { href: '/clients', label: 'Clients' },
   { href: '/reports', label: 'Reports' },
   { href: '/settings', label: 'Settings' },
@@ -20,8 +19,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <div className="font-sans text-gray-900">
         <div className="min-h-screen bg-[var(--muted)] md:flex">
           <aside className="hidden w-64 flex-col border-r border-white/10 bg-[var(--surface)]/95 px-6 py-8 shadow-md backdrop-blur md:flex md:sticky md:top-0 md:h-screen">
-            <div className="text-2xl font-bold text-[var(--brand)]">Proofly</div>
-            <p className="mt-1 text-xs text-gray-500">Compliance, simplified</p>
+            <div className="text-2xl font-bold text-[var(--brand)]">CertNow</div>
+            <p className="mt-1 text-xs text-gray-500">Certificates, simplified</p>
             <nav className="mt-8 flex flex-col gap-1">
               {links.map((link) => (
                 <NavLink key={link.href} href={link.href}>
@@ -29,7 +28,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 </NavLink>
               ))}
             </nav>
-            <div className="mt-auto text-xs text-gray-400">© {new Date().getFullYear()} Proofly</div>
+            <div className="mt-auto text-xs text-gray-400">© {new Date().getFullYear()} CertNow</div>
           </aside>
 
           <div className="flex min-h-screen flex-1 flex-col">
@@ -38,7 +37,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 <div className="flex items-center gap-3">
                   <Link href="/dashboard" className="flex items-center gap-2">
                     <span className="rounded-2xl bg-[var(--brand)]/15 px-3 py-1 text-xl font-extrabold text-[var(--brand)] shadow-sm">
-                      Proofly
+                      CertNow
                     </span>
                     <span className="hidden text-xs font-medium text-gray-500 sm:inline">Field compliance</span>
                   </Link>

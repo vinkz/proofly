@@ -74,7 +74,7 @@ export function ProfilePreferences({
           <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Trade preferences</p>
           <h2 className="text-lg font-semibold text-muted">Onboarding details</h2>
           <p className="text-sm text-muted-foreground/70">
-            Edit your trades and certifications. This controls workflow filtering and onboarding status.
+            Edit your trades and certifications. This controls certificate filtering and onboarding status.
           </p>
         </div>
         <Button onClick={handleSave} disabled={isPending || (!dirty && trades.length === initialTrades.length && certs.length === initialCerts.length)}>

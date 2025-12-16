@@ -634,6 +634,22 @@ export async function deleteJob(jobId: string) {
   revalidatePath('/jobs');
 }
 
+export async function deleteMyJobs() {
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const { error: deleteErr } = await sb.from('jobs').delete().eq('user_id', user.id);
+  if (deleteErr) throw new Error(deleteErr.message);
+
+  revalidatePath('/dashboard');
+  revalidatePath('/jobs');
+  return { ok: true };
+}
+
 export async function finalizeJobReport(jobId: string) {
   JobId.parse(jobId);
   const sb = await supabaseServerServiceRole();

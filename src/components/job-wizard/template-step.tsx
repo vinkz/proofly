@@ -50,7 +50,7 @@ export function TemplateSection({ jobId, label, templates }: TemplateSectionProp
               {template.is_general ? ' · General' : ''}
             </p>
             <p className="mt-2 text-sm text-muted-foreground/80">
-              {template.is_public ? 'Proofly public template' : 'My template'}
+              {template.is_public ? 'CertNow public template' : 'My template'}
             </p>
             <Button
               type="button"

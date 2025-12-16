@@ -18,7 +18,7 @@ export default async function SettingsPage() {
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold text-muted">Settings</h1>
         <p className="text-sm text-muted-foreground/70">
-          Update your profile, trade preferences, and credentials. This controls which workflows you see.
+          Update your profile, trade preferences, and credentials. This controls which certificates you see.
         </p>
       </div>
       <ProfilePreferences

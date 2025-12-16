@@ -12,53 +12,6 @@ export type Database = {
   };
   public: {
     Tables: {
-      job_checklist: {
-        Row: {
-          id: string;
-          job_id: string;
-          template_item_id: string | null;
-          label: string;
-          status: Database['public']['Enums']['job_item_status'];
-          note: string | null;
-          photo_path: string | null;
-          user_id: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          job_id: string;
-          template_item_id?: string | null;
-          label?: string;
-          status?: Database['public']['Enums']['job_item_status'];
-          note?: string | null;
-          photo_path?: string | null;
-          user_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          job_id?: string;
-          template_item_id?: string | null;
-          label?: string;
-          status?: Database['public']['Enums']['job_item_status'];
-          note?: string | null;
-          photo_path?: string | null;
-          user_id?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'job_items_job_id_fkey';
-            columns: ['job_id'];
-            isOneToOne: false;
-            referencedRelation: 'jobs';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
       clients: {
         Row: {
           id: string;
@@ -99,6 +52,38 @@ export type Database = {
             columns: ['user_id'];
             isOneToOne: false;
             referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      certificates: {
+        Row: {
+          id: string;
+          job_id: string | null;
+          pdf_url: string | null;
+          pdf_path: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          job_id?: string | null;
+          pdf_url?: string | null;
+          pdf_path?: string | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          job_id?: string | null;
+          pdf_url?: string | null;
+          pdf_path?: string | null;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'certificates_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
             referencedColumns: ['id'];
           },
         ];

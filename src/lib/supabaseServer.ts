@@ -51,10 +51,11 @@ export async function supabaseServerAction() {
 
 export async function supabaseServerServiceRole() {
   assertSupabaseEnv();
+  const cookieStore = await cookies();
   return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     cookies: {
-      get() {
-        return undefined;
+      get(name: string) {
+        return cookieStore.get(name)?.value;
       },
       set() {
         return;

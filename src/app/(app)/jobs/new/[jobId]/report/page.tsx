@@ -44,12 +44,12 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
             </div>
             <div className="flex flex-wrap gap-2">
               {signedReportUrl ? (
-                <a
-                  href={signedReportUrl}
-                  target="_blank"
-                  className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Download PDF
+              <a
+                href={signedReportUrl}
+                target="_blank"
+                className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white"
+              >
+                Download PDF
                 </a>
               ) : null}
               <ShareReportLinkButton jobId={jobId} />
@@ -59,7 +59,7 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
             <iframe
               key={signedReportUrl}
               src={signedReportUrl}
-              title="Proofly report preview"
+              title="CertNow report preview"
               className="mt-4 h-[420px] w-full rounded-xl border border-white/30"
             />
           ) : (
@@ -92,7 +92,7 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
               Send via email
             </h2>
-            <p className="text-xs text-muted-foreground/60">Queue delivery to your client from Proofly.</p>
+            <p className="text-xs text-muted-foreground/60">Queue delivery to your client from CertNow.</p>
             <div className="mt-3">
               <ReportEmailForm jobId={jobId} />
             </div>

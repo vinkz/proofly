@@ -118,14 +118,6 @@ export const jobsTable: TableDefinition<{
 export const jobItemsTable: TableDefinition<{
   id: Column<string>;
   job_id: Column<string>;
-  label: Column<string>;
-  result: Column<string>;
-  note: Column<string>;
-  photos: Column<unknown>;
-  position: Column<number>;
-  user_id: Column<string>;
-  created_at: Column<string>;
-  updated_at: Column<string>;
 }> = {
   name: 'job_checklist',
   primaryKey: 'id',
@@ -135,14 +127,6 @@ export const jobItemsTable: TableDefinition<{
       dataType: 'uuid',
       references: { table: jobsTable.name, column: jobsTable.primaryKey as string },
     }),
-    label: column({ dataType: 'text' }),
-    result: column({ dataType: 'text', description: 'pending | pass | fail' }),
-    note: column({ dataType: 'text', optional: true }),
-    photos: column({ dataType: 'jsonb', optional: true }),
-    position: column({ dataType: 'integer', optional: true }),
-    user_id: column({ dataType: 'uuid', optional: true }),
-    created_at: column({ dataType: 'timestamp' }),
-    updated_at: column({ dataType: 'timestamp' }),
   },
 };
 

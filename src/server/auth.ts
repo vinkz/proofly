@@ -1,9 +1,12 @@
 'use server';
 
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 import { z } from 'zod';
 
-import { supabaseServerAction, supabaseServerReadOnly } from '@/lib/supabaseServer';
-import type { TablesInsert } from '@/lib/database.types';
+import type { TablesInsert, Database } from '@/lib/database.types';
+import { supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { env, assertSupabaseEnv } from '@/lib/env';
 
 const CredentialsSchema = z.object({
   email: z.string().email(),
@@ -19,9 +22,28 @@ const SignUpSchema = CredentialsSchema.extend({
   certifications: z.array(z.string()).optional().default([]),
 });
 
+function createAuthedSupabaseClient() {
+  assertSupabaseEnv();
+  const cookieStore = cookies();
+
+  return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options) {
+        cookieStore.set({ name, value, ...options });
+      },
+      remove(name: string, options) {
+        cookieStore.set({ name, value: '', expires: new Date(0), ...options });
+      },
+    },
+  });
+}
+
 export async function signInWithPassword(payload: unknown) {
   const body = CredentialsSchema.parse(payload);
-  const sb = await supabaseServerAction();
+  const sb = createAuthedSupabaseClient();
   const { error } = await sb.auth.signInWithPassword({
     email: body.email,
     password: body.password,
@@ -32,10 +54,10 @@ export async function signInWithPassword(payload: unknown) {
 
 export async function signInWithMagicLink(email: string) {
   const parsed = z.string().email().parse(email);
-  const sb = await supabaseServerAction();
+  const sb = createAuthedSupabaseClient();
   const { error } = await sb.auth.signInWithOtp({
     email: parsed,
-    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/api/auth/callback` || undefined },
+    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/callback` || undefined },
   });
   if (error) throw new Error(error.message);
   return { ok: true };
@@ -43,7 +65,7 @@ export async function signInWithMagicLink(email: string) {
 
 export async function signUpWithPassword(payload: unknown) {
   const body = SignUpSchema.parse(payload);
-  const sb = await supabaseServerAction();
+  const sb = createAuthedSupabaseClient();
 
   const { data, error } = await sb.auth.signUp({
     email: body.email,
@@ -56,7 +78,7 @@ export async function signUpWithPassword(payload: unknown) {
         trade_types: body.trade_types,
         certifications: body.certifications,
       },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/api/auth/callback` || undefined,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/callback` || undefined,
     },
   });
   if (error) throw new Error(error.message);

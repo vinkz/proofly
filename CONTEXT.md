@@ -1,153 +1,351 @@
-# Proofly – Context & Development Guide 
+# CertNow – Grand Vision & MVP UX
 
-##  Purpose & Mission
+## Purpose & Mission
 
-Empower solo and small-team tradespeople—starting with plumbers—to **achieve compliance**, deliver **professional reports**, and **reduce admin time** using lightweight, AI-driven digital tools. Proofly eliminates manual paperwork and lowers legal and operational risks by transforming field reporting into a seamless, mobile-first experience that builds trust with clients and regulators.
+Empower solo and small‑team tradespeople to achieve compliance, deliver professional reports, and eliminate paperwork using lightweight, mobile‑first, AI‑powered tools. CertNow transforms on‑site reporting into a fast, defensible digital workflow that builds trust with clients, landlords, and regulators while saving hours of admin every week.
 
-##  Product Concept
+---
 
-Proofly is a **micro‑SaaS** platform built for independent plumbers, gas engineers, electricians, drainage specialists, and small contractors who face daily compliance demands and documentation pressure.
+## Product Concept
 
-Using a **7-step smart workflow**, Proofly lets users:
+CertNow is a micro‑SaaS platform purpose‑built for independent plumbers, gas engineers, and small contractors who face recurring compliance and documentation burdens.
 
-* Create or customise compliance templates
-* Capture photos and signatures in the field
-* Generate branded, AI-summarised PDF reports
-* Deliver reports instantly via email or WhatsApp
-* Store and track all jobs securely in the cloud
+Through a streamlined **3‑step workflow (Info → Photos → Checks → Sign)** and optional **Job Sheet Scan flow**, users generate branded, professional PDF certificates and job reports that can be sent instantly via email or WhatsApp.
 
-### 🔧 Trade-Aware Onboarding (Key Innovation)
+A core system differentiator is **Trade‑Aware Onboarding**:
 
-During signup, users specify their:
+* During signup, users select their trade(s) and certifications (e.g., Gas Safe, WRAS, CPS, NVQ levels).
+* CertNow automatically personalises templates, terminology, required fields, and workflows for their profession.
+* Users only see the certificates relevant to them, eliminating clutter and manual setup.
 
-* Trade (plumber, gas engineer, electrician, heating, drainage, etc.)
-* Certifications (Gas Safe, WRAS, CPS, NVQ levels, etc.)
-* Typical work domains
-
-Proofly then **personalises the entire system**:
-
-* Relevant templates only
-* Trade-specific terminology
-* Auto‑suggested checklists
-* Legal/regulatory variations
-
-This creates **zero setup friction** and makes the app feel tailor‑made from minute one.
+The result is a zero‑friction, tailor‑made compliance workflow from the first login.
 
 ---
 
 ## Core Features
 
-### 1. Personalised Trade-Aware Onboarding
+### Trade‑Aware Personalisation
 
-* Choose trade + certifications
-* UI, templates, and workflows adapt instantly
-* Removes clutter, increases trust and speed
+* Onboarding by trade and certification.
+* Auto‑configured workflows for plumbing, gas, heating, maintenance, etc.
 
-### 2. Customisable Compliance Checklists
+### Certificate & Checklist Engine
 
-* Drag-and-drop template builder
-* Preloaded trade-specific templates
-* Each checklist item supports notes, photos, and pass/fail
+* Customisable forms and checklists.
+* Drag‑and‑drop template editing.
+* Curated starter templates per trade.
 
-### 3. Photo & Signature Capture
+### Photo & Signature Capture
 
-* Attach real‑time, on‑site proof for every job
-* Dual signatures: engineer + client
+* In‑app camera capture for site evidence.
+* Digital customer & engineer signatures.
 
-### 4. Instant AI-Generated PDF Reports
+### Instant AI‑Generated PDFs
 
-* Professional, branded client reports
-* AI summarises inspection results into clear, compliant narratives
+* Branded documents summarised in clear professional language.
+* Multi‑page reports containing photos, readings, checklists, and notes.
 
-### 5. Cloud Storage & Sharing
+### Cloud Storage & Sharing
 
-* Secure record archive
-* One‑tap email / WhatsApp delivery
+* Secure cloud archive.
+* One‑tap delivery via WhatsApp or email.
 
-### 6. Automated Service Reminders
+### Job‑Sheet Scan (Paper → Digital)
 
-* Send follow-ups for compliance maintenance
-* Helps drive repeat business
+* OCR capture of handwritten pads and forms.
+* Layout detection and autofill of structured digital certificates.
 
-### 7. Visual Dashboard
+### Automated Reminders
 
-* Track job volume, compliance rates, templates used, and top clients
+* Annual gas safety, servicing, or maintenance follow‑ups.
 
----
+### Performance Dashboard
 
-##  Target User
-
-* Independent tradespeople (plumbers, gas engineers, electricians)
-* Small teams (1–5 engineers)
-* Businesses needing compliance documentation
-* Users who value speed over admin-heavy software
-
-Focus: **UK market first**, expanding to similar regulated trades globally.
+* Weekly/monthly job stats.
+* Report history.
+* Compliance completion tracking.
 
 ---
 
-##  Market Position & Differentiators
+## MVP Focus Certificates
 
-* **Trade-aware personalisation**—unique advantage
-* **Compliance-first** rather than full CRM or scheduling software
-* **Lightweight and affordable** for solo operators
-* **AI-augmented workflow** massively reduces time to produce reports
-* **Fastest onboarding** in the sector
-
----
-
-##  Technical Stack
-
-Same as previous version, with no changes:
-
-* Next.js 15 App Router, Supabase SSR, Tailwind 4, OpenAI GPT-4o-mini, pdf-lib, etc.
+* **CP12 Gas Safety Certificate**
+* **Boiler Service Certificate**
+* **General Works / Job Completion Certificate**
+* **Job Sheet Capture → Digital Conversion**
 
 ---
 
-##  Design System (Updated)
+## Target Users
 
-The action button color should be updated to a **green** that complements Proofly’s core blue.
-
-### Brand Colors
-
-* `--brand`: **#1E3A8A** (primary blue)
-* `--accent`: **#2563EB** (secondary blue)
-* `--action`: **#16A34A** (green for primary actions)
-* `--muted`: #F3F4F6
-* `--surface`: #FFFFFF
-* `--danger`: #DC2626
-* `--success`: #16A34A
-
-Use `bg-[--action]` for primary buttons.
-
-### Styling Principles
-
-* Mobile-first
-* Minimal inputs, maximise automation
-* Use rounded-xl, subtle shadows, clean typography
-* Framer Motion micro-animations for fluidity
+* Solo plumbers, gas engineers, heating installers, drainage technicians, and maintenance contractors.
+* UK‑based initially, then expanding to global regulated trades.
+* Users who value **speed, professionalism, and zero admin**.
 
 ---
 
-##  Developer Workflow
+## Market Positioning & Differentiators
 
-* Use server actions (`"use server"`) for backend operations
-* Keep components modular
-* Use Zod for validation
-* Run:
-
-  ```bash
-  pnpm exec tsc --noEmit
-  pnpm lint
-  pnpm dev
-  ```
+* **Certificate‑first focus** — not a bulky CRM.
+* **Trade‑aware onboarding** for instant relevance.
+* **Lightweight pricing (£10–£30/mo)** built for owner‑operators.
+* **AI productivity layer** for summarisation and OCR.
+* **Mobile‑first speed** — 30‑second certificates.
 
 ---
 
-##  Future Extensions
+## Go‑To‑Market Strategy
 
-* Stripe subscriptions
-* Template marketplace
-* Offline mode (PWA)
-* “Proof Mode” live job viewer
-* AI-driven auto-complete for job details
+* Trade‑specific Facebook groups and WhatsApp communities.
+* Educational content around CP12 and servicing compliance.
+* Partnerships with training providers and Gas Safe mentors.
+* Simple referral incentives for early adopters.
+
+---
+
+## Financial Targets
+
+* £10–£30/month subscription.
+* £500 MRR ≈ 34–40 paying users.
+* Micro‑SaaS marketplace exit target: £10k–£25k+ with upward scalability.
+
+---
+
+## Long‑Term Vision
+
+CertNow becomes the trusted compliance companion for field trades worldwide — a flexible reporting engine that adjusts to any industry’s regulations, certifications, and workflows to produce fast, professional, defensible documentation.
+
+---
+
+## Core Certification Types
+
+* CP12 Gas Safety Certificate
+* Boiler Service Certificate
+* General Works / Job Completion Certificate
+* Job Sheet (Handwritten → Snap to Digital)
+
+---
+
+## 1. Home Screen — "Jobs" (Command Centre)
+
+### Top Bar
+
+* 🔍 Search bar
+* Filter: **Today / Week / All**
+
+### Primary CTAs
+
+* **+ New Certificate**
+* **Scan Job Sheet**
+
+### Jobs List Examples
+
+* *Boiler Service — 15 Acacia Avenue — Draft*
+* *CP12 — Complete — PDF Sent*
+* *General Works — Signature Needed*
+
+The home screen acts as the central command centre for all active and completed jobs.
+
+---
+
+## 2. New Certificate Selection
+
+When the user taps **+ New Certificate**, a modal opens with certificate options:
+
+1. **CP12 Gas Safety Certificate**
+2. **Boiler Service Certificate**
+3. **General Works Certificate**
+
+*(Future option, disabled / greyed out for anticipation)*
+
+* **Electrical Minor Works — Coming Soon**
+
+---
+
+## 3. Certificate Creation Flow (Shared 3‑Step Wizard)
+
+All certificates use the same wizard flow to minimise learning curve and maximise speed.
+
+---
+
+### STEP 1 — Job Info
+
+Fields auto‑complete from past customer data whenever possible:
+
+* Customer name
+* Property address
+* Landlord / agent (optional)
+* Date & time
+* Job type (auto‑filled based on certificate selected)
+* Engineer name (auto‑filled)
+* Company details (auto‑filled)
+
+CTA:
+➡️ **Next → Add Photos**
+
+---
+
+### STEP 2 — Add Photos
+
+Large photo capture slots for common evidence types:
+
+* Appliance
+* Labels / serials
+* Any issues / defects
+* Before / after
+* Flue
+* Meter readings
+* Site evidence
+
+Photo input options:
+
+* Take photo inside app
+* Upload from camera roll
+* *(Future)* AI auto‑labelling & sorting
+
+CTA:
+➡️ **Next → Checks**
+
+---
+
+### STEP 3 — Checks & Readings
+
+#### CP12 Fields
+
+* Appliance type
+* Ventilation
+* Flue condition
+* Gas tightness
+* CO tests / readings
+* Observations
+* Defects & remedial actions
+
+#### Boiler Service Fields
+
+* Service actions performed
+* Visual inspection results
+* Burner & flue checks
+* Condensate check
+* CO2 readings
+* Service recommendations
+
+#### General Works Fields
+
+* Work completed summary
+
+* Findings
+
+* Parts used
+
+* Recommendations
+
+* Large text boxes support AI suggestions and auto‑summaries (optional later feature).
+
+---
+
+## FINISH — Digital Signatures & PDF Generation
+
+Final step across all certificates:
+
+* Customer signature (touch/finger draw)
+* Engineer signature (pre‑saved or drawn)
+
+🎉 **Upon completion, CertNow automatically generates a professional PDF certificate.**
+
+---
+
+## 4. PDF Preview Screen
+
+After generation, the user sees a visual PDF preview with action buttons:
+
+* **Send to Client** (email / WhatsApp)
+* **Download PDF**
+* **Edit Before Sending**
+* **Duplicate Template** (for repeat jobs)
+
+Once sent, the job is permanently stamped:
+
+> *PDF Sent at 14:32*
+
+This confirmation moment reinforces completion satisfaction.
+
+---
+
+## 5. Job Sheet Snap Flow (Separate Capture Flow)
+
+Accessed from home screen via **Scan Job Sheet**.
+
+---
+
+### STEP 1 — Camera Capture
+
+User photographs a handwritten paper job sheet.
+
+CertNow automatically:
+
+* Enhances image quality
+* Runs OCR extraction
+* Detects layout fields & handwritten text boxes
+* Segments form data
+
+---
+
+### STEP 2 — Auto‑Filled Digital Form
+
+CertNow pre‑builds a **General Works Certificate** using extracted fields:
+
+* Customer
+* Address
+* Job summary
+* Work carried out
+* Parts used
+* Price
+* Engineer
+* Date
+* Signature (if captured)
+
+User reviews, edits if required, then taps:
+➡️ **Generate PDF**
+
+---
+
+### STEP 3 — PDF Ready
+
+User can:
+
+* **Send to Client**
+* **Save as Template**
+* **Add to Job List**
+
+This workflow converts legacy paper processes into instant digital compliance reporting.
+
+---
+
+## 6. Job Details Page
+
+Accessible by tapping any job in the list.
+
+Displays:
+
+* Job status: Draft / Waiting for Signature / Completed
+* Uploaded photos
+* Attached certificate PDF
+* Controls:
+
+  * **Edit**
+  * **Duplicate**
+  * **Delete**
+
+---
+
+## UX Goals
+
+* 30‑second certificate creation
+* Minimal typing via photos + auto‑fill
+* Consistent flow across all document types
+* Mobile‑first, one‑hand usage
+* Offline capture support (sync when online later)
+
+---
+
+This UX model forms the foundation for CertNow MVP v1 focused on CP12, Boiler Service, General Works and Job Sheet digitisation.

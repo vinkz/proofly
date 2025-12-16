@@ -63,7 +63,7 @@ export default function SignupStep3Page() {
           trade_types: state.trade_types,
           certifications: state.certifications,
         });
-        pushToast({ title: 'Welcome to Proofly', description: 'Account created.', variant: 'success' });
+        pushToast({ title: 'Welcome to CertNow', description: 'Account created.', variant: 'success' });
         router.push('/dashboard');
         if (typeof window !== 'undefined') {
           window.sessionStorage.removeItem('proofly_signup_state');
@@ -83,7 +83,7 @@ export default function SignupStep3Page() {
       step={3}
       total={3}
       title="Choose your trades"
-      description="Select the trades and certifications that apply. This shapes your workflows."
+      description="Select the trades and certifications that apply. This shapes your certificates."
     >
       <div className="space-y-6">
         <MultiSelect

@@ -39,6 +39,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   }
 
   const { job, items, photos, signatures, report } = data;
+  if ((job.status ?? 'draft') === 'draft') {
+    const certificateType = (job as { certificate_type?: string | null }).certificate_type ?? 'general-works';
+    redirect(`/wizard/create/${certificateType}?jobId=${jobId}`);
+  }
+
   const clientName = job.client_name ?? 'Client';
   const jobAddress = job.address ?? 'No address provided';
   const jobStatus = job.status ?? 'pending';
@@ -135,7 +140,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         ) : null}
 
         <section className="mt-8 space-y-4">
-          <h2 className="text-lg font-semibold text-muted">Checklist</h2>
+          <h2 className="text-lg font-semibold text-muted">Certificate checks</h2>
           {items.length ? (
             <div className="grid gap-4">
               {items.map((item, index) => (
@@ -150,7 +155,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             </div>
           ) : (
             <p className="rounded border border-dashed border-white/15 p-4 text-sm text-muted-foreground/70">
-              Checklist has not been generated for this job.
+              Checks have not been recorded for this certificate.
             </p>
           )}
         </section>

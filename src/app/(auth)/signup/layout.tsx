@@ -7,7 +7,7 @@ export default function SignupLayout({ children }: { children: ReactNode }) {
       <header className="mx-auto flex max-w-5xl items-center justify-between px-4 pb-6 pt-8">
         <div className="flex items-center gap-2">
           <span className="rounded-xl bg-[var(--brand)]/15 px-3 py-2 text-lg font-extrabold text-[var(--brand)] shadow-sm">
-            Proofly
+            CertNow
           </span>
           <span className="text-xs font-semibold uppercase tracking-tight text-[var(--accent)]">Signup</span>
         </div>

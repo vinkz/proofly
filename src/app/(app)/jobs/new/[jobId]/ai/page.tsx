@@ -26,7 +26,7 @@ export default async function AiStepPage({ params }: { params: Promise<{ jobId: 
           <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step 6</p>
           <h1 className="text-2xl font-semibold text-muted">AI report generation</h1>
           <p className="text-sm text-muted-foreground/70">
-            Proofly assembles the checklist data, photos, and signatures into a polished PDF.
+            CertNow assembles the checklist data, photos, and signatures into a polished PDF.
           </p>
         </div>
 
