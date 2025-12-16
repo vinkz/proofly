@@ -56,7 +56,7 @@ type ClientLike = {
 };
 
 const jobColumns =
-  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name';
+  'id, client_id, client_name, address, status, created_at, template_id, certificate_type, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name';
 const parseTemplateItems = (items: TemplateRow['items']): TemplateItem[] =>
   Array.isArray(items) ? (items as unknown as TemplateItem[]) : [];
 const templateFromRow = (row: TemplateRow): TemplateModel => ({
@@ -101,8 +101,8 @@ export async function listJobs() {
   if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
-    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, completed_at, engineer_signature_path, client_signature_path',
-    'id, client_name, address, status, created_at, user_id',
+    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, certificate_type, completed_at, engineer_signature_path, client_signature_path',
+    'id, client_name, address, status, created_at, user_id, certificate_type',
   ];
 
   let rows: Record<string, unknown>[] = [];
@@ -248,8 +248,8 @@ export async function getJobWithChecklist(jobId: string) {
   if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
-    'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name',
-    'id, client_name, address, status, created_at, template_id, user_id, notes',
+    'id, client_id, client_name, address, status, created_at, template_id, certificate_type, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name',
+    'id, client_name, address, status, created_at, template_id, certificate_type, user_id, notes',
   ];
 
   let job: Record<string, unknown> | null = null;

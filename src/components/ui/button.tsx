@@ -18,7 +18,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className = '', variant = 'primary', type = 'button', asChild = false, children, ...props }, ref) => {
     const variantClass = variantClasses[variant];
-    const baseClasses = `inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 ${variantClass} ${className}`;
+    const baseClasses = `inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 ${variantClass} ${className}`;
 
     if (asChild && isValidElement(children)) {
       const child = children as ReactElement<{ className?: string }>;

@@ -2,13 +2,13 @@
 
 @layer base {
   :root {
-    --brand: #1E3A8A;
-    --accent: #2563EB;
-    --action: #2563EB;
-    --muted: #F3F4F6;
-    --surface: #FFFFFF;
-    --danger: #DC2626;
-    --success: #16A34A;
+    --brand: #111827;
+    --accent: #111827;
+    --action: #111827;
+    --muted: #f3f4f6;
+    --surface: #ffffff;
+    --danger: #b91c1c;
+    --success: #15803d;
   }
 
   body {
@@ -16,8 +16,8 @@
   }
 
   ::selection {
-    background-color: var(--accent);
-    color: var(--surface);
+    background-color: #e5e7eb;
+    color: #111827;
   }
 }
 

@@ -85,6 +85,11 @@ const SaveJobInfoSchema = z.object({
   fields: z.record(z.string(), z.string().nullable().optional()),
 });
 
+const SaveJobFieldsSchema = z.object({
+  jobId: z.string().uuid(),
+  fields: z.record(z.string(), z.string().nullable().optional()),
+});
+
 export async function saveJobInfo(payload: z.infer<typeof SaveJobInfoSchema>) {
   const input = SaveJobInfoSchema.parse(payload);
   const sb = await supabaseServerServiceRole();
@@ -116,6 +121,25 @@ export async function saveJobInfo(payload: z.infer<typeof SaveJobInfoSchema>) {
   }
 
   revalidatePath(`/jobs/${jobId}`);
+  return { ok: true };
+}
+
+export async function saveJobFields(payload: z.infer<typeof SaveJobFieldsSchema>) {
+  const input = SaveJobFieldsSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  console.log('saveJobFields called', { jobId: input.jobId, keys: Object.keys(input.fields) });
+  const entries = Object.entries(input.fields).map(([key, value]) => ({
+    job_id: input.jobId,
+    field_key: key,
+    value: value ?? null,
+  }));
+  await persistJobFields(sb, input.jobId, entries, 'saveJobFields');
+  revalidatePath(`/wizard/create/cp12?jobId=${input.jobId}`);
   return { ok: true };
 }
 

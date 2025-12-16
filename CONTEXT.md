@@ -349,3 +349,6 @@ Displays:
 ---
 
 This UX model forms the foundation for CertNow MVP v1 focused on CP12, Boiler Service, General Works and Job Sheet digitisation.
+
+## Visual Direction
+- Monochrome, Notion-inspired palette for UI: accent/brand/action `#111827`, muted backgrounds `#f3f4f6`, surface `#ffffff`, success `#15803d`, danger `#b91c1c`. No blue branding; lean on black/white/grey with subtle contrast.

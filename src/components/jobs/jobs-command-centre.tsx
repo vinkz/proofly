@@ -7,7 +7,7 @@ import { JobCard } from './job-card';
 import { CertificateTypeModal } from '@/components/certificates/certificate-type-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { DeleteAllJobsButton } from './delete-all-jobs-button';
+import { DeleteJobsMenu } from './delete-jobs-menu';
 
 export type JobSummary = {
   id: string;
@@ -77,7 +77,7 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
           <Button asChild variant="secondary" className="rounded-full px-4 py-2">
             <Link href="/jobs/scan">Scan Job Sheet</Link>
           </Button>
-          <DeleteAllJobsButton />
+          <DeleteJobsMenu jobs={jobs} />
         </div>
       </div>
 
@@ -91,10 +91,8 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
             status={job.status}
             certificateType={job.certificate_type}
             hasPdf={job.has_pdf}
-            onDeleted={() => {
-              // Optimistic local removal
-              // (full refresh still happens after delete on server)
-            }}
+            scheduledFor={job.scheduled_for}
+            createdAt={job.created_at}
           />
         ))}
         {filtered.length === 0 ? (

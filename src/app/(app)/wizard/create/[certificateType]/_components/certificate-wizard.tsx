@@ -7,8 +7,8 @@ import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { PhotoUploadCard } from '@/components/certificates/photo-upload-card';
 import { SignatureCard } from '@/components/certificates/signature-card';
+import { EvidenceCard } from './evidence-card';
 import { PHOTO_CATEGORIES, type CertificateType, type Cp12Appliance } from '@/types/certificates';
 import {
   saveCp12JobInfo,
@@ -26,7 +26,9 @@ import {
   CP12_VENTILATION,
   CP12_DEMO_APPLIANCE,
   CP12_DEMO_INFO,
+  CP12_EVIDENCE_CONFIG,
 } from '@/types/cp12';
+import { saveJobFields } from '@/server/certificates';
 
 type WizardProps = {
   jobId: string;
@@ -107,6 +109,9 @@ export function CertificateWizard({
   });
 
   const [photoNotes, setPhotoNotes] = useState<Record<string, string>>(initialPhotoNotes);
+  const [evidenceFields, setEvidenceFields] = useState<Record<string, string>>(
+    Object.fromEntries(Object.entries(initialInfo).map(([k, v]) => [k, (v as string) ?? ''])),
+  );
   const sanitizeAppliance = (appliance: Cp12Appliance): Cp12Appliance => ({
     appliance_type: appliance.appliance_type ?? '',
     location: appliance.location ?? '',
@@ -166,6 +171,13 @@ export function CertificateWizard({
           warning_notice_issued: CP12_DEMO_INFO.warning_notice_issued ?? 'NO',
         });
         setPhotoNotes((prev) => ({ ...prev, ...CP12_DEMO_PHOTO_NOTES }));
+        const evidenceDemo: Record<string, string> = { ...evidenceFields };
+        CP12_EVIDENCE_CONFIG.forEach((cfg) => {
+          Object.entries(cfg.demo ?? {}).forEach(([k, v]) => {
+            evidenceDemo[k] = v;
+          });
+        });
+        setEvidenceFields(evidenceDemo);
 
         await saveCp12JobInfo({ jobId, data: demoInfo });
         await saveCp12Appliances({
@@ -182,6 +194,7 @@ export function CertificateWizard({
             updateField({ jobId, key: `photo_note_${key}`, value }),
           ),
         );
+        await saveJobFields({ jobId, fields: evidenceDemo });
         router.refresh();
         pushToast({ title: 'CP12 demo filled', variant: 'success' });
       } catch (error) {
@@ -405,35 +418,29 @@ export function CertificateWizard({
           </Button>
         </div>
       ) : null}
-      <div className="grid gap-2 sm:grid-cols-2">
-        {PHOTO_CATEGORIES.map((category) => (
-          <PhotoUploadCard
+      <div className="grid gap-3 sm:grid-cols-2">
+        {CP12_EVIDENCE_CONFIG.map((category) => (
+          <EvidenceCard
             key={category.key}
-            label={category.label}
-            initialPreview={initialPhotoPreviews[category.key]}
-            note={photoNotes[category.key] ?? ''}
-            onNoteChange={(value) => {
-              setPhotoNotes((prev) => ({ ...prev, [category.key]: value }));
+            title={category.title}
+            fields={category.fields}
+            values={evidenceFields}
+            onChange={(key, value) => {
+              setEvidenceFields((prev) => ({ ...prev, [key]: value }));
               startTransition(async () => {
                 try {
-                  await updateField({ jobId, key: `photo_note_${category.key}`, value });
+                  await saveJobFields({ jobId, fields: { [key]: value } });
                 } catch (error) {
                   pushToast({
-                    title: 'Could not save note',
+                    title: 'Could not save field',
                     description: error instanceof Error ? error.message : 'Try again.',
                     variant: 'error',
                   });
                 }
               });
             }}
-            onVoiceRequest={() =>
-              pushToast({
-                title: 'Voice note',
-                description: 'Whisper capture coming soon. Add a quick text note for now.',
-                variant: 'default',
-              })
-            }
-            onSelect={(file) => {
+            photoPreview={initialPhotoPreviews[category.key]}
+            onPhotoUpload={(file) => {
               startTransition(async () => {
                 const data = new FormData();
                 data.append('jobId', jobId);
@@ -441,7 +448,7 @@ export function CertificateWizard({
                 data.append('file', file);
                 try {
                   await uploadJobPhoto(data);
-                  pushToast({ title: `${category.label} saved`, variant: 'success' });
+                  pushToast({ title: `${category.title} photo saved`, variant: 'success' });
                 } catch (error) {
                   pushToast({
                     title: 'Upload failed',
@@ -451,7 +458,17 @@ export function CertificateWizard({
                 }
               });
             }}
-            hint="Camera or upload"
+            onVoice={() =>
+              pushToast({
+                title: 'Voice capture',
+                description: 'Whisper capture coming soon. Add a quick text note for now.',
+                variant: 'default',
+              })
+            }
+            onText={() => {
+              // Inputs are already editable; keep for parity with other actions
+              pushToast({ title: 'Manual entry', description: 'Edit the fields directly above.', variant: 'default' });
+            }}
           />
         ))}
       </div>

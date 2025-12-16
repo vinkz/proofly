@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { clsx } from 'clsx';
-import { DeleteJobButton } from './delete-job-button';
 
 type JobCardProps = {
   id: string;
@@ -9,7 +8,8 @@ type JobCardProps = {
   status?: string | null;
   certificateType?: string | null;
   hasPdf?: boolean;
-  onDeleted?: () => void;
+  scheduledFor?: string | null;
+  createdAt?: string | null;
 };
 
 const statusColors: Record<string, string> = {
@@ -20,12 +20,20 @@ const statusColors: Record<string, string> = {
   default: 'bg-gray-100 text-gray-700',
 };
 
-export function JobCard({ id, title, address, status, certificateType, hasPdf, onDeleted }: JobCardProps) {
+function formatDate(dateString?: string | null) {
+  if (!dateString) return null;
+  const parsed = new Date(dateString);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString();
+}
+
+export function JobCard({ id, title, address, status, certificateType, hasPdf, scheduledFor, createdAt }: JobCardProps) {
   const color = statusColors[status ?? ''] ?? statusColors.default;
+  const displayDate = formatDate(scheduledFor ?? createdAt);
   return (
     <Link
       href={`/jobs/${id}`}
-      className="group block rounded-3xl border border-white/30 bg-white/80 p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+      className="group block rounded-md border border-white/30 bg-white/80 p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">
@@ -39,13 +47,6 @@ export function JobCard({ id, title, address, status, certificateType, hasPdf, o
           <span className={clsx('rounded-full px-3 py-1 text-xs font-semibold', color)}>
             {status?.replace('_', ' ') ?? 'Draft'}
           </span>
-          <DeleteJobButton
-            jobId={id}
-            variant="ghost"
-            className="h-8 px-2 text-xs font-semibold text-red-600 hover:text-red-700"
-            stopPropagation
-            onDeleted={onDeleted}
-          />
         </div>
       </div>
       <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground/60">
@@ -58,7 +59,9 @@ export function JobCard({ id, title, address, status, certificateType, hasPdf, o
             PDF
           </span>
         ) : null}
-        <span className="rounded-full bg-white/80 px-2 py-1 font-semibold text-[var(--accent)]">Tap to open</span>
+        {displayDate ? (
+          <span className="rounded-full bg-white/80 px-2 py-1 font-semibold text-[var(--accent)]">Date: {displayDate}</span>
+        ) : null}
       </div>
     </Link>
   );

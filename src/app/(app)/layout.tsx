@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <div className="font-sans text-gray-900">
         <div className="min-h-screen bg-[var(--muted)] md:flex">
           <aside className="hidden w-64 flex-col border-r border-white/10 bg-[var(--surface)]/95 px-6 py-8 shadow-md backdrop-blur md:flex md:sticky md:top-0 md:h-screen">
-            <div className="text-2xl font-bold text-[var(--brand)]">CertNow</div>
+            <div className="text-2xl font-bold text-[var(--brand)] tracking-tight">CertNow</div>
             <p className="mt-1 text-xs text-gray-500">Certificates, simplified</p>
             <nav className="mt-8 flex flex-col gap-1">
               {links.map((link) => (
@@ -36,7 +36,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <Link href="/dashboard" className="flex items-center gap-2">
-                    <span className="rounded-2xl bg-[var(--brand)]/15 px-3 py-1 text-xl font-extrabold text-[var(--brand)] shadow-sm">
+                    <span className="rounded-md bg-[var(--brand)]/10 px-3 py-1 text-xl font-extrabold text-[var(--brand)] shadow-sm">
                       CertNow
                     </span>
                     <span className="hidden text-xs font-medium text-gray-500 sm:inline">Field compliance</span>
@@ -44,12 +44,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 </div>
                 <div className="ml-auto flex items-center gap-3">
                   <details className="relative md:hidden">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-white/20 bg-white/70 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md border border-white/20 bg-white/70 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm backdrop-blur focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path d="M4 7h16M4 12h16M4 17h16" strokeWidth={2} strokeLinecap="round" />
                       </svg>
                     </summary>
-                    <div className="absolute right-0 mt-3 w-64 rounded-2xl border border-white/10 bg-[var(--surface)] p-3 shadow-xl">
+                    <div className="absolute right-0 mt-3 w-64 rounded-md border border-white/10 bg-[var(--surface)] p-3 shadow-xl">
                       <nav className="flex flex-col gap-1">
                         {links.map((link) => (
                           <NavLink key={link.href} href={link.href}>
@@ -60,21 +60,21 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                     </div>
                   </details>
                   <details className="group relative">
-                    <summary className="flex cursor-pointer list-none items-center rounded-full bg-[var(--muted)] px-3 py-1 text-sm font-semibold text-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
+                    <summary className="flex cursor-pointer list-none items-center rounded-md bg-[var(--muted)] px-3 py-1 text-sm font-semibold text-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
                       <span className="sr-only">Open user menu</span>
-                      <div className="mr-2 h-8 w-8 rounded-full bg-[var(--accent)] text-center text-sm font-bold text-white">
+                      <div className="mr-2 h-8 w-8 rounded-md bg-[var(--accent)] text-center text-sm font-bold text-white">
                         PL
                       </div>
                     </summary>
-                    <div className="absolute right-0 mt-3 w-48 rounded-xl border border-white/10 bg-[var(--surface)] p-3 text-sm shadow-lg">
+                    <div className="absolute right-0 mt-3 w-48 rounded-md border border-white/10 bg-[var(--surface)] p-3 text-sm shadow-lg">
                       <p className="font-semibold text-gray-800">Alex Morgan</p>
                       <p className="text-xs text-gray-500">Field Supervisor</p>
                       <div className="my-3 border-t border-gray-100" />
-                      <Link href="/settings" className="block rounded-lg px-3 py-2 text-gray-600 hover:bg-gray-50">
+                      <Link href="/settings" className="block rounded-sm px-3 py-2 text-gray-600 hover:bg-gray-50">
                         Settings
                       </Link>
                       <form action="/logout" method="post">
-                        <button type="submit" className="w-full rounded-lg px-3 py-2 text-left text-red-600 hover:bg-red-50">
+                        <button type="submit" className="w-full rounded-sm px-3 py-2 text-left text-red-600 hover:bg-red-50">
                           Sign out
                         </button>
                       </form>
