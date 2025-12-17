@@ -85,8 +85,9 @@ export default function JobsTable({ jobs }: { jobs: JobRow[] }) {
 }
 
 function resumeHref(job: JobRow) {
-  const certificateType = (job as { certificate_type?: string | null }).certificate_type ?? 'general-works';
+  const certificateType = (job as { certificate_type?: string | null }).certificate_type;
   if (job.status === 'completed') return `/jobs/${job.id}/pdf`;
+  if (!certificateType) return `/jobs/${job.id}`;
   return `/wizard/create/${certificateType}?jobId=${job.id}`;
 }
 

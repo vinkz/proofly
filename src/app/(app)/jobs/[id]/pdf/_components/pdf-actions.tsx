@@ -5,8 +5,9 @@ import { useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { sendPdfToClient } from '@/server/certificates';
 import { useToast } from '@/components/ui/use-toast';
+import type { CertificateType } from '@/types/certificates';
 
-export function PdfActions({ jobId, sentAt }: { jobId: string; sentAt: string | null }) {
+export function PdfActions({ jobId, sentAt, certificateType }: { jobId: string; sentAt: string | null; certificateType: CertificateType }) {
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -26,13 +27,15 @@ export function PdfActions({ jobId, sentAt }: { jobId: string; sentAt: string | 
     });
   };
 
+  const editHref = `/wizard/create/${certificateType}?jobId=${jobId}`;
+
   return (
     <div className="flex flex-wrap gap-2">
       <Button className="rounded-full bg-[var(--accent)] px-4 py-2 text-white" onClick={handleSend} disabled={isPending}>
         {isPending ? 'Sending…' : 'Send to Client'}
       </Button>
       <Button asChild variant="outline" className="rounded-full">
-        <a href={`/jobs/${jobId}`} className="px-4 py-2">
+        <a href={editHref} className="px-4 py-2">
           Edit Before Sending
         </a>
       </Button>

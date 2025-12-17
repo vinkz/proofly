@@ -63,7 +63,7 @@ export default function SignupStep3Page() {
           trade_types: state.trade_types,
           certifications: state.certifications,
         });
-        pushToast({ title: 'Welcome to CertNow', description: 'Account created.', variant: 'success' });
+        pushToast({ title: 'Welcome to certnow', description: 'Account created.', variant: 'success' });
         router.push('/dashboard');
         if (typeof window !== 'undefined') {
           window.sessionStorage.removeItem('proofly_signup_state');

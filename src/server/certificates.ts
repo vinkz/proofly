@@ -5,11 +5,18 @@ import { Buffer } from 'node:buffer';
 import { z } from 'zod';
 
 import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import type { Database } from '@/lib/database.types';
 import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { JobFieldPayload, CertificateType, PhotoCategory, Cp12Appliance } from '@/types/certificates';
 import { CERTIFICATE_TYPES, PHOTO_CATEGORIES, CERTIFICATE_LABELS } from '@/types/certificates';
+import type { BoilerServicePhotoCategory } from '@/types/boiler-service';
+import { BOILER_SERVICE_PHOTO_CATEGORIES, BOILER_SERVICE_REQUIRED_FOR_ISSUE } from '@/types/boiler-service';
+import { renderBoilerServicePdf } from '@/lib/pdf/boiler-service';
+import type { GeneralWorksPhotoCategory } from '@/types/general-works';
+import { GENERAL_WORKS_PHOTO_CATEGORIES, GENERAL_WORKS_REQUIRED_FIELDS } from '@/types/general-works';
+import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
 
 type JobInsertPayload = {
   certificateType: CertificateType;
@@ -139,7 +146,7 @@ export async function saveJobFields(payload: z.infer<typeof SaveJobFieldsSchema>
     value: value ?? null,
   }));
   await persistJobFields(sb, input.jobId, entries, 'saveJobFields');
-  revalidatePath(`/wizard/create/cp12?jobId=${input.jobId}`);
+  revalidatePath(`/jobs/${input.jobId}`);
   return { ok: true };
 }
 
@@ -275,6 +282,260 @@ export async function updateField(payload: z.infer<typeof UpdateFieldSchema>) {
 
 const optionalText = z.string().optional().default('');
 
+const BoilerServiceJobInfoSchema = z.object({
+  jobId: z.string().uuid(),
+  data: z.object({
+    customer_name: optionalText,
+    property_address: optionalText,
+    postcode: optionalText,
+    service_date: optionalText,
+    engineer_name: optionalText,
+    gas_safe_number: optionalText,
+    company_name: optionalText,
+    company_address: optionalText,
+  }),
+});
+
+const BoilerServiceDetailsSchema = z.object({
+  jobId: z.string().uuid(),
+  data: z.object({
+    boiler_make: optionalText,
+    boiler_model: optionalText,
+    boiler_type: optionalText,
+    boiler_location: optionalText,
+    serial_number: optionalText,
+    gas_type: optionalText,
+    mount_type: optionalText,
+    flue_type: optionalText,
+  }),
+});
+
+const BoilerServiceChecksSchema = z.object({
+  jobId: z.string().uuid(),
+  data: z.object({
+    service_visual_inspection: optionalText,
+    service_burner_cleaned: optionalText,
+    service_heat_exchanger_cleaned: optionalText,
+    service_condensate_trap_checked: optionalText,
+    service_seals_checked: optionalText,
+    service_filters_cleaned: optionalText,
+    service_flue_checked: optionalText,
+    service_ventilation_checked: optionalText,
+    service_controls_checked: optionalText,
+    service_leaks_checked: optionalText,
+    operating_pressure_mbar: optionalText,
+    inlet_pressure_mbar: optionalText,
+    co_ppm: optionalText,
+    co2_percent: optionalText,
+    flue_gas_temp_c: optionalText,
+    system_pressure_bar: optionalText,
+    service_summary: optionalText,
+    recommendations: optionalText,
+    defects_found: optionalText,
+    defects_details: optionalText,
+    parts_used: optionalText,
+    next_service_due: optionalText,
+  }),
+});
+
+const BoilerServicePhotoSchema = z.object({
+  jobId: z.string().uuid(),
+  category: z.enum(BOILER_SERVICE_PHOTO_CATEGORIES as [BoilerServicePhotoCategory, ...BoilerServicePhotoCategory[]]),
+  file: z.instanceof(File),
+});
+
+const GeneralWorksInfoSchema = z.object({
+  jobId: z.string().uuid(),
+  data: z.record(z.string(), z.string().optional().nullable()),
+});
+
+const GeneralWorksPhotoSchema = z.object({
+  jobId: z.string().uuid(),
+  category: z.enum(GENERAL_WORKS_PHOTO_CATEGORIES as [GeneralWorksPhotoCategory, ...GeneralWorksPhotoCategory[]]),
+  file: z.instanceof(File),
+});
+
+export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerServiceJobInfoSchema>) {
+  const input = BoilerServiceJobInfoSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const { jobId, data } = input;
+  const { error: updateErr } = await sb
+    .from('jobs')
+    .update({
+      client_name: data.customer_name,
+      address: data.property_address,
+      scheduled_for: data.service_date || null,
+      title: data.customer_name ? `Boiler Service for ${data.customer_name}` : 'Boiler Service draft',
+      certificate_type: 'boiler_service',
+    })
+    .eq('id', jobId)
+    .eq('user_id', user.id);
+  if (updateErr) throw new Error(updateErr.message);
+
+  const entries = Object.entries(data).map(([key, value]) => ({
+    job_id: jobId,
+    field_key: key,
+    value: value ?? null,
+  }));
+  await persistJobFields(sb, jobId, entries, 'saveBoilerServiceJobInfo');
+  revalidatePath(`/wizard/create/boiler_service?jobId=${jobId}`);
+  return { ok: true };
+}
+
+export async function saveBoilerServiceDetails(payload: z.infer<typeof BoilerServiceDetailsSchema>) {
+  const input = BoilerServiceDetailsSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const entries = Object.entries(input.data).map(([key, value]) => ({
+    job_id: input.jobId,
+    field_key: key,
+    value: value ?? null,
+  }));
+  await persistJobFields(sb, input.jobId, entries, 'saveBoilerServiceDetails');
+  await sb.from('jobs').update({ certificate_type: 'boiler_service' }).eq('id', input.jobId).eq('user_id', user.id);
+  revalidatePath(`/wizard/create/boiler_service?jobId=${input.jobId}`);
+  return { ok: true };
+}
+
+export async function saveBoilerServiceChecks(payload: z.infer<typeof BoilerServiceChecksSchema>) {
+  const input = BoilerServiceChecksSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const entries = Object.entries(input.data).map(([key, value]) => ({
+    job_id: input.jobId,
+    field_key: key,
+    value: value ?? null,
+  }));
+  await persistJobFields(sb, input.jobId, entries, 'saveBoilerServiceChecks');
+  await sb.from('jobs').update({ certificate_type: 'boiler_service' }).eq('id', input.jobId).eq('user_id', user.id);
+  revalidatePath(`/wizard/create/boiler_service?jobId=${input.jobId}`);
+  return { ok: true };
+}
+
+export async function uploadBoilerServicePhoto(formData: FormData) {
+  const payload = {
+    jobId: formData.get('jobId'),
+    category: formData.get('category'),
+    file: formData.get('file'),
+  };
+  const parsed = BoilerServicePhotoSchema.safeParse(payload);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid upload payload');
+
+  const { jobId, category, file } = parsed.data;
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const arrayBuffer = await file.arrayBuffer();
+  const ext = file.name.split('.').pop() ?? 'jpg';
+  const path = `${user.id}/${jobId}/${category}-${Date.now()}.${ext}`;
+
+  const { error: uploadErr } = await sb.storage
+    .from('job-photos')
+    .upload(path, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: true });
+  if (uploadErr) throw new Error(uploadErr.message);
+
+  const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
+
+  const { error: insertErr } = await sb
+    .from('job_photos')
+    .insert({ job_id: jobId, category, file_url: publicUrl, user_id: user.id });
+  if (insertErr) throw new Error(insertErr.message);
+
+  await sb.from('jobs').update({ certificate_type: 'boiler_service' }).eq('id', jobId).eq('user_id', user.id);
+
+  revalidatePath(`/wizard/create/boiler_service?jobId=${jobId}`);
+  return { url: publicUrl };
+}
+
+export async function saveGeneralWorksInfo(payload: z.infer<typeof GeneralWorksInfoSchema>) {
+  const input = GeneralWorksInfoSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const { jobId, data } = input;
+  const updates: Record<string, unknown> = {
+    certificate_type: 'general_works',
+    address: data.property_address ?? null,
+    client_name: data.customer_name ?? null,
+    scheduled_for: data.work_date ?? null,
+    title: data.work_summary ? `General Works - ${data.work_summary}` : 'General Works draft',
+  };
+  await sb.from('jobs').update(updates).eq('id', jobId).eq('user_id', user.id);
+
+  const entries = Object.entries(data).map(([key, value]) => ({
+    job_id: jobId,
+    field_key: key,
+    value: value ?? null,
+  }));
+  if (entries.length) {
+    await persistJobFields(sb, jobId, entries, 'saveGeneralWorksInfo');
+  }
+  revalidatePath(`/wizard/create/general_works?jobId=${jobId}`);
+  return { ok: true };
+}
+
+export async function uploadGeneralWorksPhoto(formData: FormData) {
+  const payload = {
+    jobId: formData.get('jobId'),
+    category: formData.get('category'),
+    file: formData.get('file'),
+  };
+  const parsed = GeneralWorksPhotoSchema.safeParse(payload);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid upload payload');
+
+  const { jobId, category, file } = parsed.data;
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const arrayBuffer = await file.arrayBuffer();
+  const ext = file.name.split('.').pop() ?? 'jpg';
+  const path = `${user.id}/${jobId}/${category}-${Date.now()}.${ext}`;
+
+  const { error: uploadErr } = await sb.storage
+    .from('job-photos')
+    .upload(path, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: true });
+  if (uploadErr) throw new Error(uploadErr.message);
+
+  const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
+
+  const { error: insertErr } = await sb
+    .from('job_photos')
+    .insert({ job_id: jobId, category, file_url: publicUrl, user_id: user.id });
+  if (insertErr) throw new Error(insertErr.message);
+
+  await sb.from('jobs').update({ certificate_type: 'general_works' }).eq('id', jobId).eq('user_id', user.id);
+  revalidatePath(`/wizard/create/general_works?jobId=${jobId}`);
+  return { url: publicUrl };
+}
+
 const Cp12JobSchema = z.object({
   jobId: z.string().uuid(),
   data: z.object({
@@ -386,6 +647,8 @@ export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSc
     await persistJobFields(sb, input.jobId, defectEntries, 'saveCp12Appliances defects');
   }
 
+  await sb.from('jobs').update({ certificate_type: 'cp12' }).eq('id', input.jobId).eq('user_id', user.id);
+
   revalidatePath(`/wizard/create/cp12?jobId=${input.jobId}`);
   return { ok: true };
 }
@@ -401,6 +664,32 @@ const CP12_REQUIRED_FIELDS = [
 
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
+
+function validateGeneralWorksForIssue(fieldMap: Record<string, unknown>) {
+  const errors: string[] = [];
+  GENERAL_WORKS_REQUIRED_FIELDS.forEach((key) => {
+    if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
+  });
+  const defects = booleanFromField(fieldMap.defects_found);
+  if (defects && !hasValue(fieldMap.defects_details)) {
+    errors.push('Defect details required when defects are marked');
+  }
+  return errors;
+}
+
+function validateBoilerServiceForIssue(fieldMap: Record<string, unknown>) {
+  const errors: string[] = [];
+  BOILER_SERVICE_REQUIRED_FOR_ISSUE.forEach((key) => {
+    if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
+  });
+
+  const defects = booleanFromField(fieldMap.defects_found);
+  if (defects && !hasValue(fieldMap.defects_details)) {
+    errors.push('Defects details are required when defects are found');
+  }
+
+  return errors;
+}
 
 // CP12 validation per docs/specs/cp12.md
 function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp12Appliance[]) {
@@ -619,8 +908,286 @@ export async function uploadSignature(formData: FormData) {
       { job_id: jobId, field_key: `${role}_signature`, value: url },
       { onConflict: 'job_id,field_key' },
     );
-  revalidatePath(`/wizard/create/cp12?jobId=${jobId}`);
+  const { data: job } = await sb.from('jobs').select('certificate_type').eq('id', jobId).maybeSingle();
+  const revalidateTarget = job?.certificate_type ? `/wizard/create/${job.certificate_type}?jobId=${jobId}` : `/jobs/${jobId}`;
+  revalidatePath(revalidateTarget);
   return { url };
+}
+
+const GenerateBoilerPdfSchema = z.object({
+  jobId: z.string().uuid(),
+  previewOnly: z.boolean().optional().default(false),
+});
+
+const GenerateGeneralWorksPdfSchema = z.object({
+  jobId: z.string().uuid(),
+  previewOnly: z.boolean().optional().default(false),
+});
+
+export async function generateBoilerServicePdf(payload: z.infer<typeof GenerateBoilerPdfSchema>) {
+  const input = GenerateBoilerPdfSchema.parse(payload);
+  const previewOnly = input.previewOnly ?? false;
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const { data: job, error: jobErr } = await sb.from('jobs').select('user_id').eq('id', input.jobId).maybeSingle();
+  if (jobErr) throw new Error(jobErr.message);
+  if (!job) throw new Error('Job not found');
+  if ((job as any).user_id !== user.id) {
+    throw new Error('RLS mismatch: job owner does not match auth user');
+  }
+
+  await sb.from('jobs').update({ certificate_type: 'boiler_service' }).eq('id', input.jobId).eq('user_id', user.id);
+
+  const { data: fields, error: fieldsErr } = await sb
+    .from('job_fields')
+    .select('field_key, value')
+    .eq('job_id', input.jobId);
+  if (fieldsErr) throw new Error(fieldsErr.message);
+  const fieldMap = Object.fromEntries((fields ?? []).map((f) => [f.field_key, f.value ?? null]));
+
+  const issuedAt = new Date().toISOString();
+  const validationErrors = previewOnly ? [] : validateBoilerServiceForIssue(fieldMap);
+  if (validationErrors.length) {
+    throw new Error(`Boiler service validation failed: ${validationErrors.join('; ')}`);
+  }
+
+  const pdfBytes = await renderBoilerServicePdf({
+    fieldMap,
+    issuedAt,
+    previewMode: previewOnly,
+  });
+  const pathBase = previewOnly ? 'boiler-service/previews' : 'boiler-service';
+  const path = `${pathBase}/${user.id}/${input.jobId}-${previewOnly ? 'preview' : Date.now()}.pdf`;
+  const upload = await sb.storage
+    .from('certificates')
+    .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', upsert: true });
+  if (upload.error || !upload.data?.path) {
+    throw new Error(upload.error?.message ?? 'Certificate PDF upload failed');
+  }
+
+  if (previewOnly) {
+    const { data: signed, error: signedErr } = await sb.storage.from('certificates').createSignedUrl(path, 60 * 10);
+    if (signedErr || !signed?.signedUrl) {
+      throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
+    }
+    console.log('BOILER SERVICE PDF preview generated', { jobId: input.jobId, path });
+    return { pdfUrl: signed.signedUrl, preview: true };
+  }
+
+  const { data: existingCertificate, error: existingCertErr } = await sb
+    .from('certificates')
+    .select('id, job_id, pdf_path, pdf_url')
+    .eq('job_id', input.jobId)
+    .maybeSingle();
+  if (existingCertErr) throw new Error(existingCertErr.message);
+
+  const basePayload: Record<string, unknown> = { job_id: input.jobId };
+  const certificatePayload: Record<string, unknown> = { ...basePayload, pdf_path: path };
+  const writeCertificate = (payload: Record<string, unknown>) =>
+    existingCertificate
+      ? sb.from('certificates').update(payload).eq('job_id', input.jobId)
+      : sb.from('certificates').insert(payload);
+
+  const { error: certErr } = await writeCertificate(certificatePayload);
+  if (certErr) {
+    console.error('BOILER SERVICE certificate write failed (pdf_path)', {
+      jobId: input.jobId,
+      payload: certificatePayload,
+      code: certErr.code,
+      message: certErr.message,
+    });
+    if (certErr.code === '42703') {
+      const fallbackPayload: Record<string, unknown> = { ...basePayload, pdf_url: path };
+      const { error: fallbackErr } = await writeCertificate(fallbackPayload);
+      if (fallbackErr) {
+        console.error('BOILER SERVICE certificate write failed (pdf_url fallback)', {
+          jobId: input.jobId,
+          payload: fallbackPayload,
+          code: fallbackErr.code,
+          message: fallbackErr.message,
+        });
+        throw new Error(fallbackErr.message);
+      }
+    } else {
+      throw new Error(certErr.message);
+    }
+  }
+
+  const { data: signed, error: signedErr } = await sb.storage.from('certificates').createSignedUrl(path, 60 * 10);
+  if (signedErr || !signed?.signedUrl) {
+    throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
+  }
+
+  await sb
+    .from('job_fields')
+    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt }, { onConflict: 'job_id,field_key' });
+  await sb.from('jobs').update({ status: 'completed', certificate_type: 'boiler_service' }).eq('id', input.jobId).eq('user_id', user.id);
+  revalidatePath(`/jobs/${input.jobId}`);
+  console.log('BOILER SERVICE certificate stored', { jobId: input.jobId, path });
+  return { pdfUrl: signed.signedUrl };
+}
+
+export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGeneralWorksPdfSchema>) {
+  const input = GenerateGeneralWorksPdfSchema.parse(payload);
+  const previewOnly = input.previewOnly ?? false;
+  console.log('GW: starting PDF generation', { jobId: input.jobId });
+  console.log('GW: service role key present', Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY));
+  const supabase = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    },
+  );
+  const {
+    data: authUser,
+    error: authErr,
+  } = await supabase.auth.getUser();
+  console.log('GW: auth user', authUser, authErr);
+
+  const { data: job, error: jobErr } = await supabase.from('jobs').select('user_id').eq('id', input.jobId).maybeSingle();
+  if (jobErr) throw new Error(jobErr.message);
+  if (!job) throw new Error('Job not found');
+  const jobOwnerId = (job as any).user_id ?? null;
+  console.log('GW: jobs update (set certificate_type) start', { jobId: input.jobId, jobOwnerId });
+  let setTypeQuery = supabase.from('jobs').update({ certificate_type: 'general_works' }).eq('id', input.jobId);
+  if (jobOwnerId) {
+    setTypeQuery = setTypeQuery.eq('user_id', jobOwnerId);
+  }
+  const jobTypeRes = await setTypeQuery;
+  console.log('GW: jobs update (set certificate_type) result', jobTypeRes);
+  if (jobTypeRes.error) throw new Error(jobTypeRes.error.message);
+
+  const { data: fields, error: fieldsErr } = await supabase
+    .from('job_fields')
+    .select('field_key, value')
+    .eq('job_id', input.jobId);
+  if (fieldsErr) throw new Error(fieldsErr.message);
+  const fieldMap = Object.fromEntries((fields ?? []).map((f) => [f.field_key, f.value ?? null]));
+
+  const { data: photos, error: photosErr } = await supabase
+    .from('job_photos')
+    .select('category, file_url')
+    .eq('job_id', input.jobId);
+  if (photosErr) throw new Error(photosErr.message);
+
+  const issuedAt = new Date().toISOString();
+  const validationErrors = previewOnly ? [] : validateGeneralWorksForIssue(fieldMap);
+  if (validationErrors.length) {
+    throw new Error(`General Works validation failed: ${validationErrors.join('; ')}`);
+  }
+
+  const pdfBytes = await renderGeneralWorksPdf({
+    fieldMap,
+    photos: (photos ?? []).filter((p) => p.category && p.file_url) as { category: string; file_url: string }[],
+    issuedAt,
+    previewMode: previewOnly,
+  });
+
+  const pathBase = previewOnly ? 'general-works/previews' : 'general-works';
+  const path = `${pathBase}/${jobOwnerId ?? 'unknown-user'}/${input.jobId}-${previewOnly ? 'preview' : Date.now()}.pdf`;
+  const upload = await supabase.storage
+    .from('certificates')
+    .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', upsert: true });
+  if (upload.error || !upload.data?.path) {
+    throw new Error(upload.error?.message ?? 'Certificate PDF upload failed');
+  }
+
+  if (previewOnly) {
+    const { data: signed, error: signedErr } = await supabase.storage.from('certificates').createSignedUrl(path, 60 * 10);
+    if (signedErr || !signed?.signedUrl) {
+      throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
+    }
+    console.log('GENERAL WORKS PDF preview generated', { jobId: input.jobId, path });
+    return { pdfUrl: signed.signedUrl, preview: true };
+  }
+
+  const { data: existingCertificate, error: existingCertErr } = await supabase
+    .from('certificates')
+    .select('id, job_id, pdf_path, pdf_url')
+    .eq('job_id', input.jobId)
+    .maybeSingle();
+  if (existingCertErr) throw new Error(existingCertErr.message);
+
+  const basePayload: Record<string, unknown> = { job_id: input.jobId };
+  const certificatePayload: Record<string, unknown> = { ...basePayload, pdf_path: path };
+  const writeCertificate = (payload: Record<string, unknown>) =>
+    existingCertificate
+      ? supabase.from('certificates').update(payload).eq('job_id', input.jobId)
+      : supabase.from('certificates').insert(payload);
+
+  console.log('GW: certificates write start', { jobId: input.jobId, path, previewOnly, payload: certificatePayload });
+  const certRes = await writeCertificate(certificatePayload);
+  console.log('GW: certificates write result', certRes);
+  const certErr = (certRes as { error?: { code?: string; message: string } }).error;
+  if (certErr) {
+    console.error('GENERAL WORKS certificate write failed (pdf_path)', {
+      jobId: input.jobId,
+      payload: certificatePayload,
+      code: certErr.code,
+      message: certErr.message,
+    });
+    if (certErr.code === '42703') {
+      const fallbackPayload: Record<string, unknown> = { ...basePayload, pdf_url: path };
+      console.log('GW: certificates fallback write start', { jobId: input.jobId, path, payload: fallbackPayload });
+      const fallbackRes = await writeCertificate(fallbackPayload);
+      console.log('GW: certificates fallback write result', fallbackRes);
+      const fallbackErr = (fallbackRes as { error?: { code?: string; message: string } }).error;
+      if (fallbackErr) {
+        console.error('GENERAL WORKS certificate write failed (pdf_url fallback)', {
+          jobId: input.jobId,
+          payload: fallbackPayload,
+          code: fallbackErr.code,
+          message: fallbackErr.message,
+        });
+        throw new Error(fallbackErr.message);
+      }
+    } else {
+      throw new Error(certErr.message);
+    }
+  }
+
+  const { data: signed, error: signedErr } = await supabase.storage.from('certificates').createSignedUrl(path, 60 * 10);
+  if (signedErr || !signed?.signedUrl) {
+    throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
+  }
+
+  console.log('GW: job_fields upsert start', {
+    jobId: input.jobId,
+    payload: { job_id: input.jobId, field_key: 'issued_at', value: issuedAt },
+  });
+  const issuedAtRes = await supabase
+    .from('job_fields')
+    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt }, { onConflict: 'job_id,field_key' });
+  console.log('GW: job_fields upsert result', issuedAtRes);
+  const issuedAtErr = (issuedAtRes as { error?: { code?: string; message: string } }).error;
+  if (issuedAtErr) throw new Error(issuedAtErr.message);
+
+  console.log('GW: jobs update (set status completed) start', {
+    jobId: input.jobId,
+    payload: { status: 'completed', certificate_type: 'general_works' },
+  });
+  let completeQuery = supabase
+    .from('jobs')
+    .update({ status: 'completed', certificate_type: 'general_works' })
+    .eq('id', input.jobId);
+  if (jobOwnerId) {
+    completeQuery = completeQuery.eq('user_id', jobOwnerId);
+  }
+  const jobCompleteRes = await completeQuery;
+  console.log('GW: jobs update (set status completed) result', jobCompleteRes);
+  if (jobCompleteRes.error) throw new Error(jobCompleteRes.error.message);
+  revalidatePath(`/jobs/${input.jobId}`);
+  console.log('GENERAL WORKS certificate stored', { jobId: input.jobId, path });
+  return { pdfUrl: signed.signedUrl };
 }
 
 const GeneratePdfSchema = z.object({
@@ -678,6 +1245,17 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   const { data: existingCertificate, error: existingCertErr } = await sb.from('certificates').select('id, job_id').eq('job_id', input.jobId).maybeSingle();
   if (existingCertErr) throw new Error(existingCertErr.message);
   console.log('CERTIFICATE existing row', { jobId: input.jobId, exists: !!existingCertificate, id: existingCertificate?.id });
+
+  if (input.certificateType === 'boiler_service') {
+    return generateBoilerServicePdf({ jobId: input.jobId, previewOnly });
+  }
+
+  if (input.certificateType === 'general_works') {
+    console.log('GW-PDF generateCertificatePdf dispatch start', { jobId: input.jobId, previewOnly });
+    const response = await generateGeneralWorksPdf({ jobId: input.jobId, previewOnly });
+    console.log('GW-PDF generateCertificatePdf dispatch result', { jobId: input.jobId, previewOnly });
+    return response;
+  }
 
   if (input.certificateType !== 'cp12') {
     const pdfUrl = `https://placehold.co/1200x1600?text=${encodeURIComponent(

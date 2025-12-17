@@ -23,6 +23,11 @@
 - Styling uses Tailwind (`tailwind.config.ts`); components favor utility-first classes over bespoke CSS.
 - External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, maps via `@googlemaps/google-maps-services-js`; isolate integration code under `src/server`.
 
+## PDF Generation
+- Field reports: `src/lib/reporting.ts` builds PDFs with `pdf-lib`; `src/server/jobs.ts` loads photos/signatures, optionally AI-summarizes via OpenAI (`getOpenAIClient` and `OPENAI_API_KEY`), then uploads to the Supabase `reports` bucket and stores `reports` rows.
+- Certificates: `src/server/certificates.ts` dispatches `generateCertificatePdf` to `renderBoilerServicePdf` (`src/lib/pdf/boiler-service.ts`), `renderGeneralWorksPdf` (`src/lib/pdf/general-works.ts`), or inline `renderCp12Pdf`, all using `pdf-lib`.
+- Certificate PDFs are written to the Supabase `certificates` bucket (preview vs final paths), linked in the `certificates` table, and served via Supabase signed URLs; no external PDF API is used.
+
 ## Build, Test, and Development Commands
 - `pnpm dev`: Run dev server (Turbopack); access via LAN/DNS from phones on the same network.
 - `pnpm build`: Production build.

@@ -36,7 +36,7 @@ export default async function ReportPage({ params }: { params: Promise<{ jobId: 
         <section className="rounded-3xl border border-white/20 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-600">PDF Preview</h2>
           {signedReportUrl ? (
-            <iframe title="CertNow report" className="mt-3 h-[70vh] w-full rounded-xl border" src={signedReportUrl} />
+            <iframe title="certnow report" className="mt-3 h-[70vh] w-full rounded-xl border" src={signedReportUrl} />
           ) : (
             <p className="mt-3 rounded border border-dashed p-4 text-sm text-gray-500">
               Generate a report to preview and send it.

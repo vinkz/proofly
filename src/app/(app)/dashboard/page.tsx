@@ -89,14 +89,6 @@ export default async function DashboardPage() {
               Track field activity, client signatures, and certificates in one place.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" asChild className="rounded-full border border-[var(--muted)] px-5 py-2">
-              <Link href="/clients">View clients</Link>
-            </Button>
-            <Button asChild className="rounded-full bg-[var(--accent)] px-5 py-2 text-white hover:bg-[var(--brand)]">
-              <Link href="/jobs">New certificate</Link>
-            </Button>
-          </div>
         </div>
         <div className="mt-6 rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-4 shadow-md backdrop-blur">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

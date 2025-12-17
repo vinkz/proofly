@@ -59,7 +59,7 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
             <iframe
               key={signedReportUrl}
               src={signedReportUrl}
-              title="CertNow report preview"
+              title="certnow report preview"
               className="mt-4 h-[420px] w-full rounded-xl border border-white/30"
             />
           ) : (
@@ -92,7 +92,7 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
               Send via email
             </h2>
-            <p className="text-xs text-muted-foreground/60">Queue delivery to your client from CertNow.</p>
+            <p className="text-xs text-muted-foreground/60">Queue delivery to your client from certnow.</p>
             <div className="mt-3">
               <ReportEmailForm jobId={jobId} />
             </div>

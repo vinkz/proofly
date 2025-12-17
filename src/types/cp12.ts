@@ -149,7 +149,7 @@ export const CP12_DEMO_INFO = {
   inspection_date: () => new Date().toISOString().slice(0, 10),
   engineer_name: 'Alex Turner',
   gas_safe_number: '123456',
-  company_name: 'CertNow Heating Services Ltd',
+  company_name: 'certnow Heating Services Ltd',
   landlord_name: 'John Smith',
   landlord_address: '12 Example Road, London, SW1A 1AA',
   reg_26_9_confirmed: true,

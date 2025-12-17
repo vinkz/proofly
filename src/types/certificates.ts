@@ -1,10 +1,10 @@
-export const CERTIFICATE_TYPES = ['cp12', 'boiler-service', 'general-works'] as const;
+export const CERTIFICATE_TYPES = ['cp12', 'boiler_service', 'general_works'] as const;
 export type CertificateType = (typeof CERTIFICATE_TYPES)[number];
 
 export const CERTIFICATE_LABELS: Record<CertificateType, string> = {
   'cp12': 'CP12 Gas Safety Certificate',
-  'boiler-service': 'Boiler Service Certificate',
-  'general-works': 'General Works Certificate',
+  'boiler_service': 'Boiler Service Record',
+  'general_works': 'General Works Report',
 };
 
 export const PHOTO_CATEGORIES = [
@@ -14,6 +14,15 @@ export const PHOTO_CATEGORIES = [
   { key: 'meter_reading', label: 'Meter reading' },
   { key: 'ventilation', label: 'Ventilation' },
   { key: 'issue_photo', label: 'Issue/Defect' },
+  { key: 'boiler', label: 'Boiler' },
+  { key: 'flue', label: 'Flue' },
+  { key: 'before_after', label: 'Before/After' },
+  { key: 'issue_defect', label: 'Issue/Defect' },
+  { key: 'site', label: 'Site' },
+  { key: 'before', label: 'Before' },
+  { key: 'after', label: 'After' },
+  { key: 'parts', label: 'Parts' },
+  { key: 'receipt_invoice', label: 'Receipt/Invoice' },
 ] as const;
 
 export type PhotoCategory = (typeof PHOTO_CATEGORIES)[number]['key'];

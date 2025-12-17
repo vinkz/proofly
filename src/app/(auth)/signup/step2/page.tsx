@@ -91,7 +91,7 @@ export default function SignupStep2Page() {
             type="text"
             value={form.business_name}
             onChange={update('business_name')}
-            placeholder="CertNow Plumbing Co."
+            placeholder="certnow Plumbing Co."
             className="mt-2"
             disabled={isPending}
           />

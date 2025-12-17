@@ -35,11 +35,11 @@ export function ScanJobSheetFlow() {
       try {
         const id = jobId
           ? jobId
-          : (await createJob({ certificateType: 'general-works', title: 'Scanned Job Sheet' })).jobId;
+          : (await createJob({ certificateType: 'general_works', title: 'Scanned Job Sheet' })).jobId;
         setJobId(id);
         await saveJobInfo({
           jobId: id,
-          certificateType: 'general-works',
+          certificateType: 'general_works',
           fields: {
             customer_name: form.customer,
             address: form.address,
@@ -47,7 +47,7 @@ export function ScanJobSheetFlow() {
             datetime: form.date,
           },
         });
-        const { pdfUrl } = await generateCertificatePdf({ jobId: id, certificateType: 'general-works' });
+        const { pdfUrl } = await generateCertificatePdf({ jobId: id, certificateType: 'general_works' });
         pushToast({ title: 'PDF ready', variant: 'success' });
         router.push(`/jobs/${id}/pdf?url=${encodeURIComponent(pdfUrl)}`);
       } catch (error) {
@@ -113,7 +113,7 @@ export function ScanJobSheetFlow() {
           step={3}
           total={3}
           title="PDF ready"
-          status={CERTIFICATE_LABELS['general-works']}
+          status={CERTIFICATE_LABELS['general_works']}
           onBack={() => setStep(2)}
         >
           <p className="text-sm text-muted-foreground/70">

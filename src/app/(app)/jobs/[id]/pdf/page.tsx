@@ -6,6 +6,7 @@ import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import { PdfActions } from './_components/pdf-actions';
 import { isUUID } from '@/lib/ids';
 import { getCertificatePdfSignedUrl, getCertificateState } from '@/server/certificates';
+import { resolveCertificateType } from '@/server/certificate-type';
 
 export default async function JobPdfPage({
   params,
@@ -47,7 +48,20 @@ export default async function JobPdfPage({
     }
   }
 
-  const certificateType = (job.certificate_type ?? '') as CertificateType;
+  const { certificateType, source } = await resolveCertificateType(id, job.certificate_type ?? null);
+  console.log('[jobs/[id]/pdf] certificate type resolved', { jobId: id, certificateType, source, existingType: job.certificate_type });
+  if (!certificateType) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800">
+          <p className="text-lg font-semibold">Certificate type missing</p>
+          <p className="mt-2 text-sm">
+            This job does not have a certificate type set. Please contact support or recreate the job. Job ID: {id}
+          </p>
+        </div>
+      </div>
+    );
+  }
   const title = job.title ?? 'Certificate';
 
   return (
@@ -60,7 +74,7 @@ export default async function JobPdfPage({
         </p>
       </div>
 
-      <PdfActions jobId={id} sentAt={null} />
+      <PdfActions jobId={id} sentAt={null} certificateType={certificateType} />
       <PdfPreview url={pdfUrl} error={pdfError} />
     </div>
   );

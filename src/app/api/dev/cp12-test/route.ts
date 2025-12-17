@@ -23,7 +23,7 @@ export async function GET() {
       inspection_date: new Date().toISOString().slice(0, 10),
       engineer_name: 'Alex Engineer',
       gas_safe_number: '123456',
-      company_name: 'CertNow Plumbing Ltd',
+      company_name: 'certnow Plumbing Ltd',
     },
   });
 

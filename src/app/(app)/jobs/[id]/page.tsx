@@ -12,6 +12,7 @@ import { ShareReportLinkButton } from '@/components/report/share-link-button';
 import { JobProgressProvider } from '@/components/job-progress-context';
 import { JobProgressBar } from '@/components/job-progress-bar';
 import { DeleteJobButton } from '@/components/jobs/delete-job-button';
+import { resolveCertificateType } from '@/server/certificate-type';
 import type { Database } from '@/lib/database.types';
 import { isUUID } from '@/lib/ids';
 
@@ -23,6 +24,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     notFound();
   }
   let data: JobDetailPayload;
+  const supabase = await supabaseServerReadOnly();
 
   try {
     data = await getJobWithChecklist(jobId);
@@ -39,8 +41,22 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   }
 
   const { job, items, photos, signatures, report } = data;
+  const existingType = (job as { certificate_type?: string | null }).certificate_type ?? null;
+  const { certificateType, source } = await resolveCertificateType(jobId, existingType);
+  console.log('[jobs/[id]] certificate type resolved', { jobId, certificateType, source, existingType });
   if ((job.status ?? 'draft') === 'draft') {
-    const certificateType = (job as { certificate_type?: string | null }).certificate_type ?? 'general-works';
+    if (!certificateType) {
+      return (
+        <main className="mx-auto max-w-3xl p-6">
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800">
+            <p className="text-lg font-semibold">Certificate type missing</p>
+            <p className="mt-2 text-sm">
+              This job does not have a certificate type set. Please contact support or recreate the job. Job ID: {jobId}
+            </p>
+          </div>
+        </main>
+      );
+    }
     redirect(`/wizard/create/${certificateType}?jobId=${jobId}`);
   }
 
@@ -48,8 +64,6 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const jobAddress = job.address ?? 'No address provided';
   const jobStatus = job.status ?? 'pending';
   const createdLabel = job.created_at ? new Date(job.created_at).toLocaleString() : 'Unknown';
-
-  const supabase = await supabaseServerReadOnly();
 
   const photosWithUrls = await Promise.all(
     photos.map(async (photo) => {

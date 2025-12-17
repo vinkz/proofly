@@ -32,7 +32,7 @@ export function WizardShell({ jobId, currentStep, job, client, template, childre
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8 py-8">
       <header className="rounded-3xl border border-white/20 bg-white/60 px-6 py-5 shadow-lg shadow-slate-900/5 backdrop-blur">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">CertNow certificate flow</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">certnow certificate flow</p>
         <div className="mt-4 flex flex-wrap gap-3">
           {steps.map((step, index) => {
             const status = index < currentIndex ? 'complete' : index === currentIndex ? 'current' : 'upcoming';

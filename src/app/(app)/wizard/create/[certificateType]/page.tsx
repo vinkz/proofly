@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { createJob, getCertificateWizardState } from '@/server/certificates';
 import { CERTIFICATE_TYPES, CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import { CertificateWizard } from './_components/certificate-wizard';
+import { BoilerServiceWizard } from './_components/boiler-service-wizard';
+import { GeneralWorksWizard } from './_components/general-works-wizard';
 
 export default async function CertificateWizardPage({
   params,
@@ -27,7 +29,28 @@ export default async function CertificateWizardPage({
     ...wizardState.fields,
     customer_name: wizardState.fields.customer_name ?? (wizardState.job as any)?.client_name ?? '',
     property_address: wizardState.fields.property_address ?? (wizardState.job as any)?.address ?? '',
+    service_date: wizardState.fields.service_date ?? (wizardState.job as any)?.scheduled_for ?? '',
   };
+
+  if (certificateType === 'boiler_service') {
+    return (
+      <BoilerServiceWizard
+        jobId={jobId}
+        initialFields={initialInfo}
+        initialPhotoPreviews={wizardState.photoPreviews}
+      />
+    );
+  }
+
+  if (certificateType === 'general_works') {
+    return (
+      <GeneralWorksWizard
+        jobId={jobId}
+        initialFields={initialInfo}
+        initialPhotoPreviews={wizardState.photoPreviews}
+      />
+    );
+  }
 
   return (
     <CertificateWizard

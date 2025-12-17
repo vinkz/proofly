@@ -47,7 +47,7 @@ export async function generateReport(data: ReportJobPayload): Promise<string> {
     input: [
       {
         role: 'system',
-        content: `You are CertNow, an assistant who produces factual, professional compliance summaries for plumbing jobs. 
+        content: `You are certnow, an assistant who produces factual, professional compliance summaries for plumbing jobs. 
 Return 3-4 sentences that highlight severity of failed checks and next steps.`,
       },
       {
@@ -82,7 +82,7 @@ export async function generatePDF(payload: PdfPayload): Promise<Uint8Array> {
     cursorY -= (opts.fontSize ?? 12) + 6;
   };
 
-  drawLine('CertNow Field Report', { fontSize: 20, font: boldFont });
+  drawLine('certnow Field Report', { fontSize: 20, font: boldFont });
   drawLine(`Client: ${payload.job.client_name ?? 'N/A'}`);
   drawLine(`Job Title: ${payload.job.title ?? 'Untitled Job'}`);
   drawLine(`Location: ${payload.job.address ?? 'Not provided'}`);
