@@ -5,7 +5,7 @@ import {
   saveBoilerServiceJobInfo,
   saveBoilerServiceDetails,
   saveBoilerServiceChecks,
-  generateBoilerServicePdf,
+  generateGasServicePdf,
 } from '@/server/certificates';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 
@@ -19,7 +19,7 @@ export async function GET() {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const { jobId } = await createJob({ certificateType: 'boiler_service', title: 'Boiler Service Test' });
+  const { jobId } = await createJob({ certificateType: 'gas_service', title: 'Boiler Service Test' });
 
   await saveBoilerServiceJobInfo({
     jobId,
@@ -77,7 +77,7 @@ export async function GET() {
     },
   });
 
-  const { pdfUrl } = await generateBoilerServicePdf({ jobId, previewOnly: true });
+  const { pdfUrl } = await generateGasServicePdf({ jobId, previewOnly: true });
 
   return NextResponse.json({ jobId, pdfUrl });
 }

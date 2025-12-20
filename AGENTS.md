@@ -25,8 +25,11 @@
 
 ## PDF Generation
 - Field reports: `src/lib/reporting.ts` builds PDFs with `pdf-lib`; `src/server/jobs.ts` loads photos/signatures, optionally AI-summarizes via OpenAI (`getOpenAIClient` and `OPENAI_API_KEY`), then uploads to the Supabase `reports` bucket and stores `reports` rows.
-- Certificates: `src/server/certificates.ts` dispatches `generateCertificatePdf` to `renderBoilerServicePdf` (`src/lib/pdf/boiler-service.ts`), `renderGeneralWorksPdf` (`src/lib/pdf/general-works.ts`), or inline `renderCp12Pdf`, all using `pdf-lib`.
-- Certificate PDFs are written to the Supabase `certificates` bucket (preview vs final paths), linked in the `certificates` table, and served via Supabase signed URLs; no external PDF API is used.
+- Certificates: `src/server/certificates.ts` orchestrates Supabase service-role writes (public.certificates/jobs/job_fields) and storage uploads to the `certificates` bucket (preview vs final), then returns signed URLs; no external PDF API is used.
+- CP12 / Gas Safety (AcroForm): `src/server/pdf/renderCp12Certificate.ts` loads `src/assets/templates/cp12-template.pdf`, reads AcroForm field names, and fills them via a mapping from `Cp12FieldMap` + `ApplianceInput`. It uses `setTextIfExists` to avoid hard failures on missing fields, combines defect/remedial/notes into `comments.comments`, uses fallbacks for signatures and issue dates, and fills appliance rows by `appliance_N.*` fields when present. If appliance fields are missing, it draws the appliance table text at fixed XY positions and adds pages by copying the template. It updates field appearances with Helvetica and leaves fields editable (no flatten).
+- CP12 / Gas Safety (drawn layout): `src/lib/pdf/cp12-template.ts` is a legacy/manual renderer that draws its own layout and writes text at coordinates (used by some dev routes).
+- Boiler Service Record: `renderGasServiceRecordTemplatePdf` in `src/lib/pdf/gas-service-template.ts` draws its own layout; wrappers `renderBoilerServicePdf`/`generateBoilerServiceRecordPdf` map certificate fields then call the renderer.
+- General Works: `renderGeneralWorksPdf` in `src/lib/pdf/general-works.ts` handles the general_works branch with targeted logging around Supabase certificate/job/job_fields writes to surface RLS failures.
 
 ## Build, Test, and Development Commands
 - `pnpm dev`: Run dev server (Turbopack); access via LAN/DNS from phones on the same network.

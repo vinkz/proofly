@@ -21,7 +21,7 @@ import {
   saveBoilerServiceDetails,
   saveBoilerServiceChecks,
   uploadBoilerServicePhoto,
-  generateBoilerServicePdf,
+  generateGasServicePdf,
   uploadSignature,
 } from '@/server/certificates';
 
@@ -56,11 +56,19 @@ const EMPTY_CHECKS = {
   next_service_due: '',
 };
 
-export function BoilerServiceWizard({ jobId, initialFields, initialPhotoPreviews = {} }: BoilerServiceWizardProps) {
+export function BoilerServiceWizard({
+  jobId,
+  initialFields,
+  initialPhotoPreviews = {},
+}: BoilerServiceWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [step, setStep] = useState(1);
   const [isPending, startTransition] = useTransition();
+
+  const [completionDate, setCompletionDate] = useState(
+    initialFields.completion_date ? (initialFields.completion_date as string).slice(0, 10) : new Date().toISOString().slice(0, 10),
+  );
 
   const [jobInfo, setJobInfo] = useState({
     customer_name: initialFields.customer_name ?? '',
@@ -178,7 +186,8 @@ export function BoilerServiceWizard({ jobId, initialFields, initialPhotoPreviews
   };
 
   const persistBeforePdf = async () => {
-    await saveBoilerServiceJobInfo({ jobId, data: jobInfo });
+    const infoToSave = { ...jobInfo, service_date: jobInfo.service_date || completionDate };
+    await saveBoilerServiceJobInfo({ jobId, data: infoToSave });
     await saveBoilerServiceDetails({ jobId, data: details });
     await saveBoilerServiceChecks({ jobId, data: checks });
   };
@@ -187,7 +196,9 @@ export function BoilerServiceWizard({ jobId, initialFields, initialPhotoPreviews
     startTransition(async () => {
       try {
         await persistBeforePdf();
-        const { pdfUrl } = await generateBoilerServicePdf({ jobId, previewOnly: true });
+        const finalInfo = { ...jobInfo, service_date: jobInfo.service_date || completionDate };
+        await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
+        const { pdfUrl } = await generateGasServicePdf({ jobId, previewOnly: true });
         pushToast({ title: 'Preview ready', variant: 'success' });
         router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}&preview=1`);
       } catch (error) {
@@ -204,7 +215,9 @@ export function BoilerServiceWizard({ jobId, initialFields, initialPhotoPreviews
     startTransition(async () => {
       try {
         await persistBeforePdf();
-        const { pdfUrl } = await generateBoilerServicePdf({ jobId, previewOnly: false });
+        const finalInfo = { ...jobInfo, service_date: jobInfo.service_date || completionDate };
+        await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
+        const { pdfUrl } = await generateGasServicePdf({ jobId, previewOnly: false });
         pushToast({ title: 'Boiler Service PDF generated', variant: 'success' });
         router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}`);
       } catch (error) {
@@ -255,17 +268,12 @@ export function BoilerServiceWizard({ jobId, initialFields, initialPhotoPreviews
               </Button>
             </div>
           ) : null}
+          <p className="mb-2 text-sm text-muted">Engineer and company details are pulled from account settings.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={jobInfo.customer_name}
               onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
               placeholder="Customer name"
-            />
-            <Input
-              value={jobInfo.service_date}
-              onChange={(e) => setJobInfo((prev) => ({ ...prev, service_date: e.target.value }))}
-              type="date"
-              placeholder="Service date"
             />
             <Input
               value={jobInfo.property_address}
@@ -277,27 +285,6 @@ export function BoilerServiceWizard({ jobId, initialFields, initialPhotoPreviews
               value={jobInfo.postcode}
               onChange={(e) => setJobInfo((prev) => ({ ...prev, postcode: e.target.value }))}
               placeholder="Postcode"
-            />
-            <Input
-              value={jobInfo.engineer_name}
-              onChange={(e) => setJobInfo((prev) => ({ ...prev, engineer_name: e.target.value }))}
-              placeholder="Engineer name"
-            />
-            <Input
-              value={jobInfo.gas_safe_number}
-              onChange={(e) => setJobInfo((prev) => ({ ...prev, gas_safe_number: e.target.value }))}
-              placeholder="Gas Safe number"
-            />
-            <Input
-              value={jobInfo.company_name}
-              onChange={(e) => setJobInfo((prev) => ({ ...prev, company_name: e.target.value }))}
-              placeholder="Company name"
-            />
-            <Input
-              value={jobInfo.company_address}
-              onChange={(e) => setJobInfo((prev) => ({ ...prev, company_address: e.target.value }))}
-              placeholder="Company address"
-              className="sm:col-span-2"
             />
           </div>
           <div className="mt-6 flex justify-end">
@@ -513,6 +500,18 @@ export function BoilerServiceWizard({ jobId, initialFields, initialPhotoPreviews
           <div className="grid gap-4 sm:grid-cols-2">
             <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Completion date</p>
+            <Input
+              type="date"
+              value={completionDate}
+              onChange={(e) => {
+                setCompletionDate(e.target.value);
+                setJobInfo((prev) => ({ ...prev, service_date: prev.service_date || e.target.value }));
+              }}
+              className="mt-2"
+            />
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>

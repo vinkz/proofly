@@ -64,10 +64,7 @@ type Cp12InfoState = {
   inspection_date: string;
   landlord_name: string;
   landlord_address: string;
-  engineer_name: string;
-  gas_safe_number: string;
   reg_26_9_confirmed: boolean;
-  company_name: string;
 };
 
 const CP12_DEMO_PHOTO_NOTES: Record<string, string> = {
@@ -101,11 +98,8 @@ export function CertificateWizard({
     inspection_date: initialInfo.inspection_date ?? '',
     landlord_name: initialInfo.landlord_name ?? '',
     landlord_address: initialInfo.landlord_address ?? '',
-    engineer_name: initialInfo.engineer_name ?? '',
-    gas_safe_number: initialInfo.gas_safe_number ?? '',
     reg_26_9_confirmed:
       initialInfo.reg_26_9_confirmed === true || initialInfo.reg_26_9_confirmed === 'true' || initialInfo.reg_26_9_confirmed === 'YES',
-    company_name: initialInfo.company_name ?? '',
   });
 
   const [photoNotes, setPhotoNotes] = useState<Record<string, string>>(initialPhotoNotes);
@@ -154,9 +148,6 @@ export function CertificateWizard({
           property_address: info.property_address || CP12_DEMO_INFO.property_address,
           postcode: info.postcode || CP12_DEMO_INFO.postcode,
           inspection_date: info.inspection_date || today,
-          engineer_name: info.engineer_name || CP12_DEMO_INFO.engineer_name,
-          gas_safe_number: info.gas_safe_number || CP12_DEMO_INFO.gas_safe_number,
-          company_name: info.company_name || CP12_DEMO_INFO.company_name,
           landlord_name: info.landlord_name || CP12_DEMO_INFO.landlord_name,
           landlord_address: info.landlord_address || CP12_DEMO_INFO.landlord_address,
           reg_26_9_confirmed: true,
@@ -214,7 +205,9 @@ export function CertificateWizard({
     }
     startTransition(async () => {
       try {
-        await saveCp12JobInfo({ jobId, data: info });
+        const data = { ...info, inspection_date: info.inspection_date || completionDate };
+        await saveCp12JobInfo({ jobId, data });
+        setInfo(data);
         setStep(2);
       } catch (error) {
         pushToast({
@@ -245,11 +238,14 @@ export function CertificateWizard({
     startTransition(async () => {
       try {
         if (isCp12) {
-          await saveCp12JobInfo({ jobId, data: info });
+          const data = { ...info, inspection_date: info.inspection_date || completionDate };
+          await saveCp12JobInfo({ jobId, data });
+          setInfo(data);
           await saveCp12Appliances({ jobId, appliances, defects });
         }
         if (isCp12) {
-          const errors = validateCp12AgainstSpec(info, appliances, defects, engineerSignature, customerSignature);
+          const normalizedInfo = { ...info, inspection_date: info.inspection_date || completionDate };
+          const errors = validateCp12AgainstSpec(normalizedInfo, appliances, defects, engineerSignature, customerSignature);
           if (errors.length) {
             pushToast({
               title: 'CP12 requirements missing',
@@ -277,7 +273,9 @@ export function CertificateWizard({
     startTransition(async () => {
       try {
         if (isCp12) {
-          await saveCp12JobInfo({ jobId, data: info });
+          const data = { ...info, inspection_date: info.inspection_date || completionDate };
+          await saveCp12JobInfo({ jobId, data });
+          setInfo(data);
           await saveCp12Appliances({ jobId, appliances, defects });
         }
         const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType, previewOnly: true });
@@ -331,6 +329,7 @@ export function CertificateWizard({
               </Button>
             </div>
           ) : null}
+          <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
           <Input
             value={info.customer_name}
             onChange={(e) => setInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
@@ -350,12 +349,6 @@ export function CertificateWizard({
             className="rounded-2xl"
           />
           <Input
-            type="date"
-            value={info.inspection_date}
-            onChange={(e) => setInfo((prev) => ({ ...prev, inspection_date: e.target.value }))}
-            className="rounded-2xl"
-          />
-          <Input
             value={info.landlord_name}
             onChange={(e) => setInfo((prev) => ({ ...prev, landlord_name: e.target.value }))}
             placeholder="Landlord / Agent name"
@@ -366,18 +359,6 @@ export function CertificateWizard({
             onChange={(e) => setInfo((prev) => ({ ...prev, landlord_address: e.target.value }))}
             placeholder="Landlord / Agent address"
             className="min-h-[70px] rounded-2xl"
-          />
-          <Input
-            value={info.engineer_name}
-            onChange={(e) => setInfo((prev) => ({ ...prev, engineer_name: e.target.value }))}
-            placeholder="Engineer name"
-            className="rounded-2xl"
-          />
-          <Input
-            value={info.gas_safe_number}
-            onChange={(e) => setInfo((prev) => ({ ...prev, gas_safe_number: e.target.value }))}
-            placeholder="Gas Safe number"
-            className="rounded-2xl"
           />
           <div className="flex items-start gap-3 rounded-2xl border border-white/40 bg-white/70 p-3">
             <input
@@ -391,12 +372,6 @@ export function CertificateWizard({
               <p className="text-xs text-muted-foreground/70">Required before issuing a CP12 (see docs/specs/cp12.md).</p>
             </div>
           </div>
-          <Input
-            value={info.company_name}
-            onChange={(e) => setInfo((prev) => ({ ...prev, company_name: e.target.value }))}
-            placeholder="Company name"
-            className="rounded-2xl"
-          />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground/70">Non-CP12 certificates currently use the simplified flow.</p>
@@ -692,14 +667,7 @@ export function CertificateWizard({
   return StepFour;
 }
 
-const CP12_REQUIRED_FIELDS = [
-  'property_address',
-  'inspection_date',
-  'landlord_name',
-  'landlord_address',
-  'engineer_name',
-  'gas_safe_number',
-] as const;
+const CP12_REQUIRED_FIELDS = ['property_address', 'inspection_date', 'landlord_name', 'landlord_address'] as const;
 
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
@@ -716,6 +684,7 @@ function validateCp12AgainstSpec(
   CP12_REQUIRED_FIELDS.forEach((key) => {
     if (!hasValue((info as any)[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
   });
+  // Engineer/company details are sourced from account settings and signatures; no field entry required here.
   if (!booleanFromField(info.reg_26_9_confirmed)) {
     errors.push('Regulation 26(9) confirmation is required');
   }

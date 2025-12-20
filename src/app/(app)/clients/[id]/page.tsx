@@ -5,6 +5,8 @@ import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { isUUID } from '@/lib/ids';
 import { ShareReportLinkButton } from '@/components/report/share-link-button';
 import { DeleteClientButton } from '@/components/clients/delete-client-button';
+import { EditClientForm } from '@/components/clients/edit-client-form';
+import { ClientCalendar } from '@/components/clients/client-calendar';
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -115,6 +117,16 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ) : null}
           </ul>
         </div>
+      </section>
+      <section className="rounded-3xl border border-white/20 bg-white/90 p-5">
+        <h2 className="text-lg font-semibold text-muted">Edit client</h2>
+        <p className="text-xs text-muted-foreground/60">Update contact details and organization info.</p>
+        <div className="mt-3">
+          <EditClientForm client={detail.client} />
+        </div>
+      </section>
+      <section className="rounded-3xl border border-white/20 bg-white/90 p-5">
+        <ClientCalendar jobs={detail.jobs as any} />
       </section>
     </div>
   );

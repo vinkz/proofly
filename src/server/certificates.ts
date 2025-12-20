@@ -13,10 +13,15 @@ import type { JobFieldPayload, CertificateType, PhotoCategory, Cp12Appliance } f
 import { CERTIFICATE_TYPES, PHOTO_CATEGORIES, CERTIFICATE_LABELS } from '@/types/certificates';
 import type { BoilerServicePhotoCategory } from '@/types/boiler-service';
 import { BOILER_SERVICE_PHOTO_CATEGORIES, BOILER_SERVICE_REQUIRED_FOR_ISSUE } from '@/types/boiler-service';
-import { renderBoilerServicePdf } from '@/lib/pdf/boiler-service';
 import type { GeneralWorksPhotoCategory } from '@/types/general-works';
 import { GENERAL_WORKS_PHOTO_CATEGORIES, GENERAL_WORKS_REQUIRED_FIELDS } from '@/types/general-works';
 import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
+import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import {
+  renderGasServicePdf,
+  type ApplianceInput as GasServiceApplianceInput,
+  type GasServiceFieldMap,
+} from '@/server/pdf/renderGasServicePdf';
 
 type JobInsertPayload = {
   certificateType: CertificateType;
@@ -47,6 +52,29 @@ async function persistJobFields(
   }
 }
 
+async function getUserWithRetry(
+  client: Awaited<ReturnType<typeof supabaseServerReadOnly>> | Awaited<ReturnType<typeof supabaseServerServiceRole>>,
+  label: string,
+  attempts = 3,
+) {
+  for (let i = 0; i < attempts; i++) {
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser();
+    if (!error || error.message !== 'Request rate limit reached') {
+      return { user, error };
+    }
+    console.warn(`${label}: auth.getUser rate limited`, { attempt: i + 1, message: error.message });
+    await new Promise((resolve) => setTimeout(resolve, 200 * (i + 1)));
+  }
+  const {
+    data: { user },
+    error,
+  } = await client.auth.getUser();
+  return { user, error };
+}
+
 const CreateJobSchema = z.object({
   certificateType: z.enum(CERTIFICATE_TYPES),
   title: z.string().optional(),
@@ -58,10 +86,7 @@ const CreateJobSchema = z.object({
 export async function createJob(payload: JobInsertPayload) {
   const input = CreateJobSchema.parse(payload);
   const readClient = await supabaseServerReadOnly();
-  const {
-    data: { user },
-    error,
-  } = await readClient.auth.getUser();
+  const { user, error } = await getUserWithRetry(readClient, 'createJob');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const sb = await supabaseServerServiceRole();
@@ -197,10 +222,7 @@ export async function uploadJobPhoto(formData: FormData) {
 
 export async function getCertificateWizardState(jobId: string) {
   const sb = await supabaseServerReadOnly();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const { user, error } = await getUserWithRetry(sb, 'getCertificateWizardState');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const { data: job, error: jobErr } = await sb.from('jobs').select('*').eq('id', jobId).eq('user_id', user.id).maybeSingle();
@@ -365,6 +387,8 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const { jobId, data } = input;
+  const { data: jobRow } = await sb.from('jobs').select('certificate_type').eq('id', jobId).maybeSingle();
+  const certificateType: CertificateType = 'gas_service';
   const { error: updateErr } = await sb
     .from('jobs')
     .update({
@@ -372,7 +396,7 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
       address: data.property_address,
       scheduled_for: data.service_date || null,
       title: data.customer_name ? `Boiler Service for ${data.customer_name}` : 'Boiler Service draft',
-      certificate_type: 'boiler_service',
+      certificate_type: certificateType,
     })
     .eq('id', jobId)
     .eq('user_id', user.id);
@@ -384,7 +408,7 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
     value: value ?? null,
   }));
   await persistJobFields(sb, jobId, entries, 'saveBoilerServiceJobInfo');
-  revalidatePath(`/wizard/create/boiler_service?jobId=${jobId}`);
+  revalidatePath(`/wizard/create/${certificateType}?jobId=${jobId}`);
   return { ok: true };
 }
 
@@ -397,14 +421,15 @@ export async function saveBoilerServiceDetails(payload: z.infer<typeof BoilerSer
   } = await sb.auth.getUser();
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const certificateType: CertificateType = 'gas_service';
   const entries = Object.entries(input.data).map(([key, value]) => ({
     job_id: input.jobId,
     field_key: key,
     value: value ?? null,
   }));
   await persistJobFields(sb, input.jobId, entries, 'saveBoilerServiceDetails');
-  await sb.from('jobs').update({ certificate_type: 'boiler_service' }).eq('id', input.jobId).eq('user_id', user.id);
-  revalidatePath(`/wizard/create/boiler_service?jobId=${input.jobId}`);
+  await sb.from('jobs').update({ certificate_type: certificateType }).eq('id', input.jobId).eq('user_id', user.id);
+  revalidatePath(`/wizard/create/${certificateType}?jobId=${input.jobId}`);
   return { ok: true };
 }
 
@@ -417,14 +442,15 @@ export async function saveBoilerServiceChecks(payload: z.infer<typeof BoilerServ
   } = await sb.auth.getUser();
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const certificateType: CertificateType = 'gas_service';
   const entries = Object.entries(input.data).map(([key, value]) => ({
     job_id: input.jobId,
     field_key: key,
     value: value ?? null,
   }));
   await persistJobFields(sb, input.jobId, entries, 'saveBoilerServiceChecks');
-  await sb.from('jobs').update({ certificate_type: 'boiler_service' }).eq('id', input.jobId).eq('user_id', user.id);
-  revalidatePath(`/wizard/create/boiler_service?jobId=${input.jobId}`);
+  await sb.from('jobs').update({ certificate_type: certificateType }).eq('id', input.jobId).eq('user_id', user.id);
+  revalidatePath(`/wizard/create/${certificateType}?jobId=${input.jobId}`);
   return { ok: true };
 }
 
@@ -461,9 +487,9 @@ export async function uploadBoilerServicePhoto(formData: FormData) {
     .insert({ job_id: jobId, category, file_url: publicUrl, user_id: user.id });
   if (insertErr) throw new Error(insertErr.message);
 
-  await sb.from('jobs').update({ certificate_type: 'boiler_service' }).eq('id', jobId).eq('user_id', user.id);
+  await sb.from('jobs').update({ certificate_type: 'gas_service' }).eq('id', jobId).eq('user_id', user.id);
 
-  revalidatePath(`/wizard/create/boiler_service?jobId=${jobId}`);
+  revalidatePath(`/wizard/create/gas_service?jobId=${jobId}`);
   return { url: publicUrl };
 }
 
@@ -727,12 +753,6 @@ function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp1
   return errors;
 }
 
-type Cp12RenderInput = {
-  fieldMap: Record<string, unknown>;
-  appliances: Cp12Appliance[];
-  issuedAt: string;
-};
-
 async function renderCp12Pdf({ fieldMap, appliances, issuedAt }: Cp12RenderInput) {
   // Layout intentionally mirrors the spec in docs/specs/cp12.md
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
@@ -914,124 +934,15 @@ export async function uploadSignature(formData: FormData) {
   return { url };
 }
 
-const GenerateBoilerPdfSchema = z.object({
-  jobId: z.string().uuid(),
-  previewOnly: z.boolean().optional().default(false),
-});
-
 const GenerateGeneralWorksPdfSchema = z.object({
   jobId: z.string().uuid(),
   previewOnly: z.boolean().optional().default(false),
 });
 
-export async function generateBoilerServicePdf(payload: z.infer<typeof GenerateBoilerPdfSchema>) {
-  const input = GenerateBoilerPdfSchema.parse(payload);
-  const previewOnly = input.previewOnly ?? false;
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
-
-  const { data: job, error: jobErr } = await sb.from('jobs').select('user_id').eq('id', input.jobId).maybeSingle();
-  if (jobErr) throw new Error(jobErr.message);
-  if (!job) throw new Error('Job not found');
-  if ((job as any).user_id !== user.id) {
-    throw new Error('RLS mismatch: job owner does not match auth user');
-  }
-
-  await sb.from('jobs').update({ certificate_type: 'boiler_service' }).eq('id', input.jobId).eq('user_id', user.id);
-
-  const { data: fields, error: fieldsErr } = await sb
-    .from('job_fields')
-    .select('field_key, value')
-    .eq('job_id', input.jobId);
-  if (fieldsErr) throw new Error(fieldsErr.message);
-  const fieldMap = Object.fromEntries((fields ?? []).map((f) => [f.field_key, f.value ?? null]));
-
-  const issuedAt = new Date().toISOString();
-  const validationErrors = previewOnly ? [] : validateBoilerServiceForIssue(fieldMap);
-  if (validationErrors.length) {
-    throw new Error(`Boiler service validation failed: ${validationErrors.join('; ')}`);
-  }
-
-  const pdfBytes = await renderBoilerServicePdf({
-    fieldMap,
-    issuedAt,
-    previewMode: previewOnly,
-  });
-  const pathBase = previewOnly ? 'boiler-service/previews' : 'boiler-service';
-  const path = `${pathBase}/${user.id}/${input.jobId}-${previewOnly ? 'preview' : Date.now()}.pdf`;
-  const upload = await sb.storage
-    .from('certificates')
-    .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', upsert: true });
-  if (upload.error || !upload.data?.path) {
-    throw new Error(upload.error?.message ?? 'Certificate PDF upload failed');
-  }
-
-  if (previewOnly) {
-    const { data: signed, error: signedErr } = await sb.storage.from('certificates').createSignedUrl(path, 60 * 10);
-    if (signedErr || !signed?.signedUrl) {
-      throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
-    }
-    console.log('BOILER SERVICE PDF preview generated', { jobId: input.jobId, path });
-    return { pdfUrl: signed.signedUrl, preview: true };
-  }
-
-  const { data: existingCertificate, error: existingCertErr } = await sb
-    .from('certificates')
-    .select('id, job_id, pdf_path, pdf_url')
-    .eq('job_id', input.jobId)
-    .maybeSingle();
-  if (existingCertErr) throw new Error(existingCertErr.message);
-
-  const basePayload: Record<string, unknown> = { job_id: input.jobId };
-  const certificatePayload: Record<string, unknown> = { ...basePayload, pdf_path: path };
-  const writeCertificate = (payload: Record<string, unknown>) =>
-    existingCertificate
-      ? sb.from('certificates').update(payload).eq('job_id', input.jobId)
-      : sb.from('certificates').insert(payload);
-
-  const { error: certErr } = await writeCertificate(certificatePayload);
-  if (certErr) {
-    console.error('BOILER SERVICE certificate write failed (pdf_path)', {
-      jobId: input.jobId,
-      payload: certificatePayload,
-      code: certErr.code,
-      message: certErr.message,
-    });
-    if (certErr.code === '42703') {
-      const fallbackPayload: Record<string, unknown> = { ...basePayload, pdf_url: path };
-      const { error: fallbackErr } = await writeCertificate(fallbackPayload);
-      if (fallbackErr) {
-        console.error('BOILER SERVICE certificate write failed (pdf_url fallback)', {
-          jobId: input.jobId,
-          payload: fallbackPayload,
-          code: fallbackErr.code,
-          message: fallbackErr.message,
-        });
-        throw new Error(fallbackErr.message);
-      }
-    } else {
-      throw new Error(certErr.message);
-    }
-  }
-
-  const { data: signed, error: signedErr } = await sb.storage.from('certificates').createSignedUrl(path, 60 * 10);
-  if (signedErr || !signed?.signedUrl) {
-    throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
-  }
-
-  await sb
-    .from('job_fields')
-    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt }, { onConflict: 'job_id,field_key' });
-  await sb.from('jobs').update({ status: 'completed', certificate_type: 'boiler_service' }).eq('id', input.jobId).eq('user_id', user.id);
-  revalidatePath(`/jobs/${input.jobId}`);
-  console.log('BOILER SERVICE certificate stored', { jobId: input.jobId, path });
-  return { pdfUrl: signed.signedUrl };
-}
-
+const GenerateGasServicePdfSchema = z.object({
+  jobId: z.string().uuid(),
+  previewOnly: z.boolean().optional().default(false),
+});
 export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGeneralWorksPdfSchema>) {
   const input = GenerateGeneralWorksPdfSchema.parse(payload);
   const previewOnly = input.previewOnly ?? false;
@@ -1079,7 +990,7 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
     .eq('job_id', input.jobId);
   if (photosErr) throw new Error(photosErr.message);
 
-  const issuedAt = new Date().toISOString();
+  const issuedAt = new Date();
   const validationErrors = previewOnly ? [] : validateGeneralWorksForIssue(fieldMap);
   if (validationErrors.length) {
     throw new Error(`General Works validation failed: ${validationErrors.join('; ')}`);
@@ -1190,6 +1101,229 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   return { pdfUrl: signed.signedUrl };
 }
 
+export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasServicePdfSchema>) {
+  const input = GenerateGasServicePdfSchema.parse(payload);
+  const previewOnly = input.previewOnly ?? false;
+  const cookieStore = cookies();
+  const sb = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options) {
+          cookieStore.delete({ name, ...options });
+        },
+      },
+    },
+  );
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'generateGasServicePdf requires authenticated user');
+
+  const { data: jobRow, error: jobErr } = await sb.from('jobs').select('id, user_id').eq('id', input.jobId).maybeSingle();
+  if (jobErr) throw new Error(jobErr.message);
+  if (!jobRow || (jobRow as any).user_id !== user.id) {
+    throw new Error('RLS mismatch: job owner does not match auth user');
+  }
+
+  const { data: fields, error: fieldsErr } = await sb
+    .from('job_fields')
+    .select('field_key, value')
+    .eq('job_id', input.jobId);
+  if (fieldsErr) throw new Error(fieldsErr.message);
+  const fieldMap = Object.fromEntries((fields ?? []).map((f) => [f.field_key, f.value ?? null]));
+
+  const issuedAt = new Date().toISOString();
+  const validationErrors = previewOnly ? [] : validateBoilerServiceForIssue(fieldMap);
+  if (validationErrors.length) {
+    throw new Error(`Boiler service validation failed: ${validationErrors.join('; ')}`);
+  }
+
+  const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
+  const boilerMake = toText((fieldMap as any).boiler_make ?? '');
+  const boilerModel = toText((fieldMap as any).boiler_model ?? '');
+  const boilerAddress = toText(fieldMap.property_address ?? fieldMap.address ?? '');
+
+  const gasServiceFields: GasServiceFieldMap = {
+    certNumber: toText(fieldMap.record_id ?? fieldMap.certificate_number ?? input.jobId ?? ''),
+    engineerName: toText(fieldMap.engineer_name ?? ''),
+    companyName: toText(fieldMap.company_name ?? ''),
+    companyAddressLine1: toText(fieldMap.company_address ?? ''),
+    companyAddressLine2: '',
+    companyTown: '',
+    companyPostcode: '',
+    companyPhone: toText(fieldMap.company_phone ?? ''),
+    gasSafeNumber: toText(fieldMap.gas_safe_number ?? ''),
+    engineerId: toText(fieldMap.engineer_id ?? ''),
+    jobName: toText(fieldMap.customer_name ?? ''),
+    jobAddressLine1: boilerAddress,
+    jobAddressLine2: '',
+    jobTown: '',
+    jobPostcode: toText(fieldMap.postcode ?? ''),
+    jobPhone: '',
+    clientName: toText(fieldMap.customer_name ?? ''),
+    clientCompany: '',
+    clientAddressLine1: boilerAddress,
+    clientAddressLine2: '',
+    clientTown: '',
+    clientPostcode: toText(fieldMap.postcode ?? ''),
+    clientPhone: '',
+    nextServiceDate: toText((fieldMap as any).next_service_due ?? ''),
+    engineerComments: [
+      toText((fieldMap as any).service_summary ?? ''),
+      toText((fieldMap as any).recommendations ?? ''),
+      toText((fieldMap as any).defects_details ?? ''),
+      toText((fieldMap as any).parts_used ?? ''),
+    ]
+      .filter((value) => value.trim().length > 0)
+      .join(' | '),
+  };
+
+  const appliances: GasServiceApplianceInput[] = [
+    {
+      description: [boilerMake, boilerModel].filter(Boolean).join(' ') || toText((fieldMap as any).boiler_type ?? ''),
+      location: toText((fieldMap as any).boiler_location ?? ''),
+      type: toText((fieldMap as any).boiler_type ?? ''),
+      make: boilerMake,
+      model: boilerModel,
+      serial: toText((fieldMap as any).serial_number ?? ''),
+      flueType: toText((fieldMap as any).flue_type ?? ''),
+      operatingPressure: toText((fieldMap as any).operating_pressure_mbar ?? ''),
+      heatInput: toText((fieldMap as any).heat_input ?? ''),
+      safetyDevice: toText((fieldMap as any).service_controls_checked ?? ''),
+      ventilationSatisfactory: toText((fieldMap as any).service_ventilation_checked ?? ''),
+      flueTerminationSatisfactory: toText((fieldMap as any).service_flue_checked ?? ''),
+      spillageTest: toText((fieldMap as any).service_visual_inspection ?? ''),
+      applianceSafeToUse: toText((fieldMap as any).service_leaks_checked ?? ''),
+      remedialActionTaken: toText((fieldMap as any).defects_found ?? ''),
+    },
+  ].filter((row) => Object.values(row).some((val) => typeof val === 'string' && val.trim().length > 0));
+
+  const pdfBytes = await renderGasServicePdf({
+    fields: gasServiceFields,
+    appliances,
+    issuedAt,
+    recordId: input.jobId,
+  });
+
+  console.log('GAS SERVICE: service role key present', Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY));
+  const admin = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    },
+  );
+
+  const pathBase = previewOnly ? 'boiler-service/previews' : 'boiler-service';
+  const path = `${pathBase}/${input.jobId}/${Date.now()}-boiler-service${previewOnly ? '-preview' : ''}.pdf`;
+  console.log('GAS SERVICE: uploading certificate PDF', { path, previewOnly });
+  const { data: uploadData, error: uploadErr } = await admin.storage
+    .from('certificates')
+    .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', cacheControl: '3600', upsert: false });
+  if (uploadErr) {
+    console.error('Storage upload failed', {
+      storagePath: path,
+      message: uploadErr.message,
+      name: uploadErr.name,
+      statusCode: (uploadErr as any).statusCode,
+    });
+    throw uploadErr;
+  }
+  if (!uploadData?.path) {
+    throw new Error('Certificate PDF upload failed: missing path');
+  }
+
+  if (previewOnly) {
+    const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
+    if (signedErr || !signed?.signedUrl) {
+      throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
+    }
+    console.log('GAS SERVICE PDF preview generated', { jobId: input.jobId, path });
+    return { pdfUrl: signed.signedUrl, preview: true };
+  }
+
+  const { data: existingCertificate, error: existingCertErr } = await admin
+    .from('certificates')
+    .select('id, job_id, pdf_path, pdf_url')
+    .eq('job_id', input.jobId)
+    .maybeSingle();
+  if (existingCertErr) throw new Error(existingCertErr.message);
+
+  const baseCertificatePayload: Record<string, unknown> = {
+    job_id: input.jobId,
+  };
+  const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
+
+  const writeCertificate = (payload: Record<string, unknown>) =>
+    existingCertificate
+      ? admin.from('certificates').update(payload).eq('job_id', input.jobId)
+      : admin.from('certificates').insert(payload);
+
+  console.log('GAS SERVICE: certificates write start', { jobId: input.jobId, path, previewOnly, payload: certificatePayload });
+  const { error: certErr } = await writeCertificate(certificatePayload);
+  console.log('GAS SERVICE: certificates write result', {
+    jobId: input.jobId,
+    error: certErr
+      ? {
+          code: certErr.code,
+          message: certErr.message,
+          details: (certErr as any).details,
+          hint: (certErr as any).hint,
+        }
+      : null,
+  });
+  if (certErr) {
+    console.error('GAS SERVICE certificate write failed (pdf_path)', {
+      jobId: input.jobId,
+      payload: certificatePayload,
+      code: certErr.code,
+      message: certErr.message,
+    });
+    if (certErr.code === '42703') {
+      const fallbackPayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_url: path };
+      const { error: fallbackErr } = await writeCertificate(fallbackPayload);
+      if (fallbackErr) {
+        console.error('GAS SERVICE certificate write failed (pdf_url fallback)', {
+          jobId: input.jobId,
+          payload: fallbackPayload,
+          code: fallbackErr.code,
+          message: fallbackErr.message,
+        });
+        throw new Error(fallbackErr.message);
+      }
+    } else {
+      throw new Error(certErr.message);
+    }
+  }
+  console.log('GAS SERVICE certificate stored', { jobId: input.jobId, path });
+
+  const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
+  if (signedErr || !signed?.signedUrl) {
+    throw new Error(signedErr?.message ?? 'Unable to create certificate link');
+  }
+  console.log('GAS SERVICE certificate signed URL generated', { jobId: input.jobId, path });
+
+  await sb
+    .from('job_fields')
+    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAtIso }, { onConflict: 'job_id,field_key' });
+
+  await sb.from('jobs').update({ status: 'completed', certificate_type: 'gas_service' }).eq('id', input.jobId);
+  revalidatePath(`/jobs/${input.jobId}`);
+  return { pdfUrl: signed.signedUrl };
+}
+
 const GeneratePdfSchema = z.object({
   jobId: z.string().uuid(),
   certificateType: z.enum(CERTIFICATE_TYPES),
@@ -1246,8 +1380,8 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   if (existingCertErr) throw new Error(existingCertErr.message);
   console.log('CERTIFICATE existing row', { jobId: input.jobId, exists: !!existingCertificate, id: existingCertificate?.id });
 
-  if (input.certificateType === 'boiler_service') {
-    return generateBoilerServicePdf({ jobId: input.jobId, previewOnly });
+  if (input.certificateType === 'gas_service') {
+    return generateGasServicePdf({ jobId: input.jobId, previewOnly });
   }
 
   if (input.certificateType === 'general_works') {
@@ -1297,28 +1431,96 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     appliances = appResp.data as Cp12Appliance[];
   }
 
-  const issuedAt = new Date().toISOString();
+  const issuedAt = new Date();
+  const issuedAtIso = issuedAt.toISOString();
   const validationErrors = previewOnly ? [] : validateCp12ForIssue(fieldMap, appliances);
   if (validationErrors.length) {
     throw new Error(`CP12 validation failed: ${validationErrors.join('; ')}`);
   }
 
-  const pdfBytes = await renderCp12Pdf({
-    fieldMap,
-    appliances,
+  console.log('CP12: service role key present', Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY));
+  const admin = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    },
+  );
+
+  const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
+  const cp12Fields: Cp12FieldMap = {
+    certNumber: toText(fieldMap.record_id ?? fieldMap.certificate_number ?? ''),
+    issueDate: toText(fieldMap.inspection_date ?? fieldMap.scheduled_for ?? '') || undefined,
+    nextInspectionDue: toText(fieldMap.next_inspection_due ?? fieldMap.completion_date ?? ''),
+    landlordName: toText(fieldMap.landlord_name ?? fieldMap.customer_name ?? ''),
+    landlordAddressLine1: toText(fieldMap.landlord_address ?? ''),
+    landlordPostcode: toText(fieldMap.postcode ?? ''),
+    propertyAddressLine1: toText(fieldMap.property_address ?? fieldMap.address ?? ''),
+    propertyPostcode: toText(fieldMap.postcode ?? ''),
+    companyName: toText(fieldMap.company_name ?? ''),
+    companyAddressLine1: toText(fieldMap.company_address ?? ''),
+    companyTown: '',
+    companyPostcode: '',
+    companyPhone: toText(fieldMap.company_phone ?? ''),
+    companyEmail: toText(fieldMap.company_email ?? ''),
+    gasSafeRegistrationNumber: toText(fieldMap.gas_safe_number ?? ''),
+    engineerName: toText(fieldMap.engineer_name ?? ''),
+    engineerIdNumber: toText(fieldMap.engineer_id ?? ''),
+    engineerSignatureText: toText(fieldMap.engineer_name ?? ''),
+    engineerVisitTime: toText(fieldMap.completion_date ?? ''),
+    responsiblePersonName: toText(fieldMap.customer_name ?? ''),
+    responsiblePersonSignatureText: toText(fieldMap.customer_name ?? ''),
+    responsiblePersonAcknowledgementDate: toText(fieldMap.completion_date ?? ''),
+    defectsIdentified: toText(fieldMap.defect_description ?? ''),
+    remedialWorksRequired: toText(fieldMap.remedial_action ?? ''),
+    additionalNotes: toText(fieldMap.comments ?? fieldMap.additional_notes ?? ''),
+  };
+
+  const applianceInputs: ApplianceInput[] = (appliances ?? []).map((app) => ({
+    description: toText(app.make_model ?? (app as any).appliance_make_model ?? app.appliance_type ?? ''),
+    location: toText(app.location ?? ''),
+    type: toText(app.appliance_type ?? ''),
+    flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
+    operatingPressure: toText(app.operating_pressure ?? ''),
+    heatInput: toText(app.heat_input ?? ''),
+    safetyDevice: toText(app.stability_test ?? ''),
+    ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
+    flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
+    spillageTest: toText(app.gas_tightness_test ?? ''),
+    applianceSafeToUse: toText(app.safety_rating ?? app.classification_code ?? ''),
+    remedialActionTaken: toText(app.classification_code ?? ''),
+  }));
+
+  const pdfBytes = await renderCp12CertificatePdf({
+    fields: cp12Fields,
+    appliances: applianceInputs,
     issuedAt,
+    recordId: input.jobId,
   });
   const pathBase = previewOnly ? 'cp12/previews' : 'cp12';
   const path = `${pathBase}/${user.id}/${input.jobId}-${previewOnly ? 'preview' : Date.now()}.pdf`;
-  const upload = await sb.storage
+  console.log('CP12: uploading certificate PDF', { path, previewOnly });
+  const upload = await admin.storage
     .from('certificates')
     .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', upsert: true });
   if (upload.error || !upload.data?.path) {
+    console.error('CP12: upload error', {
+      path,
+      error: upload.error
+        ? {
+            code: upload.error.code,
+            message: upload.error.message,
+          }
+        : null,
+    });
     throw new Error(upload.error?.message ?? 'Certificate PDF upload failed');
   }
 
   if (previewOnly) {
-    const { data: signed, error: signedErr } = await sb.storage.from('certificates').createSignedUrl(path, 60 * 10);
+    const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
     if (signedErr || !signed?.signedUrl) {
       throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
     }
@@ -1333,10 +1535,22 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
 
   const writeCertificate = (payload: Record<string, unknown>) =>
     existingCertificate
-      ? sb.from('certificates').update(payload).eq('job_id', input.jobId)
-      : sb.from('certificates').insert(payload);
+      ? admin.from('certificates').update(payload).eq('job_id', input.jobId)
+      : admin.from('certificates').insert(payload);
 
+  console.log('CP12: certificates write start', { jobId: input.jobId, path, previewOnly, payload: certificatePayload });
   const { error: certErr } = await writeCertificate(certificatePayload);
+  console.log('CP12: certificates write result', {
+    jobId: input.jobId,
+    error: certErr
+      ? {
+          code: certErr.code,
+          message: certErr.message,
+          details: (certErr as any).details,
+          hint: (certErr as any).hint,
+        }
+      : null,
+  });
   if (certErr) {
     console.error('CERTIFICATE write failed (pdf_path)', {
       jobId: input.jobId,
@@ -1375,9 +1589,9 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   }
   console.log('CERTIFICATE PDF stored', { jobId: input.jobId, path });
 
-  const { data: signed, error: signedErr } = await sb.storage.from('certificates').createSignedUrl(path, 60 * 10);
+  const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
   if (signedErr || !signed?.signedUrl) {
-    throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
+    throw new Error(signedErr?.message ?? 'Unable to create certificate link');
   }
   console.log('CERTIFICATE PDF signed URL generated', { jobId: input.jobId, path });
 

@@ -227,6 +227,74 @@ export async function getClientDetail(id: string) {
   };
 }
 
+export async function updateClient(payload: FormData | Record<string, unknown>) {
+  const body =
+    payload instanceof FormData
+      ? ClientSchema.parse({
+          name: payload.get('name'),
+          organization: payload.get('organization') ?? undefined,
+          email: payload.get('email') ?? undefined,
+          phone: payload.get('phone') ?? undefined,
+          address: payload.get('address') ?? undefined,
+        })
+      : ClientSchema.parse(payload);
+
+  const id = payload instanceof FormData ? payload.get('id') : (payload as any)?.id;
+  ClientId.parse(id);
+
+  const readClient = await supabaseServerReadOnly();
+  const {
+    data: { user },
+    error,
+  } = await readClient.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const sb = await supabaseServerServiceRole();
+  let lastErr: PostgrestError | null = null;
+
+  for (const table of CLIENT_TABLES) {
+    const updates =
+      table === 'clients'
+        ? {
+            name: body.name,
+            organization: body.organization ?? null,
+            email: body.email ?? null,
+            phone: body.phone ?? null,
+            address: body.address ?? null,
+            updated_at: new Date().toISOString(),
+          }
+        : {
+            name: body.name,
+            email: body.email ?? null,
+            phone: body.phone ?? null,
+            address: body.address ?? null,
+          };
+
+    const { error: updateErr, count } = await (sb as any)
+      .from(table)
+      .update(updates)
+      .eq('id', id as string)
+      .eq('user_id', user.id)
+      .select('id', { count: 'exact', head: true });
+
+    if (updateErr) {
+      if (updateErr.code === '42P01') {
+        lastErr = updateErr;
+        continue;
+      }
+      throw new Error(updateErr.message);
+    }
+
+    if (count && count > 0) {
+      revalidatePath('/clients');
+      revalidatePath(`/clients/${id}`);
+      return { id };
+    }
+  }
+
+  throw new Error(lastErr?.message ?? 'Unable to update client');
+}
+
 export async function deleteClient(id: string) {
   ClientId.parse(id);
   const readClient = await supabaseServerReadOnly();

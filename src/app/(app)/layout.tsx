@@ -47,40 +47,19 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                         <path d="M4 7h16M4 12h16M4 17h16" strokeWidth={2} strokeLinecap="round" />
                       </svg>
                     </summary>
-                    <div className="absolute right-0 mt-3 w-64 rounded-md border border-white/10 bg-[var(--surface)] p-3 shadow-xl">
-                      <nav className="flex flex-col gap-1">
-                        {links.map((link) => (
-                          <NavLink key={link.href} href={link.href}>
-                            {link.label}
-                          </NavLink>
-                        ))}
-                      </nav>
-                    </div>
-                  </details>
-                  <details className="group relative">
-                    <summary className="flex cursor-pointer list-none items-center rounded-md bg-[var(--muted)] px-3 py-1 text-sm font-semibold text-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
-                      <span className="sr-only">Open user menu</span>
-                      <div className="mr-2 h-8 w-8 rounded-md bg-[var(--accent)] text-center text-sm font-bold text-white">
-                        PL
-                      </div>
-                    </summary>
-                    <div className="absolute right-0 mt-3 w-48 rounded-md border border-white/10 bg-[var(--surface)] p-3 text-sm shadow-lg">
-                      <p className="font-semibold text-gray-800">Alex Morgan</p>
-                      <p className="text-xs text-gray-500">Field Supervisor</p>
-                      <div className="my-3 border-t border-gray-100" />
-                      <Link href="/settings" className="block rounded-sm px-3 py-2 text-gray-600 hover:bg-gray-50">
-                        Settings
-                      </Link>
-                      <form action="/logout" method="post">
-                        <button type="submit" className="w-full rounded-sm px-3 py-2 text-left text-red-600 hover:bg-red-50">
-                          Sign out
-                        </button>
-                      </form>
-                    </div>
-                  </details>
-                </div>
+              <div className="absolute right-0 mt-3 w-64 rounded-md border border-white/10 bg-[var(--surface)] p-3 shadow-xl">
+                <nav className="flex flex-col gap-1">
+                  {links.map((link) => (
+                    <NavLink key={link.href} href={link.href}>
+                      {link.label}
+                    </NavLink>
+                  ))}
+                </nav>
               </div>
-            </header>
+            </details>
+          </div>
+        </div>
+      </header>
 
             <main className="flex-1 px-4 pb-8 pt-6 md:px-10">
               <PageFade>{children}</PageFade>

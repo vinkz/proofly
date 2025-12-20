@@ -39,7 +39,7 @@ export default async function ClientsPage() {
           <p className="text-sm text-muted-foreground/70">Stay on top of relationships and field history.</p>
         </div>
         <Button asChild>
-          <a href="/jobs/new/client">New client job</a>
+          <a href="/clients/new">+ New client</a>
         </Button>
       </header>
 
@@ -47,14 +47,15 @@ export default async function ClientsPage() {
         {clients.map((client) => {
           const stats = jobStats[client.id] ?? { open: 0, total: 0 };
           return (
-            <a
+            <div
               key={client.id}
-              href={`/clients/${client.id}`}
               className="group rounded-3xl border border-white/20 bg-white/80 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-lg font-semibold text-muted">{client.name}</p>
+                  <a className="text-lg font-semibold text-muted hover:underline" href={`/clients/${client.id}`}>
+                    {client.name}
+                  </a>
                   <p className="text-xs text-muted-foreground/60">{client.organization ?? 'Individual'}</p>
                 </div>
                 <div className="text-right">
@@ -62,10 +63,14 @@ export default async function ClientsPage() {
                   <p className="text-xs text-muted-foreground/60">Open jobs</p>
                 </div>
               </div>
-              <div className="mt-3 flex justify-end">
-                <div onClick={(e) => e.preventDefault()}>
-                  <DeleteClientButton clientId={client.id} />
-                </div>
+              <div className="mt-3 flex justify-end gap-2">
+                <a
+                  href={`/jobs/new/client?clientId=${client.id}`}
+                  className="rounded-full border border-white/30 px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:bg-white/70"
+                >
+                  Open job
+                </a>
+                <DeleteClientButton clientId={client.id} />
               </div>
               <div className="mt-4 grid gap-2 text-xs text-muted-foreground/70">
                 {client.email ? <p>{client.email}</p> : null}
@@ -76,7 +81,7 @@ export default async function ClientsPage() {
                 {stats.total} total jobs · Created{' '}
                 {client.created_at ? new Date(client.created_at).toLocaleDateString() : 'N/A'}
               </div>
-            </a>
+            </div>
           );
         })}
         {clients.length === 0 ? (

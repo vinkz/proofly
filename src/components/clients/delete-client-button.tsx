@@ -12,7 +12,9 @@ export function DeleteClientButton({ clientId }: { clientId: string }) {
   const router = useRouter();
   const { pushToast } = useToast();
 
-  const onDelete = () => {
+  const onDelete = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     if (!window.confirm('Delete this client? This cannot be undone.')) return;
     startTransition(async () => {
       try {

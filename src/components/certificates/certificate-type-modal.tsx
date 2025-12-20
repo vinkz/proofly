@@ -21,7 +21,12 @@ export function CertificateTypeModal() {
 
   return (
     <>
-      <Button type="button" className="rounded-full bg-[var(--accent)] px-4 py-2 text-white" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="primary"
+        className="rounded-full border border-black bg-black text-white shadow-sm hover:bg-black focus-visible:outline-black"
+        onClick={() => setOpen(true)}
+      >
         + New Certificate
       </Button>
 

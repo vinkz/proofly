@@ -14,8 +14,9 @@ export default async function CertificateWizardPage({
   searchParams: Promise<{ jobId?: string }>;
 }) {
   const { certificateType } = await params;
+  const normalizedType = certificateType === 'boiler_service' ? 'gas_service' : certificateType;
   const qs = await searchParams;
-  if (!CERTIFICATE_TYPES.includes(certificateType as CertificateType)) {
+  if (!CERTIFICATE_TYPES.includes(normalizedType as CertificateType)) {
     notFound();
   }
 
@@ -23,7 +24,7 @@ export default async function CertificateWizardPage({
   const { jobId } =
     existingJobId && existingJobId.length > 10
       ? { jobId: existingJobId }
-      : await createJob({ certificateType: certificateType as CertificateType });
+      : await createJob({ certificateType: normalizedType as CertificateType });
   const wizardState = await getCertificateWizardState(jobId);
   const initialInfo = {
     ...wizardState.fields,
@@ -32,17 +33,18 @@ export default async function CertificateWizardPage({
     service_date: wizardState.fields.service_date ?? (wizardState.job as any)?.scheduled_for ?? '',
   };
 
-  if (certificateType === 'boiler_service') {
+  if (normalizedType === 'gas_service') {
     return (
       <BoilerServiceWizard
         jobId={jobId}
         initialFields={initialInfo}
         initialPhotoPreviews={wizardState.photoPreviews}
+        certificateType={normalizedType as CertificateType}
       />
     );
   }
 
-  if (certificateType === 'general_works') {
+  if (normalizedType === 'general_works') {
     return (
       <GeneralWorksWizard
         jobId={jobId}
