@@ -22,9 +22,9 @@ const SignUpSchema = CredentialsSchema.extend({
   certifications: z.array(z.string()).optional().default([]),
 });
 
-function createAuthedSupabaseClient() {
+async function createAuthedSupabaseClient() {
   assertSupabaseEnv();
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     cookies: {
@@ -43,7 +43,7 @@ function createAuthedSupabaseClient() {
 
 export async function signInWithPassword(payload: unknown) {
   const body = CredentialsSchema.parse(payload);
-  const sb = createAuthedSupabaseClient();
+  const sb = await createAuthedSupabaseClient();
   const { error } = await sb.auth.signInWithPassword({
     email: body.email,
     password: body.password,
@@ -54,7 +54,7 @@ export async function signInWithPassword(payload: unknown) {
 
 export async function signInWithMagicLink(email: string) {
   const parsed = z.string().email().parse(email);
-  const sb = createAuthedSupabaseClient();
+  const sb = await createAuthedSupabaseClient();
   const { error } = await sb.auth.signInWithOtp({
     email: parsed,
     options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/callback` || undefined },
@@ -65,7 +65,7 @@ export async function signInWithMagicLink(email: string) {
 
 export async function signUpWithPassword(payload: unknown) {
   const body = SignUpSchema.parse(payload);
-  const sb = createAuthedSupabaseClient();
+  const sb = await createAuthedSupabaseClient();
 
   const { data, error } = await sb.auth.signUp({
     email: body.email,

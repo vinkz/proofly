@@ -27,7 +27,8 @@ async function upsertProfile(
 ) {
   const { error } = await sb.from('profiles').upsert({ id: userId, ...patch }, { onConflict: 'id' });
   if (error?.code === '42703' && 'onboarding_complete' in patch) {
-    const { onboarding_complete, ...rest } = patch;
+    const rest = { ...patch };
+    delete rest.onboarding_complete;
     const retry = await sb.from('profiles').upsert({ id: userId, ...rest }, { onConflict: 'id' });
     if (retry.error) throw new Error(retry.error.message);
     return;

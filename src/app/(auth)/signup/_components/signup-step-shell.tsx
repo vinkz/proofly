@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 import { Card } from '@/components/ui/card';
@@ -60,13 +60,11 @@ export function SignupStepShell({
   description: string;
   children: React.ReactNode;
 }) {
-  const [state, setState] = useState<SignupState>(defaultState);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     const stored = loadSignupState();
-    setState(stored);
     if (stored.email === '' && pathname !== '/signup/step1') {
       router.replace('/signup/step1');
     }

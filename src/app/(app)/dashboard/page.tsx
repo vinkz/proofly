@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { KpiCards, type IconName } from './_components/kpi-cards';
-import { CertificateTypeModal } from '@/components/certificates/certificate-type-modal';
 
 type BasicJob = {
   id: string;
@@ -85,7 +84,9 @@ export default async function DashboardPage() {
               <p className="text-sm text-gray-600">Track field activity, client signatures, and certificates in one place.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <CertificateTypeModal />
+              <Button variant="primary" asChild className="rounded-full">
+                <Link href="/jobs/new">+ New Job</Link>
+              </Button>
               <Button variant="secondary" asChild className="rounded-full">
                 <Link href="/clients">View clients</Link>
               </Button>

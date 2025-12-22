@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { listClients } from '@/server/clients';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { DeleteClientButton } from '@/components/clients/delete-client-button';
@@ -39,7 +41,7 @@ export default async function ClientsPage() {
           <p className="text-sm text-muted-foreground/70">Stay on top of relationships and field history.</p>
         </div>
         <Button asChild>
-          <a href="/clients/new">+ New client</a>
+          <Link href="/clients/new">+ New client</Link>
         </Button>
       </header>
 
@@ -53,9 +55,9 @@ export default async function ClientsPage() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <a className="text-lg font-semibold text-muted hover:underline" href={`/clients/${client.id}`}>
+                  <Link className="text-lg font-semibold text-muted hover:underline" href={`/clients/${client.id}`}>
                     {client.name}
-                  </a>
+                  </Link>
                   <p className="text-xs text-muted-foreground/60">{client.organization ?? 'Individual'}</p>
                 </div>
                 <div className="text-right">
@@ -64,12 +66,12 @@ export default async function ClientsPage() {
                 </div>
               </div>
               <div className="mt-3 flex justify-end gap-2">
-                <a
+                <Link
                   href={`/jobs/new/client?clientId=${client.id}`}
                   className="rounded-full border border-white/30 px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:bg-white/70"
                 >
                   Open job
-                </a>
+                </Link>
                 <DeleteClientButton clientId={client.id} />
               </div>
               <div className="mt-4 grid gap-2 text-xs text-muted-foreground/70">

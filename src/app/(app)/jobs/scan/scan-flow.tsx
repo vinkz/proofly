@@ -47,7 +47,7 @@ export function ScanJobSheetFlow() {
             datetime: form.date,
           },
         });
-        const { pdfUrl } = await generateCertificatePdf({ jobId: id, certificateType: 'general_works' });
+        const { pdfUrl } = await generateCertificatePdf({ jobId: id, certificateType: 'general_works', previewOnly: false });
         pushToast({ title: 'PDF ready', variant: 'success' });
         router.push(`/jobs/${id}/pdf?url=${encodeURIComponent(pdfUrl)}`);
       } catch (error) {

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { getClientDetail } from '@/server/clients';
@@ -23,6 +24,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       return { job_id: report.job_id, url: data?.signedUrl ?? null };
     }),
   );
+  const calendarJobs = detail.jobs.map((job) => ({
+    id: job.id,
+    title: job.title ?? null,
+    scheduled_for: job.scheduled_for ?? null,
+    created_at: job.created_at ?? null,
+  }));
 
   return (
     <div className="space-y-6">
@@ -61,18 +68,18 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   </span>
                 </div>
                 <div className="mt-3 flex gap-2 text-xs">
-                  <a
+                  <Link
                     href={`/jobs/${job.id}`}
                     className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
                   >
                     View job
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href={`/reports/${job.id}`}
                     className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
                   >
                     Report
-                  </a>
+                  </Link>
                 </div>
               </li>
             ))}
@@ -126,7 +133,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </div>
       </section>
       <section className="rounded-3xl border border-white/20 bg-white/90 p-5">
-        <ClientCalendar jobs={detail.jobs as any} />
+        <ClientCalendar jobs={calendarJobs} />
       </section>
     </div>
   );

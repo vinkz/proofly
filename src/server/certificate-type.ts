@@ -2,8 +2,10 @@
 
 import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import { CERTIFICATE_TYPES, type CertificateType } from '@/types/certificates';
+import type { Database } from '@/lib/database.types';
 
 type CertificateSource = 'job_row' | 'cp12_inference' | 'unknown';
+const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['public']['Tables'];
 
 export type CertificateResolution = {
   certificateType: CertificateType | null;
@@ -22,7 +24,7 @@ export async function resolveCertificateType(jobId: string, existingType?: strin
 
   const readClient = await supabaseServerReadOnly();
   const { data: cp12Rows, error: cp12Err } = await readClient
-    .from('cp12_appliances')
+    .from(CP12_APPLIANCES_TABLE)
     .select('job_id')
     .eq('job_id', jobId)
     .limit(1);
@@ -30,10 +32,14 @@ export async function resolveCertificateType(jobId: string, existingType?: strin
     console.warn('[certificate-type] cp12 inference query failed', { jobId, error: cp12Err });
   }
 
-  if (cp12Rows && cp12Rows.length > 0) {
+  const applianceRows = (cp12Rows ?? []) as unknown as Array<{ job_id: string }>;
+  if (applianceRows.length > 0) {
     console.log('[certificate-type] inferred cp12 from appliances, backfilling job row', { jobId });
     const serviceClient = await supabaseServerServiceRole();
-    const { error: updateErr } = await serviceClient.from('jobs').update({ certificate_type: 'cp12' }).eq('id', jobId);
+    const { error: updateErr } = await serviceClient
+      .from('jobs')
+      .update({ certificate_type: 'cp12' } as Record<string, unknown>)
+      .eq('id', jobId);
     if (updateErr) {
       console.error('[certificate-type] backfill update failed', { jobId, error: updateErr });
     }

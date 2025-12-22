@@ -21,8 +21,11 @@ export async function GET() {
       property_address: '12 High Street, London',
       postcode: 'E1 6AN',
       inspection_date: new Date().toISOString().slice(0, 10),
+      landlord_name: 'Test Landlord',
+      landlord_address: '12 High Street, London, E1 6AN',
       engineer_name: 'Alex Engineer',
       gas_safe_number: '123456',
+      reg_26_9_confirmed: true,
       company_name: 'certnow Plumbing Ltd',
     },
   });
@@ -56,7 +59,7 @@ export async function GET() {
 
   await updateField({ jobId, key: 'completion_date', value: new Date().toISOString().slice(0, 10) });
 
-  const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType: 'cp12' });
+  const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType: 'cp12', previewOnly: false });
 
   return NextResponse.json({ jobId, pdfUrl });
 }

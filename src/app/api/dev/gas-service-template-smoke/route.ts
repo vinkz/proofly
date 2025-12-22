@@ -15,15 +15,20 @@ export async function GET() {
 
   const { jobId } = await createJob({ certificateType: 'gas_service', title: 'Gas Service Template Smoke' });
   const today = new Date().toISOString().slice(0, 10);
-  const serviceDate =
-    typeof BOILER_SERVICE_DEMO_INFO.service_date === 'function' ? BOILER_SERVICE_DEMO_INFO.service_date() : BOILER_SERVICE_DEMO_INFO.service_date;
+  const serviceDate = BOILER_SERVICE_DEMO_INFO.service_date ?? today;
 
   await saveBoilerServiceJobInfo({
     jobId,
     data: {
-      ...BOILER_SERVICE_DEMO_INFO,
+      customer_name: BOILER_SERVICE_DEMO_INFO.customer_name,
+      property_address: BOILER_SERVICE_DEMO_INFO.property_address,
+      postcode: BOILER_SERVICE_DEMO_INFO.postcode,
       service_date: serviceDate ?? today,
-    } as any,
+      engineer_name: BOILER_SERVICE_DEMO_INFO.engineer_name,
+      gas_safe_number: BOILER_SERVICE_DEMO_INFO.gas_safe_number,
+      company_name: BOILER_SERVICE_DEMO_INFO.company_name,
+      company_address: BOILER_SERVICE_DEMO_INFO.company_address,
+    },
   });
 
   await saveBoilerServiceDetails({

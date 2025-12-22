@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { PDFDocument, StandardFonts, type PDFFont } from 'pdf-lib';
+import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
 
 export type ApplianceInput = {
   description: string;
@@ -200,11 +200,12 @@ function buildCombinedComments(fields: Cp12FieldMap) {
 async function drawAppliances(
   pdfDoc: PDFDocument,
   templateDoc: PDFDocument,
-  page: any,
+  page: PDFPage,
   font: PDFFont,
   appliances: ApplianceInput[],
 ) {
   const { startX, startYOffset, rowHeight, maxRowsPerPage, columns } = APPLIANCE_TABLE;
+  type ApplianceColumnKey = keyof typeof columns;
   let currentPage = page;
   const { height } = currentPage.getSize();
   let currentY = height - startYOffset;
@@ -212,8 +213,8 @@ async function drawAppliances(
 
   const writeRow = (appliance: ApplianceInput) => {
     const size = 8;
-    const drawCell = (field: keyof ApplianceInput) => {
-      const colCfg = (columns as any)[field];
+    const drawCell = (field: ApplianceColumnKey) => {
+      const colCfg = columns[field];
       if (!colCfg) return;
       const value = appliance[field];
       if (!value) return;

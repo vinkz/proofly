@@ -62,6 +62,13 @@ type RenderCp12TemplateInput = {
   recordId?: string;
 };
 
+type Cp12ApplianceExtras = {
+  description?: string;
+  appliance_make_model?: string;
+  combustion_reading?: string;
+  co2_percent?: string;
+};
+
 const toText = (val: unknown) => {
   if (val === null || val === undefined) return '';
   return String(val).trim();
@@ -391,19 +398,20 @@ export async function renderCp12TemplatePdf({ fieldMap, appliances, issuedAt, re
   const table = CP12_TEMPLATE_COORDS.table;
   const rows = (appliances ?? []).slice(0, table.maxRows);
   rows.forEach((app, idx) => {
+    const appliance = app as Cp12Appliance & Cp12ApplianceExtras;
     const rowY = table.startY - idx * table.rowHeight;
     const textY = rowY + 8;
     const cells: Record<string, string> = {
       index: `${idx + 1}`,
       location: toText(app.location),
-      appliance_type: toText((app as any).description ?? app.appliance_type),
-      make_model: toText(app.make_model ?? (app as any).appliance_make_model),
+      appliance_type: toText(appliance.description ?? app.appliance_type),
+      make_model: toText(app.make_model ?? appliance.appliance_make_model),
       flue_type: toText(app.flue_type ?? app.ventilation_provision),
       operating_pressure: toText(app.operating_pressure),
       heat_input: toText(app.heat_input),
       flue_condition: toText(app.flue_condition ?? app.stability_test),
       ventilation: toText(app.ventilation_satisfactory ?? app.ventilation_provision),
-      combustion: toText(app.co_reading_ppm ?? (app as any).combustion_reading ?? (app as any).co2_percent),
+      combustion: toText(app.co_reading_ppm ?? appliance.combustion_reading ?? appliance.co2_percent),
       safety: toText([app.safety_rating, app.classification_code].filter((s) => s && String(s).trim()).join(' / ')),
     };
     table.columns.forEach((col) => {

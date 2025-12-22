@@ -1,4 +1,5 @@
 'use server';
+// Customers: jobs.client_id is the canonical link to public.clients; job_fields remain for per-job details only.
 
 import { revalidatePath } from 'next/cache';
 import { Buffer } from 'node:buffer';
@@ -19,6 +20,8 @@ import type {
 } from '@/types/job-detail';
 import type { JobWizardState, ClientSummary } from '@/types/job-wizard';
 import { generateReport as aiGenerateReport, generatePDF, type PdfAsset } from '@/lib/reporting';
+import { getCustomerById, resolveCustomerFromId, upsertCustomerFromJobFields } from '@/server/customer-service';
+import { upsertJobAddressForJob } from '@/server/address-service';
 
 const JobId = z.string().uuid();
 const PhotoId = z.string().uuid();
@@ -42,21 +45,10 @@ type PhotoRow = Database['public']['Tables']['photos']['Row'];
 type SignatureRow = Database['public']['Tables']['signatures']['Row'];
 type ReportRow = Database['public']['Tables']['reports']['Row'];
 type TemplateRow = Database['public']['Tables']['templates']['Row'];
-type ClientRow = Database['public']['Tables']['clients']['Row'];
 type ReportDeliveryRow = Database['public']['Tables']['report_deliveries']['Row'];
-const CLIENT_TABLES = ['clients', 'contacts'] as const;
-type ClientLike = {
-  id: string;
-  name: string;
-  organization: string | null;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
-  user_id: string | null;
-};
 
 const jobColumns =
-  'id, client_id, client_name, address, status, created_at, template_id, certificate_type, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name';
+  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name';
 const parseTemplateItems = (items: TemplateRow['items']): TemplateItem[] =>
   Array.isArray(items) ? (items as unknown as TemplateItem[]) : [];
 const templateFromRow = (row: TemplateRow): TemplateModel => ({
@@ -101,8 +93,8 @@ export async function listJobs() {
   if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
-    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, certificate_type, completed_at, engineer_signature_path, client_signature_path',
-    'id, client_name, address, status, created_at, user_id, certificate_type',
+    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, completed_at, engineer_signature_path, client_signature_path',
+    'id, client_name, address, status, created_at, user_id',
   ];
 
   let rows: Record<string, unknown>[] = [];
@@ -184,6 +176,23 @@ export async function createJob(form: FormData | Record<string, unknown>) {
     .single();
   if (jobErr || !job) throw new Error(jobErr?.message ?? 'Failed to create job');
 
+  await upsertJobAddressForJob({
+    jobId: job.id as string,
+    fields: { line1: input.address },
+    sb,
+    userId: user.id,
+  });
+
+  await upsertCustomerFromJobFields({
+    jobId: job.id as string,
+    fields: {
+      customer_name: input.client_name,
+      property_address: input.address,
+    },
+    sb,
+    userId: user.id,
+  });
+
   const templateItems = parseTemplateItems(templateRow.items);
   if (templateItems.length) {
     const checklistRows = templateItems.map(
@@ -214,9 +223,9 @@ export async function createJobDraftFromClient(clientId: string) {
   } = await sb.auth.getUser();
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
-  const clientRecord = await fetchClientForJob(sb, clientId);
+  const resolved = await resolveCustomerFromId({ customerId: clientId, sb, userId: user.id });
+  const clientRecord = resolved?.customer ?? null;
   if (!clientRecord) throw new Error('Client not found');
-  if (clientRecord.user_id && clientRecord.user_id !== user.id) throw new Error('Unauthorized');
 
   const { data: job, error: jobErr } = await sb
     .from('jobs')
@@ -231,6 +240,15 @@ export async function createJobDraftFromClient(clientId: string) {
     .select('id')
     .single();
   if (jobErr || !job) throw new Error(jobErr?.message ?? 'Could not start job');
+
+  if (clientRecord.address) {
+    await upsertJobAddressForJob({
+      jobId: job.id as string,
+      fields: { line1: clientRecord.address },
+      sb,
+      userId: user.id,
+    });
+  }
 
   revalidatePath('/jobs');
   return { jobId: job.id };
@@ -248,8 +266,8 @@ export async function getJobWithChecklist(jobId: string) {
   if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
-    'id, client_id, client_name, address, status, created_at, template_id, certificate_type, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name',
-    'id, client_name, address, status, created_at, template_id, certificate_type, user_id, notes',
+    'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name',
+    'id, client_name, address, status, created_at, template_id, user_id, notes',
   ];
 
   let job: Record<string, unknown> | null = null;
@@ -372,7 +390,7 @@ export async function setJobTemplate(jobId: string, templateId: string) {
   JobId.parse(jobId);
   TemplateId.parse(templateId);
   const sb = await supabaseServerServiceRole();
-  const { sb: ownerClient, user, job } = await fetchOwnedJob(jobId, { write: false });
+  const { user, job } = await fetchOwnedJob(jobId, { write: false });
 
   const typedTemplateId = templateId as TemplateRow['id'];
   const { data: template, error: tmplErr } = await sb
@@ -453,7 +471,9 @@ export async function getJobWizardState(jobId: string): Promise<JobWizardState> 
   const sb = await supabaseServerReadOnly();
 
   const [clientRecord, templateRow] = await Promise.all([
-    detail.job.client_id ? fetchClientForJob(sb, detail.job.client_id) : Promise.resolve(null),
+    detail.job.client_id
+      ? getCustomerById(detail.job.client_id, { sb, userId: detail.job.user_id ?? null, requireOwner: false })
+      : Promise.resolve(null),
     detail.job.template_id
       ? sb
           .from('templates')
@@ -797,43 +817,4 @@ export async function sendReportEmail(jobId: string, payload: FormData | Record<
 
   revalidatePath(`/reports/${jobId}`);
   return { ok: true };
-}
-async function fetchClientForJob(
-  sb:
-    | Awaited<ReturnType<typeof supabaseServerReadOnly>>
-    | Awaited<ReturnType<typeof supabaseServerAction>>
-    | Awaited<ReturnType<typeof supabaseServerServiceRole>>,
-  clientId: string,
-) {
-  let lastErr: PostgrestError | null = null;
-  for (const table of CLIENT_TABLES) {
-    const columns =
-      table === 'clients'
-        ? 'id, name, organization, email, phone, address, user_id'
-        : 'id, name, email, phone, address, user_id';
-    const { data, error } = await (sb as any)
-      .from(table)
-      .select(columns)
-      .eq('id', clientId)
-      .maybeSingle();
-    if (error) {
-      if (error.code === '42P01') {
-        lastErr = error;
-        continue;
-      }
-      throw new Error(error.message);
-    }
-    if (!data) continue;
-    return {
-      id: data.id,
-      name: data.name,
-      organization: table === 'clients' ? data.organization ?? null : null,
-      email: data.email ?? null,
-      phone: data.phone ?? null,
-      address: data.address ?? null,
-      user_id: data.user_id ?? null,
-    } as ClientLike;
-  }
-  if (lastErr) throw new Error(lastErr.message);
-  return null;
 }

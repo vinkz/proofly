@@ -15,7 +15,7 @@ export function PdfPreview({ url, error }: PdfPreviewProps) {
 
   return (
     <div className="overflow-hidden rounded-3xl border border-white/30 bg-white shadow-sm">
-      <iframe src={url} title="Certificate PDF" className="h-[70vh] w-full border-0" />
+      <iframe src={url ?? undefined} title="Certificate PDF" className="h-[70vh] w-full border-0" />
     </div>
   );
 }

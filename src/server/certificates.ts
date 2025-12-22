@@ -1,18 +1,22 @@
 'use server';
+// Customers: jobs.client_id is the canonical link to public.clients; job_fields are kept for backwards compatibility only.
+// Addresses: jobs.address_id -> job_addresses is the canonical property address; jobs.address/job_fields are legacy fallbacks.
 
 import { revalidatePath } from 'next/cache';
 import { Buffer } from 'node:buffer';
 import { z } from 'zod';
 
 import { cookies } from 'next/headers';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import type { Database } from '@/lib/database.types';
 import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
-import type { JobFieldPayload, CertificateType, PhotoCategory, Cp12Appliance } from '@/types/certificates';
+import type { CertificateType, PhotoCategory, Cp12Appliance } from '@/types/certificates';
 import { CERTIFICATE_TYPES, PHOTO_CATEGORIES, CERTIFICATE_LABELS } from '@/types/certificates';
 import type { BoilerServicePhotoCategory } from '@/types/boiler-service';
 import { BOILER_SERVICE_PHOTO_CATEGORIES, BOILER_SERVICE_REQUIRED_FOR_ISSUE } from '@/types/boiler-service';
+import type { GasWarningNoticeFields } from '@/types/gas-warning-notice';
+import { GAS_WARNING_REQUIRED_FOR_ISSUE } from '@/types/gas-warning-notice';
 import type { GeneralWorksPhotoCategory } from '@/types/general-works';
 import { GENERAL_WORKS_PHOTO_CATEGORIES, GENERAL_WORKS_REQUIRED_FIELDS } from '@/types/general-works';
 import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
@@ -22,6 +26,12 @@ import {
   type ApplianceInput as GasServiceApplianceInput,
   type GasServiceFieldMap,
 } from '@/server/pdf/renderGasServicePdf';
+import { renderGasWarningNoticePdf } from '@/server/pdf/renderGasWarningNoticePdf';
+import type { Customer } from '@/server/customer-service';
+import { getCustomerById, upsertCustomerFromJobFields } from '@/server/customer-service';
+import { formatJobAddress } from '@/lib/address';
+import type { JobAddress } from '@/server/address-service';
+import { upsertJobAddressForJob } from '@/server/address-service';
 
 type JobInsertPayload = {
   certificateType: CertificateType;
@@ -30,6 +40,84 @@ type JobInsertPayload = {
   address?: string | null;
   scheduledFor?: string | null;
 };
+
+type JobRow = Database['public']['Tables']['jobs']['Row'];
+type JobContext = {
+  job: Pick<JobRow, 'id' | 'user_id' | 'client_id' | 'client_name' | 'address' | 'scheduled_for' | 'title'>;
+  customer: Customer | null;
+  address: JobAddress | null;
+};
+
+const JOB_FIELDS_TABLE = 'job_fields' as unknown as keyof Database['public']['Tables'];
+const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['public']['Tables'];
+const JOB_PHOTOS_TABLE = 'job_photos' as unknown as keyof Database['public']['Tables'];
+type JobFieldRow = { field_key: string; value: string | null };
+
+const pickText = (...values: Array<string | null | undefined>) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) return value;
+  }
+  return '';
+};
+
+async function loadJobContext(
+  sb: SupabaseClient<Database>,
+  jobId: string,
+  label: string,
+): Promise<JobContext> {
+  const { data: job, error: jobErr } = await sb
+    .from('jobs')
+    .select('id, user_id, client_id, client_name, address, scheduled_for, title')
+    .eq('id', jobId as JobRow['id'])
+    .maybeSingle();
+  if (jobErr || !job) throw new Error(jobErr?.message ?? `${label}: job not found`);
+  const jobRow = job as unknown as JobContext['job'];
+  const customer = jobRow.client_id
+    ? await getCustomerById(jobRow.client_id, { sb, userId: jobRow.user_id ?? null, requireOwner: false })
+    : null;
+  const address = null; // address_id is legacy
+  return { job: jobRow, customer, address };
+}
+
+function resolveJobCustomer(
+  ctx: JobContext,
+  fallback: { name?: string; address?: string; phone?: string; email?: string; organization?: string } = {},
+) {
+  return {
+    name: pickText(ctx.customer?.name ?? null, ctx.job.client_name ?? null, fallback.name),
+    address: pickText(ctx.customer?.address ?? null, fallback.address),
+    phone: pickText(ctx.customer?.phone ?? null, fallback.phone),
+    email: pickText(ctx.customer?.email ?? null, fallback.email),
+    organization: pickText(ctx.customer?.organization ?? null, fallback.organization),
+  };
+}
+
+function resolveJobPropertyAddress(
+  ctx: JobContext,
+  fallback: { line1?: string; line2?: string; town?: string; postcode?: string; legacy?: string } = {},
+) {
+  const line1 = pickText(ctx.address?.line1 ?? null, fallback.line1, ctx.job.address ?? null, fallback.legacy);
+  const line2 = pickText(ctx.address?.line2 ?? null, fallback.line2);
+  const town = pickText(ctx.address?.town ?? null, fallback.town);
+  const postcode = pickText(ctx.address?.postcode ?? null, fallback.postcode);
+  const summary = pickText(formatJobAddress(ctx.address), line1, ctx.job.address ?? null, fallback.legacy);
+  return { line1, line2, town, postcode, summary };
+}
+
+function extractPropertyAddress(fields: Record<string, unknown>) {
+  const line1 = pickText(
+    typeof fields.property_address_line1 === 'string' ? fields.property_address_line1 : undefined,
+    typeof fields.property_address === 'string' ? fields.property_address : undefined,
+    typeof fields.address === 'string' ? fields.address : undefined,
+  );
+  const line2 = pickText(typeof fields.property_address_line2 === 'string' ? fields.property_address_line2 : undefined);
+  const town = pickText(typeof fields.property_town === 'string' ? fields.property_town : undefined);
+  const postcode = pickText(
+    typeof fields.property_postcode === 'string' ? fields.property_postcode : undefined,
+    typeof fields.postcode === 'string' ? fields.postcode : undefined,
+  );
+  return { line1, line2, town, postcode };
+}
 
 async function persistJobFields(
   sb: Awaited<ReturnType<typeof supabaseServerServiceRole>>,
@@ -40,12 +128,13 @@ async function persistJobFields(
   if (!entries.length) return;
   const keys = entries.map((e) => e.field_key);
   console.log(`${label}: deleting existing job_fields`, { jobId, keys });
-  const { error: delErr } = await sb.from('job_fields').delete().eq('job_id', jobId).in('field_key', keys);
+  const { error: delErr } = await sb.from(JOB_FIELDS_TABLE).delete().eq('job_id', jobId).in('field_key', keys);
   if (delErr) {
     console.error(`${label}: delete job_fields failed`, { jobId, error: delErr });
     throw new Error(delErr.message);
   }
-  const { data, error: insErr } = await sb.from('job_fields').insert(entries).select();
+  const insertPayload = entries as unknown as Database['public']['Tables']['jobs']['Insert'][];
+  const { data, error: insErr } = await sb.from(JOB_FIELDS_TABLE).insert(insertPayload).select();
   console.log(`${label}: inserted job_fields`, { jobId, count: data?.length ?? 0, error: insErr });
   if (insErr) {
     throw new Error(insErr.message);
@@ -90,17 +179,18 @@ export async function createJob(payload: JobInsertPayload) {
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const sb = await supabaseServerServiceRole();
+  const insertPayload = {
+    certificate_type: input.certificateType,
+    status: 'draft',
+    title: input.title ?? `${CERTIFICATE_LABELS[input.certificateType]} draft`,
+    client_name: input.clientName ?? null,
+    address: input.address ?? null,
+    scheduled_for: input.scheduledFor ?? null,
+    user_id: user.id,
+  } as Record<string, unknown>;
   const { data, error: insertErr } = await sb
     .from('jobs')
-    .insert({
-      certificate_type: input.certificateType,
-      status: 'draft',
-      title: input.title ?? `${CERTIFICATE_LABELS[input.certificateType]} draft`,
-      client_name: input.clientName ?? null,
-      address: input.address ?? null,
-      scheduled_for: input.scheduledFor ?? null,
-      user_id: user.id,
-    })
+    .insert(insertPayload as unknown as Database['public']['Tables']['jobs']['Insert'])
     .select('id, certificate_type, status')
     .single();
 
@@ -108,7 +198,30 @@ export async function createJob(payload: JobInsertPayload) {
     throw new Error(insertErr?.message ?? 'Unable to start certificate');
   }
 
-  return { jobId: data.id as string };
+  const jobRow = data as unknown as { id: string };
+
+  if (input.address) {
+    await upsertJobAddressForJob({
+      jobId: jobRow.id,
+      fields: { line1: input.address },
+      sb,
+      userId: user.id,
+    });
+  }
+
+  if (input.clientName || input.address) {
+    await upsertCustomerFromJobFields({
+      jobId: jobRow.id,
+      fields: {
+        customer_name: input.clientName ?? undefined,
+        property_address: input.address ?? undefined,
+      },
+      sb,
+      userId: user.id,
+    });
+  }
+
+  return { jobId: jobRow.id };
 }
 
 const SaveJobInfoSchema = z.object({
@@ -141,6 +254,9 @@ export async function saveJobInfo(payload: z.infer<typeof SaveJobInfoSchema>) {
   };
 
   await sb.from('jobs').update(coreUpdates).eq('id', jobId).eq('user_id', user.id);
+  await upsertCustomerFromJobFields({ jobId, fields, sb, userId: user.id });
+  const propertyAddress = extractPropertyAddress(fields);
+  await upsertJobAddressForJob({ jobId, fields: propertyAddress, sb, userId: user.id });
 
   const fieldEntries = Object.entries(fields).map(([key, value]) => ({
     job_id: jobId,
@@ -211,9 +327,8 @@ export async function uploadJobPhoto(formData: FormData) {
 
   const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
 
-  const { error: insertErr } = await sb
-    .from('job_photos')
-    .insert({ job_id: id, category: cat, file_url: publicUrl, user_id: user.id });
+  const insertPayload = { job_id: id, category: cat, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
   revalidatePath(`/jobs/${id}`);
@@ -227,10 +342,16 @@ export async function getCertificateWizardState(jobId: string) {
 
   const { data: job, error: jobErr } = await sb.from('jobs').select('*').eq('id', jobId).eq('user_id', user.id).maybeSingle();
   if (jobErr || !job) throw new Error(jobErr?.message ?? 'Job not found');
+  const jobRow = job as unknown as JobRow;
+  const client = jobRow.client_id
+    ? await getCustomerById(jobRow.client_id, { sb, userId: user.id, requireOwner: false })
+    : null;
+  const jobAddress = null; // address_id is legacy
 
-  const { data: fields, error: fieldsErr } = await sb.from('job_fields').select('field_key, value').eq('job_id', jobId);
+  const { data: fields, error: fieldsErr } = await sb.from(JOB_FIELDS_TABLE).select('field_key, value').eq('job_id', jobId);
   if (fieldsErr) throw new Error(fieldsErr.message);
-  const fieldRecord = Object.fromEntries((fields ?? []).map((f) => [f.field_key, f.value ?? null]));
+  const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
+  const fieldRecord = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
   const photoNotes: Record<string, string> = {};
   Object.entries(fieldRecord).forEach(([key, value]) => {
     if (key.startsWith('photo_note_') && typeof value === 'string') {
@@ -239,27 +360,30 @@ export async function getCertificateWizardState(jobId: string) {
   });
 
   const { data: photos, error: photosErr } = await sb
-    .from('job_photos')
+    .from(JOB_PHOTOS_TABLE)
     .select('category, file_url')
     .eq('job_id', jobId);
   if (photosErr) throw new Error(photosErr.message);
   const photoPreviews: Record<string, string> = {};
-  (photos ?? []).forEach((photo) => {
+  const photoRows = (photos ?? []) as unknown as Array<{ category: string | null; file_url: string | null }>;
+  photoRows.forEach((photo) => {
     if (photo.category && photo.file_url && !photoPreviews[photo.category]) {
       photoPreviews[photo.category] = photo.file_url;
     }
   });
 
   let appliances: Cp12Appliance[] = [];
-  const appResp = await sb.from('cp12_appliances').select('*').eq('job_id', jobId);
+  const appResp = await sb.from(CP12_APPLIANCES_TABLE).select('*').eq('job_id', jobId);
   if (appResp.error) {
     if (appResp.error.code !== '42P01') throw new Error(appResp.error.message);
   } else if (appResp.data) {
-    appliances = appResp.data as Cp12Appliance[];
+    appliances = appResp.data as unknown as Cp12Appliance[];
   }
 
   return {
-    job,
+    job: jobRow,
+    client,
+    jobAddress,
     fields: fieldRecord,
     photoNotes,
     photoPreviews,
@@ -283,16 +407,17 @@ export async function updateField(payload: z.infer<typeof UpdateFieldSchema>) {
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   await sb
-    .from('job_fields')
+    .from(JOB_FIELDS_TABLE)
     .delete()
     .eq('job_id', input.jobId)
     .eq('field_key', input.key);
 
-  const { error: insErr } = await sb.from('job_fields').insert({
+  const insertPayload = {
     job_id: input.jobId,
     field_key: input.key,
     value: input.value ?? null,
-  });
+  } as unknown as Database['public']['Tables']['jobs']['Insert'];
+  const { error: insErr } = await sb.from(JOB_FIELDS_TABLE).insert(insertPayload);
   if (insErr) {
     console.error('updateField insert failed', { jobId: input.jobId, key: input.key, error: insErr });
     throw new Error(insErr.message);
@@ -303,6 +428,8 @@ export async function updateField(payload: z.infer<typeof UpdateFieldSchema>) {
 }
 
 const optionalText = z.string().optional().default('');
+const optionalLooseText = z.string().optional();
+const optionalLooseBool = z.boolean().optional();
 
 const BoilerServiceJobInfoSchema = z.object({
   jobId: z.string().uuid(),
@@ -360,9 +487,49 @@ const BoilerServiceChecksSchema = z.object({
   }),
 });
 
+const GasWarningJobInfoSchema = z.object({
+  jobId: z.string().uuid(),
+  data: z.object({
+    property_address: optionalLooseText,
+    postcode: optionalLooseText,
+    customer_name: optionalLooseText,
+    customer_contact: optionalLooseText,
+  }),
+});
+
+const GasWarningDetailsSchema = z.object({
+  jobId: z.string().uuid(),
+  data: z.object({
+    appliance_location: optionalLooseText,
+    appliance_type: optionalLooseText,
+    make_model: optionalLooseText,
+    gas_supply_isolated: optionalLooseBool,
+    appliance_capped_off: optionalLooseBool,
+    customer_refused_isolation: optionalLooseBool,
+    classification: optionalLooseText,
+    classification_code: optionalLooseText,
+    unsafe_situation_description: optionalLooseText,
+    underlying_cause: optionalLooseText,
+    actions_taken: optionalLooseText,
+    emergency_services_contacted: optionalLooseBool,
+    emergency_reference: optionalLooseText,
+    danger_do_not_use_label_fitted: optionalLooseBool,
+    meter_or_appliance_tagged: optionalLooseBool,
+    customer_informed: optionalLooseBool,
+    customer_understands_risks: optionalLooseBool,
+    customer_signed_at: optionalLooseText,
+    engineer_name: optionalLooseText,
+    engineer_company: optionalLooseText,
+    gas_safe_number: optionalLooseText,
+    engineer_id_card_number: optionalLooseText,
+    issued_at: optionalLooseText,
+    record_id: optionalLooseText,
+  }),
+});
+
 const BoilerServicePhotoSchema = z.object({
   jobId: z.string().uuid(),
-  category: z.enum(BOILER_SERVICE_PHOTO_CATEGORIES as [BoilerServicePhotoCategory, ...BoilerServicePhotoCategory[]]),
+  category: z.enum(BOILER_SERVICE_PHOTO_CATEGORIES as unknown as [BoilerServicePhotoCategory, ...BoilerServicePhotoCategory[]]),
   file: z.instanceof(File),
 });
 
@@ -373,7 +540,7 @@ const GeneralWorksInfoSchema = z.object({
 
 const GeneralWorksPhotoSchema = z.object({
   jobId: z.string().uuid(),
-  category: z.enum(GENERAL_WORKS_PHOTO_CATEGORIES as [GeneralWorksPhotoCategory, ...GeneralWorksPhotoCategory[]]),
+  category: z.enum(GENERAL_WORKS_PHOTO_CATEGORIES as unknown as [GeneralWorksPhotoCategory, ...GeneralWorksPhotoCategory[]]),
   file: z.instanceof(File),
 });
 
@@ -387,7 +554,6 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const { jobId, data } = input;
-  const { data: jobRow } = await sb.from('jobs').select('certificate_type').eq('id', jobId).maybeSingle();
   const certificateType: CertificateType = 'gas_service';
   const { error: updateErr } = await sb
     .from('jobs')
@@ -401,6 +567,13 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
     .eq('id', jobId)
     .eq('user_id', user.id);
   if (updateErr) throw new Error(updateErr.message);
+  await upsertCustomerFromJobFields({ jobId, fields: data, sb, userId: user.id });
+  await upsertJobAddressForJob({
+    jobId,
+    fields: { line1: data.property_address, postcode: data.postcode },
+    sb,
+    userId: user.id,
+  });
 
   const entries = Object.entries(data).map(([key, value]) => ({
     job_id: jobId,
@@ -428,7 +601,11 @@ export async function saveBoilerServiceDetails(payload: z.infer<typeof BoilerSer
     value: value ?? null,
   }));
   await persistJobFields(sb, input.jobId, entries, 'saveBoilerServiceDetails');
-  await sb.from('jobs').update({ certificate_type: certificateType }).eq('id', input.jobId).eq('user_id', user.id);
+  await sb
+    .from('jobs')
+    .update({ certificate_type: certificateType } as Record<string, unknown>)
+    .eq('id', input.jobId)
+    .eq('user_id', user.id);
   revalidatePath(`/wizard/create/${certificateType}?jobId=${input.jobId}`);
   return { ok: true };
 }
@@ -449,7 +626,79 @@ export async function saveBoilerServiceChecks(payload: z.infer<typeof BoilerServ
     value: value ?? null,
   }));
   await persistJobFields(sb, input.jobId, entries, 'saveBoilerServiceChecks');
-  await sb.from('jobs').update({ certificate_type: certificateType }).eq('id', input.jobId).eq('user_id', user.id);
+  await sb
+    .from('jobs')
+    .update({ certificate_type: certificateType } as Record<string, unknown>)
+    .eq('id', input.jobId)
+    .eq('user_id', user.id);
+  revalidatePath(`/wizard/create/${certificateType}?jobId=${input.jobId}`);
+  return { ok: true };
+}
+
+export async function saveGasWarningJobInfo(payload: z.infer<typeof GasWarningJobInfoSchema>) {
+  const input = GasWarningJobInfoSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const { jobId, data } = input;
+  const certificateType: CertificateType = 'gas_warning_notice';
+  const updatePayload = {
+    client_name: data.customer_name ?? null,
+    address: data.property_address ?? null,
+    title: data.customer_name ? `Gas Warning Notice for ${data.customer_name}` : 'Gas Warning Notice draft',
+    certificate_type: certificateType,
+  } as Record<string, unknown>;
+  await sb.from('jobs').update(updatePayload).eq('id', jobId).eq('user_id', user.id);
+  await upsertCustomerFromJobFields({ jobId, fields: data, sb, userId: user.id });
+  await upsertJobAddressForJob({
+    jobId,
+    fields: { line1: data.property_address ?? undefined, postcode: data.postcode ?? undefined },
+    sb,
+    userId: user.id,
+  });
+
+  const entries = Object.entries(data)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => ({
+      job_id: jobId,
+      field_key: key,
+      value: typeof value === 'boolean' ? String(value) : value ?? null,
+    }));
+  await persistJobFields(sb, jobId, entries, 'saveGasWarningJobInfo');
+  revalidatePath(`/wizard/create/${certificateType}?jobId=${jobId}`);
+  return { ok: true };
+}
+
+export async function saveGasWarningDetails(payload: z.infer<typeof GasWarningDetailsSchema>) {
+  const input = GasWarningDetailsSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const certificateType: CertificateType = 'gas_warning_notice';
+  const updates: Record<string, unknown> = {
+    certificate_type: certificateType,
+  };
+  if (input.data.issued_at) {
+    updates.scheduled_for = input.data.issued_at;
+  }
+  await sb.from('jobs').update(updates).eq('id', input.jobId).eq('user_id', user.id);
+
+  const entries = Object.entries(input.data)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => ({
+      job_id: input.jobId,
+      field_key: key,
+      value: typeof value === 'boolean' ? String(value) : value ?? null,
+    }));
+  await persistJobFields(sb, input.jobId, entries, 'saveGasWarningDetails');
   revalidatePath(`/wizard/create/${certificateType}?jobId=${input.jobId}`);
   return { ok: true };
 }
@@ -482,12 +731,15 @@ export async function uploadBoilerServicePhoto(formData: FormData) {
 
   const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
 
-  const { error: insertErr } = await sb
-    .from('job_photos')
-    .insert({ job_id: jobId, category, file_url: publicUrl, user_id: user.id });
+  const insertPayload = { job_id: jobId, category, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
-  await sb.from('jobs').update({ certificate_type: 'gas_service' }).eq('id', jobId).eq('user_id', user.id);
+  await sb
+    .from('jobs')
+    .update({ certificate_type: 'gas_service' } as Record<string, unknown>)
+    .eq('id', jobId)
+    .eq('user_id', user.id);
 
   revalidatePath(`/wizard/create/gas_service?jobId=${jobId}`);
   return { url: publicUrl };
@@ -511,6 +763,13 @@ export async function saveGeneralWorksInfo(payload: z.infer<typeof GeneralWorksI
     title: data.work_summary ? `General Works - ${data.work_summary}` : 'General Works draft',
   };
   await sb.from('jobs').update(updates).eq('id', jobId).eq('user_id', user.id);
+  await upsertCustomerFromJobFields({ jobId, fields: data, sb, userId: user.id });
+  await upsertJobAddressForJob({
+    jobId,
+    fields: { line1: data.property_address ?? undefined, postcode: data.postcode ?? undefined },
+    sb,
+    userId: user.id,
+  });
 
   const entries = Object.entries(data).map(([key, value]) => ({
     job_id: jobId,
@@ -552,12 +811,15 @@ export async function uploadGeneralWorksPhoto(formData: FormData) {
 
   const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
 
-  const { error: insertErr } = await sb
-    .from('job_photos')
-    .insert({ job_id: jobId, category, file_url: publicUrl, user_id: user.id });
+  const insertPayload = { job_id: jobId, category, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
-  await sb.from('jobs').update({ certificate_type: 'general_works' }).eq('id', jobId).eq('user_id', user.id);
+  await sb
+    .from('jobs')
+    .update({ certificate_type: 'general_works' } as Record<string, unknown>)
+    .eq('id', jobId)
+    .eq('user_id', user.id);
   revalidatePath(`/wizard/create/general_works?jobId=${jobId}`);
   return { url: publicUrl };
 }
@@ -600,6 +862,13 @@ export async function saveCp12JobInfo(payload: z.infer<typeof Cp12JobSchema>) {
     })
     .eq('id', jobId)
     .eq('user_id', user.id);
+  await upsertCustomerFromJobFields({ jobId, fields: data, sb, userId: user.id });
+  await upsertJobAddressForJob({
+    jobId,
+    fields: { line1: data.property_address, postcode: data.postcode },
+    sb,
+    userId: user.id,
+  });
 
   const entries = Object.entries(data).map(([key, value]) => ({
     job_id: jobId,
@@ -651,7 +920,7 @@ export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSc
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   console.log('saveCp12Appliances called', { jobId: input.jobId, appliances: input.appliances.length });
-  await sb.from('cp12_appliances').delete().eq('job_id', input.jobId);
+  await sb.from(CP12_APPLIANCES_TABLE).delete().eq('job_id', input.jobId);
 
   if (input.appliances.length) {
     const rows = input.appliances.map((appliance) => ({
@@ -659,7 +928,8 @@ export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSc
       user_id: user.id,
       ...appliance,
     }));
-    const { data: insData, error: insertErr } = await sb.from('cp12_appliances').insert(rows).select();
+    const insertPayload = rows as unknown as Database['public']['Tables']['jobs']['Insert'][];
+    const { data: insData, error: insertErr } = await sb.from(CP12_APPLIANCES_TABLE).insert(insertPayload).select();
     console.log('saveCp12Appliances insert', { jobId: input.jobId, count: insData?.length ?? 0, error: insertErr });
     if (insertErr) throw new Error(insertErr.message);
   }
@@ -673,7 +943,11 @@ export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSc
     await persistJobFields(sb, input.jobId, defectEntries, 'saveCp12Appliances defects');
   }
 
-  await sb.from('jobs').update({ certificate_type: 'cp12' }).eq('id', input.jobId).eq('user_id', user.id);
+  await sb
+    .from('jobs')
+    .update({ certificate_type: 'cp12' } as Record<string, unknown>)
+    .eq('id', input.jobId)
+    .eq('user_id', user.id);
 
   revalidatePath(`/wizard/create/cp12?jobId=${input.jobId}`);
   return { ok: true };
@@ -717,6 +991,32 @@ function validateBoilerServiceForIssue(fieldMap: Record<string, unknown>) {
   return errors;
 }
 
+function validateGasWarningNoticeForIssue(fields: GasWarningNoticeFields) {
+  const errors: string[] = [];
+  GAS_WARNING_REQUIRED_FOR_ISSUE.forEach((key) => {
+    if (key === 'customer_informed') {
+      if (!booleanFromField(fields.customer_informed)) {
+        errors.push('Customer must be informed before issuing');
+      }
+      return;
+    }
+    const value = (fields as Record<string, unknown>)[key];
+    if (!hasValue(value)) errors.push(`${key.replace(/_/g, ' ')} is required`);
+  });
+
+  const classification = String(fields.classification ?? '').trim();
+  if (classification === 'IMMEDIATELY_DANGEROUS') {
+    if (!booleanFromField(fields.danger_do_not_use_label_fitted)) {
+      errors.push('Danger: Do Not Use label must be fitted for Immediately Dangerous');
+    }
+    if (!booleanFromField(fields.gas_supply_isolated) && !booleanFromField(fields.customer_refused_isolation)) {
+      errors.push('Customer refusal is required when gas supply is not isolated for Immediately Dangerous');
+    }
+  }
+
+  return errors;
+}
+
 // CP12 validation per docs/specs/cp12.md
 function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp12Appliance[]) {
   const errors: string[] = [];
@@ -753,7 +1053,13 @@ function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp1
   return errors;
 }
 
-async function renderCp12Pdf({ fieldMap, appliances, issuedAt }: Cp12RenderInput) {
+type Cp12RenderInput = {
+  fieldMap: Record<string, unknown>;
+  appliances: Cp12Appliance[];
+  issuedAt: string;
+};
+
+export async function renderCp12Pdf({ fieldMap, appliances, issuedAt }: Cp12RenderInput) {
   // Layout intentionally mirrors the spec in docs/specs/cp12.md
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
   const pdfDoc = await PDFDocument.create();
@@ -848,11 +1154,12 @@ async function renderCp12Pdf({ fieldMap, appliances, issuedAt }: Cp12RenderInput
 
   appliances.forEach((app, index) => {
     ensureSpace(180, drawApplianceHeader);
-    const checkedDate = formatText((app as any).checked_date ?? fieldMap.inspection_date ?? '', '');
+    const appExtras = app as Cp12Appliance & { checked_date?: string; description?: string };
+    const checkedDate = formatText(appExtras.checked_date ?? fieldMap.inspection_date ?? '', '');
     const rowValues = [
       `${index + 1}`,
       formatText(app.location),
-      formatText((app as any).appliance_type ?? (app as any).description),
+      formatText(app.appliance_type ?? appExtras.description),
       formatText(app.operating_pressure),
       formatText(app.flue_condition || app.ventilation_provision),
       formatText(app.safety_rating),
@@ -923,13 +1230,16 @@ export async function uploadSignature(formData: FormData) {
   const url = sb.storage.from('signatures').getPublicUrl(path).data.publicUrl;
 
   await sb
-    .from('job_fields')
+    .from(JOB_FIELDS_TABLE)
     .upsert(
-      { job_id: jobId, field_key: `${role}_signature`, value: url },
+      { job_id: jobId, field_key: `${role}_signature`, value: url } as Record<string, unknown>,
       { onConflict: 'job_id,field_key' },
     );
   const { data: job } = await sb.from('jobs').select('certificate_type').eq('id', jobId).maybeSingle();
-  const revalidateTarget = job?.certificate_type ? `/wizard/create/${job.certificate_type}?jobId=${jobId}` : `/jobs/${jobId}`;
+  const jobRow = job as { certificate_type?: string | null } | null;
+  const revalidateTarget = jobRow?.certificate_type
+    ? `/wizard/create/${jobRow.certificate_type}?jobId=${jobId}`
+    : `/jobs/${jobId}`;
   revalidatePath(revalidateTarget);
   return { url };
 }
@@ -964,12 +1274,13 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   } = await supabase.auth.getUser();
   console.log('GW: auth user', authUser, authErr);
 
-  const { data: job, error: jobErr } = await supabase.from('jobs').select('user_id').eq('id', input.jobId).maybeSingle();
-  if (jobErr) throw new Error(jobErr.message);
-  if (!job) throw new Error('Job not found');
-  const jobOwnerId = (job as any).user_id ?? null;
+  const jobContext = await loadJobContext(supabase, input.jobId, 'generateGeneralWorksPdf');
+  const jobOwnerId = jobContext.job.user_id ?? null;
   console.log('GW: jobs update (set certificate_type) start', { jobId: input.jobId, jobOwnerId });
-  let setTypeQuery = supabase.from('jobs').update({ certificate_type: 'general_works' }).eq('id', input.jobId);
+  let setTypeQuery = supabase
+    .from('jobs')
+    .update({ certificate_type: 'general_works' } as Record<string, unknown>)
+    .eq('id', input.jobId);
   if (jobOwnerId) {
     setTypeQuery = setTypeQuery.eq('user_id', jobOwnerId);
   }
@@ -978,28 +1289,51 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   if (jobTypeRes.error) throw new Error(jobTypeRes.error.message);
 
   const { data: fields, error: fieldsErr } = await supabase
-    .from('job_fields')
+    .from(JOB_FIELDS_TABLE)
     .select('field_key, value')
     .eq('job_id', input.jobId);
   if (fieldsErr) throw new Error(fieldsErr.message);
-  const fieldMap = Object.fromEntries((fields ?? []).map((f) => [f.field_key, f.value ?? null]));
+  const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
+  const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+  const customer = resolveJobCustomer(jobContext, {
+    name: typeof fieldMap.customer_name === 'string' ? fieldMap.customer_name : undefined,
+    address: typeof fieldMap.customer_address === 'string' ? fieldMap.customer_address : undefined,
+    phone: typeof fieldMap.customer_phone === 'string' ? fieldMap.customer_phone : undefined,
+    email: typeof fieldMap.customer_email === 'string' ? fieldMap.customer_email : undefined,
+  });
+  const propertyAddress = resolveJobPropertyAddress(jobContext, {
+    line1: typeof fieldMap.property_address === 'string' ? fieldMap.property_address : undefined,
+    line2: typeof fieldMap.property_address_line2 === 'string' ? fieldMap.property_address_line2 : undefined,
+    town: typeof fieldMap.property_town === 'string' ? fieldMap.property_town : undefined,
+    postcode: typeof fieldMap.postcode === 'string' ? fieldMap.postcode : undefined,
+    legacy: typeof fieldMap.address === 'string' ? fieldMap.address : undefined,
+  });
+  const mergedFieldMap = {
+    ...fieldMap,
+    customer_name: customer.name || fieldMap.customer_name,
+    property_address: propertyAddress.summary || fieldMap.property_address,
+    postcode: propertyAddress.postcode || fieldMap.postcode,
+    customer_phone: customer.phone || fieldMap.customer_phone,
+    customer_email: customer.email || fieldMap.customer_email,
+  };
 
   const { data: photos, error: photosErr } = await supabase
-    .from('job_photos')
+    .from(JOB_PHOTOS_TABLE)
     .select('category, file_url')
     .eq('job_id', input.jobId);
   if (photosErr) throw new Error(photosErr.message);
 
   const issuedAt = new Date();
-  const validationErrors = previewOnly ? [] : validateGeneralWorksForIssue(fieldMap);
+  const validationErrors = previewOnly ? [] : validateGeneralWorksForIssue(mergedFieldMap);
   if (validationErrors.length) {
     throw new Error(`General Works validation failed: ${validationErrors.join('; ')}`);
   }
 
+  const photoRows = (photos ?? []) as unknown as Array<{ category?: string | null; file_url?: string | null }>;
   const pdfBytes = await renderGeneralWorksPdf({
-    fieldMap,
-    photos: (photos ?? []).filter((p) => p.category && p.file_url) as { category: string; file_url: string }[],
-    issuedAt,
+    fieldMap: mergedFieldMap,
+    photos: photoRows.filter((p) => p.category && p.file_url) as { category: string; file_url: string }[],
+    issuedAt: issuedAt.toISOString(),
     previewMode: previewOnly,
   });
 
@@ -1076,8 +1410,10 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
     payload: { job_id: input.jobId, field_key: 'issued_at', value: issuedAt },
   });
   const issuedAtRes = await supabase
-    .from('job_fields')
-    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt }, { onConflict: 'job_id,field_key' });
+    .from(JOB_FIELDS_TABLE)
+    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt } as Record<string, unknown>, {
+      onConflict: 'job_id,field_key',
+    });
   console.log('GW: job_fields upsert result', issuedAtRes);
   const issuedAtErr = (issuedAtRes as { error?: { code?: string; message: string } }).error;
   if (issuedAtErr) throw new Error(issuedAtErr.message);
@@ -1088,7 +1424,7 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   });
   let completeQuery = supabase
     .from('jobs')
-    .update({ status: 'completed', certificate_type: 'general_works' })
+    .update({ status: 'completed', certificate_type: 'general_works' } as Record<string, unknown>)
     .eq('id', input.jobId);
   if (jobOwnerId) {
     completeQuery = completeQuery.eq('user_id', jobOwnerId);
@@ -1104,7 +1440,7 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
 export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasServicePdfSchema>) {
   const input = GenerateGasServicePdfSchema.parse(payload);
   const previewOnly = input.previewOnly ?? false;
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sb = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -1128,29 +1464,52 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
   } = await sb.auth.getUser();
   if (error || !user) throw new Error(error?.message ?? 'generateGasServicePdf requires authenticated user');
 
-  const { data: jobRow, error: jobErr } = await sb.from('jobs').select('id, user_id').eq('id', input.jobId).maybeSingle();
-  if (jobErr) throw new Error(jobErr.message);
-  if (!jobRow || (jobRow as any).user_id !== user.id) {
+  const jobContext = await loadJobContext(sb, input.jobId, 'generateGasServicePdf');
+  if (jobContext.job.user_id && jobContext.job.user_id !== user.id) {
     throw new Error('RLS mismatch: job owner does not match auth user');
   }
 
   const { data: fields, error: fieldsErr } = await sb
-    .from('job_fields')
+    .from(JOB_FIELDS_TABLE)
     .select('field_key, value')
     .eq('job_id', input.jobId);
   if (fieldsErr) throw new Error(fieldsErr.message);
-  const fieldMap = Object.fromEntries((fields ?? []).map((f) => [f.field_key, f.value ?? null]));
+  const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
+  const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+  const customer = resolveJobCustomer(jobContext, {
+    name: typeof fieldMap.customer_name === 'string' ? fieldMap.customer_name : undefined,
+    address: typeof fieldMap.customer_address === 'string' ? fieldMap.customer_address : undefined,
+    phone: typeof fieldMap.customer_phone === 'string' ? fieldMap.customer_phone : undefined,
+    email: typeof fieldMap.customer_email === 'string' ? fieldMap.customer_email : undefined,
+  });
+  const propertyAddress = resolveJobPropertyAddress(jobContext, {
+    line1: typeof fieldMap.property_address === 'string' ? fieldMap.property_address : undefined,
+    line2: typeof fieldMap.property_address_line2 === 'string' ? fieldMap.property_address_line2 : undefined,
+    town: typeof fieldMap.property_town === 'string' ? fieldMap.property_town : undefined,
+    postcode: typeof fieldMap.postcode === 'string' ? fieldMap.postcode : undefined,
+    legacy: typeof fieldMap.address === 'string' ? fieldMap.address : undefined,
+  });
+  const mergedFieldMap = {
+    ...fieldMap,
+    customer_name: customer.name || fieldMap.customer_name,
+    property_address: propertyAddress.summary || fieldMap.property_address,
+    postcode: propertyAddress.postcode || fieldMap.postcode,
+    customer_phone: customer.phone || fieldMap.customer_phone,
+    customer_email: customer.email || fieldMap.customer_email,
+  };
 
-  const issuedAt = new Date().toISOString();
-  const validationErrors = previewOnly ? [] : validateBoilerServiceForIssue(fieldMap);
+  const issuedAt = new Date();
+  const issuedAtIso = issuedAt.toISOString();
+  const validationErrors = previewOnly ? [] : validateBoilerServiceForIssue(mergedFieldMap);
   if (validationErrors.length) {
     throw new Error(`Boiler service validation failed: ${validationErrors.join('; ')}`);
   }
 
   const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
-  const boilerMake = toText((fieldMap as any).boiler_make ?? '');
-  const boilerModel = toText((fieldMap as any).boiler_model ?? '');
-  const boilerAddress = toText(fieldMap.property_address ?? fieldMap.address ?? '');
+  const getFieldText = (key: string) => toText(fieldMap[key]);
+  const boilerMake = getFieldText('boiler_make');
+  const boilerModel = getFieldText('boiler_model');
+  const boilerAddress = pickText(propertyAddress.summary, toText(fieldMap.property_address ?? fieldMap.address ?? ''));
 
   const gasServiceFields: GasServiceFieldMap = {
     certNumber: toText(fieldMap.record_id ?? fieldMap.certificate_number ?? input.jobId ?? ''),
@@ -1163,25 +1522,25 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     companyPhone: toText(fieldMap.company_phone ?? ''),
     gasSafeNumber: toText(fieldMap.gas_safe_number ?? ''),
     engineerId: toText(fieldMap.engineer_id ?? ''),
-    jobName: toText(fieldMap.customer_name ?? ''),
+    jobName: customer.name || toText(fieldMap.customer_name ?? ''),
     jobAddressLine1: boilerAddress,
     jobAddressLine2: '',
     jobTown: '',
-    jobPostcode: toText(fieldMap.postcode ?? ''),
-    jobPhone: '',
-    clientName: toText(fieldMap.customer_name ?? ''),
-    clientCompany: '',
+    jobPostcode: pickText(propertyAddress.postcode, toText(fieldMap.postcode ?? '')),
+    jobPhone: customer.phone || '',
+    clientName: customer.name || toText(fieldMap.customer_name ?? ''),
+    clientCompany: customer.organization || '',
     clientAddressLine1: boilerAddress,
     clientAddressLine2: '',
     clientTown: '',
-    clientPostcode: toText(fieldMap.postcode ?? ''),
-    clientPhone: '',
-    nextServiceDate: toText((fieldMap as any).next_service_due ?? ''),
+    clientPostcode: pickText(propertyAddress.postcode, toText(fieldMap.postcode ?? '')),
+    clientPhone: customer.phone || '',
+    nextServiceDate: getFieldText('next_service_due'),
     engineerComments: [
-      toText((fieldMap as any).service_summary ?? ''),
-      toText((fieldMap as any).recommendations ?? ''),
-      toText((fieldMap as any).defects_details ?? ''),
-      toText((fieldMap as any).parts_used ?? ''),
+      getFieldText('service_summary'),
+      getFieldText('recommendations'),
+      getFieldText('defects_details'),
+      getFieldText('parts_used'),
     ]
       .filter((value) => value.trim().length > 0)
       .join(' | '),
@@ -1189,21 +1548,21 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
 
   const appliances: GasServiceApplianceInput[] = [
     {
-      description: [boilerMake, boilerModel].filter(Boolean).join(' ') || toText((fieldMap as any).boiler_type ?? ''),
-      location: toText((fieldMap as any).boiler_location ?? ''),
-      type: toText((fieldMap as any).boiler_type ?? ''),
+      description: [boilerMake, boilerModel].filter(Boolean).join(' ') || getFieldText('boiler_type'),
+      location: getFieldText('boiler_location'),
+      type: getFieldText('boiler_type'),
       make: boilerMake,
       model: boilerModel,
-      serial: toText((fieldMap as any).serial_number ?? ''),
-      flueType: toText((fieldMap as any).flue_type ?? ''),
-      operatingPressure: toText((fieldMap as any).operating_pressure_mbar ?? ''),
-      heatInput: toText((fieldMap as any).heat_input ?? ''),
-      safetyDevice: toText((fieldMap as any).service_controls_checked ?? ''),
-      ventilationSatisfactory: toText((fieldMap as any).service_ventilation_checked ?? ''),
-      flueTerminationSatisfactory: toText((fieldMap as any).service_flue_checked ?? ''),
-      spillageTest: toText((fieldMap as any).service_visual_inspection ?? ''),
-      applianceSafeToUse: toText((fieldMap as any).service_leaks_checked ?? ''),
-      remedialActionTaken: toText((fieldMap as any).defects_found ?? ''),
+      serial: getFieldText('serial_number'),
+      flueType: getFieldText('flue_type'),
+      operatingPressure: getFieldText('operating_pressure_mbar'),
+      heatInput: getFieldText('heat_input'),
+      safetyDevice: getFieldText('service_controls_checked'),
+      ventilationSatisfactory: getFieldText('service_ventilation_checked'),
+      flueTerminationSatisfactory: getFieldText('service_flue_checked'),
+      spillageTest: getFieldText('service_visual_inspection'),
+      applianceSafeToUse: getFieldText('service_leaks_checked'),
+      remedialActionTaken: getFieldText('defects_found'),
     },
   ].filter((row) => Object.values(row).some((val) => typeof val === 'string' && val.trim().length > 0));
 
@@ -1233,11 +1592,12 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     .from('certificates')
     .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', cacheControl: '3600', upsert: false });
   if (uploadErr) {
+    const statusCode = 'statusCode' in uploadErr ? uploadErr.statusCode : undefined;
     console.error('Storage upload failed', {
       storagePath: path,
       message: uploadErr.message,
       name: uploadErr.name,
-      statusCode: (uploadErr as any).statusCode,
+      statusCode,
     });
     throw uploadErr;
   }
@@ -1279,8 +1639,8 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
       ? {
           code: certErr.code,
           message: certErr.message,
-          details: (certErr as any).details,
-          hint: (certErr as any).hint,
+          details: certErr.details,
+          hint: certErr.hint,
         }
       : null,
   });
@@ -1316,10 +1676,15 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
   console.log('GAS SERVICE certificate signed URL generated', { jobId: input.jobId, path });
 
   await sb
-    .from('job_fields')
-    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAtIso }, { onConflict: 'job_id,field_key' });
+    .from(JOB_FIELDS_TABLE)
+    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAtIso } as Record<string, unknown>, {
+      onConflict: 'job_id,field_key',
+    });
 
-  await sb.from('jobs').update({ status: 'completed', certificate_type: 'gas_service' }).eq('id', input.jobId);
+  await sb
+    .from('jobs')
+    .update({ status: 'completed', certificate_type: 'gas_service' } as Record<string, unknown>)
+    .eq('id', input.jobId);
   revalidatePath(`/jobs/${input.jobId}`);
   return { pdfUrl: signed.signedUrl };
 }
@@ -1345,7 +1710,7 @@ const GetCertificatePdfSignedUrlSchema = z.object({
 export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdfSchema>) {
   const input = GeneratePdfSchema.parse(payload);
   const previewOnly = input.previewOnly ?? false;
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sb = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -1370,9 +1735,8 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   if (error || !user) throw new Error(error?.message ?? 'generateCertificatePdf requires authenticated user');
   console.log('CERT PDF AUTH UID:', user.id);
 
-  const { data: jobRow, error: jobErr } = await sb.from('jobs').select('id, user_id').eq('id', input.jobId).maybeSingle();
-  if (jobErr) throw new Error(jobErr.message);
-  if (!jobRow || (jobRow as any).user_id !== user.id) {
+  const jobContext = await loadJobContext(sb, input.jobId, 'generateCertificatePdf');
+  if (jobContext.job.user_id && jobContext.job.user_id !== user.id) {
     throw new Error('RLS mismatch: job owner does not match auth user');
   }
 
@@ -1389,6 +1753,128 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     const response = await generateGeneralWorksPdf({ jobId: input.jobId, previewOnly });
     console.log('GW-PDF generateCertificatePdf dispatch result', { jobId: input.jobId, previewOnly });
     return response;
+  }
+
+  if (input.certificateType === 'gas_warning_notice') {
+    const { data: fields, error: fieldsErr } = await sb
+      .from(JOB_FIELDS_TABLE)
+      .select('field_key, value')
+      .eq('job_id', input.jobId);
+    if (fieldsErr) throw new Error(fieldsErr.message);
+    const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
+    const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+    const customer = resolveJobCustomer(jobContext, {
+      name: typeof fieldMap.customer_name === 'string' ? fieldMap.customer_name : undefined,
+      phone: typeof fieldMap.customer_phone === 'string' ? fieldMap.customer_phone : undefined,
+      email: typeof fieldMap.customer_email === 'string' ? fieldMap.customer_email : undefined,
+    });
+    const propertyAddress = resolveJobPropertyAddress(jobContext, {
+      line1: typeof fieldMap.property_address === 'string' ? fieldMap.property_address : undefined,
+      postcode: typeof fieldMap.postcode === 'string' ? fieldMap.postcode : undefined,
+      legacy: typeof fieldMap.address === 'string' ? fieldMap.address : undefined,
+    });
+
+    const issuedAt = new Date();
+    const issuedAtIso = issuedAt.toISOString();
+    const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
+    const customerContact = pickText(
+      customer.phone,
+      customer.email,
+      toText(fieldMap.customer_contact ?? fieldMap.customer_phone ?? fieldMap.customer_email ?? ''),
+    );
+    const gasWarningFields: GasWarningNoticeFields = {
+      property_address: pickText(propertyAddress.summary, toText(fieldMap.property_address ?? fieldMap.address ?? '')),
+      postcode: pickText(propertyAddress.postcode, toText(fieldMap.postcode ?? '')),
+      customer_name: customer.name || toText(fieldMap.customer_name ?? ''),
+      customer_contact: customerContact,
+      appliance_location: toText(fieldMap.appliance_location ?? ''),
+      appliance_type: toText(fieldMap.appliance_type ?? ''),
+      make_model: toText(fieldMap.make_model ?? ''),
+      gas_supply_isolated: toText(fieldMap.gas_supply_isolated ?? ''),
+      appliance_capped_off: toText(fieldMap.appliance_capped_off ?? ''),
+      customer_refused_isolation: toText(fieldMap.customer_refused_isolation ?? ''),
+      classification: toText(fieldMap.classification ?? ''),
+      classification_code: toText(fieldMap.classification_code ?? ''),
+      unsafe_situation_description: toText(fieldMap.unsafe_situation_description ?? ''),
+      underlying_cause: toText(fieldMap.underlying_cause ?? ''),
+      actions_taken: toText(fieldMap.actions_taken ?? ''),
+      emergency_services_contacted: toText(fieldMap.emergency_services_contacted ?? ''),
+      emergency_reference: toText(fieldMap.emergency_reference ?? ''),
+      danger_do_not_use_label_fitted: toText(fieldMap.danger_do_not_use_label_fitted ?? ''),
+      meter_or_appliance_tagged: toText(fieldMap.meter_or_appliance_tagged ?? ''),
+      customer_informed: toText(fieldMap.customer_informed ?? ''),
+      customer_understands_risks: toText(fieldMap.customer_understands_risks ?? ''),
+      customer_signature_url: toText(fieldMap.customer_signature ?? fieldMap.customer_signature_url ?? ''),
+      customer_signed_at: toText(fieldMap.customer_signed_at ?? ''),
+      engineer_name: toText(fieldMap.engineer_name ?? ''),
+      engineer_company: toText(fieldMap.engineer_company ?? fieldMap.company_name ?? ''),
+      gas_safe_number: toText(fieldMap.gas_safe_number ?? ''),
+      engineer_id_card_number: toText(fieldMap.engineer_id_card_number ?? fieldMap.engineer_id ?? ''),
+      engineer_signature_url: toText(fieldMap.engineer_signature ?? fieldMap.engineer_signature_url ?? ''),
+      issued_at: toText(fieldMap.issued_at ?? issuedAtIso),
+      record_id: toText(fieldMap.record_id ?? input.jobId),
+    };
+
+    const validationErrors = previewOnly ? [] : validateGasWarningNoticeForIssue(gasWarningFields);
+    if (validationErrors.length) {
+      throw new Error(`Gas warning notice validation failed: ${validationErrors.join('; ')}`);
+    }
+
+    const admin = createClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      },
+    );
+
+    const pdfBytes = await renderGasWarningNoticePdf({
+      fields: gasWarningFields,
+      issuedAt: gasWarningFields.issued_at ?? issuedAtIso,
+      recordId: gasWarningFields.record_id ?? input.jobId,
+    });
+
+    const pathBase = previewOnly ? 'gas-warning-notice/previews' : 'gas-warning-notice';
+    const path = `${pathBase}/${input.jobId}/${Date.now()}-gas-warning-notice${previewOnly ? '-preview' : ''}.pdf`;
+    const { data: uploadData, error: uploadErr } = await admin.storage
+      .from('certificates')
+      .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', cacheControl: '3600', upsert: false });
+    if (uploadErr) {
+      throw uploadErr;
+    }
+    if (!uploadData?.path) {
+      throw new Error('Gas warning notice PDF upload failed: missing path');
+    }
+
+    if (previewOnly) {
+      const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
+      if (signedErr || !signed?.signedUrl) {
+        throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
+      }
+      return { pdfUrl: signed.signedUrl, preview: true };
+    }
+
+    const baseCertificatePayload: Record<string, unknown> = {
+      job_id: input.jobId,
+    };
+    const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
+    const writeCertificate = (payload: Record<string, unknown>) =>
+      existingCertificate
+        ? admin.from('certificates').update(payload).eq('job_id', input.jobId)
+        : admin.from('certificates').insert(payload);
+    const { error: certErr } = await writeCertificate(certificatePayload);
+    if (certErr) {
+      throw new Error(certErr.message);
+    }
+    await admin
+      .from('jobs')
+      .update({ status: 'completed', certificate_type: 'gas_warning_notice' } as Record<string, unknown>)
+      .eq('id', input.jobId);
+    revalidatePath(`/jobs/${input.jobId}`);
+    return { pdfUrl: admin.storage.from('certificates').getPublicUrl(path).data.publicUrl };
   }
 
   if (input.certificateType !== 'cp12') {
@@ -1417,23 +1903,37 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   }
 
   const { data: fields, error: fieldsErr } = await sb
-    .from('job_fields')
+    .from(JOB_FIELDS_TABLE)
     .select('field_key, value')
     .eq('job_id', input.jobId);
   if (fieldsErr) throw new Error(fieldsErr.message);
-  const fieldMap = Object.fromEntries((fields ?? []).map((f) => [f.field_key, f.value ?? null]));
+  const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
+  const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
 
   let appliances: Cp12Appliance[] = [];
-  const appResp = await sb.from('cp12_appliances').select('*').eq('job_id', input.jobId);
+  const appResp = await sb.from(CP12_APPLIANCES_TABLE).select('*').eq('job_id', input.jobId);
   if (appResp.error) {
     if (appResp.error.code !== '42P01') throw new Error(appResp.error.message);
   } else if (appResp.data) {
-    appliances = appResp.data as Cp12Appliance[];
+    appliances = appResp.data as unknown as Cp12Appliance[];
   }
 
   const issuedAt = new Date();
-  const issuedAtIso = issuedAt.toISOString();
-  const validationErrors = previewOnly ? [] : validateCp12ForIssue(fieldMap, appliances);
+  const customer = resolveJobCustomer(jobContext, {
+    name: typeof fieldMap.customer_name === 'string' ? fieldMap.customer_name : undefined,
+  });
+  const propertyAddress = resolveJobPropertyAddress(jobContext, {
+    line1: typeof fieldMap.property_address === 'string' ? fieldMap.property_address : undefined,
+    postcode: typeof fieldMap.postcode === 'string' ? fieldMap.postcode : undefined,
+    legacy: typeof fieldMap.address === 'string' ? fieldMap.address : undefined,
+  });
+  const validationFieldMap = {
+    ...fieldMap,
+    customer_name: customer.name || fieldMap.customer_name,
+    property_address: propertyAddress.summary || fieldMap.property_address,
+    postcode: propertyAddress.postcode || fieldMap.postcode,
+  };
+  const validationErrors = previewOnly ? [] : validateCp12ForIssue(validationFieldMap, appliances);
   if (validationErrors.length) {
     throw new Error(`CP12 validation failed: ${validationErrors.join('; ')}`);
   }
@@ -1455,11 +1955,11 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     certNumber: toText(fieldMap.record_id ?? fieldMap.certificate_number ?? ''),
     issueDate: toText(fieldMap.inspection_date ?? fieldMap.scheduled_for ?? '') || undefined,
     nextInspectionDue: toText(fieldMap.next_inspection_due ?? fieldMap.completion_date ?? ''),
-    landlordName: toText(fieldMap.landlord_name ?? fieldMap.customer_name ?? ''),
+    landlordName: toText(fieldMap.landlord_name ?? customer.name ?? ''),
     landlordAddressLine1: toText(fieldMap.landlord_address ?? ''),
     landlordPostcode: toText(fieldMap.postcode ?? ''),
-    propertyAddressLine1: toText(fieldMap.property_address ?? fieldMap.address ?? ''),
-    propertyPostcode: toText(fieldMap.postcode ?? ''),
+    propertyAddressLine1: pickText(propertyAddress.summary, toText(fieldMap.property_address ?? fieldMap.address ?? '')),
+    propertyPostcode: pickText(propertyAddress.postcode, toText(fieldMap.postcode ?? '')),
     companyName: toText(fieldMap.company_name ?? ''),
     companyAddressLine1: toText(fieldMap.company_address ?? ''),
     companyTown: '',
@@ -1471,28 +1971,31 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     engineerIdNumber: toText(fieldMap.engineer_id ?? ''),
     engineerSignatureText: toText(fieldMap.engineer_name ?? ''),
     engineerVisitTime: toText(fieldMap.completion_date ?? ''),
-    responsiblePersonName: toText(fieldMap.customer_name ?? ''),
-    responsiblePersonSignatureText: toText(fieldMap.customer_name ?? ''),
+    responsiblePersonName: toText(customer.name ?? ''),
+    responsiblePersonSignatureText: toText(customer.name ?? ''),
     responsiblePersonAcknowledgementDate: toText(fieldMap.completion_date ?? ''),
     defectsIdentified: toText(fieldMap.defect_description ?? ''),
     remedialWorksRequired: toText(fieldMap.remedial_action ?? ''),
     additionalNotes: toText(fieldMap.comments ?? fieldMap.additional_notes ?? ''),
   };
 
-  const applianceInputs: ApplianceInput[] = (appliances ?? []).map((app) => ({
-    description: toText(app.make_model ?? (app as any).appliance_make_model ?? app.appliance_type ?? ''),
-    location: toText(app.location ?? ''),
-    type: toText(app.appliance_type ?? ''),
-    flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
-    operatingPressure: toText(app.operating_pressure ?? ''),
-    heatInput: toText(app.heat_input ?? ''),
-    safetyDevice: toText(app.stability_test ?? ''),
-    ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
-    flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
-    spillageTest: toText(app.gas_tightness_test ?? ''),
-    applianceSafeToUse: toText(app.safety_rating ?? app.classification_code ?? ''),
-    remedialActionTaken: toText(app.classification_code ?? ''),
-  }));
+  const applianceInputs: ApplianceInput[] = (appliances ?? []).map((app) => {
+    const appExtras = app as Cp12Appliance & { appliance_make_model?: string };
+    return {
+      description: toText(app.make_model ?? appExtras.appliance_make_model ?? app.appliance_type ?? ''),
+      location: toText(app.location ?? ''),
+      type: toText(app.appliance_type ?? ''),
+      flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
+      operatingPressure: toText(app.operating_pressure ?? ''),
+      heatInput: toText(app.heat_input ?? ''),
+      safetyDevice: toText(app.stability_test ?? ''),
+      ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
+      flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
+      spillageTest: toText(app.gas_tightness_test ?? ''),
+      applianceSafeToUse: toText(app.safety_rating ?? app.classification_code ?? ''),
+      remedialActionTaken: toText(app.classification_code ?? ''),
+    };
+  });
 
   const pdfBytes = await renderCp12CertificatePdf({
     fields: cp12Fields,
@@ -1511,8 +2014,9 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       path,
       error: upload.error
         ? {
-            code: upload.error.code,
             message: upload.error.message,
+            name: upload.error.name,
+            statusCode: 'statusCode' in upload.error ? upload.error.statusCode : undefined,
           }
         : null,
     });
@@ -1546,8 +2050,8 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       ? {
           code: certErr.code,
           message: certErr.message,
-          details: (certErr as any).details,
-          hint: (certErr as any).hint,
+          details: certErr.details,
+          hint: certErr.hint,
         }
       : null,
   });
@@ -1596,8 +2100,10 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   console.log('CERTIFICATE PDF signed URL generated', { jobId: input.jobId, path });
 
   await sb
-    .from('job_fields')
-    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt }, { onConflict: 'job_id,field_key' });
+    .from(JOB_FIELDS_TABLE)
+    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt } as Record<string, unknown>, {
+      onConflict: 'job_id,field_key',
+    });
 
   await sb.from('jobs').update({ status: 'completed' }).eq('id', input.jobId);
   revalidatePath(`/jobs/${input.jobId}`);
@@ -1617,7 +2123,7 @@ export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCert
   const { data: job, error: jobErr } = await sb.from('jobs').select('user_id').eq('id', jobId).maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
   if (!job) throw new Error('Job not found');
-  if ((job as any).user_id !== user.id) {
+  if (job.user_id !== user.id) {
     throw new Error('RLS mismatch: job owner does not match auth user');
   }
 
@@ -1631,7 +2137,7 @@ export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCert
     throw new Error('No PDF found for this job');
   }
 
-  const pdfPath = (certificate as any).pdf_path ?? (certificate as any).pdf_url;
+  const pdfPath = certificate.pdf_path ?? certificate.pdf_url;
   if (!pdfPath) throw new Error('No PDF found for this job');
 
   if (typeof pdfPath === 'string' && pdfPath.startsWith('http')) {

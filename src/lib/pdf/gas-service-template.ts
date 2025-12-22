@@ -52,6 +52,12 @@ export type RenderGasServiceRecordInput = {
   previewMode?: boolean;
 };
 
+type GasServiceApplianceExtras = {
+  boiler_type?: string;
+  appliance_make_model?: string;
+  flue_check?: string;
+};
+
 const toText = (val: unknown) => {
   if (val === null || val === undefined) return '';
   return String(val).trim();
@@ -371,32 +377,33 @@ export async function renderGasServiceRecordTemplatePdf({
 
   writeField('property_address', toText(fieldMap.property_address ?? fieldMap.address));
   writeField('postcode', toText(fieldMap.postcode));
-  writeField('service_date', toText((fieldMap as any).service_date ?? fieldMap.inspection_date ?? fieldMap.scheduled_for));
+  writeField('service_date', toText(fieldMap.service_date ?? fieldMap.inspection_date ?? fieldMap.scheduled_for));
   writeField('customer_name', toText(fieldMap.customer_name));
-  writeField('customer_address', toText((fieldMap as any).customer_address ?? fieldMap.address));
+  writeField('customer_address', toText(fieldMap.customer_address ?? fieldMap.address));
   writeField('engineer_name', toText(fieldMap.engineer_name));
   writeField('gas_safe_number', toText(fieldMap.gas_safe_number));
   writeField('company_name', toText(fieldMap.company_name));
   writeField('issued_at', new Date(issuedAt).toLocaleDateString());
   writeField('record_id', recordId ?? '');
-  writeField('next_service_due', toText((fieldMap as any).next_service_due));
+  writeField('next_service_due', toText(fieldMap.next_service_due));
 
-  writeBlock('service_summary', toText((fieldMap as any).service_summary));
-  writeBlock('recommendations', toText((fieldMap as any).recommendations));
-  writeBlock('comments', toText((fieldMap as any).comments));
+  writeBlock('service_summary', toText(fieldMap.service_summary));
+  writeBlock('recommendations', toText(fieldMap.recommendations));
+  writeBlock('comments', toText(fieldMap.comments));
 
   const table = GAS_SERVICE_RECORD_COORDS.table;
   const rows = (appliances ?? []).slice(0, table.maxRows);
   rows.forEach((app, idx) => {
+    const appliance = app as Cp12Appliance & GasServiceApplianceExtras;
     const rowY = table.startY - idx * table.rowHeight;
     const textY = rowY + 8;
     const cells: Record<string, string> = {
       index: `${idx + 1}`,
       location: toText(app.location),
-      boiler_type: toText((app as any).boiler_type ?? app.appliance_type),
-      make_model: toText(app.make_model ?? (app as any).appliance_make_model),
+      boiler_type: toText(appliance.boiler_type ?? app.appliance_type),
+      make_model: toText(app.make_model ?? appliance.appliance_make_model),
       operating_pressure: toText(app.operating_pressure),
-      flue_check: toText((app as any).flue_check ?? app.flue_condition),
+      flue_check: toText(appliance.flue_check ?? app.flue_condition),
       safety: toText(app.safety_rating ?? app.classification_code),
     };
     table.columns.forEach((col) => {

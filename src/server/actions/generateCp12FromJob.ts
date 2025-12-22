@@ -1,11 +1,29 @@
+// Customers: CP12 generation resolves customer data from jobs.client_id first, then job fields as fallback.
 import { randomUUID } from 'node:crypto';
 
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { Database } from '@/lib/database.types';
 import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import { getCustomerById } from '@/server/customer-service';
 
 type JobRow = Database['public']['Tables']['jobs']['Row'] & {
   certificate_type?: string | null;
+};
+type Cp12ApplianceRow = {
+  appliance_type?: string | null;
+  location?: string | null;
+  make_model?: string | null;
+  operating_pressure?: string | null;
+  heat_input?: string | null;
+  flue_type?: string | null;
+  ventilation_provision?: string | null;
+  ventilation_satisfactory?: string | null;
+  flue_condition?: string | null;
+  stability_test?: string | null;
+  gas_tightness_test?: string | null;
+  co_reading_ppm?: string | null;
+  safety_rating?: string | null;
+  classification_code?: string | null;
 };
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'] & {
@@ -31,6 +49,8 @@ export type GenerateCp12Result = {
 
 const CERTIFICATES_BUCKET = 'certificates';
 const LOGO_BUCKET = 'profile-logos';
+const JOB_FIELDS_TABLE = 'job_fields' as unknown as keyof Database['public']['Tables'];
+const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['public']['Tables'];
 
 export async function generateCp12FromJob(jobId: string, currentUserId: string): Promise<GenerateCp12Result> {
   const supabase = await supabaseServerServiceRole();
@@ -49,21 +69,29 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
     throw new Error(profileError?.message ?? 'Profile not found');
   }
   const profile = profileData as ProfileRow;
+  const customer = job.client_id
+    ? await getCustomerById(job.client_id, {
+        sb: supabase,
+        userId: job.user_id ?? currentUserId,
+        requireOwner: false,
+      })
+    : null;
 
   const { data: fieldsData, error: fieldsError } = await supabase
-    .from('job_fields')
+    .from(JOB_FIELDS_TABLE)
     .select('field_key, value')
     .eq('job_id', jobId);
   if (fieldsError) {
     throw new Error(`Failed to load job fields: ${fieldsError.message}`);
   }
-  const fieldMap = Object.fromEntries((fieldsData ?? []).map((item) => [item.field_key, item.value ?? null])) as Record<
+  const fieldRows = (fieldsData ?? []) as unknown as Array<{ field_key: string; value: string | null }>;
+  const fieldMap = Object.fromEntries(fieldRows.map((item) => [item.field_key, item.value ?? null])) as Record<
     string,
     unknown
   >;
 
   const { data: applianceRows, error: appliancesError } = await supabase
-    .from('cp12_appliances')
+    .from(CP12_APPLIANCES_TABLE)
     .select('*')
     .eq('job_id', jobId)
     .order('created_at', { ascending: true });
@@ -73,20 +101,23 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
 
   const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
 
-  const applianceInputs: ApplianceInput[] = (applianceRows ?? []).map((app) => ({
-    description: toText((app as any).make_model ?? (app as any).appliance_make_model ?? (app as any).appliance_type ?? ''),
-    location: toText((app as any).location ?? ''),
-    type: toText((app as any).appliance_type ?? ''),
-    flueType: toText((app as any).flue_type ?? (app as any).ventilation_provision ?? ''),
-    operatingPressure: toText((app as any).operating_pressure ?? ''),
-    heatInput: toText((app as any).heat_input ?? ''),
-    safetyDevice: toText((app as any).stability_test ?? ''),
-    ventilationSatisfactory: toText((app as any).ventilation_satisfactory ?? (app as any).ventilation_provision ?? ''),
-    flueTerminationSatisfactory: toText((app as any).flue_condition ?? ''),
-    spillageTest: toText((app as any).gas_tightness_test ?? ''),
-    applianceSafeToUse: toText((app as any).safety_rating ?? (app as any).classification_code ?? ''),
-    remedialActionTaken: toText((app as any).classification_code ?? ''),
-  }));
+  const applianceInputs: ApplianceInput[] = (applianceRows ?? []).map((app) => {
+    const row = app as Cp12ApplianceRow;
+    return {
+      description: toText(row.make_model ?? row.appliance_type ?? ''),
+      location: toText(row.location ?? ''),
+      type: toText(row.appliance_type ?? ''),
+      flueType: toText(row.flue_type ?? row.ventilation_provision ?? ''),
+      operatingPressure: toText(row.operating_pressure ?? ''),
+      heatInput: toText(row.heat_input ?? ''),
+      safetyDevice: toText(row.stability_test ?? ''),
+      ventilationSatisfactory: toText(row.ventilation_satisfactory ?? row.ventilation_provision ?? ''),
+      flueTerminationSatisfactory: toText(row.flue_condition ?? ''),
+      spillageTest: toText(row.gas_tightness_test ?? ''),
+      applianceSafeToUse: toText(row.safety_rating ?? row.classification_code ?? ''),
+      remedialActionTaken: toText(row.classification_code ?? ''),
+    };
+  });
 
   const issuedAtIso = job.completed_at ?? job.scheduled_for ?? new Date().toISOString();
   const issuedAtDate = new Date(issuedAtIso);
@@ -95,8 +126,8 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
     certNumber: toText(fieldMap.record_id ?? fieldMap.certificate_number ?? job.id ?? ''),
     issueDate: toText(fieldMap.inspection_date ?? fieldMap.scheduled_for ?? issuedAtIso),
     nextInspectionDue: toText(fieldMap.next_inspection_due ?? fieldMap.completion_date ?? ''),
-    landlordName: toText(fieldMap.landlord_name ?? fieldMap.customer_name ?? job.client_name ?? ''),
-    landlordAddressLine1: toText(fieldMap.landlord_address ?? ''),
+    landlordName: toText(fieldMap.landlord_name ?? fieldMap.customer_name ?? customer?.name ?? job.client_name ?? ''),
+    landlordAddressLine1: toText(fieldMap.landlord_address ?? customer?.address ?? ''),
     landlordAddressLine2: toText(fieldMap.landlord_address_line2 ?? ''),
     landlordTown: toText(fieldMap.landlord_town ?? ''),
     landlordPostcode: toText(fieldMap.landlord_postcode ?? fieldMap.postcode ?? ''),
@@ -123,8 +154,10 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
         '',
     ),
     engineerVisitTime: toText(fieldMap.completion_date ?? fieldMap.inspection_time ?? ''),
-    responsiblePersonName: toText(fieldMap.customer_name ?? job.client_name ?? ''),
-    responsiblePersonSignatureText: toText(fieldMap.customer_signature_text ?? fieldMap.customer_name ?? job.client_name ?? ''),
+    responsiblePersonName: toText(fieldMap.customer_name ?? customer?.name ?? job.client_name ?? ''),
+    responsiblePersonSignatureText: toText(
+      fieldMap.customer_signature_text ?? fieldMap.customer_name ?? customer?.name ?? job.client_name ?? '',
+    ),
     responsiblePersonAcknowledgementDate: toText(fieldMap.completion_date ?? issuedAtIso),
     defectsIdentified: toText(fieldMap.defect_description ?? fieldMap.defects_identified ?? job.notes ?? ''),
     remedialWorksRequired: toText(fieldMap.remedial_action ?? fieldMap.remedial_works_required ?? ''),

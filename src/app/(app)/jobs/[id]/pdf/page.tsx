@@ -2,11 +2,12 @@ import { notFound } from 'next/navigation';
 
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { PdfPreview } from '@/components/certificates/pdf-preview';
-import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
+import { CERTIFICATE_LABELS } from '@/types/certificates';
 import { PdfActions } from './_components/pdf-actions';
 import { isUUID } from '@/lib/ids';
 import { getCertificatePdfSignedUrl, getCertificateState } from '@/server/certificates';
 import { resolveCertificateType } from '@/server/certificate-type';
+import type { Database } from '@/lib/database.types';
 
 export default async function JobPdfPage({
   params,
@@ -22,10 +23,11 @@ export default async function JobPdfPage({
   const supabase = await supabaseServerReadOnly();
   const [{ data: certificate, error: certificateError }, { data: job, error: jobError }] = await Promise.all([
     supabase.from('certificates').select('id, job_id, pdf_path, pdf_url, created_at').eq('job_id', id).maybeSingle(),
-    supabase.from('jobs').select('certificate_type, title, address').eq('id', id).maybeSingle(),
+    supabase.from('jobs').select('*').eq('id', id).maybeSingle(),
   ]);
   if (jobError) throw new Error(jobError.message);
   if (!job) notFound();
+  const jobRow = job as Database['public']['Tables']['jobs']['Row'];
 
   let pdfUrl: string | null = null;
   let pdfError: string | null = null;
@@ -48,8 +50,10 @@ export default async function JobPdfPage({
     }
   }
 
-  const { certificateType, source } = await resolveCertificateType(id, job.certificate_type ?? null);
-  console.log('[jobs/[id]/pdf] certificate type resolved', { jobId: id, certificateType, source, existingType: job.certificate_type });
+  const jobRecord = jobRow as Record<string, unknown>;
+  const existingType = typeof jobRecord.certificate_type === 'string' ? jobRecord.certificate_type : null;
+  const { certificateType, source } = await resolveCertificateType(id, existingType);
+  console.log('[jobs/[id]/pdf] certificate type resolved', { jobId: id, certificateType, source, existingType });
   if (!certificateType) {
     return (
       <div className="space-y-4">
@@ -62,15 +66,15 @@ export default async function JobPdfPage({
       </div>
     );
   }
-  const title = job.title ?? 'Certificate';
+  const title = jobRow.title ?? 'Certificate';
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-1">
         <p className="text-xs uppercase tracking-wide text-[var(--accent)]">PDF preview</p>
         <h1 className="text-2xl font-semibold text-muted">{title}</h1>
-        <p className="text-sm text-muted-foreground/70">
-          {CERTIFICATE_LABELS[certificateType] ?? 'Certificate'} — {job?.address ?? 'Address pending'}
+          <p className="text-sm text-muted-foreground/70">
+          {CERTIFICATE_LABELS[certificateType] ?? 'Certificate'} — {jobRow.address ?? 'Address pending'}
         </p>
       </div>
 

@@ -19,12 +19,10 @@ export default async function RequireAuth({ children }: { children: ReactNode })
   ];
 
   let profile: Record<string, unknown> | null = null;
-  let profileError: { code?: string; message: string } | null = null;
 
   for (const columns of selectVariants) {
     const response = await supabase.from('profiles').select(columns).eq('id', user.id).maybeSingle();
     if (response.error) {
-      profileError = response.error;
       if (response.error.code === '42703') continue;
       throw new Error(response.error.message);
     }

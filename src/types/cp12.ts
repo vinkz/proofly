@@ -44,7 +44,7 @@ export type EvidenceField = {
   key: string;
   label: string;
   type?: 'text' | 'select' | 'number';
-  options?: { value: string; label: string }[];
+  options?: ReadonlyArray<{ value: string; label: string }>;
 };
 
 export const CP12_EVIDENCE_CONFIG: {
@@ -59,9 +59,9 @@ export const CP12_EVIDENCE_CONFIG: {
     fields: [
       { key: 'boiler_make', label: 'Boiler make' },
       { key: 'boiler_model', label: 'Boiler model' },
-      { key: 'boiler_type', label: 'Boiler type', type: 'select', options: CP12_APPLIANCE_TYPES as any },
+      { key: 'boiler_type', label: 'Boiler type', type: 'select', options: CP12_APPLIANCE_TYPES },
       { key: 'mount_type', label: 'Mount type', type: 'select', options: [{ value: 'wall', label: 'Wall' }, { value: 'floor', label: 'Floor' }] },
-      { key: 'location', label: 'Location', type: 'select', options: CP12_LOCATIONS as any },
+      { key: 'location', label: 'Location', type: 'select', options: CP12_LOCATIONS },
     ],
     demo: {
       boiler_make: 'Worcester Bosch',
@@ -89,7 +89,7 @@ export const CP12_EVIDENCE_CONFIG: {
     key: 'flue_photo',
     title: 'Flue photo',
     fields: [
-      { key: 'flue_type', label: 'Flue type', type: 'select', options: CP12_FLUE_TYPES as any },
+      { key: 'flue_type', label: 'Flue type', type: 'select', options: CP12_FLUE_TYPES },
       { key: 'termination', label: 'Termination' },
       { key: 'condition', label: 'Condition' },
     ],
@@ -118,7 +118,7 @@ export const CP12_EVIDENCE_CONFIG: {
     title: 'Ventilation',
     fields: [
       { key: 'ventilation_present', label: 'Ventilation present', type: 'select', options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
-      { key: 'condition', label: 'Condition', type: 'select', options: CP12_VENTILATION as any },
+      { key: 'condition', label: 'Condition', type: 'select', options: CP12_VENTILATION },
       { key: 'notes', label: 'Notes' },
     ],
     demo: {

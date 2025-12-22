@@ -7,7 +7,6 @@ import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { EvidenceCard } from './evidence-card';
 import { SignatureCard } from '@/components/certificates/signature-card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { GENERAL_WORKS_EVIDENCE_FIELDS, GENERAL_WORKS_PHOTO_CATEGORIES } from '@/types/general-works';

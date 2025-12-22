@@ -21,10 +21,17 @@ export async function GET() {
   await saveCp12JobInfo({
     jobId,
     data: {
-      ...CP12_DEMO_INFO,
+      customer_name: CP12_DEMO_INFO.customer_name,
+      property_address: CP12_DEMO_INFO.property_address,
+      postcode: CP12_DEMO_INFO.postcode,
       inspection_date: demoInspectionDate ?? today,
+      engineer_name: CP12_DEMO_INFO.engineer_name,
+      gas_safe_number: CP12_DEMO_INFO.gas_safe_number,
+      company_name: CP12_DEMO_INFO.company_name,
+      landlord_name: CP12_DEMO_INFO.landlord_name,
+      landlord_address: CP12_DEMO_INFO.landlord_address,
       reg_26_9_confirmed: true,
-    } as any,
+    },
   });
 
   await saveCp12Appliances({

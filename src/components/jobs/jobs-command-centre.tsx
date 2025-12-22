@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 
 import { JobCard } from './job-card';
-import { CertificateTypeModal } from '@/components/certificates/certificate-type-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DeleteJobsMenu } from './delete-jobs-menu';
@@ -73,7 +72,9 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <CertificateTypeModal />
+          <Button asChild variant="primary" className="rounded-full px-4 py-2">
+            <Link href="/jobs/new">+ New Job</Link>
+          </Button>
           <Button asChild variant="secondary" className="rounded-full px-4 py-2">
             <Link href="/jobs/scan">Scan Job Sheet</Link>
           </Button>

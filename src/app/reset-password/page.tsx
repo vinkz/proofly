@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useTransition, useEffect } from 'react';
 import { z } from 'zod';
@@ -15,7 +16,7 @@ const ResetSchema = z.object({
   new_password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-export default function ResetPasswordPage() {
+function ResetPasswordInner() {
   const params = useSearchParams();
   const code = params?.get('code') ?? '';
   const router = useRouter();
@@ -101,5 +102,13 @@ export default function ResetPasswordPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordInner />
+    </Suspense>
   );
 }

@@ -3,16 +3,29 @@ import { JobsCommandCentre, type JobSummary } from '@/components/jobs/jobs-comma
 
 export default async function JobsIndexPage() {
   const { active, completed } = await listJobs();
-  const mapped: JobSummary[] = [...active, ...completed].map((job: any) => ({
-    id: job.id,
-    title: job.title ?? job.client_name ?? 'Untitled job',
-    address: job.address ?? job.client_address ?? null,
-    status: job.status ?? 'draft',
-    certificate_type: job.certificate_type ?? job.template_id ?? null,
-    created_at: job.created_at ?? null,
-    scheduled_for: job.scheduled_for ?? null,
-    has_pdf: Boolean(job.report_storage_path),
-  }));
+  const asString = (value: unknown) => (typeof value === 'string' ? value : null);
+  const allJobs = [...active, ...completed] as Array<Record<string, unknown>>;
+  const mapped: JobSummary[] = allJobs.map((job) => {
+    const id = typeof job.id === 'string' ? job.id : '';
+    const title = asString(job.title) ?? asString(job.client_name) ?? 'Untitled job';
+    const address = asString(job.address) ?? asString(job.client_address);
+    const status = asString(job.status) ?? 'draft';
+    const certificate_type = asString(job.certificate_type) ?? asString(job.template_id);
+    const created_at = asString(job.created_at);
+    const scheduled_for = asString(job.scheduled_for);
+    const has_pdf = Boolean(job.report_storage_path);
+
+    return {
+      id,
+      title,
+      address,
+      status,
+      certificate_type,
+      created_at,
+      scheduled_for,
+      has_pdf,
+    };
+  });
 
   return (
     <div className="space-y-4">

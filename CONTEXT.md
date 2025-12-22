@@ -135,7 +135,7 @@ CertNow becomes the trusted compliance companion for field trades worldwide — 
 
 ### Primary CTAs
 
-* **+ New Certificate**
+* **+ New Job**
 * **Scan Job Sheet**
 
 ### Jobs List Examples
@@ -150,7 +150,7 @@ The home screen acts as the central command centre for all active and completed 
 
 ## 2. New Certificate Selection
 
-When the user taps **+ New Certificate**, a modal opens with certificate options:
+When the user taps **+ New Job**, a modal opens with certificate options:
 
 1. **CP12 Gas Safety Certificate**
 2. **Boiler Service Certificate**

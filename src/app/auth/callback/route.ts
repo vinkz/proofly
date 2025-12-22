@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   assertSupabaseEnv();
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const supabase = createServerClient<Database>(
     env.SUPABASE_URL,

@@ -15,6 +15,9 @@ import {
   BOILER_SERVICE_DEMO_INFO,
   BOILER_SERVICE_DEMO_DETAILS,
   BOILER_SERVICE_DEMO_CHECKS,
+  type BoilerServiceChecks,
+  type BoilerServiceDetails,
+  type BoilerServiceJobInfo,
 } from '@/types/boiler-service';
 import {
   saveBoilerServiceJobInfo,
@@ -31,7 +34,7 @@ type BoilerServiceWizardProps = {
   initialPhotoPreviews?: Record<string, string>;
 };
 
-const EMPTY_CHECKS = {
+const EMPTY_CHECKS: BoilerServiceChecks = {
   service_visual_inspection: '',
   service_burner_cleaned: '',
   service_heat_exchanger_cleaned: '',
@@ -70,7 +73,7 @@ export function BoilerServiceWizard({
     initialFields.completion_date ? (initialFields.completion_date as string).slice(0, 10) : new Date().toISOString().slice(0, 10),
   );
 
-  const [jobInfo, setJobInfo] = useState({
+  const [jobInfo, setJobInfo] = useState<BoilerServiceJobInfo>({
     customer_name: initialFields.customer_name ?? '',
     property_address: initialFields.property_address ?? '',
     postcode: initialFields.postcode ?? '',
@@ -81,7 +84,7 @@ export function BoilerServiceWizard({
     company_address: initialFields.company_address ?? '',
   });
 
-  const [details, setDetails] = useState<Record<string, string>>({
+  const [details, setDetails] = useState<BoilerServiceDetails>({
     boiler_make: initialFields.boiler_make ?? '',
     boiler_model: initialFields.boiler_model ?? '',
     boiler_type: initialFields.boiler_type ?? '',
@@ -92,7 +95,7 @@ export function BoilerServiceWizard({
     flue_type: initialFields.flue_type ?? '',
   });
 
-  const [checks, setChecks] = useState<Record<string, string>>({
+  const [checks, setChecks] = useState<BoilerServiceChecks>({
     ...EMPTY_CHECKS,
     ...Object.entries(EMPTY_CHECKS).reduce<Record<string, string>>((acc, [key]) => {
       const existing = initialFields[key];
@@ -111,11 +114,11 @@ export function BoilerServiceWizard({
     startTransition(async () => {
       try {
         const today = new Date().toISOString().slice(0, 10);
-        const demoInfo = {
+        const demoInfo: typeof jobInfo = {
           ...jobInfo,
           ...BOILER_SERVICE_DEMO_INFO,
-          service_date: typeof BOILER_SERVICE_DEMO_INFO.service_date === 'function' ? BOILER_SERVICE_DEMO_INFO.service_date() : today,
-        } as Record<string, string>;
+          service_date: BOILER_SERVICE_DEMO_INFO.service_date ?? today,
+        };
         const demoDetails = { ...BOILER_SERVICE_DEMO_DETAILS };
         const demoChecks = { ...BOILER_SERVICE_DEMO_CHECKS };
 
@@ -230,7 +233,7 @@ export function BoilerServiceWizard({
     });
   };
 
-  const setCheckValue = (key: string, value: string) => {
+  const setCheckValue = (key: keyof BoilerServiceChecks, value: string) => {
     setChecks((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -256,6 +259,19 @@ export function BoilerServiceWizard({
         }
       });
     };
+
+  const checkItems: Array<{ key: keyof BoilerServiceChecks; label: string }> = [
+    { key: 'service_visual_inspection', label: 'Visual inspection' },
+    { key: 'service_burner_cleaned', label: 'Burner cleaned' },
+    { key: 'service_heat_exchanger_cleaned', label: 'Heat exchanger cleaned' },
+    { key: 'service_condensate_trap_checked', label: 'Condensate trap checked' },
+    { key: 'service_seals_checked', label: 'Seals checked' },
+    { key: 'service_filters_cleaned', label: 'Filters cleaned' },
+    { key: 'service_flue_checked', label: 'Flue checked' },
+    { key: 'service_ventilation_checked', label: 'Ventilation checked' },
+    { key: 'service_controls_checked', label: 'Controls checked' },
+    { key: 'service_leaks_checked', label: 'Leaks checked' },
+  ];
 
   return (
     <>
@@ -373,18 +389,7 @@ export function BoilerServiceWizard({
             </div>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
-            {[
-              { key: 'service_visual_inspection', label: 'Visual inspection' },
-              { key: 'service_burner_cleaned', label: 'Burner cleaned' },
-              { key: 'service_heat_exchanger_cleaned', label: 'Heat exchanger cleaned' },
-              { key: 'service_condensate_trap_checked', label: 'Condensate trap checked' },
-              { key: 'service_seals_checked', label: 'Seals checked' },
-              { key: 'service_filters_cleaned', label: 'Filters cleaned' },
-              { key: 'service_flue_checked', label: 'Flue checked' },
-              { key: 'service_ventilation_checked', label: 'Ventilation checked' },
-              { key: 'service_controls_checked', label: 'Controls checked' },
-              { key: 'service_leaks_checked', label: 'Leaks checked' },
-            ].map((item) => (
+            {checkItems.map((item) => (
               <div key={item.key} className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
                 <p className="text-sm font-semibold text-muted">{item.label}</p>
                 <div className="mt-2 flex gap-2">

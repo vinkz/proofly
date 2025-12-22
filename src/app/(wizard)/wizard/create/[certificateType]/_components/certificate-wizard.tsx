@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { SignatureCard } from '@/components/certificates/signature-card';
 import { EvidenceCard } from './evidence-card';
-import { PHOTO_CATEGORIES, type CertificateType, type Cp12Appliance } from '@/types/certificates';
+import { type CertificateType, type Cp12Appliance } from '@/types/certificates';
 import {
   saveCp12JobInfo,
   uploadJobPhoto,
@@ -35,7 +35,6 @@ type WizardProps = {
   certificateType: CertificateType;
   certificateLabel: string;
   initialInfo?: Record<string, string | null | undefined>;
-  initialPhotoNotes?: Record<string, string>;
   initialPhotoPreviews?: Record<string, string>;
   initialAppliances?: Cp12Appliance[];
 };
@@ -81,7 +80,6 @@ export function CertificateWizard({
   certificateType,
   certificateLabel,
   initialInfo = {},
-  initialPhotoNotes = {},
   initialPhotoPreviews = {},
   initialAppliances = [],
 }: WizardProps) {
@@ -98,11 +96,12 @@ export function CertificateWizard({
     inspection_date: initialInfo.inspection_date ?? '',
     landlord_name: initialInfo.landlord_name ?? '',
     landlord_address: initialInfo.landlord_address ?? '',
-    reg_26_9_confirmed:
-      initialInfo.reg_26_9_confirmed === true || initialInfo.reg_26_9_confirmed === 'true' || initialInfo.reg_26_9_confirmed === 'YES',
+    reg_26_9_confirmed: (() => {
+      const value = String(initialInfo.reg_26_9_confirmed ?? '').toLowerCase();
+      return value === 'true' || value === 'yes';
+    })(),
   });
 
-  const [photoNotes, setPhotoNotes] = useState<Record<string, string>>(initialPhotoNotes);
   const [evidenceFields, setEvidenceFields] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(initialInfo).map(([k, v]) => [k, (v as string) ?? ''])),
   );
@@ -142,7 +141,7 @@ export function CertificateWizard({
     startTransition(async () => {
       try {
         const today = new Date().toISOString().slice(0, 10);
-        const demoInfo = {
+        const demoInfo: Cp12InfoState = {
           ...info,
           customer_name: info.customer_name || CP12_DEMO_INFO.customer_name,
           property_address: info.property_address || CP12_DEMO_INFO.property_address,
@@ -151,6 +150,12 @@ export function CertificateWizard({
           landlord_name: info.landlord_name || CP12_DEMO_INFO.landlord_name,
           landlord_address: info.landlord_address || CP12_DEMO_INFO.landlord_address,
           reg_26_9_confirmed: true,
+        };
+        const demoJobInfo = {
+          ...demoInfo,
+          engineer_name: CP12_DEMO_INFO.engineer_name,
+          gas_safe_number: CP12_DEMO_INFO.gas_safe_number,
+          company_name: CP12_DEMO_INFO.company_name,
         };
 
         const demoAppliance: Cp12Appliance = { ...emptyAppliance, ...CP12_DEMO_APPLIANCE };
@@ -161,7 +166,6 @@ export function CertificateWizard({
           remedial_action: CP12_DEMO_INFO.remedial_action,
           warning_notice_issued: CP12_DEMO_INFO.warning_notice_issued ?? 'NO',
         });
-        setPhotoNotes((prev) => ({ ...prev, ...CP12_DEMO_PHOTO_NOTES }));
         const evidenceDemo: Record<string, string> = { ...evidenceFields };
         CP12_EVIDENCE_CONFIG.forEach((cfg) => {
           Object.entries(cfg.demo ?? {}).forEach(([k, v]) => {
@@ -170,7 +174,7 @@ export function CertificateWizard({
         });
         setEvidenceFields(evidenceDemo);
 
-        await saveCp12JobInfo({ jobId, data: demoInfo });
+        await saveCp12JobInfo({ jobId, data: demoJobInfo });
         await saveCp12Appliances({
           jobId,
           appliances: [demoAppliance],
@@ -206,7 +210,13 @@ export function CertificateWizard({
     startTransition(async () => {
       try {
         const data = { ...info, inspection_date: info.inspection_date || completionDate };
-        await saveCp12JobInfo({ jobId, data });
+        const jobPayload = {
+          ...data,
+          engineer_name: initialInfo.engineer_name ?? '',
+          gas_safe_number: initialInfo.gas_safe_number ?? '',
+          company_name: initialInfo.company_name ?? '',
+        };
+        await saveCp12JobInfo({ jobId, data: jobPayload });
         setInfo(data);
         setStep(2);
       } catch (error) {
@@ -239,7 +249,13 @@ export function CertificateWizard({
       try {
         if (isCp12) {
           const data = { ...info, inspection_date: info.inspection_date || completionDate };
-          await saveCp12JobInfo({ jobId, data });
+          const jobPayload = {
+            ...data,
+            engineer_name: initialInfo.engineer_name ?? '',
+            gas_safe_number: initialInfo.gas_safe_number ?? '',
+            company_name: initialInfo.company_name ?? '',
+          };
+          await saveCp12JobInfo({ jobId, data: jobPayload });
           setInfo(data);
           await saveCp12Appliances({ jobId, appliances, defects });
         }
@@ -256,7 +272,7 @@ export function CertificateWizard({
           }
         }
         await updateField({ jobId, key: 'completion_date', value: completionDate });
-        const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType });
+        const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType, previewOnly: false });
         pushToast({ title: 'PDF generated', variant: 'success' });
         router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}`);
       } catch (error) {
@@ -274,7 +290,13 @@ export function CertificateWizard({
       try {
         if (isCp12) {
           const data = { ...info, inspection_date: info.inspection_date || completionDate };
-          await saveCp12JobInfo({ jobId, data });
+          const jobPayload = {
+            ...data,
+            engineer_name: initialInfo.engineer_name ?? '',
+            gas_safe_number: initialInfo.gas_safe_number ?? '',
+            company_name: initialInfo.company_name ?? '',
+          };
+          await saveCp12JobInfo({ jobId, data: jobPayload });
           setInfo(data);
           await saveCp12Appliances({ jobId, appliances, defects });
         }
@@ -682,7 +704,7 @@ function validateCp12AgainstSpec(
 ) {
   const errors: string[] = [];
   CP12_REQUIRED_FIELDS.forEach((key) => {
-    if (!hasValue((info as any)[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
+    if (!hasValue(info[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
   });
   // Engineer/company details are sourced from account settings and signatures; no field entry required here.
   if (!booleanFromField(info.reg_26_9_confirmed)) {

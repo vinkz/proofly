@@ -107,11 +107,11 @@ export const BOILER_SERVICE_EVIDENCE_CARDS: {
     fields: [
       { key: 'boiler_make', label: 'Boiler make' },
       { key: 'boiler_model', label: 'Boiler model' },
-      { key: 'boiler_type', label: 'Boiler type', type: 'select', options: BOILER_SERVICE_TYPES as any },
+      { key: 'boiler_type', label: 'Boiler type', type: 'select', options: BOILER_SERVICE_TYPES },
       { key: 'boiler_location', label: 'Location' },
-      { key: 'mount_type', label: 'Mount type', type: 'select', options: BOILER_SERVICE_MOUNT_TYPES as any },
-      { key: 'gas_type', label: 'Gas type', type: 'select', options: BOILER_SERVICE_GAS_TYPES as any },
-      { key: 'flue_type', label: 'Flue type', type: 'select', options: BOILER_SERVICE_FLUE_TYPES as any },
+      { key: 'mount_type', label: 'Mount type', type: 'select', options: BOILER_SERVICE_MOUNT_TYPES },
+      { key: 'gas_type', label: 'Gas type', type: 'select', options: BOILER_SERVICE_GAS_TYPES },
+      { key: 'flue_type', label: 'Flue type', type: 'select', options: BOILER_SERVICE_FLUE_TYPES },
     ],
   },
   {

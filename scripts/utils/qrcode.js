@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const qrcode = require('qrcode-terminal');
 
 function renderQr(url) {

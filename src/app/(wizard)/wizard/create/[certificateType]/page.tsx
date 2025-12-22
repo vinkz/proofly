@@ -1,10 +1,13 @@
+// Jobs-centric flow: wizard bootstraps from jobId and prefers job/client data over job_fields for customer/address defaults.
 import { notFound } from 'next/navigation';
 
 import { createJob, getCertificateWizardState } from '@/server/certificates';
 import { CERTIFICATE_TYPES, CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
+import type { Database } from '@/lib/database.types';
 import { CertificateWizard } from './_components/certificate-wizard';
 import { BoilerServiceWizard } from './_components/boiler-service-wizard';
 import { GeneralWorksWizard } from './_components/general-works-wizard';
+import { GasWarningNoticeWizard } from './_components/gas-warning-notice-wizard';
 
 export default async function CertificateWizardPage({
   params,
@@ -26,11 +29,18 @@ export default async function CertificateWizardPage({
       ? { jobId: existingJobId }
       : await createJob({ certificateType: normalizedType as CertificateType });
   const wizardState = await getCertificateWizardState(jobId);
+  const job = wizardState.job as Database['public']['Tables']['jobs']['Row'] | null;
+  const customerName =
+    job?.client_name ?? wizardState.client?.name ?? wizardState.fields.customer_name ?? '';
+  const propertyAddress = job?.address || wizardState.fields.property_address || '';
+  const postcode = wizardState.fields.postcode ?? '';
+  const serviceDate = job?.scheduled_for ?? wizardState.fields.service_date ?? '';
   const initialInfo = {
     ...wizardState.fields,
-    customer_name: wizardState.fields.customer_name ?? (wizardState.job as any)?.client_name ?? '',
-    property_address: wizardState.fields.property_address ?? (wizardState.job as any)?.address ?? '',
-    service_date: wizardState.fields.service_date ?? (wizardState.job as any)?.scheduled_for ?? '',
+    customer_name: customerName,
+    property_address: propertyAddress,
+    postcode,
+    service_date: serviceDate,
   };
 
   if (normalizedType === 'gas_service') {
@@ -39,7 +49,6 @@ export default async function CertificateWizardPage({
         jobId={jobId}
         initialFields={initialInfo}
         initialPhotoPreviews={wizardState.photoPreviews}
-        certificateType={normalizedType as CertificateType}
       />
     );
   }
@@ -54,13 +63,16 @@ export default async function CertificateWizardPage({
     );
   }
 
+  if (normalizedType === 'gas_warning_notice') {
+    return <GasWarningNoticeWizard jobId={jobId} initialFields={initialInfo} certificateType={normalizedType as CertificateType} />;
+  }
+
   return (
     <CertificateWizard
       jobId={jobId}
       certificateType={certificateType as CertificateType}
       certificateLabel={CERTIFICATE_LABELS[certificateType as CertificateType]}
       initialInfo={initialInfo}
-      initialPhotoNotes={wizardState.photoNotes}
       initialPhotoPreviews={wizardState.photoPreviews}
       initialAppliances={wizardState.appliances}
     />

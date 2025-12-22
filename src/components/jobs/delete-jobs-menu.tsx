@@ -69,7 +69,11 @@ export function DeleteJobsMenu({ jobs }: { jobs: JobSummary[] }) {
   const toggleSelection = (jobId: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(jobId) ? next.delete(jobId) : next.add(jobId);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
       return next;
     });
   };

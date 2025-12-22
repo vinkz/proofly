@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { spawn, execSync } = require('node:child_process');
 const fs = require('node:fs');
 const net = require('node:net');

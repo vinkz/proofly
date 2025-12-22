@@ -14,7 +14,6 @@ import {
 } from 'react';
 import { clsx } from 'clsx';
 
-import type { Database } from '@/lib/database.types';
 import type { JobChecklistItem } from '@/types/job-detail';
 import { updateChecklistItem, uploadPhoto, deletePhoto } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
@@ -36,7 +35,6 @@ interface ChecklistItemCardProps {
   nextItemId: string | null;
 }
 
-type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
 const resultOptions = [
   { value: 'pass', label: 'Pass' },
   { value: 'fail', label: 'Fail' },

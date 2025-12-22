@@ -54,3 +54,8 @@ export const Users = baseIcon(
   ],
   'Users',
 );
+
+export const ChevronRight = baseIcon(
+  [<path key="arrow" d="m9 18 6-6-6-6" />],
+  'ChevronRight',
+);
