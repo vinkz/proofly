@@ -187,7 +187,7 @@ export function DeleteJobsMenu({ jobs }: { jobs: JobSummary[] }) {
                       <p className="text-sm font-semibold text-muted">{job.title ?? 'Untitled job'}</p>
                       <p className="text-xs text-muted-foreground/70">{job.address ?? 'Address pending'}</p>
                       <p className="text-[11px] uppercase tracking-wide text-muted-foreground/60">
-                        {renderStatus(job.status)} · {(job.certificate_type ?? 'certificate').toString()}
+                        {renderStatus(job.status)}
                       </p>
                     </div>
                   </label>

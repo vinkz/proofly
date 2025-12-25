@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -18,6 +19,7 @@ import {
   type BoilerServiceChecks,
   type BoilerServiceDetails,
   type BoilerServiceJobInfo,
+  type BoilerServicePhotoCategory,
 } from '@/types/boiler-service';
 import {
   saveBoilerServiceJobInfo,
@@ -27,11 +29,14 @@ import {
   generateGasServicePdf,
   uploadSignature,
 } from '@/server/certificates';
+import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 
 type BoilerServiceWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
+  initialJobContext?: InitialJobContext | null;
   initialPhotoPreviews?: Record<string, string>;
+  stepOffset?: number;
 };
 
 const EMPTY_CHECKS: BoilerServiceChecks = {
@@ -59,55 +64,66 @@ const EMPTY_CHECKS: BoilerServiceChecks = {
   next_service_due: '',
 };
 
+const FINAL_EVIDENCE_CATEGORIES: Array<{ key: BoilerServicePhotoCategory; label: string }> = [
+  { key: 'boiler', label: 'Boiler' },
+  { key: 'flue', label: 'Flue' },
+  { key: 'issue_defect', label: 'Issue/Defect' },
+];
+
 export function BoilerServiceWizard({
   jobId,
   initialFields,
+  initialJobContext = null,
   initialPhotoPreviews = {},
+  stepOffset = 0,
 }: BoilerServiceWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [step, setStep] = useState(1);
   const [isPending, startTransition] = useTransition();
+  const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
 
   const [completionDate, setCompletionDate] = useState(
-    initialFields.completion_date ? (initialFields.completion_date as string).slice(0, 10) : new Date().toISOString().slice(0, 10),
+    resolvedFields.completion_date ? resolvedFields.completion_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
   );
 
   const [jobInfo, setJobInfo] = useState<BoilerServiceJobInfo>({
-    customer_name: initialFields.customer_name ?? '',
-    property_address: initialFields.property_address ?? '',
-    postcode: initialFields.postcode ?? '',
-    service_date: initialFields.service_date ? (initialFields.service_date as string).slice(0, 10) : '',
-    engineer_name: initialFields.engineer_name ?? '',
-    gas_safe_number: initialFields.gas_safe_number ?? '',
-    company_name: initialFields.company_name ?? '',
-    company_address: initialFields.company_address ?? '',
+    customer_name: resolvedFields.customer_name ?? '',
+    property_address: resolvedFields.property_address ?? '',
+    postcode: resolvedFields.postcode ?? '',
+    service_date: resolvedFields.service_date ? resolvedFields.service_date.slice(0, 10) : '',
+    engineer_name: resolvedFields.engineer_name ?? '',
+    gas_safe_number: resolvedFields.gas_safe_number ?? '',
+    company_name: resolvedFields.company_name ?? '',
+    company_address: resolvedFields.company_address ?? '',
   });
 
   const [details, setDetails] = useState<BoilerServiceDetails>({
-    boiler_make: initialFields.boiler_make ?? '',
-    boiler_model: initialFields.boiler_model ?? '',
-    boiler_type: initialFields.boiler_type ?? '',
-    boiler_location: initialFields.boiler_location ?? '',
-    serial_number: initialFields.serial_number ?? '',
-    gas_type: initialFields.gas_type ?? '',
-    mount_type: initialFields.mount_type ?? '',
-    flue_type: initialFields.flue_type ?? '',
+    boiler_make: resolvedFields.boiler_make ?? '',
+    boiler_model: resolvedFields.boiler_model ?? '',
+    boiler_type: resolvedFields.boiler_type ?? '',
+    boiler_location: resolvedFields.boiler_location ?? '',
+    serial_number: resolvedFields.serial_number ?? '',
+    gas_type: resolvedFields.gas_type ?? '',
+    mount_type: resolvedFields.mount_type ?? '',
+    flue_type: resolvedFields.flue_type ?? '',
   });
 
   const [checks, setChecks] = useState<BoilerServiceChecks>({
     ...EMPTY_CHECKS,
     ...Object.entries(EMPTY_CHECKS).reduce<Record<string, string>>((acc, [key]) => {
-      const existing = initialFields[key];
+      const existing = resolvedFields[key];
       acc[key] = typeof existing === 'boolean' ? String(existing) : (existing as string) ?? '';
       return acc;
     }, {}),
   });
 
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>(initialPhotoPreviews);
-  const [engineerSignature, setEngineerSignature] = useState((initialFields.engineer_signature as string) ?? '');
-  const [customerSignature, setCustomerSignature] = useState((initialFields.customer_signature as string) ?? '');
+  const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
+  const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const totalSteps = 4 + stepOffset;
+  const offsetStep = (step: number) => step + stepOffset;
 
   const handleDemoFill = () => {
     if (!demoEnabled) return;
@@ -139,6 +155,27 @@ export function BoilerServiceWizard({
       }
     });
   };
+
+  const handleEvidenceUpload =
+    (category: BoilerServicePhotoCategory) =>
+    (file: File) => {
+      startTransition(async () => {
+        const data = new FormData();
+        data.append('jobId', jobId);
+        data.append('category', category);
+        data.append('file', file);
+        try {
+          await uploadBoilerServicePhoto(data);
+          pushToast({ title: 'Photo saved', variant: 'success' });
+        } catch (error) {
+          pushToast({
+            title: 'Upload failed',
+            description: error instanceof Error ? error.message : 'Please try again.',
+            variant: 'error',
+          });
+        }
+      });
+    };
 
   const handleJobInfoNext = () => {
     startTransition(async () => {
@@ -220,9 +257,19 @@ export function BoilerServiceWizard({
         await persistBeforePdf();
         const finalInfo = { ...jobInfo, service_date: jobInfo.service_date || completionDate };
         await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
-        const { pdfUrl } = await generateGasServicePdf({ jobId, previewOnly: false });
-        pushToast({ title: 'Boiler Service PDF generated', variant: 'success' });
-        router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}`);
+        const { pdfUrl, jobId: resultJobId } = await generateGasServicePdf({ jobId, previewOnly: false });
+        pushToast({
+          title: 'Boiler Service generated successfully',
+          description: pdfUrl ? (
+            <Link href={pdfUrl} target="_blank" rel="noreferrer" className="text-[var(--action)] underline">
+              View PDF
+            </Link>
+          ) : (
+            'PDF ready. Open from the job detail.'
+          ),
+          variant: 'success',
+        });
+        router.push(`/jobs/${resultJobId}`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -276,7 +323,7 @@ export function BoilerServiceWizard({
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={1} total={4} title="Job & engineer info" status="Boiler Service Record">
+        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job & engineer info" status="Boiler Service Record">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -313,8 +360,8 @@ export function BoilerServiceWizard({
 
       {step === 2 ? (
         <WizardLayout
-          step={2}
-          total={4}
+          step={offsetStep(2)}
+          total={totalSteps}
           title="Boiler details & evidence"
           status="Capture evidence"
           onBack={() => setStep(1)}
@@ -380,7 +427,7 @@ export function BoilerServiceWizard({
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={3} total={4} title="Service checks & readings" status="On-site checks" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Service checks & readings" status="On-site checks" onBack={() => setStep(2)}>
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -501,7 +548,7 @@ export function BoilerServiceWizard({
       ) : null}
 
       {step === 4 ? (
-        <WizardLayout step={4} total={4} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
           <div className="grid gap-4 sm:grid-cols-2">
             <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
@@ -517,6 +564,21 @@ export function BoilerServiceWizard({
               }}
               className="mt-2"
             />
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {FINAL_EVIDENCE_CATEGORIES.map((item) => (
+                <EvidenceCard
+                  key={item.key}
+                  title={item.label}
+                  fields={[]}
+                  values={{}}
+                  onChange={() => null}
+                  onPhotoUpload={handleEvidenceUpload(item.key)}
+                />
+              ))}
+            </div>
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>

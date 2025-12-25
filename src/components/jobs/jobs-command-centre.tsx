@@ -13,7 +13,6 @@ export type JobSummary = {
   title: string;
   address?: string | null;
   status?: string | null;
-  certificate_type?: string | null;
   created_at?: string | null;
   scheduled_for?: string | null;
   has_pdf?: boolean;
@@ -21,7 +20,7 @@ export type JobSummary = {
 
 type FilterRange = 'today' | 'week' | 'all';
 
-export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
+export function JobsCommandCentre({ jobs, showActions = true }: { jobs: JobSummary[]; showActions?: boolean }) {
   const [query, setQuery] = useState('');
   const [range, setRange] = useState<FilterRange>('all');
 
@@ -71,15 +70,17 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
             ))}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button asChild variant="primary" className="rounded-full px-4 py-2">
-            <Link href="/jobs/new">+ New Job</Link>
-          </Button>
-          <Button asChild variant="secondary" className="rounded-full px-4 py-2">
-            <Link href="/jobs/scan">Scan Job Sheet</Link>
-          </Button>
-          <DeleteJobsMenu jobs={jobs} />
-        </div>
+        {showActions ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button asChild variant="primary" className="rounded-full px-4 py-2">
+              <Link href="/jobs/new">+ New Job</Link>
+            </Button>
+            <Button asChild variant="secondary" className="rounded-full px-4 py-2">
+              <Link href="/jobs/scan">Scan Job Sheet</Link>
+            </Button>
+            <DeleteJobsMenu jobs={jobs} />
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-3">
@@ -90,7 +91,6 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
             title={job.title ?? 'Untitled job'}
             address={job.address}
             status={job.status}
-            certificateType={job.certificate_type}
             hasPdf={job.has_pdf}
             scheduledFor={job.scheduled_for}
             createdAt={job.created_at}

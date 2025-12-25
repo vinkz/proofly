@@ -4,4 +4,8 @@ export interface ClientListItem extends ClientSummary {
   user_id: string | null;
   created_at: string | null;
   updated_at: string | null;
+  client_ids?: string[];
+  postcode: string | null;
+  landlord_name: string | null;
+  landlord_address: string | null;
 }

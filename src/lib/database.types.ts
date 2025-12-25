@@ -4,612 +4,1054 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[];
+  | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: '15.1.0';
-  };
+    PostgrestVersion: "13.0.5"
+  }
   public: {
     Tables: {
-      clients: {
-        Row: {
-          id: string;
-          user_id: string | null;
-          name: string;
-          organization: string | null;
-          email: string | null;
-          phone: string | null;
-          address: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id?: string | null;
-          name: string;
-          organization?: string | null;
-          email?: string | null;
-          phone?: string | null;
-          address?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string | null;
-          name?: string;
-          organization?: string | null;
-          email?: string | null;
-          phone?: string | null;
-          address?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'clients_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
       certificates: {
         Row: {
-          id: string;
-          job_id: string | null;
-          pdf_url: string | null;
-          pdf_path: string | null;
-          created_at: string | null;
-        };
+          appliances: Json | null
+          cert_type: string | null
+          created_at: string | null
+          fields: Json | null
+          id: string
+          issued_at: string | null
+          job_id: string | null
+          pdf_path: string | null
+          pdf_url: string | null
+          status: string | null
+          template_version: string | null
+          user_id: string | null
+        }
         Insert: {
-          id?: string;
-          job_id?: string | null;
-          pdf_url?: string | null;
-          pdf_path?: string | null;
-          created_at?: string | null;
-        };
+          appliances?: Json | null
+          cert_type?: string | null
+          created_at?: string | null
+          fields?: Json | null
+          id?: string
+          issued_at?: string | null
+          job_id?: string | null
+          pdf_path?: string | null
+          pdf_url?: string | null
+          status?: string | null
+          template_version?: string | null
+          user_id?: string | null
+        }
         Update: {
-          id?: string;
-          job_id?: string | null;
-          pdf_url?: string | null;
-          pdf_path?: string | null;
-          created_at?: string | null;
-        };
+          appliances?: Json | null
+          cert_type?: string | null
+          created_at?: string | null
+          fields?: Json | null
+          id?: string
+          issued_at?: string | null
+          job_id?: string | null
+          pdf_path?: string | null
+          pdf_url?: string | null
+          status?: string | null
+          template_version?: string | null
+          user_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: 'certificates_job_id_fkey';
-            columns: ['job_id'];
-            isOneToOne: false;
-            referencedRelation: 'jobs';
-            referencedColumns: ['id'];
+            foreignKeyName: "certificates_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      profiles: {
+        ]
+      }
+      clients: {
         Row: {
-          id: string;
-          trade_types: string[];
-          certifications: string[];
-          onboarding_complete: boolean | null;
-          created_at: string | null;
-          updated_at: string | null;
-          full_name?: string | null;
-          avatar_url?: string | null;
-          date_of_birth?: string | null;
-          profession?: string | null;
-        };
+          address: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          landlord_address: string | null
+          landlord_name: string | null
+          name: string
+          organization: string | null
+          phone: string | null
+          postcode: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
         Insert: {
-          id: string;
-          trade_types?: string[];
-          certifications?: string[];
-          onboarding_complete?: boolean | null;
-          created_at?: string | null;
-          updated_at?: string | null;
-          full_name?: string | null;
-          avatar_url?: string | null;
-          date_of_birth?: string | null;
-          profession?: string | null;
-        };
+          address?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          landlord_address?: string | null
+          landlord_name?: string | null
+          name: string
+          organization?: string | null
+          phone?: string | null
+          postcode?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
         Update: {
-          id?: string;
-          trade_types?: string[];
-          certifications?: string[];
-          onboarding_complete?: boolean | null;
-          created_at?: string | null;
-          updated_at?: string | null;
-          full_name?: string | null;
-          avatar_url?: string | null;
-          date_of_birth?: string | null;
-          profession?: string | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'profiles_id_fkey';
-            columns: ['id'];
-            isOneToOne: true;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
-      templates: {
+          address?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          landlord_address?: string | null
+          landlord_name?: string | null
+          name?: string
+          organization?: string | null
+          phone?: string | null
+          postcode?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      contacts: {
         Row: {
-          id: string;
-          user_id: string | null;
-          name: string;
-          trade_type: string;
-          description: string | null;
-          is_public: boolean;
-          is_general: boolean;
-          items: Json;
-          created_at: string;
-          updated_at: string | null;
-        };
+          address: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          name: string
+          phone: string | null
+          user_id: string | null
+        }
         Insert: {
-          id?: string;
-          user_id?: string | null;
-          name: string;
-          trade_type: string;
-          description?: string | null;
-          is_public?: boolean;
-          is_general?: boolean;
-          items?: Json;
-          created_at?: string;
-          updated_at?: string | null;
-        };
+          address?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          user_id?: string | null
+        }
         Update: {
-          id?: string;
-          user_id?: string | null;
-          name?: string;
-          trade_type?: string;
-          description?: string | null;
-          is_public?: boolean;
-          is_general?: boolean;
-          items?: Json;
-          created_at?: string;
-          updated_at?: string | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'templates_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
-      template_items: {
+          address?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      cp12_appliances: {
         Row: {
-          id: string;
-          template_id: string;
-          label: string;
-          help_text: string | null;
-          is_required: boolean;
-          position: number;
-          created_at: string;
-          updated_at: string;
-        };
+          appliance_type: string | null
+          classification_code: string | null
+          co_reading_ppm: string | null
+          created_at: string | null
+          flue_condition: string | null
+          flue_type: string | null
+          gas_tightness_test: string | null
+          heat_input: string | null
+          id: string
+          job_id: string | null
+          location: string | null
+          make_model: string | null
+          operating_pressure: string | null
+          safety_rating: string | null
+          stability_test: string | null
+          user_id: string | null
+          ventilation_provision: string | null
+          ventilation_satisfactory: string | null
+        }
         Insert: {
-          id?: string;
-          template_id: string;
-          label: string;
-          help_text?: string | null;
-          is_required?: boolean;
-          position?: number;
-          created_at?: string;
-          updated_at?: string;
-        };
+          appliance_type?: string | null
+          classification_code?: string | null
+          co_reading_ppm?: string | null
+          created_at?: string | null
+          flue_condition?: string | null
+          flue_type?: string | null
+          gas_tightness_test?: string | null
+          heat_input?: string | null
+          id?: string
+          job_id?: string | null
+          location?: string | null
+          make_model?: string | null
+          operating_pressure?: string | null
+          safety_rating?: string | null
+          stability_test?: string | null
+          user_id?: string | null
+          ventilation_provision?: string | null
+          ventilation_satisfactory?: string | null
+        }
         Update: {
-          id?: string;
-          template_id?: string;
-          label?: string;
-          help_text?: string | null;
-          is_required?: boolean;
-          position?: number;
-          created_at?: string;
-          updated_at?: string;
-        };
+          appliance_type?: string | null
+          classification_code?: string | null
+          co_reading_ppm?: string | null
+          created_at?: string | null
+          flue_condition?: string | null
+          flue_type?: string | null
+          gas_tightness_test?: string | null
+          heat_input?: string | null
+          id?: string
+          job_id?: string | null
+          location?: string | null
+          make_model?: string | null
+          operating_pressure?: string | null
+          safety_rating?: string | null
+          stability_test?: string | null
+          user_id?: string | null
+          ventilation_provision?: string | null
+          ventilation_satisfactory?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: 'template_items_template_id_fkey';
-            columns: ['template_id'];
-            isOneToOne: false;
-            referencedRelation: 'templates';
-            referencedColumns: ['id'];
+            foreignKeyName: "cp12_appliances_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      jobs: {
+        ]
+      }
+      job_checklist: {
         Row: {
-          id: string;
-          user_id: string | null;
-          client_id: string | null;
-          client_name: string;
-          address: string | null;
-          title: string | null;
-          status: Database['public']['Enums']['job_status'];
-          template_id: string | null;
-          scheduled_for: string | null;
-          completed_at: string | null;
-          engineer_signature_path: string | null;
-          client_signature_path: string | null;
-          technician_name: string | null;
-          notes: string | null;
-          created_at: string;
-          updated_at: string;
-        };
+          created_at: string | null
+          id: string
+          job_id: string | null
+          label: string | null
+          note: string | null
+          status: string | null
+          user_id: string
+        }
         Insert: {
-          id?: string;
-          user_id?: string | null;
-          client_id?: string | null;
-          client_name: string;
-          address?: string | null;
-          title?: string | null;
-          status?: Database['public']['Enums']['job_status'];
-          template_id?: string | null;
-          scheduled_for?: string | null;
-          completed_at?: string | null;
-          engineer_signature_path?: string | null;
-          client_signature_path?: string | null;
-          technician_name?: string | null;
-          notes?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
+          created_at?: string | null
+          id?: string
+          job_id?: string | null
+          label?: string | null
+          note?: string | null
+          status?: string | null
+          user_id: string
+        }
         Update: {
-          id?: string;
-          user_id?: string | null;
-          client_id?: string | null;
-          client_name?: string;
-          address?: string | null;
-          title?: string | null;
-          status?: Database['public']['Enums']['job_status'];
-          template_id?: string | null;
-          scheduled_for?: string | null;
-          completed_at?: string | null;
-          engineer_signature_path?: string | null;
-          client_signature_path?: string | null;
-          technician_name?: string | null;
-          notes?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
+          created_at?: string | null
+          id?: string
+          job_id?: string | null
+          label?: string | null
+          note?: string | null
+          status?: string | null
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'jobs_client_id_fkey';
-            columns: ['client_id'];
-            isOneToOne: false;
-            referencedRelation: 'clients';
-            referencedColumns: ['id'];
+            foreignKeyName: "job_checklist_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
           },
+        ]
+      }
+      job_fields: {
+        Row: {
+          created_at: string | null
+          field_key: string
+          id: string
+          job_id: string | null
+          value: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          field_key: string
+          id?: string
+          job_id?: string | null
+          value?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          field_key?: string
+          id?: string
+          job_id?: string | null
+          value?: string | null
+        }
+        Relationships: [
           {
-            foreignKeyName: 'jobs_template_id_fkey';
-            columns: ['template_id'];
-            isOneToOne: false;
-            referencedRelation: 'templates';
-            referencedColumns: ['id'];
+            foreignKeyName: "job_fields_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: 'jobs_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
+        ]
+      }
       job_items: {
         Row: {
-          id: string;
-          job_id: string;
-          template_item_id: string | null;
-          label: string;
-          result: string | null;
-          note: string | null;
-          photos: Json | null;
-          position: number | null;
-          created_at: string | null;
-          updated_at: string | null;
-        };
+          created_at: string | null
+          id: string
+          job_id: string | null
+          label: string
+          note: string | null
+          photos: string[] | null
+          position: number | null
+          result: string | null
+          template_item_id: string | null
+          updated_at: string | null
+        }
         Insert: {
-          id?: string;
-          job_id: string;
-          template_item_id?: string | null;
-          label: string;
-          result?: string | null;
-          note?: string | null;
-          photos?: Json | null;
-          position?: number | null;
-          created_at?: string | null;
-          updated_at?: string | null;
-        };
+          created_at?: string | null
+          id?: string
+          job_id?: string | null
+          label?: string
+          note?: string | null
+          photos?: string[] | null
+          position?: number | null
+          result?: string | null
+          template_item_id?: string | null
+          updated_at?: string | null
+        }
         Update: {
-          id?: string;
-          job_id?: string;
-          template_item_id?: string | null;
-          label?: string;
-          result?: string | null;
-          note?: string | null;
-          photos?: Json | null;
-          position?: number | null;
-          created_at?: string | null;
-          updated_at?: string | null;
-        };
+          created_at?: string | null
+          id?: string
+          job_id?: string | null
+          label?: string
+          note?: string | null
+          photos?: string[] | null
+          position?: number | null
+          result?: string | null
+          template_item_id?: string | null
+          updated_at?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: 'job_items_job_id_fkey';
-            columns: ['job_id'];
-            isOneToOne: false;
-            referencedRelation: 'jobs';
-            referencedColumns: ['id'];
+            foreignKeyName: "job_items_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'job_items_template_item_id_fkey';
-            columns: ['template_item_id'];
-            isOneToOne: false;
-            referencedRelation: 'template_items';
-            referencedColumns: ['id'];
+            foreignKeyName: "job_items_template_item_id_fkey"
+            columns: ["template_item_id"]
+            isOneToOne: false
+            referencedRelation: "template_items"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
+      job_photos: {
+        Row: {
+          category: string
+          created_at: string | null
+          file_url: string
+          id: string
+          job_id: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          file_url: string
+          id?: string
+          job_id?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          file_url?: string
+          id?: string
+          job_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_photos_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_sheets: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          is_active: boolean
+          job_id: string
+          last_scanned_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          job_id: string
+          last_scanned_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          job_id?: string
+          last_scanned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_sheets_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_records: {
+        Row: {
+          created_at: string
+          job_id: string
+          record: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          job_id: string
+          record?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          job_id?: string
+          record?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_records_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          address: string | null
+          certificate_type: string | null
+          client_id: string | null
+          client_name: string | null
+          client_signature_path: string | null
+          completed_at: string | null
+          contact_id: string | null
+          created_at: string | null
+          engineer_signature_path: string | null
+          id: string
+          job_type: string | null
+          notes: string | null
+          scheduled_for: string | null
+          status: string | null
+          technician_name: string | null
+          template_id: string | null
+          title: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          address?: string | null
+          certificate_type?: string | null
+          client_id?: string | null
+          client_name?: string | null
+          client_signature_path?: string | null
+          completed_at?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          engineer_signature_path?: string | null
+          id?: string
+          job_type?: string | null
+          notes?: string | null
+          scheduled_for?: string | null
+          status?: string | null
+          technician_name?: string | null
+          template_id?: string | null
+          title?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          address?: string | null
+          certificate_type?: string | null
+          client_id?: string | null
+          client_name?: string | null
+          client_signature_path?: string | null
+          completed_at?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          engineer_signature_path?: string | null
+          id?: string
+          job_type?: string | null
+          notes?: string | null
+          scheduled_for?: string | null
+          status?: string | null
+          technician_name?: string | null
+          template_id?: string | null
+          title?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       photos: {
         Row: {
-          id: string;
-          job_id: string | null;
-          checklist_id: string | null;
-          storage_path: string;
-          caption: string | null;
-          geo_lat: number | null;
-          geo_lng: number | null;
-          shot_at: string | null;
-          created_at: string | null;
-        };
+          caption: string | null
+          checklist_id: string | null
+          created_at: string | null
+          geo_lat: number | null
+          geo_lng: number | null
+          id: string
+          job_id: string | null
+          shot_at: string | null
+          storage_path: string
+        }
         Insert: {
-          id?: string;
-          job_id?: string | null;
-          checklist_id?: string | null;
-          storage_path: string;
-          caption?: string | null;
-          geo_lat?: number | null;
-          geo_lng?: number | null;
-          shot_at?: string | null;
-          created_at?: string | null;
-        };
+          caption?: string | null
+          checklist_id?: string | null
+          created_at?: string | null
+          geo_lat?: number | null
+          geo_lng?: number | null
+          id?: string
+          job_id?: string | null
+          shot_at?: string | null
+          storage_path: string
+        }
         Update: {
-          id?: string;
-          job_id?: string | null;
-          checklist_id?: string | null;
-          storage_path?: string;
-          caption?: string | null;
-          geo_lat?: number | null;
-          geo_lng?: number | null;
-          shot_at?: string | null;
-          created_at?: string | null;
-        };
+          caption?: string | null
+          checklist_id?: string | null
+          created_at?: string | null
+          geo_lat?: number | null
+          geo_lng?: number | null
+          id?: string
+          job_id?: string | null
+          shot_at?: string | null
+          storage_path?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'photos_checklist_id_fkey';
-            columns: ['checklist_id'];
-            isOneToOne: false;
-            referencedRelation: 'job_items';
-            referencedColumns: ['id'];
+            foreignKeyName: "photos_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "job_checklist"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'photos_job_id_fkey';
-            columns: ['job_id'];
-            isOneToOne: false;
-            referencedRelation: 'jobs';
-            referencedColumns: ['id'];
+            foreignKeyName: "photos_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      reports: {
+        ]
+      }
+      profiles: {
         Row: {
-          id: string;
-          job_id: string;
-          storage_path: string;
-          generated_at: string;
-          created_at: string | null;
-          updated_at: string | null;
-        };
+          certifications: string[] | null
+          company_name: string | null
+          created_at: string | null
+          date_of_birth: string | null
+          default_engineer_id: string | null
+          default_engineer_name: string | null
+          full_name: string | null
+          gas_safe_number: string | null
+          id: string
+          logo_url: string | null
+          onboarding_complete: boolean | null
+          plan_tier: string | null
+          profession: string | null
+          trade_type: string | null
+          trade_types: string[] | null
+        }
         Insert: {
-          id?: string;
-          job_id: string;
-          storage_path: string;
-          generated_at?: string;
-          created_at?: string | null;
-          updated_at?: string | null;
-        };
+          certifications?: string[] | null
+          company_name?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          default_engineer_id?: string | null
+          default_engineer_name?: string | null
+          full_name?: string | null
+          gas_safe_number?: string | null
+          id: string
+          logo_url?: string | null
+          onboarding_complete?: boolean | null
+          plan_tier?: string | null
+          profession?: string | null
+          trade_type?: string | null
+          trade_types?: string[] | null
+        }
         Update: {
-          id?: string;
-          job_id?: string;
-          storage_path?: string;
-          generated_at?: string;
-          created_at?: string | null;
-          updated_at?: string | null;
-        };
+          certifications?: string[] | null
+          company_name?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          default_engineer_id?: string | null
+          default_engineer_name?: string | null
+          full_name?: string | null
+          gas_safe_number?: string | null
+          id?: string
+          logo_url?: string | null
+          onboarding_complete?: boolean | null
+          plan_tier?: string | null
+          profession?: string | null
+          trade_type?: string | null
+          trade_types?: string[] | null
+        }
+        Relationships: []
+      }
+      reminders: {
+        Row: {
+          contact_id: string | null
+          created_at: string | null
+          due_date: string
+          id: string
+          job_id: string | null
+          kind: string | null
+          sent_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string | null
+          due_date: string
+          id?: string
+          job_id?: string | null
+          kind?: string | null
+          sent_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string | null
+          due_date?: string
+          id?: string
+          job_id?: string | null
+          kind?: string | null
+          sent_at?: string | null
+          user_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: 'reports_job_id_fkey';
-            columns: ['job_id'];
-            isOneToOne: true;
-            referencedRelation: 'jobs';
-            referencedColumns: ['id'];
+            foreignKeyName: "reminders_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+          {
+            foreignKeyName: "reminders_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_deliveries: {
         Row: {
-          id: string;
-          job_id: string;
-          report_id: string;
-          recipient_email: string;
-          recipient_name: string | null;
-          status: string;
-          last_error: string | null;
-          sent_at: string | null;
-          created_at: string | null;
-          updated_at: string | null;
-        };
+          created_at: string | null
+          id: string
+          job_id: string | null
+          last_error: string | null
+          recipient_email: string
+          recipient_name: string | null
+          report_id: string | null
+          sent_at: string | null
+          status: string | null
+          updated_at: string | null
+        }
         Insert: {
-          id?: string;
-          job_id: string;
-          report_id: string;
-          recipient_email: string;
-          recipient_name?: string | null;
-          status?: string;
-          last_error?: string | null;
-          sent_at?: string | null;
-          created_at?: string | null;
-          updated_at?: string | null;
-        };
+          created_at?: string | null
+          id?: string
+          job_id?: string | null
+          last_error?: string | null
+          recipient_email?: string
+          recipient_name?: string | null
+          report_id?: string | null
+          sent_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
         Update: {
-          id?: string;
-          job_id?: string;
-          report_id?: string;
-          recipient_email?: string;
-          recipient_name?: string | null;
-          status?: string;
-          last_error?: string | null;
-          sent_at?: string | null;
-          created_at?: string | null;
-          updated_at?: string | null;
-        };
+          created_at?: string | null
+          id?: string
+          job_id?: string | null
+          last_error?: string | null
+          recipient_email?: string
+          recipient_name?: string | null
+          report_id?: string | null
+          sent_at?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: 'report_deliveries_job_id_fkey';
-            columns: ['job_id'];
-            isOneToOne: false;
-            referencedRelation: 'jobs';
-            referencedColumns: ['id'];
+            foreignKeyName: "report_deliveries_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: 'report_deliveries_report_id_fkey';
-            columns: ['report_id'];
-            isOneToOne: false;
-            referencedRelation: 'reports';
-            referencedColumns: ['id'];
+            foreignKeyName: "report_deliveries_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
+      reports: {
+        Row: {
+          created_at: string | null
+          generated_at: string | null
+          id: string
+          job_id: string
+          kind: string | null
+          storage_path: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          generated_at?: string | null
+          id?: string
+          job_id: string
+          kind?: string | null
+          storage_path: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          generated_at?: string | null
+          id?: string
+          job_id?: string
+          kind?: string | null
+          storage_path?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       signatures: {
         Row: {
-          job_id: string;
-          plumber_sig_path: string | null;
-          client_sig_path: string | null;
-          signed_at: string | null;
-        };
+          client_sig_path: string | null
+          job_id: string
+          plumber_sig_path: string | null
+          signed_at: string | null
+        }
         Insert: {
-          job_id: string;
-          plumber_sig_path?: string | null;
-          client_sig_path?: string | null;
-          signed_at?: string | null;
-        };
+          client_sig_path?: string | null
+          job_id: string
+          plumber_sig_path?: string | null
+          signed_at?: string | null
+        }
         Update: {
-          job_id?: string;
-          plumber_sig_path?: string | null;
-          client_sig_path?: string | null;
-          signed_at?: string | null;
-        };
+          client_sig_path?: string | null
+          job_id?: string
+          plumber_sig_path?: string | null
+          signed_at?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: 'signatures_job_id_fkey';
-            columns: ['job_id'];
-            isOneToOne: true;
-            referencedRelation: 'jobs';
-            referencedColumns: ['id'];
+            foreignKeyName: "signatures_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-    };
+        ]
+      }
+      template_items: {
+        Row: {
+          created_at: string | null
+          help_text: string | null
+          id: string
+          is_required: boolean | null
+          label: string
+          position: number | null
+          template_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          help_text?: string | null
+          id?: string
+          is_required?: boolean | null
+          label?: string
+          position?: number | null
+          template_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          help_text?: string | null
+          id?: string
+          is_required?: boolean | null
+          label?: string
+          position?: number | null
+          template_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      templates: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_general: boolean
+          is_public: boolean | null
+          items: Json
+          name: string
+          trade_type: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_general?: boolean
+          is_public?: boolean | null
+          items: Json
+          name: string
+          trade_type: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_general?: boolean
+          is_public?: boolean | null
+          items?: Json
+          name?: string
+          trade_type?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      usage_counters: {
+        Row: {
+          month_key: string
+          reports_generated: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          month_key: string
+          reports_generated?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          month_key?: string
+          reports_generated?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+    }
     Views: {
-      [_ in never]: never;
-    };
-    Functions: Record<string, never>;
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
     Enums: {
-      job_status: 'draft' | 'active' | 'awaiting_signatures' | 'awaiting_report' | 'completed';
-      job_item_status: 'pending' | 'pass' | 'fail';
-      template_item_type: 'toggle' | 'text' | 'number' | 'note';
-    };
-    CompositeTypes: Record<string, never>;
-  };
-};
+      job_item_status: "pending" | "pass" | "fail"
+      job_type: "general" | "safety_check" | "service" | "breakdown" | "installation"
+      job_status:
+        | "draft"
+        | "active"
+        | "awaiting_signatures"
+        | "awaiting_report"
+        | "completed"
+      template_item_type: "toggle" | "text" | "number" | "note"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
 
-type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>;
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof DatabaseWithoutInternals, 'public'>];
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
-  PublicTableNameOrOptions extends
-    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-    ? keyof (DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables'] &
-        DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Views'])
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-  ? (DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables'] &
-      DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Views'])[TableName] extends {
-      Row: infer R;
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
     }
-      ? R
-      : never
-  : PublicTableNameOrOptions extends keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
-    ? (DefaultSchema['Tables'] & DefaultSchema['Views'])[PublicTableNameOrOptions] extends {
-        Row: infer R;
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
       }
       ? R
       : never
-    : never;
+    : never
 
 export type TablesInsert<
-  PublicTableNameOrOptions extends keyof DefaultSchema['Tables'] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-    ? keyof DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables']
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-  ? DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables'][TableName] extends {
-      Insert: infer I;
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
     }
     ? I
     : never
-  : PublicTableNameOrOptions extends keyof DefaultSchema['Tables']
-    ? DefaultSchema['Tables'][PublicTableNameOrOptions] extends {
-        Insert: infer I;
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
       }
       ? I
       : never
-    : never;
+    : never
 
 export type TablesUpdate<
-  PublicTableNameOrOptions extends keyof DefaultSchema['Tables'] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-    ? keyof DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables']
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-  ? DatabaseWithoutInternals[PublicTableNameOrOptions['schema']]['Tables'][TableName] extends {
-      Update: infer U;
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
     }
     ? U
     : never
-  : PublicTableNameOrOptions extends keyof DefaultSchema['Tables']
-    ? DefaultSchema['Tables'][PublicTableNameOrOptions] extends {
-        Update: infer U;
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
       }
       ? U
       : never
-    : never;
+    : never
 
 export type Enums<
-  PublicEnumNameOrOptions extends keyof DefaultSchema['Enums'] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends PublicEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-    ? keyof DatabaseWithoutInternals[PublicEnumNameOrOptions['schema']]['Enums']
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = PublicEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
-  ? DatabaseWithoutInternals[PublicEnumNameOrOptions['schema']]['Enums'][EnumName]
-  : PublicEnumNameOrOptions extends keyof DefaultSchema['Enums']
-    ? DefaultSchema['Enums'][PublicEnumNameOrOptions]
-    : never;
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      job_item_status: ["pending", "pass", "fail"],
+      job_status: [
+        "draft",
+        "active",
+        "awaiting_signatures",
+        "awaiting_report",
+        "completed",
+      ],
+      template_item_type: ["toggle", "text", "number", "note"],
+    },
+  },
+} as const

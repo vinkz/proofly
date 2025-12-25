@@ -4,27 +4,36 @@ import { useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { TRADE_TYPES, CERTIFICATIONS } from '@/lib/profile-options';
-import { updateTradeTypes, updateCertifications, markOnboardingComplete, updateProfileBasics } from '@/server/profile';
+import { CERTIFICATIONS } from '@/lib/profile-options';
+import { updateCertifications, markOnboardingComplete, updateProfileBasics } from '@/server/profile';
 
 export function ProfilePreferences({
-  initialTrades,
   initialCerts,
   initialName = '',
   initialDob = '',
   initialProfession = '',
+  initialCompanyName = '',
+  initialEngineerName = '',
+  initialEngineerId = '',
+  initialGasSafeNumber = '',
 }: {
-  initialTrades: string[];
   initialCerts: string[];
   initialName?: string;
   initialDob?: string;
   initialProfession?: string;
+  initialCompanyName?: string;
+  initialEngineerName?: string;
+  initialEngineerId?: string;
+  initialGasSafeNumber?: string;
 }) {
-  const [trades, setTrades] = useState<string[]>(initialTrades);
   const [certs, setCerts] = useState<string[]>(initialCerts);
   const [fullName, setFullName] = useState(initialName);
   const [dob, setDob] = useState(initialDob);
   const [profession, setProfession] = useState(initialProfession);
+  const [companyName, setCompanyName] = useState(initialCompanyName);
+  const [engineerName, setEngineerName] = useState(initialEngineerName);
+  const [engineerId, setEngineerId] = useState(initialEngineerId);
+  const [gasSafeNumber, setGasSafeNumber] = useState(initialGasSafeNumber);
   const [isPending, startTransition] = useTransition();
   const { pushToast } = useToast();
 
@@ -39,12 +48,12 @@ export function ProfilePreferences({
           full_name: fullName.trim() || undefined,
           date_of_birth: dob.trim() || undefined,
           profession: profession.trim() || undefined,
+          company_name: companyName.trim() || undefined,
+          default_engineer_name: engineerName.trim() || undefined,
+          default_engineer_id: engineerId.trim() || undefined,
+          gas_safe_number: gasSafeNumber.trim() || undefined,
         });
-        const tradesChanged = trades.sort().join(',') !== initialTrades.sort().join(',');
         const certsChanged = certs.sort().join(',') !== initialCerts.sort().join(',');
-        if (tradesChanged && trades.length > 0) {
-          await updateTradeTypes(trades);
-        }
         if (certsChanged) {
           await updateCertifications(certs);
         }
@@ -61,23 +70,26 @@ export function ProfilePreferences({
   };
 
   const dirty =
-    trades.sort().join(',') !== initialTrades.sort().join(',') ||
     certs.sort().join(',') !== initialCerts.sort().join(',') ||
     fullName !== initialName ||
     dob !== initialDob ||
-    profession !== initialProfession;
+    profession !== initialProfession ||
+    companyName !== initialCompanyName ||
+    engineerName !== initialEngineerName ||
+    engineerId !== initialEngineerId ||
+    gasSafeNumber !== initialGasSafeNumber;
 
   return (
     <section className="rounded-3xl border border-white/20 bg-white/80 p-6 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Trade preferences</p>
+          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Profile preferences</p>
           <h2 className="text-lg font-semibold text-muted">Onboarding details</h2>
           <p className="text-sm text-muted-foreground/70">
-            Edit your trades and certifications. This controls certificate filtering and onboarding status.
+            Update your profile and certifications. This controls certificate filtering and onboarding status.
           </p>
         </div>
-        <Button onClick={handleSave} disabled={isPending || (!dirty && trades.length === initialTrades.length && certs.length === initialCerts.length)}>
+        <Button onClick={handleSave} disabled={isPending || !dirty}>
           {isPending ? 'Saving…' : 'Save'}
         </Button>
       </div>
@@ -117,14 +129,53 @@ export function ProfilePreferences({
               disabled={isPending}
             />
           </label>
+          <div className="pt-2">
+            <p className="text-sm font-semibold text-muted">Engineer & company</p>
+            <p className="text-xs text-muted-foreground/70">
+              These details prefill engineer and company fields on certificates.
+            </p>
+          </div>
+          <label className="block text-sm font-semibold text-muted">
+            Engineer name
+            <input
+              value={engineerName ?? ''}
+              onChange={(e) => setEngineerName(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              placeholder="Engineer name"
+              disabled={isPending}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-muted">
+            Company name
+            <input
+              value={companyName ?? ''}
+              onChange={(e) => setCompanyName(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              placeholder="Company name"
+              disabled={isPending}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-muted">
+            Engineer ID card number
+            <input
+              value={engineerId ?? ''}
+              onChange={(e) => setEngineerId(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              placeholder="Optional"
+              disabled={isPending}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-muted">
+            Gas Safe number
+            <input
+              value={gasSafeNumber ?? ''}
+              onChange={(e) => setGasSafeNumber(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              placeholder="Optional"
+              disabled={isPending}
+            />
+          </label>
         </div>
-        <PreferenceGroup
-          title="Trades"
-          subtitle="Choose all trades you cover."
-          options={TRADE_TYPES as unknown as string[]}
-          selected={trades}
-          onToggle={(value) => toggle(value, setTrades, trades)}
-        />
         <PreferenceGroup
           title="Certifications"
           subtitle="Select your current credentials."

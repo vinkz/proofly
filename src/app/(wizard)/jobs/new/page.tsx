@@ -1,6 +1,6 @@
-// src/app/(app)/jobs/new/page.tsx
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+
 import { CERTIFICATE_LABELS, CERTIFICATE_TYPES } from '@/types/certificates';
 import { Card } from '@/components/ui/card';
 
@@ -9,9 +9,9 @@ export default function NewJobPage() {
     <div className="mx-auto max-w-2xl py-10">
       <div className="space-y-2">
         <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Start a new job</p>
-        <h1 className="text-3xl font-bold text-[var(--brand)]">Select a record type</h1>
+        <h1 className="text-3xl font-bold text-[var(--brand)]">Select record type</h1>
         <p className="text-sm text-muted-foreground/80">
-          Choose the type of certificate or record you need to create.
+          You will select or create a client in step 1 of the wizard.
         </p>
       </div>
       <Card className="mt-6 space-y-3 border border-white/50 bg-white/95 p-4 shadow">

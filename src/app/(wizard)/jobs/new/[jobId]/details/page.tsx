@@ -21,7 +21,7 @@ export default async function JobDetailsStep({ params }: { params: Promise<{ job
     <WizardShell jobId={jobId} currentStep="details" job={state.job} client={state.client} template={state.template}>
       <div className="space-y-4">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step 3</p>
+          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step 4</p>
           <h1 className="text-2xl font-semibold text-muted">Job details</h1>
           <p className="text-sm text-muted-foreground/70">
             Schedule the visit and assign who will complete the checklist.

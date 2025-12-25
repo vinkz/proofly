@@ -37,15 +37,22 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Client</p>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-muted">{detail.client.name}</h1>
-            <p className="text-sm text-muted-foreground/70">{detail.client.organization ?? 'Individual'}</p>
+            <h1 className="text-3xl font-semibold text-muted">{detail.contactDetails.name}</h1>
+            <p className="text-sm text-muted-foreground/70">{detail.contactDetails.organization ?? 'Individual'}</p>
           </div>
           <DeleteClientButton clientId={detail.client.id} />
         </div>
-        <div className="mt-4 grid gap-3 text-sm text-muted-foreground/80 md:grid-cols-3">
-          {detail.client.email ? <p>{detail.client.email}</p> : null}
-          {detail.client.phone ? <p>{detail.client.phone}</p> : null}
-          {detail.client.address ? <p>{detail.client.address}</p> : null}
+        <div id="edit-client" className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-sm font-semibold text-muted">Contact details</h2>
+            <p className="text-xs text-muted-foreground/60">
+              {Object.values(detail.contactSources).some((source) => source === 'job')
+                ? 'Some details are pulled from recent jobs and drafts.'
+                : 'Saved client contact details.'}
+            </p>
+            <p className="text-xs text-muted-foreground/60">Client ID: {detail.client.id}</p>
+          </div>
+          <EditClientForm client={detail.client} initialValues={detail.contactDetails} />
         </div>
       </header>
 
@@ -123,13 +130,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               </li>
             ) : null}
           </ul>
-        </div>
-      </section>
-      <section className="rounded-3xl border border-white/20 bg-white/90 p-5">
-        <h2 className="text-lg font-semibold text-muted">Edit client</h2>
-        <p className="text-xs text-muted-foreground/60">Update contact details and organization info.</p>
-        <div className="mt-3">
-          <EditClientForm client={detail.client} />
         </div>
       </section>
       <section className="rounded-3xl border border-white/20 bg-white/90 p-5">

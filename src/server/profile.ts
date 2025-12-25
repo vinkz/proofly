@@ -39,7 +39,8 @@ async function upsertProfile(
 export async function getProfile() {
   const { sb, user } = await requireUser();
   const selectVariants = [
-    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete',
+    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, default_engineer_name, default_engineer_id, gas_safe_number',
+    'id, full_name, profession, trade_types, certifications, company_name, default_engineer_name, default_engineer_id, gas_safe_number',
     'id, full_name, profession, trade_types, certifications',
   ];
 
@@ -100,17 +101,29 @@ export async function updateProfileBasics(payload: {
   full_name?: string;
   date_of_birth?: string;
   profession?: string;
+  company_name?: string;
+  default_engineer_name?: string;
+  default_engineer_id?: string;
+  gas_safe_number?: string;
 }) {
   const schema = z
     .object({
       full_name: z.string().min(2).optional(),
       date_of_birth: z.string().min(4).optional(),
       profession: z.string().min(2).optional(),
+      company_name: z.string().min(2).optional(),
+      default_engineer_name: z.string().min(2).optional(),
+      default_engineer_id: z.string().min(2).optional(),
+      gas_safe_number: z.string().min(2).optional(),
     })
     .transform((data) => ({
       full_name: data.full_name?.trim(),
       date_of_birth: data.date_of_birth?.trim() || undefined,
       profession: data.profession?.trim(),
+      company_name: data.company_name?.trim(),
+      default_engineer_name: data.default_engineer_name?.trim(),
+      default_engineer_id: data.default_engineer_id?.trim(),
+      gas_safe_number: data.gas_safe_number?.trim(),
     }));
   const parsed = schema.parse(payload);
   const { sb, user } = await requireUser({ write: true });
@@ -118,6 +131,10 @@ export async function updateProfileBasics(payload: {
     full_name: parsed.full_name ?? null,
     date_of_birth: parsed.date_of_birth ?? null,
     profession: parsed.profession ?? null,
+    company_name: parsed.company_name ?? null,
+    default_engineer_name: parsed.default_engineer_name ?? null,
+    default_engineer_id: parsed.default_engineer_id ?? null,
+    gas_safe_number: parsed.gas_safe_number ?? null,
   });
   revalidatePath('/dashboard');
 }

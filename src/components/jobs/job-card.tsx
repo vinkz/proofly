@@ -1,14 +1,11 @@
 import Link from 'next/link';
 import { clsx } from 'clsx';
 
-import { CERTIFICATE_LABELS } from '@/types/certificates';
-
 type JobCardProps = {
   id: string;
   title: string;
   address?: string | null;
   status?: string | null;
-  certificateType?: string | null;
   hasPdf?: boolean;
   scheduledFor?: string | null;
   createdAt?: string | null;
@@ -29,13 +26,9 @@ function formatDate(dateString?: string | null) {
   return parsed.toLocaleDateString();
 }
 
-export function JobCard({ id, title, address, status, certificateType, hasPdf, scheduledFor, createdAt }: JobCardProps) {
+export function JobCard({ id, title, address, status, hasPdf, scheduledFor, createdAt }: JobCardProps) {
   const color = statusColors[status ?? ''] ?? statusColors.default;
   const displayDate = formatDate(scheduledFor ?? createdAt);
-  const displayLabel =
-    (certificateType && (CERTIFICATE_LABELS as Record<string, string>)[certificateType]) ??
-    certificateType ??
-    'Certificate';
   return (
     <Link
       href={`/jobs/${id}`}
@@ -43,9 +36,7 @@ export function JobCard({ id, title, address, status, certificateType, hasPdf, s
     >
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">
-          <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">
-            {displayLabel}
-          </p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-[var(--accent)]">Job</p>
           <h3 className="text-lg font-semibold text-muted">{title}</h3>
           <p className="text-sm text-muted-foreground/70">{address ?? 'Address pending'}</p>
         </div>

@@ -22,7 +22,7 @@ export function Toaster() {
         >
           <div className="flex-1">
             <p className="text-sm font-medium">{toast.title}</p>
-            {toast.description ? <p className="mt-1 text-xs text-gray-600">{toast.description}</p> : null}
+            {toast.description ? <div className="mt-1 text-xs text-gray-600">{toast.description}</div> : null}
           </div>
           <button
             type="button"

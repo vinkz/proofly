@@ -1,4 +1,5 @@
 import type { Database } from '@/lib/database.types';
+import type { JobType } from '@/types/job-records';
 
 export type JobChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
 
@@ -50,6 +51,7 @@ export interface JobDetailPayload {
     template_id: string | null;
     user_id: string | null;
     notes: string | null;
+    job_type?: JobType | null;
   };
   items: JobChecklistItem[];
   photos: JobPhoto[];

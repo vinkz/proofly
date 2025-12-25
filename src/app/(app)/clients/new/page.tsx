@@ -4,7 +4,11 @@ import { createClient } from '@/server/clients';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { ClientForm } from '@/components/clients/client-form';
 
-export default async function NewClientPage() {
+export default async function NewClientPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ redirect?: string }>;
+}) {
   const supabase = await supabaseServerReadOnly();
   const {
     data: { user },
@@ -12,10 +16,17 @@ export default async function NewClientPage() {
   if (!user) {
     redirect('/login');
   }
+  const params = await searchParams;
+  const redirectParam = typeof params?.redirect === 'string' ? params.redirect : '';
+  const safeRedirect = redirectParam.startsWith('/jobs/new') ? redirectParam : '';
 
   const onCreate = async (formData: FormData) => {
     'use server';
     const { id } = await createClient(formData);
+    if (safeRedirect) {
+      const joiner = safeRedirect.includes('?') ? '&' : '?';
+      redirect(`${safeRedirect}${joiner}clientId=${id}`);
+    }
     redirect(`/clients/${id}`);
   };
 

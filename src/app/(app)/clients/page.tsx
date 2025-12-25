@@ -4,26 +4,37 @@ import { listClients } from '@/server/clients';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { DeleteClientButton } from '@/components/clients/delete-client-button';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
-export default async function ClientsPage() {
-  const clients = await listClients();
+export default async function ClientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const params = await searchParams;
+  const query = typeof params?.q === 'string' ? params.q : '';
+  const clients = await listClients(query);
   const supabase = await supabaseServerReadOnly();
-  const { data: jobs } = clients.length
+  const clientIds = clients.flatMap((client) => client.client_ids ?? [client.id]);
+  const { data: jobs } = clientIds.length
     ? await supabase
         .from('jobs')
         .select('client_id, status')
-        .in(
-          'client_id',
-          clients.map((client) => client.id),
-        )
+        .in('client_id', clientIds)
     : { data: [] };
+  const clientIdMap = new Map<string, string>();
+  clients.forEach((client) => {
+    const ids = client.client_ids ?? [client.id];
+    ids.forEach((id) => clientIdMap.set(id, client.id));
+  });
   const jobStats = (jobs ?? []).reduce<Record<string, { open: number; total: number }>>((acc, job) => {
     const key = job.client_id ?? '';
-    if (!key) return acc;
-    acc[key] = acc[key]
+    const groupKey = key ? clientIdMap.get(key) ?? '' : '';
+    if (!groupKey) return acc;
+    acc[groupKey] = acc[groupKey]
       ? {
-          open: acc[key].open + (job.status === 'completed' ? 0 : 1),
-          total: acc[key].total + 1,
+          open: acc[groupKey].open + (job.status === 'completed' ? 0 : 1),
+          total: acc[groupKey].total + 1,
         }
       : {
           open: job.status === 'completed' ? 0 : 1,
@@ -44,6 +55,19 @@ export default async function ClientsPage() {
           <Link href="/clients/new">+ New client</Link>
         </Button>
       </header>
+
+      <form className="flex flex-col gap-3 rounded-2xl border border-white/20 bg-white/70 p-4 md:flex-row" action="/clients" method="get">
+        <Input
+          type="search"
+          name="q"
+          defaultValue={query}
+          placeholder="Search clients by name, company, or email"
+          className="flex-1"
+        />
+        <Button type="submit" className="md:w-40">
+          Search
+        </Button>
+      </form>
 
       <section className="grid gap-4 md:grid-cols-2">
         {clients.map((client) => {
@@ -66,12 +90,9 @@ export default async function ClientsPage() {
                 </div>
               </div>
               <div className="mt-3 flex justify-end gap-2">
-                <Link
-                  href={`/jobs/new/client?clientId=${client.id}`}
-                  className="rounded-full border border-white/30 px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:bg-white/70"
-                >
-                  Open job
-                </Link>
+                <Button asChild variant="secondary" className="rounded-full">
+                  <Link href={`/clients/${client.id}`}>View details</Link>
+                </Button>
                 <DeleteClientButton clientId={client.id} />
               </div>
               <div className="mt-4 grid gap-2 text-xs text-muted-foreground/70">
@@ -88,7 +109,7 @@ export default async function ClientsPage() {
         })}
         {clients.length === 0 ? (
           <p className="rounded-3xl border border-dashed border-white/30 p-6 text-sm text-muted-foreground/70">
-            No clients on file. Add one from the job wizard to get started.
+            No clients on file. Add a new client to get started.
           </p>
         ) : null}
       </section>

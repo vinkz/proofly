@@ -8,6 +8,7 @@ import type { JobDetailPayload } from '@/types/job-detail';
 
 const steps = [
   { id: 'client', label: 'Client' },
+  { id: 'type', label: 'Job type' },
   { id: 'template', label: 'Certificate' },
   { id: 'details', label: 'Job details' },
   { id: 'inspection', label: 'Inspection' },

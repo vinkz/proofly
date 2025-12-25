@@ -1,4 +1,11 @@
-export const CERTIFICATE_TYPES = ['cp12', 'gas_service', 'general_works', 'gas_warning_notice'] as const;
+export const CERTIFICATE_TYPES = [
+  'cp12',
+  'gas_service',
+  'general_works',
+  'gas_warning_notice',
+  'breakdown',
+  'commissioning',
+] as const;
 export type CertificateType = (typeof CERTIFICATE_TYPES)[number];
 
 export const CERTIFICATE_LABELS: Record<CertificateType, string> = {
@@ -6,6 +13,8 @@ export const CERTIFICATE_LABELS: Record<CertificateType, string> = {
   'gas_service': 'Boiler Service Record',
   'general_works': 'General Works Report',
   'gas_warning_notice': 'Gas Warning Notice',
+  'breakdown': 'Gas Breakdown Record',
+  'commissioning': 'Commissioning Checklist',
 };
 
 export const PHOTO_CATEGORIES = [

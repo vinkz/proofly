@@ -2,11 +2,9 @@ import { notFound } from 'next/navigation';
 
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { PdfPreview } from '@/components/certificates/pdf-preview';
-import { CERTIFICATE_LABELS } from '@/types/certificates';
 import { PdfActions } from './_components/pdf-actions';
 import { isUUID } from '@/lib/ids';
 import { getCertificatePdfSignedUrl, getCertificateState } from '@/server/certificates';
-import { resolveCertificateType } from '@/server/certificate-type';
 import type { Database } from '@/lib/database.types';
 
 export default async function JobPdfPage({
@@ -50,22 +48,6 @@ export default async function JobPdfPage({
     }
   }
 
-  const jobRecord = jobRow as Record<string, unknown>;
-  const existingType = typeof jobRecord.certificate_type === 'string' ? jobRecord.certificate_type : null;
-  const { certificateType, source } = await resolveCertificateType(id, existingType);
-  console.log('[jobs/[id]/pdf] certificate type resolved', { jobId: id, certificateType, source, existingType });
-  if (!certificateType) {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-amber-800">
-          <p className="text-lg font-semibold">Certificate type missing</p>
-          <p className="mt-2 text-sm">
-            This job does not have a certificate type set. Please contact support or recreate the job. Job ID: {id}
-          </p>
-        </div>
-      </div>
-    );
-  }
   const title = jobRow.title ?? 'Certificate';
 
   return (
@@ -74,11 +56,11 @@ export default async function JobPdfPage({
         <p className="text-xs uppercase tracking-wide text-[var(--accent)]">PDF preview</p>
         <h1 className="text-2xl font-semibold text-muted">{title}</h1>
           <p className="text-sm text-muted-foreground/70">
-          {CERTIFICATE_LABELS[certificateType] ?? 'Certificate'} — {jobRow.address ?? 'Address pending'}
+          {jobRow.address ?? 'Address pending'}
         </p>
       </div>
 
-      <PdfActions jobId={id} sentAt={null} certificateType={certificateType} />
+      <PdfActions jobId={id} sentAt={null} />
       <PdfPreview url={pdfUrl} error={pdfError} />
     </div>
   );

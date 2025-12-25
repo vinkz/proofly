@@ -14,7 +14,7 @@ type ToastVariant = 'default' | 'success' | 'error';
 
 export interface ToastOptions {
   title: string;
-  description?: string;
+  description?: ReactNode;
   variant?: ToastVariant;
 }
 

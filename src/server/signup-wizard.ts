@@ -3,7 +3,10 @@
 import { z } from 'zod';
 
 import { supabaseServerAction } from '@/lib/supabaseServer';
+import { TRADE_TYPES } from '@/lib/profile-options';
 import type { TablesInsert } from '@/lib/database.types';
+
+const defaultTrades = TRADE_TYPES as unknown as string[];
 
 const SignupWizardSchema = z.object({
   email: z.string().email({ message: 'Valid email required' }),
@@ -12,7 +15,10 @@ const SignupWizardSchema = z.object({
   date_of_birth: z.string().min(4, 'Date of birth required'),
   profession: z.string().min(2, 'Profession required'),
   business_name: z.string().optional(),
-  trade_types: z.array(z.string()).min(1, 'Select at least one trade'),
+  trade_types: z
+    .array(z.string())
+    .default(defaultTrades)
+    .transform((value) => (value.length ? value : defaultTrades)),
   certifications: z.array(z.string()).optional().default([]),
 });
 

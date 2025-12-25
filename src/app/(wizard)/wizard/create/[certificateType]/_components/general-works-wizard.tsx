@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
@@ -9,59 +10,138 @@ import { SignatureCard } from '@/components/certificates/signature-card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { GENERAL_WORKS_EVIDENCE_FIELDS, GENERAL_WORKS_PHOTO_CATEGORIES } from '@/types/general-works';
+import { GENERAL_WORKS_EVIDENCE_FIELDS, GENERAL_WORKS_PHOTO_CATEGORIES, type GeneralWorksPhotoCategory } from '@/types/general-works';
 import {
   saveGeneralWorksInfo,
   uploadGeneralWorksPhoto,
   generateGeneralWorksPdf,
   uploadSignature,
 } from '@/server/certificates';
+import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 
 type GeneralWorksWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
+  initialJobContext?: InitialJobContext | null;
   initialPhotoPreviews?: Record<string, string>;
+  stepOffset?: number;
 };
 
-export function GeneralWorksWizard({ jobId, initialFields, initialPhotoPreviews = {} }: GeneralWorksWizardProps) {
+export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = null, initialPhotoPreviews = {}, stepOffset = 0 }: GeneralWorksWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [step, setStep] = useState(1);
   const [isPending, startTransition] = useTransition();
+  const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
+  const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const totalSteps = 4 + stepOffset;
+  const offsetStep = (value: number) => value + stepOffset;
 
   const [info, setInfo] = useState({
-    property_address: initialFields.property_address ?? '',
-    postcode: initialFields.postcode ?? '',
-    work_date: initialFields.work_date ? (initialFields.work_date as string).slice(0, 10) : '',
-    customer_name: initialFields.customer_name ?? '',
-    engineer_name: initialFields.engineer_name ?? '',
-    company_name: initialFields.company_name ?? '',
-    customer_email: initialFields.customer_email ?? '',
-    customer_phone: initialFields.customer_phone ?? '',
+    property_address: resolvedFields.property_address ?? '',
+    postcode: resolvedFields.postcode ?? '',
+    work_date: resolvedFields.work_date ? resolvedFields.work_date.slice(0, 10) : '',
+    customer_name: resolvedFields.customer_name ?? '',
+    engineer_name: resolvedFields.engineer_name ?? '',
+    company_name: resolvedFields.company_name ?? '',
+    customer_email: resolvedFields.customer_email ?? '',
+    customer_phone: resolvedFields.customer_phone ?? '',
   });
 
   const [evidence, setEvidence] = useState({
-    work_summary: initialFields.work_summary ?? '',
-    work_completed: initialFields.work_completed ?? '',
-    parts_used: initialFields.parts_used ?? '',
-    defects_found: initialFields.defects_found ?? '',
-    defects_details: initialFields.defects_details ?? '',
-    recommendations: initialFields.recommendations ?? '',
+    work_summary: resolvedFields.work_summary ?? '',
+    work_completed: resolvedFields.work_completed ?? '',
+    parts_used: resolvedFields.parts_used ?? '',
+    defects_found: resolvedFields.defects_found ?? '',
+    defects_details: resolvedFields.defects_details ?? '',
+    recommendations: resolvedFields.recommendations ?? '',
   });
 
   const [review, setReview] = useState({
-    invoice_amount: initialFields.invoice_amount ?? '',
-    payment_status: initialFields.payment_status ?? '',
-    follow_up_required: initialFields.follow_up_required ?? '',
-    follow_up_date: initialFields.follow_up_date ? (initialFields.follow_up_date as string).slice(0, 10) : '',
+    invoice_amount: resolvedFields.invoice_amount ?? '',
+    payment_status: resolvedFields.payment_status ?? '',
+    follow_up_required: resolvedFields.follow_up_required ?? '',
+    follow_up_date: resolvedFields.follow_up_date ? resolvedFields.follow_up_date.slice(0, 10) : '',
   });
 
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>(initialPhotoPreviews);
-  const [engineerSignature, setEngineerSignature] = useState((initialFields.engineer_signature as string) ?? '');
-  const [customerSignature, setCustomerSignature] = useState((initialFields.customer_signature as string) ?? '');
+  const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
+  const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
 
   const saveFields = (data: Record<string, string | undefined>) =>
     saveGeneralWorksInfo({ jobId, data });
+
+  const FINAL_EVIDENCE_CATEGORIES: Array<{ key: GeneralWorksPhotoCategory; label: string }> = [
+    { key: 'site', label: 'Site' },
+    { key: 'after', label: 'After' },
+    { key: 'issue_defect', label: 'Issue/Defect' },
+  ];
+
+  const handleDemoFill = () => {
+    if (!demoEnabled) return;
+    startTransition(async () => {
+      try {
+        const today = new Date().toISOString().slice(0, 10);
+        const demoInfo = {
+          property_address: '12 High Street, Leyton',
+          postcode: 'E10 6AA',
+          work_date: today,
+          customer_name: 'Jamie Collins',
+          engineer_name: 'Alex Turner',
+          company_name: 'CertNow Heating',
+          customer_email: 'jamie@example.com',
+          customer_phone: '07123 456789',
+        };
+        const demoEvidence = {
+          work_summary: 'Intermittent boiler lockouts and no hot water.',
+          work_completed: 'Replaced ignition electrode and cleaned condensate trap.',
+          parts_used: 'Ignition electrode kit',
+          defects_found: 'no',
+          defects_details: '',
+          recommendations: 'Annual service and CO alarm test.',
+        };
+        const demoReview = {
+          invoice_amount: '180.00',
+          payment_status: 'Paid',
+          follow_up_required: 'no',
+          follow_up_date: '',
+        };
+
+        setInfo(demoInfo);
+        setEvidence(demoEvidence);
+        setReview(demoReview);
+        await saveFields({ ...demoInfo, ...demoEvidence, ...demoReview });
+        pushToast({ title: 'General Works demo filled', variant: 'success' });
+      } catch (error) {
+        pushToast({
+          title: 'Could not fill demo data',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
+  const handleEvidenceUpload =
+    (category: GeneralWorksPhotoCategory) =>
+    (file: File) => {
+      startTransition(async () => {
+        const data = new FormData();
+        data.append('jobId', jobId);
+        data.append('category', category);
+        data.append('file', file);
+        try {
+          await uploadGeneralWorksPhoto(data);
+          pushToast({ title: 'Photo saved', variant: 'success' });
+        } catch (error) {
+          pushToast({
+            title: 'Upload failed',
+            description: error instanceof Error ? error.message : 'Please try again.',
+            variant: 'error',
+          });
+        }
+      });
+    };
 
   const persistThroughStep = async () => {
     await saveFields({ ...info, ...evidence, ...review });
@@ -136,9 +216,19 @@ export function GeneralWorksWizard({ jobId, initialFields, initialPhotoPreviews 
     startTransition(async () => {
       try {
         await persistThroughStep();
-        const { pdfUrl } = await generateGeneralWorksPdf({ jobId, previewOnly: false });
-        pushToast({ title: 'General Works PDF generated', variant: 'success' });
-        router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}`);
+        const { pdfUrl, jobId: resultJobId } = await generateGeneralWorksPdf({ jobId, previewOnly: false });
+        pushToast({
+          title: 'General Works generated successfully',
+          description: pdfUrl ? (
+            <Link href={pdfUrl} target="_blank" rel="noreferrer" className="text-[var(--action)] underline">
+              View PDF
+            </Link>
+          ) : (
+            'PDF ready. Open from the job detail.'
+          ),
+          variant: 'success',
+        });
+        router.push(`/jobs/${resultJobId}`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -175,7 +265,14 @@ export function GeneralWorksWizard({ jobId, initialFields, initialPhotoPreviews 
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={1} total={4} title="Job basics" status="General Works">
+        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job basics" status="General Works">
+          {demoEnabled ? (
+            <div className="mb-3 flex justify-end">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                Fill demo General Works
+              </Button>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={info.property_address}
@@ -229,7 +326,14 @@ export function GeneralWorksWizard({ jobId, initialFields, initialPhotoPreviews 
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={2} total={4} title="Evidence capture" status="Work detail" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Evidence capture" status="Work detail" onBack={() => setStep(1)}>
+          {demoEnabled ? (
+            <div className="mb-3 flex justify-end">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                Fill demo General Works
+              </Button>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <EvidenceCard
               title="Work details"
@@ -298,7 +402,14 @@ export function GeneralWorksWizard({ jobId, initialFields, initialPhotoPreviews 
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={3} total={4} title="Review & totals" status="Summary" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Review & totals" status="Summary" onBack={() => setStep(2)}>
+          {demoEnabled ? (
+            <div className="mb-3 flex justify-end">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                Fill demo General Works
+              </Button>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={review.invoice_amount}
@@ -358,7 +469,29 @@ export function GeneralWorksWizard({ jobId, initialFields, initialPhotoPreviews 
       ) : null}
 
       {step === 4 ? (
-        <WizardLayout step={4} total={4} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
+          {demoEnabled ? (
+            <div className="mb-3 flex justify-end">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                Fill demo General Works
+              </Button>
+            </div>
+          ) : null}
+          <div className="mb-4 rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {FINAL_EVIDENCE_CATEGORIES.map((item) => (
+                <EvidenceCard
+                  key={item.key}
+                  title={item.label}
+                  fields={[]}
+                  values={{}}
+                  onChange={() => null}
+                  onPhotoUpload={handleEvidenceUpload(item.key)}
+                />
+              ))}
+            </div>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />

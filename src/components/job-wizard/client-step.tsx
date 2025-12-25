@@ -25,7 +25,7 @@ export function ClientPicker({ clients }: ClientPickerProps) {
       try {
         const { jobId } = await createJobDraftFromClient(clientId);
         pushToast({ title: 'Client selected', variant: 'success' });
-        router.push(`/jobs/new/${jobId}/template`);
+        router.push(`/jobs/new/${jobId}/type`);
       } catch (error) {
         pushToast({
           title: 'Unable to start job',
@@ -91,7 +91,7 @@ export function NewClientForm() {
         const { jobId } = await createJobDraftFromClient(id);
         pushToast({ title: 'Client created', variant: 'success' });
         reset();
-        const nextUrl = searchParams?.get('redirect') ?? `/jobs/new/${jobId}/template`;
+        const nextUrl = searchParams?.get('redirect') ?? `/jobs/new/${jobId}/type`;
         router.push(nextUrl);
       } catch (error) {
         pushToast({

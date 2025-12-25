@@ -25,7 +25,7 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
     <WizardShell jobId={jobId} currentStep="report" job={state.job} client={state.client} template={state.template}>
       <div className="space-y-6">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step 7</p>
+          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step 8</p>
           <h1 className="text-2xl font-semibold text-muted">Report delivery</h1>
           <p className="text-sm text-muted-foreground/70">
             Final review, download, and email the completed PDF to stakeholders.

@@ -7,6 +7,9 @@ import { z } from 'zod';
 import type { TablesInsert, Database } from '@/lib/database.types';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { env, assertSupabaseEnv } from '@/lib/env';
+import { TRADE_TYPES } from '@/lib/profile-options';
+
+const defaultTrades = TRADE_TYPES as unknown as string[];
 
 const CredentialsSchema = z.object({
   email: z.string().email(),
@@ -18,7 +21,10 @@ const SignUpSchema = CredentialsSchema.extend({
   date_of_birth: z.string().min(4, 'Date of birth is required'),
   profession: z.string().min(2, 'Profession is required'),
   business_name: z.string().optional(),
-  trade_types: z.array(z.string()).min(1, 'Select at least one trade'),
+  trade_types: z
+    .array(z.string())
+    .default(defaultTrades)
+    .transform((value) => (value.length ? value : defaultTrades)),
   certifications: z.array(z.string()).optional().default([]),
 });
 

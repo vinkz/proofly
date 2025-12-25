@@ -28,10 +28,8 @@ export default async function RootPage() {
     break;
   }
 
-  const trades = (profile as { trade_types?: string[] } | null)?.trade_types ?? [];
-  const certs = (profile as { certifications?: string[] } | null)?.certifications ?? [];
   const onboardingComplete = (profile as { onboarding_complete?: boolean | null } | null)?.onboarding_complete ?? null;
-  const needsOnboarding = onboardingComplete !== true && (trades.length === 0 || certs.length === 0);
+  const needsOnboarding = onboardingComplete !== true;
 
   if (needsOnboarding) {
     redirect('/signup/step1');

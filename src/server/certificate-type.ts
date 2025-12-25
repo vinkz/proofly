@@ -1,6 +1,6 @@
 'use server';
 
-import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { CERTIFICATE_TYPES, type CertificateType } from '@/types/certificates';
 import type { Database } from '@/lib/database.types';
 
@@ -34,15 +34,7 @@ export async function resolveCertificateType(jobId: string, existingType?: strin
 
   const applianceRows = (cp12Rows ?? []) as unknown as Array<{ job_id: string }>;
   if (applianceRows.length > 0) {
-    console.log('[certificate-type] inferred cp12 from appliances, backfilling job row', { jobId });
-    const serviceClient = await supabaseServerServiceRole();
-    const { error: updateErr } = await serviceClient
-      .from('jobs')
-      .update({ certificate_type: 'cp12' } as Record<string, unknown>)
-      .eq('id', jobId);
-    if (updateErr) {
-      console.error('[certificate-type] backfill update failed', { jobId, error: updateErr });
-    }
+    console.log('[certificate-type] inferred cp12 from appliances', { jobId });
     return { certificateType: 'cp12', source: 'cp12_inference' };
   }
 

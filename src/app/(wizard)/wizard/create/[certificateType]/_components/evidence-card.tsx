@@ -82,26 +82,30 @@ export function EvidenceCard({
           </span>
           Photo
         </button>
-        <button
-          type="button"
-          className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 shadow-sm transition hover:border-[var(--accent)]"
-          onClick={onVoice}
-        >
-          <span role="img" aria-label="Voice">
-            🎤
-          </span>
-          Voice
-        </button>
-        <button
-          type="button"
-          className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 shadow-sm transition hover:border-[var(--accent)]"
-          onClick={onText}
-        >
-          <span role="img" aria-label="Text">
-            ⌨️
-          </span>
-          Text
-        </button>
+        {onVoice ? (
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 shadow-sm transition hover:border-[var(--accent)]"
+            onClick={onVoice}
+          >
+            <span role="img" aria-label="Voice">
+              🎤
+            </span>
+            Voice
+          </button>
+        ) : null}
+        {onText ? (
+          <button
+            type="button"
+            className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 shadow-sm transition hover:border-[var(--accent)]"
+            onClick={onText}
+          >
+            <span role="img" aria-label="Text">
+              ⌨️
+            </span>
+            Text
+          </button>
+        ) : null}
       </div>
       <input
         ref={fileRef}

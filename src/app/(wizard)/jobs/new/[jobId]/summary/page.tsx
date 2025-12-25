@@ -33,7 +33,7 @@ export default async function SummaryStep({ params }: { params: Promise<{ jobId:
     <WizardShell jobId={jobId} currentStep="summary" job={state.job} client={state.client} template={state.template}>
       <div className="space-y-6">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step 5</p>
+          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step 6</p>
           <h1 className="text-2xl font-semibold text-muted">Summary & signatures</h1>
           <p className="text-sm text-muted-foreground/70">
             Review checklist outcomes, highlight failures, and capture sign-off.

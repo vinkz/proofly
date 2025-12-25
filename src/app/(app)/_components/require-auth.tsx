@@ -30,13 +30,11 @@ export default async function RequireAuth({ children }: { children: ReactNode })
     break;
   }
 
-  const tradeTypes = (profile as { trade_types?: string[] } | null)?.trade_types ?? [];
-  const certifications = (profile as { certifications?: string[] } | null)?.certifications ?? [];
   const onboardingComplete = (profile as { onboarding_complete?: boolean | null } | null)?.onboarding_complete ?? null;
-  const needsOnboarding =
-    onboardingComplete !== true && (tradeTypes.length === 0 || certifications.length === 0);
+  const needsOnboarding = onboardingComplete !== true;
 
   if (needsOnboarding) {
+    // /jobs/scan stays protected: enforce onboarding like other app routes.
     redirect('/signup/step1');
   }
 

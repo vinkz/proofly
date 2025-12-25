@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
@@ -10,19 +11,24 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { EvidenceCard } from './evidence-card';
 import { GAS_WARNING_CLASSIFICATIONS, type GasWarningClassification } from '@/types/gas-warning-notice';
 import {
   saveGasWarningJobInfo,
   saveGasWarningDetails,
   generateCertificatePdf,
+  uploadJobPhoto,
   uploadSignature,
 } from '@/server/certificates';
-import type { CertificateType } from '@/types/certificates';
+import type { CertificateType, PhotoCategory } from '@/types/certificates';
+import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 
 type GasWarningNoticeWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
+  initialJobContext?: InitialJobContext | null;
   certificateType: CertificateType;
+  stepOffset?: number;
 };
 
 type GasWarningFormState = {
@@ -55,6 +61,12 @@ type GasWarningFormState = {
   issued_at: string;
 };
 
+const FINAL_EVIDENCE_CATEGORIES: Array<{ key: PhotoCategory; label: string }> = [
+  { key: 'appliance_photo', label: 'Appliance' },
+  { key: 'issue_photo', label: 'Issue/Defect' },
+  { key: 'site', label: 'Site' },
+];
+
 const parseBool = (value: unknown) => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
@@ -63,44 +75,111 @@ const parseBool = (value: unknown) => {
   return false;
 };
 
-export function GasWarningNoticeWizard({ jobId, initialFields, certificateType }: GasWarningNoticeWizardProps) {
+export function GasWarningNoticeWizard({
+  jobId,
+  initialFields,
+  initialJobContext = null,
+  certificateType,
+  stepOffset = 0,
+}: GasWarningNoticeWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [step, setStep] = useState(1);
   const [isPending, startTransition] = useTransition();
+  const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
+  const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const totalSteps = 3 + stepOffset;
+  const offsetStep = (value: number) => value + stepOffset;
 
   const [fields, setFields] = useState<GasWarningFormState>({
-    property_address: initialFields.property_address ?? '',
-    postcode: initialFields.postcode ?? '',
-    customer_name: initialFields.customer_name ?? '',
-    customer_contact: initialFields.customer_contact ?? '',
-    appliance_location: initialFields.appliance_location ?? '',
-    appliance_type: initialFields.appliance_type ?? '',
-    make_model: initialFields.make_model ?? '',
-    gas_supply_isolated: parseBool(initialFields.gas_supply_isolated),
-    appliance_capped_off: parseBool(initialFields.appliance_capped_off),
-    customer_refused_isolation: parseBool(initialFields.customer_refused_isolation),
-    classification: (initialFields.classification as GasWarningClassification) ?? '',
-    classification_code: initialFields.classification_code ?? '',
-    unsafe_situation_description: initialFields.unsafe_situation_description ?? '',
-    underlying_cause: initialFields.underlying_cause ?? '',
-    actions_taken: initialFields.actions_taken ?? '',
-    emergency_services_contacted: parseBool(initialFields.emergency_services_contacted),
-    emergency_reference: initialFields.emergency_reference ?? '',
-    danger_do_not_use_label_fitted: parseBool(initialFields.danger_do_not_use_label_fitted),
-    meter_or_appliance_tagged: parseBool(initialFields.meter_or_appliance_tagged),
-    customer_informed: parseBool(initialFields.customer_informed),
-    customer_understands_risks: parseBool(initialFields.customer_understands_risks),
-    customer_signed_at: initialFields.customer_signed_at ? initialFields.customer_signed_at.slice(0, 10) : '',
-    engineer_name: initialFields.engineer_name ?? '',
-    engineer_company: initialFields.engineer_company ?? '',
-    gas_safe_number: initialFields.gas_safe_number ?? '',
-    engineer_id_card_number: initialFields.engineer_id_card_number ?? '',
-    issued_at: initialFields.issued_at ? initialFields.issued_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+    property_address: resolvedFields.property_address ?? '',
+    postcode: resolvedFields.postcode ?? '',
+    customer_name: resolvedFields.customer_name ?? '',
+    customer_contact: resolvedFields.customer_contact ?? '',
+    appliance_location: resolvedFields.appliance_location ?? '',
+    appliance_type: resolvedFields.appliance_type ?? '',
+    make_model: resolvedFields.make_model ?? '',
+    gas_supply_isolated: parseBool(resolvedFields.gas_supply_isolated),
+    appliance_capped_off: parseBool(resolvedFields.appliance_capped_off),
+    customer_refused_isolation: parseBool(resolvedFields.customer_refused_isolation),
+    classification: (resolvedFields.classification as GasWarningClassification) ?? '',
+    classification_code: resolvedFields.classification_code ?? '',
+    unsafe_situation_description: resolvedFields.unsafe_situation_description ?? '',
+    underlying_cause: resolvedFields.underlying_cause ?? '',
+    actions_taken: resolvedFields.actions_taken ?? '',
+    emergency_services_contacted: parseBool(resolvedFields.emergency_services_contacted),
+    emergency_reference: resolvedFields.emergency_reference ?? '',
+    danger_do_not_use_label_fitted: parseBool(resolvedFields.danger_do_not_use_label_fitted),
+    meter_or_appliance_tagged: parseBool(resolvedFields.meter_or_appliance_tagged),
+    customer_informed: parseBool(resolvedFields.customer_informed),
+    customer_understands_risks: parseBool(resolvedFields.customer_understands_risks),
+    customer_signed_at: resolvedFields.customer_signed_at ? resolvedFields.customer_signed_at.slice(0, 10) : '',
+    engineer_name: resolvedFields.engineer_name ?? '',
+    engineer_company: resolvedFields.engineer_company ?? '',
+    gas_safe_number: resolvedFields.gas_safe_number ?? '',
+    engineer_id_card_number: resolvedFields.engineer_id_card_number ?? '',
+    issued_at: resolvedFields.issued_at ? resolvedFields.issued_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
   });
 
-  const [engineerSignature, setEngineerSignature] = useState((initialFields.engineer_signature as string) ?? '');
-  const [customerSignature, setCustomerSignature] = useState((initialFields.customer_signature as string) ?? '');
+  const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
+  const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+
+  const handleDemoFill = () => {
+    if (!demoEnabled) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const demo: GasWarningFormState = {
+      property_address: '12 High Street, Leyton',
+      postcode: 'E10 6AA',
+      customer_name: 'Jamie Collins',
+      customer_contact: '07123 456789',
+      appliance_location: 'Kitchen cupboard',
+      appliance_type: 'Combi boiler',
+      make_model: 'Worcester Bosch Greenstar 30i',
+      gas_supply_isolated: true,
+      appliance_capped_off: false,
+      customer_refused_isolation: false,
+      classification: 'AT_RISK',
+      classification_code: 'AR',
+      unsafe_situation_description: 'Flue seal degraded causing minor spillage risk.',
+      underlying_cause: 'Flue seal deterioration.',
+      actions_taken: 'Isolated appliance and advised replacement seal.',
+      emergency_services_contacted: false,
+      emergency_reference: '',
+      danger_do_not_use_label_fitted: true,
+      meter_or_appliance_tagged: true,
+      customer_informed: true,
+      customer_understands_risks: true,
+      customer_signed_at: today,
+      engineer_name: 'Alex Turner',
+      engineer_company: 'CertNow Heating',
+      gas_safe_number: '123456',
+      engineer_id_card_number: 'GS-987654',
+      issued_at: today,
+    };
+    setFields(demo);
+    pushToast({ title: 'Gas Warning demo filled', variant: 'success' });
+  };
+
+  const handleEvidenceUpload =
+    (category: PhotoCategory) =>
+    (file: File) => {
+      startTransition(async () => {
+        const data = new FormData();
+        data.append('jobId', jobId);
+        data.append('category', category);
+        data.append('file', file);
+        try {
+          await uploadJobPhoto(data);
+          pushToast({ title: 'Photo saved', variant: 'success' });
+        } catch (error) {
+          pushToast({
+            title: 'Upload failed',
+            description: error instanceof Error ? error.message : 'Please try again.',
+            variant: 'error',
+          });
+        }
+      });
+    };
 
   const handleJobNext = () => {
     startTransition(async () => {
@@ -249,9 +328,19 @@ export function GasWarningNoticeWizard({ jobId, initialFields, certificateType }
     startTransition(async () => {
       try {
         await persistAll();
-        const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType, previewOnly: false });
-        pushToast({ title: 'Gas Warning Notice generated', variant: 'success' });
-        router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}`);
+        const { pdfUrl, jobId: resultJobId } = await generateCertificatePdf({ jobId, certificateType, previewOnly: false });
+        pushToast({
+          title: 'Gas Warning Notice generated successfully',
+          description: pdfUrl ? (
+            <Link href={pdfUrl} target="_blank" rel="noreferrer" className="text-[var(--action)] underline">
+              View PDF
+            </Link>
+          ) : (
+            'PDF ready. Open from the job detail.'
+          ),
+          variant: 'success',
+        });
+        router.push(`/jobs/${resultJobId}`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -288,7 +377,14 @@ export function GasWarningNoticeWizard({ jobId, initialFields, certificateType }
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={1} total={3} title="Job / property" status="Gas Warning Notice">
+        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job / property" status="Gas Warning Notice">
+          {demoEnabled ? (
+            <div className="mb-3 flex justify-end">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                Fill demo Gas Warning
+              </Button>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={fields.property_address}
@@ -321,7 +417,14 @@ export function GasWarningNoticeWizard({ jobId, initialFields, certificateType }
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={2} total={3} title="Appliance + classification" status="Gas Warning" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance + classification" status="Gas Warning" onBack={() => setStep(1)}>
+          {demoEnabled ? (
+            <div className="mb-3 flex justify-end">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                Fill demo Gas Warning
+              </Button>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={fields.appliance_location}
@@ -411,7 +514,29 @@ export function GasWarningNoticeWizard({ jobId, initialFields, certificateType }
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={3} total={3} title="Acknowledgement + engineer" status="Gas Warning" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Acknowledgement + engineer" status="Gas Warning" onBack={() => setStep(2)}>
+          {demoEnabled ? (
+            <div className="mb-3 flex justify-end">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                Fill demo Gas Warning
+              </Button>
+            </div>
+          ) : null}
+          <div className="mb-4 rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {FINAL_EVIDENCE_CATEGORIES.map((item) => (
+                <EvidenceCard
+                  key={item.key}
+                  title={item.label}
+                  fields={[]}
+                  values={{}}
+                  onChange={() => null}
+                  onPhotoUpload={handleEvidenceUpload(item.key)}
+                />
+              ))}
+            </div>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={fields.engineer_name}

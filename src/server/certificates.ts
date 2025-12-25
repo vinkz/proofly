@@ -13,6 +13,7 @@ import type { Database } from '@/lib/database.types';
 import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { CertificateType, PhotoCategory, Cp12Appliance } from '@/types/certificates';
 import { CERTIFICATE_TYPES, PHOTO_CATEGORIES, CERTIFICATE_LABELS } from '@/types/certificates';
+import { DEFAULT_JOB_TYPE } from '@/types/job-records';
 import type { BoilerServicePhotoCategory } from '@/types/boiler-service';
 import { BOILER_SERVICE_PHOTO_CATEGORIES, BOILER_SERVICE_REQUIRED_FOR_ISSUE } from '@/types/boiler-service';
 import type { GasWarningNoticeFields } from '@/types/gas-warning-notice';
@@ -39,6 +40,7 @@ type JobInsertPayload = {
   clientName?: string | null;
   address?: string | null;
   scheduledFor?: string | null;
+  clientId?: string | null;
 };
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
@@ -170,6 +172,7 @@ const CreateJobSchema = z.object({
   clientName: z.string().optional(),
   address: z.string().optional(),
   scheduledFor: z.string().optional(),
+  clientId: z.string().uuid().optional(),
 });
 
 export async function createJob(payload: JobInsertPayload) {
@@ -179,19 +182,30 @@ export async function createJob(payload: JobInsertPayload) {
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const sb = await supabaseServerServiceRole();
+  const linkedClient = input.clientId
+    ? await getCustomerById(input.clientId, { sb, userId: user.id, requireOwner: true })
+    : null;
+
+  if (input.clientId && !linkedClient) {
+    throw new Error('Client not found');
+  }
+
+  const resolvedClientName = input.clientName ?? linkedClient?.name ?? null;
+  const resolvedAddress = input.address ?? linkedClient?.address ?? null;
   const insertPayload = {
-    certificate_type: input.certificateType,
     status: 'draft',
     title: input.title ?? `${CERTIFICATE_LABELS[input.certificateType]} draft`,
-    client_name: input.clientName ?? null,
-    address: input.address ?? null,
+    client_id: linkedClient?.id ?? null,
+    client_name: resolvedClientName,
+    address: resolvedAddress,
     scheduled_for: input.scheduledFor ?? null,
     user_id: user.id,
+    job_type: DEFAULT_JOB_TYPE,
   } as Record<string, unknown>;
   const { data, error: insertErr } = await sb
     .from('jobs')
     .insert(insertPayload as unknown as Database['public']['Tables']['jobs']['Insert'])
-    .select('id, certificate_type, status')
+    .select('id')
     .single();
 
   if (insertErr || !data) {
@@ -200,21 +214,21 @@ export async function createJob(payload: JobInsertPayload) {
 
   const jobRow = data as unknown as { id: string };
 
-  if (input.address) {
+  if (resolvedAddress) {
     await upsertJobAddressForJob({
       jobId: jobRow.id,
-      fields: { line1: input.address },
+      fields: { line1: resolvedAddress },
       sb,
       userId: user.id,
     });
   }
 
-  if (input.clientName || input.address) {
+  if (resolvedClientName || resolvedAddress) {
     await upsertCustomerFromJobFields({
       jobId: jobRow.id,
       fields: {
-        customer_name: input.clientName ?? undefined,
-        property_address: input.address ?? undefined,
+        customer_name: resolvedClientName ?? undefined,
+        property_address: resolvedAddress ?? undefined,
       },
       sb,
       userId: user.id,
@@ -222,6 +236,59 @@ export async function createJob(payload: JobInsertPayload) {
   }
 
   return { jobId: jobRow.id };
+}
+
+const AssignClientSchema = z.object({
+  jobId: z.string().uuid(),
+  clientId: z.string().uuid(),
+});
+
+export async function assignClientToJob(payload: z.infer<typeof AssignClientSchema>) {
+  const input = AssignClientSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const { data: job, error: jobErr } = await sb
+    .from('jobs')
+    .select('id, user_id, client_name, address')
+    .eq('id', input.jobId as JobRow['id'])
+    .maybeSingle();
+  if (jobErr || !job) throw new Error(jobErr?.message ?? 'Job not found');
+  if (job.user_id && job.user_id !== user.id) throw new Error('Unauthorized');
+
+  const client = await getCustomerById(input.clientId, { sb, userId: user.id, requireOwner: true });
+  if (!client) throw new Error('Client not found');
+
+  const nextClientName = pickText(job.client_name ?? null, client.name);
+  const nextAddress = pickText(job.address ?? null, client.address ?? null);
+
+  const updatePayload = {
+    client_id: client.id,
+    client_name: nextClientName || null,
+    address: nextAddress || null,
+  } as Database['public']['Tables']['jobs']['Update'];
+
+  const { error: updateErr } = await sb
+    .from('jobs')
+    .update(updatePayload)
+    .eq('id', input.jobId as JobRow['id'])
+    .eq('user_id', user.id);
+  if (updateErr) throw new Error(updateErr.message);
+
+  if (nextAddress && nextAddress !== job.address) {
+    await upsertJobAddressForJob({
+      jobId: input.jobId,
+      fields: { line1: nextAddress },
+      sb,
+      userId: user.id,
+    });
+  }
+
+  return { ok: true };
 }
 
 const SaveJobInfoSchema = z.object({
@@ -250,7 +317,6 @@ export async function saveJobInfo(payload: z.infer<typeof SaveJobInfoSchema>) {
     address: fields.address ?? null,
     title: fields.job_type ?? null,
     scheduled_for: fields.datetime ?? null,
-    certificate_type: input.certificateType,
   };
 
   await sb.from('jobs').update(coreUpdates).eq('id', jobId).eq('user_id', user.id);
@@ -346,12 +412,41 @@ export async function getCertificateWizardState(jobId: string) {
   const client = jobRow.client_id
     ? await getCustomerById(jobRow.client_id, { sb, userId: user.id, requireOwner: false })
     : null;
-  const jobAddress = null; // address_id is legacy
+  const jobAddress = resolveJobPropertyAddress({
+    job: jobRow,
+    customer: client,
+    address: null,
+  });
 
   const { data: fields, error: fieldsErr } = await sb.from(JOB_FIELDS_TABLE).select('field_key, value').eq('job_id', jobId);
   if (fieldsErr) throw new Error(fieldsErr.message);
   const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
   const fieldRecord = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+
+  const { data: profileRow, error: profileErr } = await sb
+    .from('profiles')
+    .select('company_name, default_engineer_name, default_engineer_id, gas_safe_number, full_name')
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileErr && profileErr.code !== '42703') {
+    throw new Error(profileErr.message);
+  }
+
+  const applyDefault = (key: string, value: string | null | undefined) => {
+    if (!value) return;
+    const existing = fieldRecord[key];
+    if (typeof existing === 'string' && existing.trim()) return;
+    fieldRecord[key] = value;
+  };
+
+  if (profileRow) {
+    const engineerName = profileRow.default_engineer_name ?? profileRow.full_name ?? null;
+    applyDefault('engineer_name', engineerName);
+    applyDefault('company_name', profileRow.company_name ?? null);
+    applyDefault('engineer_company', profileRow.company_name ?? null);
+    applyDefault('gas_safe_number', profileRow.gas_safe_number ?? null);
+    applyDefault('engineer_id_card_number', profileRow.default_engineer_id ?? null);
+  }
   const photoNotes: Record<string, string> = {};
   Object.entries(fieldRecord).forEach(([key, value]) => {
     if (key.startsWith('photo_note_') && typeof value === 'string') {
@@ -562,7 +657,6 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
       address: data.property_address,
       scheduled_for: data.service_date || null,
       title: data.customer_name ? `Boiler Service for ${data.customer_name}` : 'Boiler Service draft',
-      certificate_type: certificateType,
     })
     .eq('id', jobId)
     .eq('user_id', user.id);
@@ -601,11 +695,6 @@ export async function saveBoilerServiceDetails(payload: z.infer<typeof BoilerSer
     value: value ?? null,
   }));
   await persistJobFields(sb, input.jobId, entries, 'saveBoilerServiceDetails');
-  await sb
-    .from('jobs')
-    .update({ certificate_type: certificateType } as Record<string, unknown>)
-    .eq('id', input.jobId)
-    .eq('user_id', user.id);
   revalidatePath(`/wizard/create/${certificateType}?jobId=${input.jobId}`);
   return { ok: true };
 }
@@ -626,11 +715,6 @@ export async function saveBoilerServiceChecks(payload: z.infer<typeof BoilerServ
     value: value ?? null,
   }));
   await persistJobFields(sb, input.jobId, entries, 'saveBoilerServiceChecks');
-  await sb
-    .from('jobs')
-    .update({ certificate_type: certificateType } as Record<string, unknown>)
-    .eq('id', input.jobId)
-    .eq('user_id', user.id);
   revalidatePath(`/wizard/create/${certificateType}?jobId=${input.jobId}`);
   return { ok: true };
 }
@@ -650,7 +734,6 @@ export async function saveGasWarningJobInfo(payload: z.infer<typeof GasWarningJo
     client_name: data.customer_name ?? null,
     address: data.property_address ?? null,
     title: data.customer_name ? `Gas Warning Notice for ${data.customer_name}` : 'Gas Warning Notice draft',
-    certificate_type: certificateType,
   } as Record<string, unknown>;
   await sb.from('jobs').update(updatePayload).eq('id', jobId).eq('user_id', user.id);
   await upsertCustomerFromJobFields({ jobId, fields: data, sb, userId: user.id });
@@ -684,7 +767,6 @@ export async function saveGasWarningDetails(payload: z.infer<typeof GasWarningDe
 
   const certificateType: CertificateType = 'gas_warning_notice';
   const updates: Record<string, unknown> = {
-    certificate_type: certificateType,
   };
   if (input.data.issued_at) {
     updates.scheduled_for = input.data.issued_at;
@@ -735,12 +817,6 @@ export async function uploadBoilerServicePhoto(formData: FormData) {
   const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
-  await sb
-    .from('jobs')
-    .update({ certificate_type: 'gas_service' } as Record<string, unknown>)
-    .eq('id', jobId)
-    .eq('user_id', user.id);
-
   revalidatePath(`/wizard/create/gas_service?jobId=${jobId}`);
   return { url: publicUrl };
 }
@@ -756,7 +832,6 @@ export async function saveGeneralWorksInfo(payload: z.infer<typeof GeneralWorksI
 
   const { jobId, data } = input;
   const updates: Record<string, unknown> = {
-    certificate_type: 'general_works',
     address: data.property_address ?? null,
     client_name: data.customer_name ?? null,
     scheduled_for: data.work_date ?? null,
@@ -815,11 +890,6 @@ export async function uploadGeneralWorksPhoto(formData: FormData) {
   const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
-  await sb
-    .from('jobs')
-    .update({ certificate_type: 'general_works' } as Record<string, unknown>)
-    .eq('id', jobId)
-    .eq('user_id', user.id);
   revalidatePath(`/wizard/create/general_works?jobId=${jobId}`);
   return { url: publicUrl };
 }
@@ -858,7 +928,6 @@ export async function saveCp12JobInfo(payload: z.infer<typeof Cp12JobSchema>) {
       address: data.property_address,
       scheduled_for: data.inspection_date,
       title: `CP12 for ${data.customer_name}`,
-      certificate_type: 'cp12',
     })
     .eq('id', jobId)
     .eq('user_id', user.id);
@@ -942,12 +1011,6 @@ export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSc
   if (defectEntries.length) {
     await persistJobFields(sb, input.jobId, defectEntries, 'saveCp12Appliances defects');
   }
-
-  await sb
-    .from('jobs')
-    .update({ certificate_type: 'cp12' } as Record<string, unknown>)
-    .eq('id', input.jobId)
-    .eq('user_id', user.id);
 
   revalidatePath(`/wizard/create/cp12?jobId=${input.jobId}`);
   return { ok: true };
@@ -1235,12 +1298,7 @@ export async function uploadSignature(formData: FormData) {
       { job_id: jobId, field_key: `${role}_signature`, value: url } as Record<string, unknown>,
       { onConflict: 'job_id,field_key' },
     );
-  const { data: job } = await sb.from('jobs').select('certificate_type').eq('id', jobId).maybeSingle();
-  const jobRow = job as { certificate_type?: string | null } | null;
-  const revalidateTarget = jobRow?.certificate_type
-    ? `/wizard/create/${jobRow.certificate_type}?jobId=${jobId}`
-    : `/jobs/${jobId}`;
-  revalidatePath(revalidateTarget);
+  revalidatePath(`/jobs/${jobId}`);
   return { url };
 }
 
@@ -1276,17 +1334,6 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
 
   const jobContext = await loadJobContext(supabase, input.jobId, 'generateGeneralWorksPdf');
   const jobOwnerId = jobContext.job.user_id ?? null;
-  console.log('GW: jobs update (set certificate_type) start', { jobId: input.jobId, jobOwnerId });
-  let setTypeQuery = supabase
-    .from('jobs')
-    .update({ certificate_type: 'general_works' } as Record<string, unknown>)
-    .eq('id', input.jobId);
-  if (jobOwnerId) {
-    setTypeQuery = setTypeQuery.eq('user_id', jobOwnerId);
-  }
-  const jobTypeRes = await setTypeQuery;
-  console.log('GW: jobs update (set certificate_type) result', jobTypeRes);
-  if (jobTypeRes.error) throw new Error(jobTypeRes.error.message);
 
   const { data: fields, error: fieldsErr } = await supabase
     .from(JOB_FIELDS_TABLE)
@@ -1352,7 +1399,7 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
       throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
     }
     console.log('GENERAL WORKS PDF preview generated', { jobId: input.jobId, path });
-    return { pdfUrl: signed.signedUrl, preview: true };
+    return { pdfUrl: signed.signedUrl, preview: true, jobId: input.jobId };
   }
 
   const { data: existingCertificate, error: existingCertErr } = await supabase
@@ -1420,11 +1467,11 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
 
   console.log('GW: jobs update (set status completed) start', {
     jobId: input.jobId,
-    payload: { status: 'completed', certificate_type: 'general_works' },
+    payload: { status: 'completed' },
   });
   let completeQuery = supabase
     .from('jobs')
-    .update({ status: 'completed', certificate_type: 'general_works' } as Record<string, unknown>)
+    .update({ status: 'completed' } as Record<string, unknown>)
     .eq('id', input.jobId);
   if (jobOwnerId) {
     completeQuery = completeQuery.eq('user_id', jobOwnerId);
@@ -1434,7 +1481,7 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   if (jobCompleteRes.error) throw new Error(jobCompleteRes.error.message);
   revalidatePath(`/jobs/${input.jobId}`);
   console.log('GENERAL WORKS certificate stored', { jobId: input.jobId, path });
-  return { pdfUrl: signed.signedUrl };
+  return { pdfUrl: signed.signedUrl, jobId: input.jobId };
 }
 
 export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasServicePdfSchema>) {
@@ -1611,7 +1658,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
       throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
     }
     console.log('GAS SERVICE PDF preview generated', { jobId: input.jobId, path });
-    return { pdfUrl: signed.signedUrl, preview: true };
+    return { pdfUrl: signed.signedUrl, preview: true, jobId: input.jobId };
   }
 
   const { data: existingCertificate, error: existingCertErr } = await admin
@@ -1683,10 +1730,10 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
 
   await sb
     .from('jobs')
-    .update({ status: 'completed', certificate_type: 'gas_service' } as Record<string, unknown>)
+    .update({ status: 'completed' } as Record<string, unknown>)
     .eq('id', input.jobId);
   revalidatePath(`/jobs/${input.jobId}`);
-  return { pdfUrl: signed.signedUrl };
+  return { pdfUrl: signed.signedUrl, jobId: input.jobId };
 }
 
 const GeneratePdfSchema = z.object({
@@ -1854,7 +1901,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       if (signedErr || !signed?.signedUrl) {
         throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
       }
-      return { pdfUrl: signed.signedUrl, preview: true };
+      return { pdfUrl: signed.signedUrl, preview: true, jobId: input.jobId };
     }
 
     const baseCertificatePayload: Record<string, unknown> = {
@@ -1871,10 +1918,10 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     }
     await admin
       .from('jobs')
-      .update({ status: 'completed', certificate_type: 'gas_warning_notice' } as Record<string, unknown>)
+      .update({ status: 'completed' } as Record<string, unknown>)
       .eq('id', input.jobId);
     revalidatePath(`/jobs/${input.jobId}`);
-    return { pdfUrl: admin.storage.from('certificates').getPublicUrl(path).data.publicUrl };
+    return { pdfUrl: admin.storage.from('certificates').getPublicUrl(path).data.publicUrl, jobId: input.jobId };
   }
 
   if (input.certificateType !== 'cp12') {
@@ -1899,7 +1946,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       await sb.from('jobs').update({ status: 'completed' }).eq('id', input.jobId);
       revalidatePath(`/jobs/${input.jobId}`);
     }
-    return { pdfUrl };
+    return { pdfUrl, jobId: input.jobId };
   }
 
   const { data: fields, error: fieldsErr } = await sb
@@ -2029,7 +2076,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
     }
     console.log('CERTIFICATE PDF preview generated', { jobId: input.jobId, path });
-    return { pdfUrl: signed.signedUrl, preview: true };
+    return { pdfUrl: signed.signedUrl, preview: true, jobId: input.jobId };
   }
 
   const baseCertificatePayload: Record<string, unknown> = {
@@ -2107,7 +2154,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
 
   await sb.from('jobs').update({ status: 'completed' }).eq('id', input.jobId);
   revalidatePath(`/jobs/${input.jobId}`);
-  return { pdfUrl: signed.signedUrl };
+  return { pdfUrl: signed.signedUrl, jobId: input.jobId };
 }
 
 export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCertificatePdfSignedUrlSchema> | string) {

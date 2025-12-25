@@ -13,18 +13,9 @@
     color-scheme: light;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --brand: #ffffff;
-      --accent: #ffffff;
-      --action: #ffffff;
-      --muted: #111111;
-      --surface: #000000;
-      --text: #ffffff;
-      --danger: #fca5a5;
-      --success: #bbf7d0;
-      color-scheme: dark;
-    }
+  html {
+    color-scheme: light;
+    background: var(--surface);
   }
 
   body {

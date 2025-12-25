@@ -6,8 +6,10 @@ import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
+import { createClient } from '@supabase/supabase-js';
 import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { PostgrestError } from '@supabase/supabase-js';
+import { env } from '@/lib/env';
 import { photoPath, reportPath, signaturePath } from '@/lib/storage';
 import type { Database } from '@/lib/database.types';
 import type { TemplateItem, TemplateModel } from '@/types/template';
@@ -19,14 +21,20 @@ import type {
   JobDetailPayload,
 } from '@/types/job-detail';
 import type { JobWizardState, ClientSummary } from '@/types/job-wizard';
+import { DEFAULT_JOB_TYPE, JOB_TYPES, type JobType } from '@/types/job-records';
+import { REPORT_KINDS, type ReportKind } from '@/types/reports';
 import { generateReport as aiGenerateReport, generatePDF, type PdfAsset } from '@/lib/reporting';
 import { getCustomerById, resolveCustomerFromId, upsertCustomerFromJobFields } from '@/server/customer-service';
 import { upsertJobAddressForJob } from '@/server/address-service';
+import { ensureJobRecord, updateJobRecord } from '@/server/jobRecords';
+import { renderGasBreakdownRecord } from '@/server/pdf/renderGasBreakdownRecord';
+import { renderCommissioningChecklist } from '@/server/pdf/renderCommissioningChecklist';
 
 const JobId = z.string().uuid();
 const PhotoId = z.string().uuid();
 const ClientId = z.string().uuid();
 const TemplateId = z.string().uuid();
+const JobTypeSchema = z.enum(JOB_TYPES);
 const JobDetailsSchema = z.object({
   title: z.string().min(3, 'Title is required'),
   scheduled_for: z.string().min(3, 'Select a scheduled date'),
@@ -37,6 +45,13 @@ const ReportEmailSchema = z.object({
   email: z.string().email(),
   name: z.string().optional(),
 });
+const ReportKindSchema = z.enum(REPORT_KINDS);
+const ReportPdfInputSchema = z.object({
+  jobId: z.string().uuid(),
+  fields: z.record(z.string(), z.unknown()),
+  issuedAt: z.date().optional(),
+});
+type ReportPdfInput = z.infer<typeof ReportPdfInputSchema>;
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
 type JobChecklistRow = Database['public']['Tables']['job_items']['Row'];
@@ -48,7 +63,7 @@ type TemplateRow = Database['public']['Tables']['templates']['Row'];
 type ReportDeliveryRow = Database['public']['Tables']['report_deliveries']['Row'];
 
 const jobColumns =
-  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name';
+  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name, job_type';
 const parseTemplateItems = (items: TemplateRow['items']): TemplateItem[] =>
   Array.isArray(items) ? (items as unknown as TemplateItem[]) : [];
 const templateFromRow = (row: TemplateRow): TemplateModel => ({
@@ -93,7 +108,7 @@ export async function listJobs() {
   if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
-    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, completed_at, engineer_signature_path, client_signature_path',
+    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, completed_at, engineer_signature_path, client_signature_path, job_type',
     'id, client_name, address, status, created_at, user_id',
   ];
 
@@ -163,15 +178,18 @@ export async function createJob(form: FormData | Record<string, unknown>) {
     throw new Error('You do not have access to this template');
   }
 
+  const insertPayload = {
+    client_name: input.client_name,
+    address: input.address,
+    status: 'active',
+    template_id: templateRow.id,
+    user_id: user.id,
+    job_type: DEFAULT_JOB_TYPE,
+  } as Database['public']['Tables']['jobs']['Insert'];
+
   const { data: job, error: jobErr } = await sb
     .from('jobs')
-    .insert({
-      client_name: input.client_name,
-      address: input.address,
-      status: 'active',
-      template_id: templateRow.id,
-      user_id: user.id,
-    })
+    .insert(insertPayload)
     .select('id')
     .single();
   if (jobErr || !job) throw new Error(jobErr?.message ?? 'Failed to create job');
@@ -227,16 +245,19 @@ export async function createJobDraftFromClient(clientId: string) {
   const clientRecord = resolved?.customer ?? null;
   if (!clientRecord) throw new Error('Client not found');
 
+  const insertPayload = {
+    client_id: clientRecord.id,
+    client_name: clientRecord.name,
+    address: clientRecord.address,
+    status: 'draft',
+    user_id: user.id,
+    title: `${clientRecord.name} inspection`,
+    job_type: DEFAULT_JOB_TYPE,
+  } as Database['public']['Tables']['jobs']['Insert'];
+
   const { data: job, error: jobErr } = await sb
     .from('jobs')
-    .insert({
-      client_id: clientRecord.id,
-      client_name: clientRecord.name,
-      address: clientRecord.address,
-      status: 'draft',
-      user_id: user.id,
-      title: `${clientRecord.name} inspection`,
-    })
+    .insert(insertPayload)
     .select('id')
     .single();
   if (jobErr || !job) throw new Error(jobErr?.message ?? 'Could not start job');
@@ -250,8 +271,26 @@ export async function createJobDraftFromClient(clientId: string) {
     });
   }
 
+  await ensureJobRecord(job.id as string);
+
   revalidatePath('/jobs');
   return { jobId: job.id };
+}
+
+export async function setJobType(jobId: string, jobType: JobType) {
+  JobId.parse(jobId);
+  const parsedType = JobTypeSchema.parse(jobType);
+  const { sb } = await fetchOwnedJob(jobId, { write: true });
+
+  const updatePayload = { job_type: parsedType } as Database['public']['Tables']['jobs']['Update'];
+  const { error } = await sb.from('jobs').update(updatePayload).eq('id', jobId as JobRow['id']);
+  if (error) throw new Error(error.message);
+
+  await updateJobRecord(jobId, { job_type_selected: true });
+
+  revalidatePath(`/jobs/new/${jobId}/type`);
+  revalidatePath(`/jobs/new/${jobId}/template`);
+  return { jobId };
 }
 
 
@@ -266,7 +305,7 @@ export async function getJobWithChecklist(jobId: string) {
   if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
-    'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name',
+    'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name, job_type',
     'id, client_name, address, status, created_at, template_id, user_id, notes',
   ];
 
@@ -376,6 +415,7 @@ export async function getJobWithChecklist(jobId: string) {
       template_id: jobData.template_id ?? null,
       user_id: jobOwner ?? null,
       notes,
+      job_type: (job as { job_type?: JobType | null }).job_type ?? null,
     },
     items: checklistItems,
     photos: photoItems,
@@ -464,6 +504,18 @@ export async function saveJobDetails(jobId: string, form: FormData | Record<stri
   if (error) throw new Error(error.message);
 
   revalidatePath(`/jobs/new/${jobId}/details`);
+}
+
+export async function markJobComplete(jobId: string) {
+  JobId.parse(jobId);
+  const { sb } = await fetchOwnedJob(jobId, { write: true });
+  const typedJobId = jobId as JobRow['id'];
+  const updatePayload = { status: 'completed' } as Database['public']['Tables']['jobs']['Update'];
+  const { error } = await sb.from('jobs').update(updatePayload).eq('id', typedJobId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/jobs');
+  revalidatePath(`/jobs/${jobId}`);
 }
 
 export async function getJobWizardState(jobId: string): Promise<JobWizardState> {
@@ -670,8 +722,64 @@ export async function deleteMyJobs() {
   return { ok: true };
 }
 
-export async function finalizeJobReport(jobId: string) {
+type ReportStoragePayload = {
+  jobId: string;
+  pdfBytes: Uint8Array;
+  kind: ReportKind;
+  metadata?: Record<string, unknown>;
+};
+
+async function storeReportPdf({ jobId, pdfBytes, kind, metadata }: ReportStoragePayload) {
+  const admin = createClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const typedJobId = jobId as ReportRow['job_id'];
+  const storagePath = reportPath(jobId);
+
+  const { error: uploadErr } = await admin.storage.from('reports').upload(storagePath, pdfBytes, {
+    contentType: 'application/pdf',
+    upsert: true,
+  });
+  if (uploadErr) throw new Error(uploadErr.message);
+
+  await admin.from('reports').delete().eq('job_id', typedJobId);
+
+  const reportInsert: Database['public']['Tables']['reports']['Insert'] & { kind?: ReportKind } = {
+    job_id: jobId as ReportRow['job_id'],
+    storage_path: storagePath,
+    generated_at: new Date().toISOString(),
+    kind,
+  };
+
+  const { error: insertReportErr } = await admin.from('reports').insert(reportInsert);
+  if (insertReportErr) {
+    if (insertReportErr.code !== '42703') {
+      throw new Error(insertReportErr.message);
+    }
+    const fallbackInsert = {
+      job_id: jobId as ReportRow['job_id'],
+      storage_path: storagePath,
+      generated_at: new Date().toISOString(),
+      metadata: {
+        ...(metadata ?? {}),
+        kind,
+      },
+    } as unknown as Database['public']['Tables']['reports']['Insert'];
+    const { error: fallbackErr } = await admin.from('reports').insert(fallbackInsert);
+    if (fallbackErr) throw new Error(fallbackErr.message);
+  }
+
+  const { data: signed, error: signedErr } = await admin.storage
+    .from('reports')
+    .createSignedUrl(storagePath, 60 * 60 * 24);
+  if (signedErr || !signed?.signedUrl) throw new Error(signedErr?.message ?? 'Unable to create report link');
+
+  return { storagePath, signedUrl: signed.signedUrl };
+}
+
+export async function finalizeJobReport(jobId: string, kind: ReportKind) {
   JobId.parse(jobId);
+  const reportKind = ReportKindSchema.parse(kind);
   const sb = await supabaseServerServiceRole();
   const typedJobId = jobId as JobRow['id'];
   const detail = await getJobWithChecklist(jobId);
@@ -732,22 +840,11 @@ export async function finalizeJobReport(jobId: string) {
     assets,
   });
 
-  const storagePath = reportPath(jobId);
-  const { error: uploadErr } = await sb.storage.from('reports').upload(storagePath, pdfBytes, {
-    contentType: 'application/pdf',
-    upsert: true,
+  const { storagePath, signedUrl } = await storeReportPdf({
+    jobId,
+    pdfBytes,
+    kind: reportKind,
   });
-  if (uploadErr) throw new Error(uploadErr.message);
-
-  await sb.from('reports').delete().eq('job_id', typedJobId);
-  const { error: insertReportErr } = await sb
-    .from('reports')
-    .insert({
-      job_id: jobId as ReportRow['job_id'],
-      storage_path: storagePath,
-      generated_at: new Date().toISOString(),
-    });
-  if (insertReportErr) throw new Error(insertReportErr.message);
 
   await sb.from('jobs').update({ status: 'completed', notes: summary }).eq('id', typedJobId);
 
@@ -756,10 +853,53 @@ export async function finalizeJobReport(jobId: string) {
   revalidatePath(`/reports/${jobId}`);
   revalidatePath(`/jobs/new/${jobId}/ai`);
 
-  const { data: signed, error: signedErr } = await sb.storage.from('reports').createSignedUrl(storagePath, 60 * 60 * 24);
-  if (signedErr || !signed?.signedUrl) throw new Error(signedErr?.message ?? 'Unable to create report link');
+  return { storagePath, signedUrl, summary };
+}
 
-  return { storagePath, signedUrl: signed.signedUrl, summary };
+export async function createGasBreakdownReport(payload: ReportPdfInput) {
+  const input = ReportPdfInputSchema.parse(payload);
+  await fetchOwnedJob(input.jobId, { write: false });
+
+  const renderResult = await renderGasBreakdownRecord({
+    jobId: input.jobId,
+    fields: input.fields,
+    issuedAt: input.issuedAt,
+  });
+
+  const { storagePath, signedUrl } = await storeReportPdf({
+    jobId: input.jobId,
+    pdfBytes: renderResult.pdfBytes,
+    kind: renderResult.kind,
+    metadata: renderResult.metadata,
+  });
+
+  revalidatePath(`/jobs/${input.jobId}`);
+  revalidatePath(`/reports/${input.jobId}`);
+
+  return { ...renderResult, storagePath, signedUrl };
+}
+
+export async function createCommissioningChecklistReport(payload: ReportPdfInput) {
+  const input = ReportPdfInputSchema.parse(payload);
+  await fetchOwnedJob(input.jobId, { write: false });
+
+  const renderResult = await renderCommissioningChecklist({
+    jobId: input.jobId,
+    fields: input.fields,
+    issuedAt: input.issuedAt,
+  });
+
+  const { storagePath, signedUrl } = await storeReportPdf({
+    jobId: input.jobId,
+    pdfBytes: renderResult.pdfBytes,
+    kind: renderResult.kind,
+    metadata: renderResult.metadata,
+  });
+
+  revalidatePath(`/jobs/${input.jobId}`);
+  revalidatePath(`/reports/${input.jobId}`);
+
+  return { ...renderResult, storagePath, signedUrl };
 }
 
 export async function createReportSignedUrl(jobId: string) {

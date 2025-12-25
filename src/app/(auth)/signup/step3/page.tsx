@@ -2,8 +2,6 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { z } from 'zod';
-
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { MultiSelect } from '../_components/multi-select';
@@ -11,21 +9,16 @@ import { SignupStepShell, loadSignupState, saveSignupState, type SignupState } f
 import { TRADE_TYPES, CERTIFICATIONS } from '@/lib/profile-options';
 import { completeSignupWizard } from '@/server/signup-wizard';
 
-const Step3Schema = z.object({
-  trade_types: z.array(z.string()).min(1, 'Select at least one trade'),
-  certifications: z.array(z.string()).optional(),
-});
+const defaultTrades = TRADE_TYPES as unknown as string[];
 
 export default function SignupStep3Page() {
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
-  const [trades, setTrades] = useState<string[]>([]);
   const [certs, setCerts] = useState<string[]>([]);
 
   useEffect(() => {
     const state = loadSignupState();
-    setTrades(state.trade_types ?? []);
     setCerts(state.certifications ?? []);
   }, []);
 
@@ -37,19 +30,10 @@ export default function SignupStep3Page() {
 
   const handleFinish = () => {
     startTransition(async () => {
-      const parsed = Step3Schema.safeParse({ trade_types: trades, certifications: certs });
-      if (!parsed.success) {
-        pushToast({
-          title: 'Select at least one trade',
-          description: parsed.error.issues[0]?.message ?? 'Pick your trade.',
-          variant: 'error',
-        });
-        return;
-      }
       const state: SignupState = {
         ...loadSignupState(),
-        trade_types: parsed.data.trade_types,
-        certifications: parsed.data.certifications ?? [],
+        trade_types: defaultTrades,
+        certifications: certs,
       };
       saveSignupState(state);
       try {
@@ -82,20 +66,13 @@ export default function SignupStep3Page() {
     <SignupStepShell
       step={3}
       total={3}
-      title="Choose your trades"
-      description="Select the trades and certifications that apply. This shapes your certificates."
+      title="Add certifications"
+      description="Optional. This helps tailor templates in the future."
     >
       <div className="space-y-6">
         <MultiSelect
-          title="Trades"
-          subtitle="Pick at least one."
-          options={TRADE_TYPES as unknown as string[]}
-          selected={trades}
-          onToggle={(value) => toggle(value, trades, setTrades)}
-        />
-        <MultiSelect
           title="Certifications"
-          subtitle="Optional. Helps us tailor templates."
+          subtitle="Optional."
           options={CERTIFICATIONS as unknown as string[]}
           selected={certs}
           onToggle={(value) => toggle(value, certs, setCerts)}

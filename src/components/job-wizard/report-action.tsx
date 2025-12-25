@@ -4,10 +4,11 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { finalizeJobReport } from '@/server/jobs';
+import type { ReportKind } from '@/types/reports';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 
-export function GenerateWizardReportButton({ jobId }: { jobId: string }) {
+export function GenerateWizardReportButton({ jobId, reportKind }: { jobId: string; reportKind: ReportKind }) {
   const [isPending, startTransition] = useTransition();
   const { pushToast } = useToast();
   const router = useRouter();
@@ -15,7 +16,7 @@ export function GenerateWizardReportButton({ jobId }: { jobId: string }) {
   const handleGenerate = () => {
     startTransition(async () => {
       try {
-        await finalizeJobReport(jobId);
+        await finalizeJobReport(jobId, reportKind);
         pushToast({ title: 'Report generated', variant: 'success' });
         router.push(`/jobs/new/${jobId}/report`);
         router.refresh();

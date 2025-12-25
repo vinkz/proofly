@@ -5,11 +5,14 @@ import { PasswordSection } from './password-section';
 
 export default async function SettingsPage() {
   const { profile } = await getProfile();
-  const trades = profile?.trade_types ?? [];
   const certs = profile?.certifications ?? [];
   const name = profile?.full_name ?? '';
   const dob = profile?.date_of_birth ?? '';
   const profession = profile?.profession ?? '';
+  const companyName = profile?.company_name ?? '';
+  const engineerName = profile?.default_engineer_name ?? '';
+  const engineerId = profile?.default_engineer_id ?? '';
+  const gasSafeNumber = profile?.gas_safe_number ?? '';
 
   const { hasPassword } = await userHasPassword();
 
@@ -22,11 +25,14 @@ export default async function SettingsPage() {
         </p>
       </div>
       <ProfilePreferences
-        initialTrades={trades}
         initialCerts={certs}
         initialName={name}
         initialDob={dob}
         initialProfession={profession}
+        initialCompanyName={companyName}
+        initialEngineerName={engineerName}
+        initialEngineerId={engineerId}
+        initialGasSafeNumber={gasSafeNumber}
       />
       <PasswordSection hasPassword={hasPassword} />
     </div>

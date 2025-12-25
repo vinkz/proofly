@@ -6,9 +6,7 @@ import type { Database } from '@/lib/database.types';
 import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
 import { getCustomerById } from '@/server/customer-service';
 
-type JobRow = Database['public']['Tables']['jobs']['Row'] & {
-  certificate_type?: string | null;
-};
+type JobRow = Database['public']['Tables']['jobs']['Row'];
 type Cp12ApplianceRow = {
   appliance_type?: string | null;
   location?: string | null;

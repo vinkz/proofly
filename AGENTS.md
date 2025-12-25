@@ -22,6 +22,13 @@
 - Client UI pulls typed data via props; shared types in `src/types` keep server/client contracts aligned.
 - Styling uses Tailwind (`tailwind.config.ts`); components favor utility-first classes over bespoke CSS.
 - External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, maps via `@googlemaps/google-maps-services-js`; isolate integration code under `src/server`.
+- Job sheets: `src/server/job-sheets.ts` manages `public.job_sheets` codes (CN-XXXXXX) for the job sheet scan flow.
+- Job sheet lookup API: `src/app/api/job-sheets/lookup/route.ts` resolves CN codes to jobs for the scan flow.
+- Job sheet scan UI: `src/app/(app)/jobs/scan` provides the QR scan entry point that redirects to the linked job.
+- Job sheet scan client: `scan-job-sheet-client.tsx` uses QR scanning + lookup with inline errors and auto-redirect on success.
+- Job sheet PDF: `src/lib/pdf/job-sheet-template.ts` renders a QR-enabled job sheet PDF for scan flows.
+- Job sheet PDF API: `src/app/api/jobs/[jobId]/job-sheet/route.ts` serves the generated job sheet PDF.
+- Job detail actions: job pages include a "Generate Job Sheet" button wired to the job sheet PDF API.
 
 ## PDF Generation
 - Field reports: `src/lib/reporting.ts` builds PDFs with `pdf-lib`; `src/server/jobs.ts` loads photos/signatures, optionally AI-summarizes via OpenAI (`getOpenAIClient` and `OPENAI_API_KEY`), then uploads to the Supabase `reports` bucket and stores `reports` rows.
@@ -31,6 +38,7 @@
 - Gas Warning Notice: `src/server/pdf/renderGasWarningNoticePdf.ts` loads `src/assets/templates/gas-warning-notice.pdf`, fills AcroForm fields when present, and falls back to XY text drawing if the template is not form-enabled. Signature URLs are drawn into the signature boxes when available.
 - Boiler Service Record: `renderGasServiceRecordTemplatePdf` in `src/lib/pdf/gas-service-template.ts` draws its own layout; wrappers `renderBoilerServicePdf`/`generateBoilerServiceRecordPdf` map certificate fields then call the renderer.
 - General Works: `renderGeneralWorksPdf` in `src/lib/pdf/general-works.ts` handles the general_works branch with targeted logging around Supabase certificate/job/job_fields writes to surface RLS failures.
+- Job sheets: `renderJobSheetPdf` in `src/lib/pdf/job-sheet-template.ts` builds QR-enabled PDFs; `generateJobSheetPdf` in `src/server/pdf/renderJobSheetPdf.ts` loads job context and sheet codes.
 
 ## Build, Test, and Development Commands
 - `pnpm dev`: Run dev server (Turbopack); access via LAN/DNS from phones on the same network.

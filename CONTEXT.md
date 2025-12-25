@@ -50,10 +50,21 @@ The result is a zero‑friction, tailor‑made compliance workflow from the firs
 * Secure cloud archive.
 * One‑tap delivery via WhatsApp or email.
 
-### Job‑Sheet Scan (Paper → Digital)
+### Job-Sheet Scan (Paper → Digital)
 
-* OCR capture of handwritten pads and forms.
-* Layout detection and autofill of structured digital certificates.
+Scan Job Sheet (/jobs/scan): A dedicated mobile-first camera interface to scan Job Sheet QR codes and jump directly into the correct job.
+Future versions may also support capturing photos of handwritten forms for AI-powered digitization.
+
+* Future: OCR capture of handwritten pads and forms.
+* Future: Layout detection and autofill of structured digital certificates.
+* Short CN-XXXXXX codes link scanned sheets back to jobs.
+* The job sheet lookup API resolves codes to job IDs for scan flows.
+* QR scan entry lives at `/jobs/scan` and uses the job sheet lookup API.
+* Job sheet PDFs include a QR code that deep-links to the scan flow.
+* Job sheet PDFs are generated server-side from job + customer data.
+* Job sheet PDFs are served from `/api/jobs/{jobId}/job-sheet`.
+* Job detail pages can generate job sheet PDFs from the actions row.
+* The scan UI handles lookup errors inline and keeps the camera active.
 
 ### Automated Reminders
 
@@ -273,7 +284,12 @@ This confirmation moment reinforces completion satisfaction.
 
 ## 5. Job Sheet Snap Flow (Separate Capture Flow)
 
+Scan Job Sheet (/jobs/scan): A dedicated mobile-first camera interface to scan Job Sheet QR codes and jump directly into the correct job.
+Future versions may also support capturing photos of handwritten forms for AI-powered digitization.
+
 Accessed from home screen via **Scan Job Sheet**.
+
+Future capture workflow:
 
 ---
 

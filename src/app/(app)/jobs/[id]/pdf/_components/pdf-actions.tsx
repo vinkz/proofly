@@ -7,7 +7,15 @@ import { sendPdfToClient } from '@/server/certificates';
 import { useToast } from '@/components/ui/use-toast';
 import type { CertificateType } from '@/types/certificates';
 
-export function PdfActions({ jobId, sentAt, certificateType }: { jobId: string; sentAt: string | null; certificateType: CertificateType }) {
+export function PdfActions({
+  jobId,
+  sentAt,
+  certificateType,
+}: {
+  jobId: string;
+  sentAt: string | null;
+  certificateType?: CertificateType | null;
+}) {
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -27,18 +35,18 @@ export function PdfActions({ jobId, sentAt, certificateType }: { jobId: string; 
     });
   };
 
-  const editHref = `/wizard/create/${certificateType}?jobId=${jobId}`;
-
   return (
     <div className="flex flex-wrap gap-2">
       <Button className="rounded-full bg-[var(--accent)] px-4 py-2 text-white" onClick={handleSend} disabled={isPending}>
         {isPending ? 'Sending…' : 'Send to Client'}
       </Button>
-      <Button asChild variant="outline" className="rounded-full">
-        <a href={editHref} className="px-4 py-2">
-          Edit Before Sending
-        </a>
-      </Button>
+      {certificateType ? (
+        <Button asChild variant="outline" className="rounded-full">
+          <a href={`/wizard/create/${certificateType}?jobId=${jobId}`} className="px-4 py-2">
+            Edit Before Sending
+          </a>
+        </Button>
+      ) : null}
       <Button variant="secondary" className="rounded-full">
         Download PDF
       </Button>

@@ -14,6 +14,9 @@ export type Customer = {
   email: string | null;
   phone: string | null;
   address: string | null;
+  postcode: string | null;
+  landlord_name: string | null;
+  landlord_address: string | null;
   user_id: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -40,6 +43,9 @@ function normalizeCustomer(row: ClientRow): Customer {
     email: row.email ?? null,
     phone: row.phone ?? null,
     address: row.address ?? null,
+    postcode: row.postcode ?? null,
+    landlord_name: row.landlord_name ?? null,
+    landlord_address: row.landlord_address ?? null,
     user_id: row.user_id ?? null,
     created_at: row.created_at ?? null,
     updated_at: row.updated_at ?? null,
@@ -72,7 +78,9 @@ export async function getCustomerById(
 
   const { data, error } = await sb
     .from('clients')
-    .select('id, name, organization, email, phone, address, user_id, created_at, updated_at')
+    .select(
+      'id, name, organization, email, phone, address, postcode, landlord_name, landlord_address, user_id, created_at, updated_at',
+    )
     .eq('id', customerId)
     .maybeSingle();
 
@@ -97,7 +105,9 @@ export async function searchCustomers(
   const like = `%${term}%`;
   const { data, error } = await sb
     .from('clients')
-    .select('id, name, organization, email, phone, address, user_id, created_at, updated_at')
+    .select(
+      'id, name, organization, email, phone, address, postcode, landlord_name, landlord_address, user_id, created_at, updated_at',
+    )
     .eq('user_id', userId)
     .or(`name.ilike.${like},organization.ilike.${like},email.ilike.${like},phone.ilike.${like}`);
   if (error) throw new Error(error.message);
@@ -146,11 +156,14 @@ export async function upsertCustomerFromJobFields(params: {
     toText(params.fields.billing_address),
     toText(params.fields.client_address),
   );
+  const postcode = pickText(toText(params.fields.property_postcode), toText(params.fields.postcode));
+  const landlordName = pickText(toText(params.fields.landlord_name));
+  const landlordAddress = pickText(toText(params.fields.landlord_address));
   const email = pickText(toText(params.fields.customer_email), toText(params.fields.email));
   const phone = pickText(toText(params.fields.customer_phone), toText(params.fields.phone));
   const organization = pickText(toText(params.fields.customer_company), toText(params.fields.organization));
 
-  if (!name && !address && !email && !phone) {
+  if (!name && !address && !postcode && !landlordName && !landlordAddress && !email && !phone) {
     return { customer: null, created: false, updated: false, linked: false };
   }
 
@@ -163,6 +176,9 @@ export async function upsertCustomerFromJobFields(params: {
     const updatePayload: Partial<ClientRow> = {};
     if (name) updatePayload.name = name;
     if (address) updatePayload.address = address;
+    if (postcode) updatePayload.postcode = postcode;
+    if (landlordName) updatePayload.landlord_name = landlordName;
+    if (landlordAddress) updatePayload.landlord_address = landlordAddress;
     if (email) updatePayload.email = email;
     if (phone) updatePayload.phone = phone;
     if (organization) updatePayload.organization = organization;
@@ -172,7 +188,9 @@ export async function upsertCustomerFromJobFields(params: {
         .from('clients')
         .update(updatePayload)
         .eq('id', job.client_id)
-        .select('id, name, organization, email, phone, address, user_id, created_at, updated_at')
+        .select(
+          'id, name, organization, email, phone, address, postcode, landlord_name, landlord_address, user_id, created_at, updated_at',
+        )
         .single();
       if (error) throw new Error(error.message);
       customer = normalizeCustomer(data);
@@ -189,9 +207,14 @@ export async function upsertCustomerFromJobFields(params: {
         email: email || null,
         phone: phone || null,
         address: address || null,
+        postcode: postcode || null,
+        landlord_name: landlordName || null,
+        landlord_address: landlordAddress || null,
         user_id: userId,
       })
-      .select('id, name, organization, email, phone, address, user_id, created_at, updated_at')
+      .select(
+        'id, name, organization, email, phone, address, postcode, landlord_name, landlord_address, user_id, created_at, updated_at',
+      )
       .single();
     if (error || !data) throw new Error(error?.message ?? 'Unable to create customer');
     customer = normalizeCustomer(data);
