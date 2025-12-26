@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,14 +88,10 @@ export function ApplianceStep({
   inlineEditor = false,
 }: ApplianceStepProps) {
   const catalogMakes = useMemo(() => getMakes(), []);
-  const resolvedMakeOptions = useMemo(
-    () =>
-      (makeOptions ?? catalogMakes).map((make) => ({
-        label: make,
-        value: make,
-      })),
-    [catalogMakes, makeOptions],
-  );
+  const resolvedMakeOptions = useMemo(() => {
+    if (makeOptions?.length) return makeOptions;
+    return catalogMakes.map((make) => ({ label: make, value: make }));
+  }, [catalogMakes, makeOptions]);
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
     const years: string[] = [];
@@ -105,7 +101,7 @@ export function ApplianceStep({
     return ['Unknown', ...years];
   }, []);
   const isArrayMode = Array.isArray(appliances) && typeof onAppliancesChange === 'function';
-  const normalizeExtendedFields = (items: ApplianceStepValues[]) => {
+  const normalizeExtendedFields = useCallback((items: ApplianceStepValues[]) => {
     if (!showExtendedFields) return items;
     return items.map((item) => ({
       ...item,
@@ -113,7 +109,7 @@ export function ApplianceStep({
       gasType: item.gasType || DEFAULT_GAS,
       year: item.year || 'unknown',
     }));
-  };
+  }, [showExtendedFields]);
 
   const [localAppliances, setLocalAppliances] = useState<ApplianceStepValues[]>(
     normalizeExtendedFields(appliances && appliances.length ? appliances : [appliance ?? emptyAppliance]),
@@ -130,12 +126,12 @@ export function ApplianceStep({
         return normalizeExtendedFields(next);
       });
     }
-  }, [appliance, isArrayMode, showExtendedFields]);
+  }, [appliance, isArrayMode, normalizeExtendedFields]);
 
   useEffect(() => {
     if (!isArrayMode || !appliances) return;
     setLocalAppliances(normalizeExtendedFields(appliances.length ? appliances : [emptyAppliance]));
-  }, [appliances, isArrayMode, showExtendedFields]);
+  }, [appliances, isArrayMode, normalizeExtendedFields]);
 
   const activeAppliances = useMemo(
     () => (isArrayMode ? appliances ?? [] : localAppliances),
