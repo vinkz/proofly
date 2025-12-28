@@ -879,6 +879,31 @@ export async function createGasBreakdownReport(payload: ReportPdfInput) {
   return { ...renderResult, storagePath, signedUrl };
 }
 
+export async function previewGasBreakdownReport(payload: ReportPdfInput) {
+  const input = ReportPdfInputSchema.parse(payload);
+  await fetchOwnedJob(input.jobId, { write: false });
+
+  const renderResult = await renderGasBreakdownRecord({
+    jobId: input.jobId,
+    fields: input.fields,
+    issuedAt: input.issuedAt,
+  });
+
+  const sb = await supabaseServerServiceRole();
+  const storagePath = `previews/${input.jobId}/${Date.now()}-gas-breakdown-preview.pdf`;
+
+  const { error: uploadErr } = await sb.storage.from('reports').upload(storagePath, renderResult.pdfBytes, {
+    contentType: 'application/pdf',
+    upsert: true,
+  });
+  if (uploadErr) throw new Error(uploadErr.message);
+
+  const { data: signed, error: signedErr } = await sb.storage.from('reports').createSignedUrl(storagePath, 60 * 60);
+  if (signedErr || !signed?.signedUrl) throw new Error(signedErr?.message ?? 'Unable to create preview link');
+
+  return { pdfUrl: signed.signedUrl };
+}
+
 export async function createCommissioningChecklistReport(payload: ReportPdfInput) {
   const input = ReportPdfInputSchema.parse(payload);
   await fetchOwnedJob(input.jobId, { write: false });
@@ -900,6 +925,31 @@ export async function createCommissioningChecklistReport(payload: ReportPdfInput
   revalidatePath(`/reports/${input.jobId}`);
 
   return { ...renderResult, storagePath, signedUrl };
+}
+
+export async function previewCommissioningChecklistReport(payload: ReportPdfInput) {
+  const input = ReportPdfInputSchema.parse(payload);
+  await fetchOwnedJob(input.jobId, { write: false });
+
+  const renderResult = await renderCommissioningChecklist({
+    jobId: input.jobId,
+    fields: input.fields,
+    issuedAt: input.issuedAt,
+  });
+
+  const sb = await supabaseServerServiceRole();
+  const storagePath = `previews/${input.jobId}/${Date.now()}-commissioning-preview.pdf`;
+
+  const { error: uploadErr } = await sb.storage.from('reports').upload(storagePath, renderResult.pdfBytes, {
+    contentType: 'application/pdf',
+    upsert: true,
+  });
+  if (uploadErr) throw new Error(uploadErr.message);
+
+  const { data: signed, error: signedErr } = await sb.storage.from('reports').createSignedUrl(storagePath, 60 * 60);
+  if (signedErr || !signed?.signedUrl) throw new Error(signedErr?.message ?? 'Unable to create preview link');
+
+  return { pdfUrl: signed.signedUrl };
 }
 
 export async function createReportSignedUrl(jobId: string) {

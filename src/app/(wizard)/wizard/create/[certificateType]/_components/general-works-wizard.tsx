@@ -34,7 +34,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
-  const totalSteps = 4 + stepOffset;
+  const totalSteps = 3 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
 
   const [info, setInfo] = useState({
@@ -147,27 +147,11 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
     await saveFields({ ...info, ...evidence, ...review });
   };
 
-  const handleInfoNext = () => {
-    startTransition(async () => {
-      try {
-        await saveFields(info);
-        setStep(2);
-        pushToast({ title: 'Saved job basics', variant: 'success' });
-      } catch (error) {
-        pushToast({
-          title: 'Could not save job info',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
-
   const handleEvidenceNext = () => {
     startTransition(async () => {
       try {
         await saveFields({ ...info, ...evidence });
-        setStep(3);
+        setStep(2);
         pushToast({ title: 'Saved evidence', variant: 'success' });
       } catch (error) {
         pushToast({
@@ -183,7 +167,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
     startTransition(async () => {
       try {
         await saveFields({ ...info, ...evidence, ...review });
-        setStep(4);
+        setStep(3);
         pushToast({ title: 'Saved review', variant: 'success' });
       } catch (error) {
         pushToast({
@@ -265,68 +249,8 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job basics" status="General Works">
-          {demoEnabled ? (
-            <div className="mb-3 flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
-                Fill demo General Works
-              </Button>
-            </div>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              value={info.property_address}
-              onChange={(e) => setInfo((prev) => ({ ...prev, property_address: e.target.value }))}
-              placeholder="Property address"
-              className="sm:col-span-2"
-            />
-            <Input
-              value={info.postcode}
-              onChange={(e) => setInfo((prev) => ({ ...prev, postcode: e.target.value }))}
-              placeholder="Postcode"
-            />
-            <Input
-              type="date"
-              value={info.work_date}
-              onChange={(e) => setInfo((prev) => ({ ...prev, work_date: e.target.value }))}
-              placeholder="Work date"
-            />
-            <Input
-              value={info.customer_name}
-              onChange={(e) => setInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
-              placeholder="Customer name (optional)"
-            />
-            <Input
-              value={info.engineer_name}
-              onChange={(e) => setInfo((prev) => ({ ...prev, engineer_name: e.target.value }))}
-              placeholder="Engineer name"
-            />
-            <Input
-              value={info.company_name}
-              onChange={(e) => setInfo((prev) => ({ ...prev, company_name: e.target.value }))}
-              placeholder="Company name (optional)"
-            />
-            <Input
-              value={info.customer_email}
-              onChange={(e) => setInfo((prev) => ({ ...prev, customer_email: e.target.value }))}
-              placeholder="Customer email (optional)"
-            />
-            <Input
-              value={info.customer_phone}
-              onChange={(e) => setInfo((prev) => ({ ...prev, customer_phone: e.target.value }))}
-              placeholder="Customer phone (optional)"
-            />
-          </div>
-          <div className="mt-6 flex justify-end">
-            <Button className="rounded-full px-6" onClick={handleInfoNext} disabled={isPending}>
-              Next → Evidence
-            </Button>
-          </div>
-        </WizardLayout>
-      ) : null}
-
-      {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Evidence capture" status="Work detail" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Evidence capture" status="Work detail">
+          <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -393,6 +317,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
               ))}
             </div>
           </div>
+          </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleEvidenceNext} disabled={isPending}>
               Next → Review
@@ -401,8 +326,9 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
         </WizardLayout>
       ) : null}
 
-      {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Review & totals" status="Summary" onBack={() => setStep(2)}>
+      {step === 2 ? (
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Review & totals" status="Summary" onBack={() => setStep(1)}>
+          <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -415,11 +341,13 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
               value={review.invoice_amount}
               onChange={(e) => setReview((prev) => ({ ...prev, invoice_amount: e.target.value }))}
               placeholder="Invoice amount (optional)"
+              className="rounded-2xl"
             />
             <Input
               value={review.payment_status}
               onChange={(e) => setReview((prev) => ({ ...prev, payment_status: e.target.value }))}
               placeholder="Payment status (optional)"
+              className="rounded-2xl"
             />
             <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
               <p className="text-sm font-semibold text-muted">Follow up required?</p>
@@ -443,6 +371,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
               value={review.follow_up_date}
               onChange={(e) => setReview((prev) => ({ ...prev, follow_up_date: e.target.value }))}
               placeholder="Follow-up date"
+              className="rounded-2xl"
             />
           </div>
 
@@ -460,6 +389,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
             </div>
           </div>
 
+          </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleReviewNext} disabled={isPending}>
               Next → Sign & PDF
@@ -468,8 +398,9 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
         </WizardLayout>
       ) : null}
 
-      {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
+      {step === 3 ? (
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(2)}>
+          <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -496,11 +427,12 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
             <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
           </div>
-          <div className="mt-6 flex flex-wrap gap-3">
+          </div>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>
               Preview General Works template
             </Button>
-            <Button className="rounded-full bg-[var(--accent)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
+            <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
               {isPending ? 'Generating…' : 'Generate PDF'}
             </Button>
           </div>

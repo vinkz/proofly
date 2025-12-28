@@ -1740,6 +1740,7 @@ const GeneratePdfSchema = z.object({
   jobId: z.string().uuid(),
   certificateType: z.enum(CERTIFICATE_TYPES),
   previewOnly: z.boolean().optional().default(false),
+  fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 type CertificatePaths = Pick<Database['public']['Tables']['certificates']['Row'], 'pdf_path' | 'pdf_url'> | null | undefined;
@@ -1810,15 +1811,19 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     if (fieldsErr) throw new Error(fieldsErr.message);
     const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
     const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+    const mergedFieldMap = {
+      ...fieldMap,
+      ...(input.fields ?? {}),
+    } as Record<string, unknown>;
     const customer = resolveJobCustomer(jobContext, {
-      name: typeof fieldMap.customer_name === 'string' ? fieldMap.customer_name : undefined,
-      phone: typeof fieldMap.customer_phone === 'string' ? fieldMap.customer_phone : undefined,
-      email: typeof fieldMap.customer_email === 'string' ? fieldMap.customer_email : undefined,
+      name: typeof mergedFieldMap.customer_name === 'string' ? mergedFieldMap.customer_name : undefined,
+      phone: typeof mergedFieldMap.customer_phone === 'string' ? mergedFieldMap.customer_phone : undefined,
+      email: typeof mergedFieldMap.customer_email === 'string' ? mergedFieldMap.customer_email : undefined,
     });
     const propertyAddress = resolveJobPropertyAddress(jobContext, {
-      line1: typeof fieldMap.property_address === 'string' ? fieldMap.property_address : undefined,
-      postcode: typeof fieldMap.postcode === 'string' ? fieldMap.postcode : undefined,
-      legacy: typeof fieldMap.address === 'string' ? fieldMap.address : undefined,
+      line1: typeof mergedFieldMap.property_address === 'string' ? mergedFieldMap.property_address : undefined,
+      postcode: typeof mergedFieldMap.postcode === 'string' ? mergedFieldMap.postcode : undefined,
+      legacy: typeof mergedFieldMap.address === 'string' ? mergedFieldMap.address : undefined,
     });
 
     const issuedAt = new Date();
@@ -1827,39 +1832,39 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     const customerContact = pickText(
       customer.phone,
       customer.email,
-      toText(fieldMap.customer_contact ?? fieldMap.customer_phone ?? fieldMap.customer_email ?? ''),
+      toText(mergedFieldMap.customer_contact ?? mergedFieldMap.customer_phone ?? mergedFieldMap.customer_email ?? ''),
     );
     const gasWarningFields: GasWarningNoticeFields = {
-      property_address: pickText(propertyAddress.summary, toText(fieldMap.property_address ?? fieldMap.address ?? '')),
-      postcode: pickText(propertyAddress.postcode, toText(fieldMap.postcode ?? '')),
-      customer_name: customer.name || toText(fieldMap.customer_name ?? ''),
+      property_address: pickText(propertyAddress.summary, toText(mergedFieldMap.property_address ?? mergedFieldMap.address ?? '')),
+      postcode: pickText(propertyAddress.postcode, toText(mergedFieldMap.postcode ?? '')),
+      customer_name: customer.name || toText(mergedFieldMap.customer_name ?? ''),
       customer_contact: customerContact,
-      appliance_location: toText(fieldMap.appliance_location ?? ''),
-      appliance_type: toText(fieldMap.appliance_type ?? ''),
-      make_model: toText(fieldMap.make_model ?? ''),
-      gas_supply_isolated: toText(fieldMap.gas_supply_isolated ?? ''),
-      appliance_capped_off: toText(fieldMap.appliance_capped_off ?? ''),
-      customer_refused_isolation: toText(fieldMap.customer_refused_isolation ?? ''),
-      classification: toText(fieldMap.classification ?? ''),
-      classification_code: toText(fieldMap.classification_code ?? ''),
-      unsafe_situation_description: toText(fieldMap.unsafe_situation_description ?? ''),
-      underlying_cause: toText(fieldMap.underlying_cause ?? ''),
-      actions_taken: toText(fieldMap.actions_taken ?? ''),
-      emergency_services_contacted: toText(fieldMap.emergency_services_contacted ?? ''),
-      emergency_reference: toText(fieldMap.emergency_reference ?? ''),
-      danger_do_not_use_label_fitted: toText(fieldMap.danger_do_not_use_label_fitted ?? ''),
-      meter_or_appliance_tagged: toText(fieldMap.meter_or_appliance_tagged ?? ''),
-      customer_informed: toText(fieldMap.customer_informed ?? ''),
-      customer_understands_risks: toText(fieldMap.customer_understands_risks ?? ''),
-      customer_signature_url: toText(fieldMap.customer_signature ?? fieldMap.customer_signature_url ?? ''),
-      customer_signed_at: toText(fieldMap.customer_signed_at ?? ''),
-      engineer_name: toText(fieldMap.engineer_name ?? ''),
-      engineer_company: toText(fieldMap.engineer_company ?? fieldMap.company_name ?? ''),
-      gas_safe_number: toText(fieldMap.gas_safe_number ?? ''),
-      engineer_id_card_number: toText(fieldMap.engineer_id_card_number ?? fieldMap.engineer_id ?? ''),
-      engineer_signature_url: toText(fieldMap.engineer_signature ?? fieldMap.engineer_signature_url ?? ''),
-      issued_at: toText(fieldMap.issued_at ?? issuedAtIso),
-      record_id: toText(fieldMap.record_id ?? input.jobId),
+      appliance_location: toText(mergedFieldMap.appliance_location ?? ''),
+      appliance_type: toText(mergedFieldMap.appliance_type ?? ''),
+      make_model: toText(mergedFieldMap.make_model ?? ''),
+      gas_supply_isolated: toText(mergedFieldMap.gas_supply_isolated ?? ''),
+      appliance_capped_off: toText(mergedFieldMap.appliance_capped_off ?? ''),
+      customer_refused_isolation: toText(mergedFieldMap.customer_refused_isolation ?? ''),
+      classification: toText(mergedFieldMap.classification ?? ''),
+      classification_code: toText(mergedFieldMap.classification_code ?? ''),
+      unsafe_situation_description: toText(mergedFieldMap.unsafe_situation_description ?? ''),
+      underlying_cause: toText(mergedFieldMap.underlying_cause ?? ''),
+      actions_taken: toText(mergedFieldMap.actions_taken ?? ''),
+      emergency_services_contacted: toText(mergedFieldMap.emergency_services_contacted ?? ''),
+      emergency_reference: toText(mergedFieldMap.emergency_reference ?? ''),
+      danger_do_not_use_label_fitted: toText(mergedFieldMap.danger_do_not_use_label_fitted ?? ''),
+      meter_or_appliance_tagged: toText(mergedFieldMap.meter_or_appliance_tagged ?? ''),
+      customer_informed: toText(mergedFieldMap.customer_informed ?? ''),
+      customer_understands_risks: toText(mergedFieldMap.customer_understands_risks ?? ''),
+      customer_signature_url: toText(mergedFieldMap.customer_signature ?? mergedFieldMap.customer_signature_url ?? ''),
+      customer_signed_at: toText(mergedFieldMap.customer_signed_at ?? ''),
+      engineer_name: toText(mergedFieldMap.engineer_name ?? ''),
+      engineer_company: toText(mergedFieldMap.engineer_company ?? mergedFieldMap.company_name ?? ''),
+      gas_safe_number: toText(mergedFieldMap.gas_safe_number ?? ''),
+      engineer_id_card_number: toText(mergedFieldMap.engineer_id_card_number ?? mergedFieldMap.engineer_id ?? ''),
+      engineer_signature_url: toText(mergedFieldMap.engineer_signature ?? mergedFieldMap.engineer_signature_url ?? ''),
+      issued_at: toText(mergedFieldMap.issued_at ?? issuedAtIso),
+      record_id: toText(mergedFieldMap.record_id ?? input.jobId),
     };
 
     const validationErrors = previewOnly ? [] : validateGasWarningNoticeForIssue(gasWarningFields);

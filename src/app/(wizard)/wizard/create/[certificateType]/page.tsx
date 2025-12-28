@@ -14,6 +14,11 @@ import { BreakdownWizard } from './_components/breakdown-wizard';
 import { CommissioningWizard } from './_components/commissioning-wizard';
 import { mergeJobContextFields } from './_components/initial-job-context';
 import { CertificateClientStep } from './_components/certificate-client-step';
+import { BoilerServiceClientStep } from './_components/boiler-service-client-step';
+import { GeneralWorksClientStep } from './_components/general-works-client-step';
+import { GasWarningClientStep } from './_components/gas-warning-client-step';
+import { BreakdownClientStep } from './_components/breakdown-client-step';
+import { CommissioningClientStep } from './_components/commissioning-client-step';
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
@@ -27,12 +32,12 @@ const isAuthError = (error: unknown) =>
   (error.message === 'Unauthorized' || error.message.includes('Auth session missing'));
 
 const CERTIFICATE_STEP_TOTALS: Record<CertificateType, number> = {
-  cp12: 4,
+  cp12: 5,
   gas_service: 4,
-  general_works: 4,
+  general_works: 3,
   gas_warning_notice: 3,
   breakdown: 5,
-  commissioning: 5,
+  commissioning: 4,
 };
 
 export default async function CertificateWizardPage({
@@ -63,6 +68,21 @@ export default async function CertificateWizardPage({
   if (!existingJobId && !clientId) {
     try {
       const clients = await listClients();
+      if (normalizedType === 'gas_service') {
+        return <BoilerServiceClientStep clients={clients} totalSteps={totalSteps} />;
+      }
+      if (normalizedType === 'general_works') {
+        return <GeneralWorksClientStep clients={clients} totalSteps={totalSteps} />;
+      }
+      if (normalizedType === 'gas_warning_notice') {
+        return <GasWarningClientStep clients={clients} totalSteps={totalSteps} />;
+      }
+      if (normalizedType === 'breakdown') {
+        return <BreakdownClientStep clients={clients} totalSteps={totalSteps} />;
+      }
+      if (normalizedType === 'commissioning') {
+        return <CommissioningClientStep clients={clients} totalSteps={totalSteps} />;
+      }
       return (
         <CertificateClientStep
           certificateType={normalizedType as CertificateType}

@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { CollapsibleSection } from '@/components/wizard/layout/collapsible-section';
 import { EvidenceCard } from './evidence-card';
 import { GAS_WARNING_CLASSIFICATIONS, type GasWarningClassification } from '@/types/gas-warning-notice';
 import {
@@ -311,7 +312,7 @@ export function GasWarningNoticeWizard({
     startTransition(async () => {
       try {
         await persistAll();
-        const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType, previewOnly: true });
+        const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType, previewOnly: true, fields });
         pushToast({ title: 'Preview ready', variant: 'success' });
         router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}&preview=1`);
       } catch (error) {
@@ -328,7 +329,7 @@ export function GasWarningNoticeWizard({
     startTransition(async () => {
       try {
         await persistAll();
-        const { pdfUrl, jobId: resultJobId } = await generateCertificatePdf({ jobId, certificateType, previewOnly: false });
+        const { pdfUrl, jobId: resultJobId } = await generateCertificatePdf({ jobId, certificateType, previewOnly: false, fields });
         pushToast({
           title: 'Gas Warning Notice generated successfully',
           description: pdfUrl ? (
@@ -378,6 +379,7 @@ export function GasWarningNoticeWizard({
     <>
       {step === 1 ? (
         <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job / property" status="Gas Warning Notice">
+          <div className="space-y-3">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -385,28 +387,33 @@ export function GasWarningNoticeWizard({
               </Button>
             </div>
           ) : null}
+          <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={fields.property_address}
               onChange={(e) => setFields((prev) => ({ ...prev, property_address: e.target.value }))}
               placeholder="Property address"
-              className="sm:col-span-2"
+              className="rounded-2xl sm:col-span-2"
             />
             <Input
               value={fields.postcode}
               onChange={(e) => setFields((prev) => ({ ...prev, postcode: e.target.value }))}
               placeholder="Postcode"
+              className="rounded-2xl"
             />
             <Input
               value={fields.customer_name}
               onChange={(e) => setFields((prev) => ({ ...prev, customer_name: e.target.value }))}
               placeholder="Customer name"
+              className="rounded-2xl"
             />
             <Input
               value={fields.customer_contact}
               onChange={(e) => setFields((prev) => ({ ...prev, customer_contact: e.target.value }))}
               placeholder="Customer contact (phone/email)"
+              className="rounded-2xl"
             />
+          </div>
           </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleJobNext} disabled={isPending}>
@@ -418,6 +425,7 @@ export function GasWarningNoticeWizard({
 
       {step === 2 ? (
         <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance + classification" status="Gas Warning" onBack={() => setStep(1)}>
+          <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -425,85 +433,93 @@ export function GasWarningNoticeWizard({
               </Button>
             </div>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              value={fields.appliance_location}
-              onChange={(e) => setFields((prev) => ({ ...prev, appliance_location: e.target.value }))}
-              placeholder="Appliance location"
-            />
-            <Input
-              value={fields.appliance_type}
-              onChange={(e) => setFields((prev) => ({ ...prev, appliance_type: e.target.value }))}
-              placeholder="Appliance type"
-            />
-            <Input
-              value={fields.make_model}
-              onChange={(e) => setFields((prev) => ({ ...prev, make_model: e.target.value }))}
-              placeholder="Make / model (optional)"
-              className="sm:col-span-2"
-            />
-            <Select
-              value={fields.classification}
-              onChange={(e) => setFields((prev) => ({ ...prev, classification: e.target.value as GasWarningClassification }))}
-            >
-              <option value="">Classification</option>
-              {GAS_WARNING_CLASSIFICATIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
+          <CollapsibleSection title="Appliance & classification" subtitle="Capture appliance and risk">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                value={fields.appliance_location}
+                onChange={(e) => setFields((prev) => ({ ...prev, appliance_location: e.target.value }))}
+                placeholder="Appliance location"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.appliance_type}
+                onChange={(e) => setFields((prev) => ({ ...prev, appliance_type: e.target.value }))}
+                placeholder="Appliance type"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.make_model}
+                onChange={(e) => setFields((prev) => ({ ...prev, make_model: e.target.value }))}
+                placeholder="Make / model (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Select
+                value={fields.classification}
+                onChange={(e) => setFields((prev) => ({ ...prev, classification: e.target.value as GasWarningClassification }))}
+              >
+                <option value="">Classification</option>
+                {GAS_WARNING_CLASSIFICATIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </Select>
+              <Input
+                value={fields.classification_code}
+                onChange={(e) => setFields((prev) => ({ ...prev, classification_code: e.target.value }))}
+                placeholder="Classification code (optional)"
+                className="rounded-2xl"
+              />
+              <Textarea
+                value={fields.unsafe_situation_description}
+                onChange={(e) => setFields((prev) => ({ ...prev, unsafe_situation_description: e.target.value }))}
+                placeholder="Unsafe situation description"
+                className="min-h-[90px] rounded-2xl sm:col-span-2"
+              />
+              <Textarea
+                value={fields.underlying_cause}
+                onChange={(e) => setFields((prev) => ({ ...prev, underlying_cause: e.target.value }))}
+                placeholder="Underlying cause (optional)"
+                className="min-h-[90px] rounded-2xl sm:col-span-2"
+              />
+              <Textarea
+                value={fields.actions_taken}
+                onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
+                placeholder="Actions taken"
+                className="min-h-[90px] rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={fields.emergency_reference}
+                onChange={(e) => setFields((prev) => ({ ...prev, emergency_reference: e.target.value }))}
+                placeholder="Emergency reference (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+            </div>
+          </CollapsibleSection>
+          <CollapsibleSection title="Safety actions" subtitle="Isolation, tagging, and emergency actions">
+            <div className="space-y-2 rounded-2xl border border-white/40 bg-white/70 p-4">
+              {[
+                ['gas_supply_isolated', 'Gas supply isolated'],
+                ['appliance_capped_off', 'Appliance capped off'],
+                ['customer_refused_isolation', 'Customer refused isolation'],
+                ['emergency_services_contacted', 'Emergency services contacted'],
+                ['danger_do_not_use_label_fitted', "Danger: Do Not Use label fitted"],
+                ['meter_or_appliance_tagged', 'Meter or appliance tagged'],
+              ].map(([key, label]) => (
+                <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[var(--accent)]"
+                    checked={fields[key as keyof GasWarningFormState] as boolean}
+                    onChange={(e) =>
+                      setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
+                    }
+                  />
+                  {label}
+                </label>
               ))}
-            </Select>
-            <Input
-              value={fields.classification_code}
-              onChange={(e) => setFields((prev) => ({ ...prev, classification_code: e.target.value }))}
-              placeholder="Classification code (optional)"
-            />
-            <Textarea
-              value={fields.unsafe_situation_description}
-              onChange={(e) => setFields((prev) => ({ ...prev, unsafe_situation_description: e.target.value }))}
-              placeholder="Unsafe situation description"
-              className="min-h-[90px] sm:col-span-2"
-            />
-            <Textarea
-              value={fields.underlying_cause}
-              onChange={(e) => setFields((prev) => ({ ...prev, underlying_cause: e.target.value }))}
-              placeholder="Underlying cause (optional)"
-              className="min-h-[90px] sm:col-span-2"
-            />
-            <Textarea
-              value={fields.actions_taken}
-              onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
-              placeholder="Actions taken"
-              className="min-h-[90px] sm:col-span-2"
-            />
-            <Input
-              value={fields.emergency_reference}
-              onChange={(e) => setFields((prev) => ({ ...prev, emergency_reference: e.target.value }))}
-              placeholder="Emergency reference (optional)"
-              className="sm:col-span-2"
-            />
-          </div>
-          <div className="mt-4 space-y-2 rounded-2xl border border-white/40 bg-white/70 p-4">
-            {[
-              ['gas_supply_isolated', 'Gas supply isolated'],
-              ['appliance_capped_off', 'Appliance capped off'],
-              ['customer_refused_isolation', 'Customer refused isolation'],
-              ['emergency_services_contacted', 'Emergency services contacted'],
-              ['danger_do_not_use_label_fitted', "Danger: Do Not Use label fitted"],
-              ['meter_or_appliance_tagged', 'Meter or appliance tagged'],
-            ].map(([key, label]) => (
-              <label key={key} className="flex items-center gap-3 text-sm text-muted">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-[var(--accent)]"
-                  checked={fields[key as keyof GasWarningFormState] as boolean}
-                  onChange={(e) =>
-                    setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
-                  }
-                />
-                {label}
-              </label>
-            ))}
+            </div>
+          </CollapsibleSection>
           </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleApplianceNext} disabled={isPending}>
@@ -515,6 +531,7 @@ export function GasWarningNoticeWizard({
 
       {step === 3 ? (
         <WizardLayout step={offsetStep(3)} total={totalSteps} title="Acknowledgement + engineer" status="Gas Warning" onBack={() => setStep(2)}>
+          <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -522,9 +539,8 @@ export function GasWarningNoticeWizard({
               </Button>
             </div>
           ) : null}
-          <div className="mb-4 rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
-            <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <CollapsibleSection title="Evidence photos" subtitle="Optional attachments">
+            <div className="grid gap-3 sm:grid-cols-2">
               {FINAL_EVIDENCE_CATEGORIES.map((item) => (
                 <EvidenceCard
                   key={item.key}
@@ -536,68 +552,81 @@ export function GasWarningNoticeWizard({
                 />
               ))}
             </div>
+          </CollapsibleSection>
+          <CollapsibleSection title="Engineer details" subtitle="Required to issue notice" defaultOpen>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                value={fields.engineer_name}
+                onChange={(e) => setFields((prev) => ({ ...prev, engineer_name: e.target.value }))}
+                placeholder="Engineer name"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.engineer_company}
+                onChange={(e) => setFields((prev) => ({ ...prev, engineer_company: e.target.value }))}
+                placeholder="Engineer company"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.gas_safe_number}
+                onChange={(e) => setFields((prev) => ({ ...prev, gas_safe_number: e.target.value }))}
+                placeholder="Gas Safe number"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.engineer_id_card_number}
+                onChange={(e) => setFields((prev) => ({ ...prev, engineer_id_card_number: e.target.value }))}
+                placeholder="Engineer ID card number (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                type="date"
+                value={fields.issued_at}
+                onChange={(e) => setFields((prev) => ({ ...prev, issued_at: e.target.value }))}
+                placeholder="Issued at"
+                className="rounded-2xl"
+              />
+              <Input
+                type="date"
+                value={fields.customer_signed_at}
+                onChange={(e) => setFields((prev) => ({ ...prev, customer_signed_at: e.target.value }))}
+                placeholder="Customer signed at (optional)"
+                className="rounded-2xl"
+              />
+            </div>
+          </CollapsibleSection>
+          <CollapsibleSection title="Customer acknowledgement" subtitle="Confirm customer informed">
+            <div className="space-y-2 rounded-2xl border border-white/40 bg-white/70 p-4">
+              {[
+                ['customer_informed', 'Customer informed (required)'],
+                ['customer_understands_risks', 'Customer understands risks'],
+              ].map(([key, label]) => (
+                <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[var(--accent)]"
+                    checked={fields[key as keyof GasWarningFormState] as boolean}
+                    onChange={(e) =>
+                      setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </CollapsibleSection>
+          <CollapsibleSection title="Signatures" subtitle="Customer + engineer">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+              <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
+            </div>
+          </CollapsibleSection>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              value={fields.engineer_name}
-              onChange={(e) => setFields((prev) => ({ ...prev, engineer_name: e.target.value }))}
-              placeholder="Engineer name"
-            />
-            <Input
-              value={fields.engineer_company}
-              onChange={(e) => setFields((prev) => ({ ...prev, engineer_company: e.target.value }))}
-              placeholder="Engineer company"
-            />
-            <Input
-              value={fields.gas_safe_number}
-              onChange={(e) => setFields((prev) => ({ ...prev, gas_safe_number: e.target.value }))}
-              placeholder="Gas Safe number"
-            />
-            <Input
-              value={fields.engineer_id_card_number}
-              onChange={(e) => setFields((prev) => ({ ...prev, engineer_id_card_number: e.target.value }))}
-              placeholder="Engineer ID card number (optional)"
-            />
-            <Input
-              type="date"
-              value={fields.issued_at}
-              onChange={(e) => setFields((prev) => ({ ...prev, issued_at: e.target.value }))}
-              placeholder="Issued at"
-            />
-            <Input
-              type="date"
-              value={fields.customer_signed_at}
-              onChange={(e) => setFields((prev) => ({ ...prev, customer_signed_at: e.target.value }))}
-              placeholder="Customer signed at (optional)"
-            />
-          </div>
-          <div className="mt-4 space-y-2 rounded-2xl border border-white/40 bg-white/70 p-4">
-            {[
-              ['customer_informed', 'Customer informed (required)'],
-              ['customer_understands_risks', 'Customer understands risks'],
-            ].map(([key, label]) => (
-              <label key={key} className="flex items-center gap-3 text-sm text-muted">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-[var(--accent)]"
-                  checked={fields[key as keyof GasWarningFormState] as boolean}
-                  onChange={(e) =>
-                    setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
-                  }
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
-            <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
-          </div>
-          <div className="mt-6 flex flex-wrap gap-3 justify-end">
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" className="rounded-full px-6" onClick={handlePreview} disabled={isPending}>
               Preview PDF
             </Button>
-            <Button className="rounded-full px-6" onClick={handleGenerate} disabled={isPending}>
+            <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
               Generate PDF
             </Button>
             <Button variant="ghost" className="rounded-full px-6" onClick={handleAcknowledgementNext} disabled={isPending}>

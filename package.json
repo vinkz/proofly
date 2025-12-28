@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
+    "extract:gas-warning-fields": "node scripts/extract-gas-warning-fields.js",
+    "test:gas-warning-render": "node scripts/test-render-gas-warning.js",
     "mobile": "node scripts/mobile-dev.js"
   },
   "dependencies": {

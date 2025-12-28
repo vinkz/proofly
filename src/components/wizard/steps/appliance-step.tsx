@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +40,9 @@ type ApplianceStepProps = {
   onPrefillClick?: () => void;
   requiredKeys?: Array<keyof ApplianceStepValues>;
   showExtendedFields?: boolean;
+  showYear?: boolean;
+  yearStart?: number;
+  applyExtendedDefaults?: boolean;
   inlineEditor?: boolean;
 };
 
@@ -85,35 +88,38 @@ export function ApplianceStep({
   onPrefillClick,
   requiredKeys = ['type', 'location'],
   showExtendedFields = false,
+  showYear = true,
+  yearStart = YEAR_MIN,
+  applyExtendedDefaults = true,
   inlineEditor = false,
 }: ApplianceStepProps) {
   const catalogMakes = useMemo(() => getMakes(), []);
-  const resolvedMakeOptions = useMemo(
-    () =>
-      (makeOptions ?? catalogMakes).map((make) => ({
-        label: make,
-        value: make,
-      })),
-    [catalogMakes, makeOptions],
-  );
+  const resolvedMakeOptions = useMemo(() => {
+    if (makeOptions?.length) return makeOptions;
+    return catalogMakes.map((make) => ({
+      label: make,
+      value: make,
+    }));
+  }, [catalogMakes, makeOptions]);
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
     const years: string[] = [];
-    for (let year = current; year >= YEAR_MIN; year -= 1) {
+    for (let year = current; year >= yearStart; year -= 1) {
       years.push(String(year));
     }
     return ['Unknown', ...years];
-  }, []);
+  }, [yearStart]);
   const isArrayMode = Array.isArray(appliances) && typeof onAppliancesChange === 'function';
-  const normalizeExtendedFields = (items: ApplianceStepValues[]) => {
+  const normalizeExtendedFields = useCallback((items: ApplianceStepValues[]) => {
     if (!showExtendedFields) return items;
+    if (!applyExtendedDefaults) return items;
     return items.map((item) => ({
       ...item,
       mountType: item.mountType || DEFAULT_MOUNT,
       gasType: item.gasType || DEFAULT_GAS,
-      year: item.year || 'unknown',
+      year: showYear ? item.year || 'unknown' : item.year ?? '',
     }));
-  };
+  }, [applyExtendedDefaults, showExtendedFields, showYear]);
 
   const [localAppliances, setLocalAppliances] = useState<ApplianceStepValues[]>(
     normalizeExtendedFields(appliances && appliances.length ? appliances : [appliance ?? emptyAppliance]),
@@ -130,12 +136,12 @@ export function ApplianceStep({
         return normalizeExtendedFields(next);
       });
     }
-  }, [appliance, isArrayMode, showExtendedFields]);
+  }, [appliance, isArrayMode, normalizeExtendedFields]);
 
   useEffect(() => {
     if (!isArrayMode || !appliances) return;
     setLocalAppliances(normalizeExtendedFields(appliances.length ? appliances : [emptyAppliance]));
-  }, [appliances, isArrayMode, showExtendedFields]);
+  }, [appliances, isArrayMode, normalizeExtendedFields]);
 
   const activeAppliances = useMemo(
     () => (isArrayMode ? appliances ?? [] : localAppliances),
@@ -198,7 +204,7 @@ export function ApplianceStep({
       }
       if (key === 'make') {
         const models = getModelsForMake(value);
-        if (updated.model && value !== 'Other' && models.length && !models.includes(updated.model)) {
+        if (updated.model && models.length && !models.includes(updated.model)) {
           updated.model = '';
         }
       }
@@ -228,7 +234,7 @@ export function ApplianceStep({
   const modelOptions = useMemo(() => {
     const make = activeAppliances[editingIndex]?.make ?? '';
     const models = getModelsForMake(make);
-    return [...models, 'Other'].map((model) => ({ label: model, value: model }));
+    return [...models, 'Not listed'].map((model) => ({ label: model, value: model }));
   }, [activeAppliances, editingIndex]);
 
   return (
@@ -245,7 +251,21 @@ export function ApplianceStep({
       <div className="space-y-3">
         {inlineEditor ? (
           <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-            <div className="grid gap-4 sm:grid-cols-2">
+            {(() => {
+              const makeValue = activeAppliances[0]?.make ?? '';
+              const makeIsKnown = isKnownMake(makeValue);
+              const makeSelectValue = makeIsKnown ? makeValue : makeValue ? 'Other' : '';
+              const showOtherMake = makeSelectValue === 'Other';
+              const modelValue = activeAppliances[0]?.model ?? '';
+              const modelsForMake = getModelsForMake(makeValue);
+              const modelIsKnown = modelsForMake.includes(modelValue);
+              const modelSelectValue = modelIsKnown ? modelValue : modelValue ? 'Not listed' : '';
+              const showManualModel = modelSelectValue === 'Not listed';
+              const manualModelValue = modelValue === 'Not listed' ? '' : modelValue;
+              const manualMakeValue = makeValue === 'Other' ? '' : makeValue;
+
+              return (
+                <div className="grid gap-4 sm:grid-cols-2">
               <EnumChips
                 label="Appliance type"
                 value={activeAppliances[0]?.type ?? ''}
@@ -254,18 +274,28 @@ export function ApplianceStep({
               />
               <SearchableSelect
                 label="Make"
-                value={activeAppliances[0]?.make ?? ''}
+                value={makeSelectValue}
                 options={resolvedMakeOptions}
                 placeholder="Select or type"
-                onChange={(val) => updateApplianceField(0, 'make', val)}
+                onChange={(val) => updateApplianceField(0, 'make', val === 'Other' ? 'Other' : val)}
               />
-              {isKnownMake(activeAppliances[0]?.make ?? '') && activeAppliances[0]?.make !== 'Other' ? (
+              {showOtherMake ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Other make</p>
+                  <Input
+                    value={manualMakeValue}
+                    onChange={(e) => updateApplianceField(0, 'make', e.target.value)}
+                    placeholder="Type boiler make"
+                  />
+                </div>
+              ) : null}
+              {makeIsKnown ? (
                 <SearchableSelect
                   label="Model"
-                  value={activeAppliances[0]?.model ?? ''}
+                  value={modelSelectValue}
                   options={modelOptions}
                   placeholder="Select or type"
-                  onChange={(val) => updateApplianceField(0, 'model', val)}
+                  onChange={(val) => updateApplianceField(0, 'model', val === 'Not listed' ? 'Not listed' : val)}
                 />
               ) : (
                 <div className="space-y-2">
@@ -277,6 +307,16 @@ export function ApplianceStep({
                   />
                 </div>
               )}
+              {makeIsKnown && showManualModel ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model (manual)</p>
+                  <Input
+                    value={manualModelValue}
+                    onChange={(e) => updateApplianceField(0, 'model', e.target.value)}
+                    placeholder="Type model"
+                  />
+                </div>
+              ) : null}
               <SearchableSelect
                 label="Location"
                 value={activeAppliances[0]?.location ?? ''}
@@ -319,7 +359,7 @@ export function ApplianceStep({
                   </Select>
                 </div>
               ) : null}
-              {showExtendedFields ? (
+              {showExtendedFields && showYear ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Year of manufacture</p>
                   <Select
@@ -340,6 +380,8 @@ export function ApplianceStep({
                   value={activeAppliances[0]?.serial ?? ''}
                   onChange={(e) => updateApplianceField(0, 'serial', e.target.value)}
                   placeholder="Serial number"
+                  inputMode="text"
+                  autoCapitalize="characters"
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground/70">
                   <span>Usually on data plate/label.</span>
@@ -349,6 +391,8 @@ export function ApplianceStep({
                 </div>
               </div>
             </div>
+              );
+            })()}
           </div>
         ) : (
           activeAppliances.map((item, index) => (
@@ -365,7 +409,21 @@ export function ApplianceStep({
       {!inlineEditor ? (
         <Sheet open={isEditorOpen} onOpenChange={setIsEditorOpen}>
           <SheetContent side="bottom" title="Appliance profile" description="Add core appliance details.">
-            <div className="grid gap-4 sm:grid-cols-2">
+            {(() => {
+              const makeValue = activeAppliances[editingIndex]?.make ?? '';
+              const makeIsKnown = isKnownMake(makeValue);
+              const makeSelectValue = makeIsKnown ? makeValue : makeValue ? 'Other' : '';
+              const showOtherMake = makeSelectValue === 'Other';
+              const modelValue = activeAppliances[editingIndex]?.model ?? '';
+              const modelsForMake = getModelsForMake(makeValue);
+              const modelIsKnown = modelsForMake.includes(modelValue);
+              const modelSelectValue = modelIsKnown ? modelValue : modelValue ? 'Not listed' : '';
+              const showManualModel = modelSelectValue === 'Not listed';
+              const manualModelValue = modelValue === 'Not listed' ? '' : modelValue;
+              const manualMakeValue = makeValue === 'Other' ? '' : makeValue;
+
+              return (
+                <div className="grid gap-4 sm:grid-cols-2">
               <EnumChips
                 label="Appliance type"
                 value={activeAppliances[editingIndex]?.type ?? ''}
@@ -374,18 +432,28 @@ export function ApplianceStep({
               />
               <SearchableSelect
                 label="Make"
-                value={activeAppliances[editingIndex]?.make ?? ''}
+                value={makeSelectValue}
                 options={resolvedMakeOptions}
                 placeholder="Select or type"
-                onChange={(val) => updateApplianceField(editingIndex, 'make', val)}
+                onChange={(val) => updateApplianceField(editingIndex, 'make', val === 'Other' ? 'Other' : val)}
               />
-              {isKnownMake(activeAppliances[editingIndex]?.make ?? '') && activeAppliances[editingIndex]?.make !== 'Other' ? (
+              {showOtherMake ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Other make</p>
+                  <Input
+                    value={manualMakeValue}
+                    onChange={(e) => updateApplianceField(editingIndex, 'make', e.target.value)}
+                    placeholder="Type boiler make"
+                  />
+                </div>
+              ) : null}
+              {makeIsKnown ? (
                 <SearchableSelect
                   label="Model"
-                  value={activeAppliances[editingIndex]?.model ?? ''}
+                  value={modelSelectValue}
                   options={modelOptions}
                   placeholder="Select or type"
-                  onChange={(val) => updateApplianceField(editingIndex, 'model', val)}
+                  onChange={(val) => updateApplianceField(editingIndex, 'model', val === 'Not listed' ? 'Not listed' : val)}
                 />
               ) : (
                 <div className="space-y-2">
@@ -397,6 +465,16 @@ export function ApplianceStep({
                   />
                 </div>
               )}
+              {makeIsKnown && showManualModel ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model (manual)</p>
+                  <Input
+                    value={manualModelValue}
+                    onChange={(e) => updateApplianceField(editingIndex, 'model', e.target.value)}
+                    placeholder="Type model"
+                  />
+                </div>
+              ) : null}
               <SearchableSelect
                 label="Location"
                 value={activeAppliances[editingIndex]?.location ?? ''}
@@ -439,7 +517,7 @@ export function ApplianceStep({
                   </Select>
                 </div>
               ) : null}
-              {showExtendedFields ? (
+              {showExtendedFields && showYear ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Year of manufacture</p>
                   <Select
@@ -460,6 +538,8 @@ export function ApplianceStep({
                   value={activeAppliances[editingIndex]?.serial ?? ''}
                   onChange={(e) => updateApplianceField(editingIndex, 'serial', e.target.value)}
                   placeholder="Serial number"
+                  inputMode="text"
+                  autoCapitalize="characters"
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground/70">
                   <span>Usually on data plate/label.</span>
@@ -469,6 +549,8 @@ export function ApplianceStep({
                 </div>
               </div>
             </div>
+              );
+            })()}
             <div className="mt-6 flex justify-end">
               <Button type="button" className="rounded-full" onClick={() => setIsEditorOpen(false)}>
                 Done

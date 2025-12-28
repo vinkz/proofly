@@ -1,12 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -15,7 +13,7 @@ import { EvidenceCard } from './evidence-card';
 import { ApplianceStep } from '@/components/wizard/steps/appliance-step';
 import { ChecksStep } from '@/components/wizard/steps/checks-step';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
-import { createGasBreakdownReport } from '@/server/jobs';
+import { createGasBreakdownReport, previewGasBreakdownReport } from '@/server/jobs';
 import { uploadJobPhoto } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { PhotoCategory } from '@/types/certificates';
@@ -111,28 +109,14 @@ const pickText = (...values: Array<string | null | undefined>) => {
   return '';
 };
 
-const Step1Schema = z
-  .object({
-    job_reference: z.string().min(1, 'Job reference is required'),
-    job_visit_date: z.string().min(1, 'Visit date is required'),
-    job_address_line1: z.string().min(1, 'Job address line 1 is required'),
-    job_postcode: z.string().min(1, 'Job postcode is required'),
-    client_name: z.string().min(1, 'Client name is required'),
-    client_tel: z.string().optional(),
-    client_email: z.string().optional(),
-  })
-  .refine((data) => Boolean(data.client_tel?.trim() || data.client_email?.trim()), {
-    message: 'Client phone or email is required',
-    path: ['client_tel'],
-  });
-
-const Step2Schema = z.object({
-  engineer_name: z.string().min(1, 'Engineer name is required'),
-  company_name: z.string().min(1, 'Company name is required'),
-  gas_safe_number: z.string().min(1, 'Gas Safe number is required'),
+const Step1Schema = z.object({
+  job_reference: z.string().min(1, 'Job reference is required'),
+  job_visit_date: z.string().min(1, 'Visit date is required'),
+  job_address_line1: z.string().min(1, 'Job address line 1 is required'),
+  job_postcode: z.string().min(1, 'Job postcode is required'),
 });
 
-const Step3Schema = z.object({
+const Step2Schema = z.object({
   appliance_type: z.string().min(1, 'Appliance type is required'),
   appliance_make: z.string().min(1, 'Appliance make is required'),
   appliance_model: z.string().min(1, 'Appliance model is required'),
@@ -140,7 +124,7 @@ const Step3Schema = z.object({
   appliance_serial: z.string().min(1, 'Appliance serial is required'),
 });
 
-const Step4Schema = z.object({
+const Step3Schema = z.object({
   operating_pressure: z.string().min(1, 'Operating pressure is required'),
   heat_input: z.string().min(1, 'Heat input is required'),
   reported_issue: z.string().min(1, 'Reported issue is required'),
@@ -150,11 +134,11 @@ const Step4Schema = z.object({
   fault_resolved: z.boolean(),
 });
 
-const Step5Schema = z.object({
+const Step4Schema = z.object({
   issued_by_name: z.string().min(1, 'Issued by name is required'),
 });
 
-const RequiredSchema = Step1Schema.merge(Step2Schema).merge(Step3Schema).merge(Step4Schema).merge(Step5Schema);
+const RequiredSchema = Step1Schema.merge(Step2Schema).merge(Step3Schema).merge(Step4Schema);
 
 const APPLIANCE_TYPE_OPTIONS = [
   { label: 'Combi', value: 'combi' },
@@ -171,17 +155,17 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const today = new Date().toISOString().slice(0, 10);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
-  const totalSteps = 5 + stepOffset;
+  const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
 
   const [fields, setFields] = useState<BreakdownFormState>({
     job_reference: pickText(resolvedFields.job_reference, resolvedFields.cert_no, resolvedFields.record_id),
     job_visit_date: pickText(toDateInput(resolvedFields.job_visit_date), toDateInput(resolvedFields.service_date), today),
     job_address_name: toText(resolvedFields.property_name),
-    job_address_line1: toText(resolvedFields.property_address),
+    job_address_line1: pickText(toText(resolvedFields.job_address_line1), toText(resolvedFields.property_address)),
     job_address_line2: toText(resolvedFields.property_address_line2),
     job_address_city: toText(resolvedFields.property_town),
-    job_postcode: toText(resolvedFields.postcode),
+    job_postcode: pickText(toText(resolvedFields.job_postcode), toText(resolvedFields.postcode)),
     job_tel: toText(resolvedFields.job_phone),
     client_name: toText(resolvedFields.customer_name),
     client_company: toText(resolvedFields.customer_company),
@@ -383,6 +367,36 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
     });
   };
 
+  const handlePreview = () => {
+    if (!validateStep(RequiredSchema)) return;
+
+    startTransition(async () => {
+      try {
+        const result = await previewGasBreakdownReport({
+          jobId,
+          fields,
+        });
+        pushToast({
+          title: 'Preview ready',
+          variant: 'success',
+        });
+        if (result.pdfUrl && typeof window !== 'undefined') {
+          try {
+            window.open(result.pdfUrl, '_blank');
+          } catch {
+            // ignore window blocking
+          }
+        }
+      } catch (error) {
+        pushToast({
+          title: 'Could not load preview',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
   const safetyChecksLeft = [
     { key: 'safety_operating_correctly', label: 'Operating correctly' },
     { key: 'safety_conforms_standards', label: 'Conforms to safety standards' },
@@ -410,7 +424,8 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job + client" status="Breakdown">
+        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job address" status="Breakdown">
+          <div className="space-y-3">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -418,127 +433,73 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
               </Button>
             </div>
           ) : null}
-          <Card>
-            <CardHeader>
-              <CardTitle>Job + property</CardTitle>
-              <CardDescription>Confirm the job reference and client/property details.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                  value={fields.job_reference}
-                  onChange={(e) => setFields((prev) => ({ ...prev, job_reference: e.target.value }))}
-                  placeholder="Job reference (Cert No)"
-                />
-                <Input
-                  type="date"
-                  value={fields.job_visit_date}
-                  onChange={(e) => setFields((prev) => ({ ...prev, job_visit_date: e.target.value }))}
-                  placeholder="Visit date"
-                />
-                <Input
-                  value={fields.job_address_name}
-                  onChange={(e) => setFields((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                  placeholder="Job address name (optional)"
-                  className="sm:col-span-2"
-                />
-                <Input
-                  value={fields.job_address_line1}
-                  onChange={(e) => setFields((prev) => ({ ...prev, job_address_line1: e.target.value }))}
-                  placeholder="Job address line 1"
-                  className="sm:col-span-2"
-                />
-                <Input
-                  value={fields.job_address_line2}
-                  onChange={(e) => setFields((prev) => ({ ...prev, job_address_line2: e.target.value }))}
-                  placeholder="Job address line 2 (optional)"
-                />
-                <Input
-                  value={fields.job_address_city}
-                  onChange={(e) => setFields((prev) => ({ ...prev, job_address_city: e.target.value }))}
-                  placeholder="Town/City (optional)"
-                />
-                <Input
-                  value={fields.job_postcode}
-                  onChange={(e) => setFields((prev) => ({ ...prev, job_postcode: e.target.value }))}
-                  placeholder="Postcode"
-                />
-                <Input
-                  value={fields.job_tel}
-                  onChange={(e) => setFields((prev) => ({ ...prev, job_tel: e.target.value }))}
-                  placeholder="Job phone (optional)"
-                />
-                <div className="sm:col-span-2 mt-3 border-t border-white/10 pt-3 text-sm font-semibold text-muted">
-                  Client / Landlord
-                </div>
-                <Input
-                  value={fields.client_name}
-                  onChange={(e) => setFields((prev) => ({ ...prev, client_name: e.target.value }))}
-                  placeholder="Client name"
-                />
-                <Input
-                  value={fields.client_company}
-                  onChange={(e) => setFields((prev) => ({ ...prev, client_company: e.target.value }))}
-                  placeholder="Client company (optional)"
-                />
-                <Input
-                  value={fields.client_address_line1}
-                  onChange={(e) => setFields((prev) => ({ ...prev, client_address_line1: e.target.value }))}
-                  placeholder="Client address line 1"
-                  className="sm:col-span-2"
-                />
-                <Input
-                  value={fields.client_address_line2}
-                  onChange={(e) => setFields((prev) => ({ ...prev, client_address_line2: e.target.value }))}
-                  placeholder="Client address line 2 (optional)"
-                />
-                <Input
-                  value={fields.client_city}
-                  onChange={(e) => setFields((prev) => ({ ...prev, client_city: e.target.value }))}
-                  placeholder="Town/City (optional)"
-                />
-                <Input
-                  value={fields.client_postcode}
-                  onChange={(e) => setFields((prev) => ({ ...prev, client_postcode: e.target.value }))}
-                  placeholder="Client postcode (optional)"
-                />
-                <Input
-                  value={fields.client_tel}
-                  onChange={(e) => setFields((prev) => ({ ...prev, client_tel: e.target.value }))}
-                  placeholder="Client phone"
-                />
-                <Input
-                  value={fields.client_email}
-                  onChange={(e) => setFields((prev) => ({ ...prev, client_email: e.target.value }))}
-                  placeholder="Client email (optional)"
-                />
-                <Input
-                  value={fields.landlord_name}
-                  onChange={(e) => setFields((prev) => ({ ...prev, landlord_name: e.target.value }))}
-                  placeholder="Landlord name (optional)"
-                />
-                <Input
-                  value={fields.landlord_address}
-                  onChange={(e) => setFields((prev) => ({ ...prev, landlord_address: e.target.value }))}
-                  placeholder="Landlord address (optional)"
-                  className="sm:col-span-2"
-                />
-              </div>
-            </CardContent>
-            <CardFooter className="justify-between">
-              <Button asChild variant="outline" className="rounded-full">
-                <Link href={`/jobs/${jobId}`}>Back to job</Link>
-              </Button>
-              <Button className="rounded-full" onClick={() => handleNext(Step1Schema)} disabled={isPending}>
-                Next → Company
-              </Button>
-            </CardFooter>
-          </Card>
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Job address</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Input
+                value={fields.job_reference}
+                onChange={(e) => setFields((prev) => ({ ...prev, job_reference: e.target.value }))}
+                placeholder="Job reference (Cert No)"
+                className="rounded-2xl"
+              />
+              <Input
+                type="date"
+                value={fields.job_visit_date}
+                onChange={(e) => setFields((prev) => ({ ...prev, job_visit_date: e.target.value }))}
+                placeholder="Visit date"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.job_address_name}
+                onChange={(e) => setFields((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                placeholder="Job address name (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={fields.job_address_line1}
+                onChange={(e) => setFields((prev) => ({ ...prev, job_address_line1: e.target.value }))}
+                placeholder="Job address line 1"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={fields.job_address_line2}
+                onChange={(e) => setFields((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                placeholder="Job address line 2 (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.job_address_city}
+                onChange={(e) => setFields((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                placeholder="Town/City (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.job_postcode}
+                onChange={(e) => setFields((prev) => ({ ...prev, job_postcode: e.target.value }))}
+                placeholder="Postcode"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.job_tel}
+                onChange={(e) => setFields((prev) => ({ ...prev, job_tel: e.target.value }))}
+                placeholder="Job phone (optional)"
+                className="rounded-2xl"
+              />
+            </div>
+          </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button className="rounded-full" onClick={() => handleNext(Step1Schema)} disabled={isPending}>
+              Next → Appliance
+            </Button>
+          </div>
         </WizardLayout>
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Company + engineer" status="Breakdown" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance details" status="Breakdown" onBack={() => setStep(1)}>
+          <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -546,75 +507,72 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
               </Button>
             </div>
           ) : null}
-          <Card>
-            <CardHeader>
-              <CardTitle>Company + engineer</CardTitle>
-              <CardDescription>Confirm installer and Gas Safe details.</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Appliance</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Capture appliance details and combustion readings.</p>
+            <div className="mt-4 space-y-4">
+              <ApplianceStep
+                appliance={{
+                  type: fields.appliance_type,
+                  make: fields.appliance_make,
+                  model: fields.appliance_model,
+                  location: fields.appliance_location,
+                  serial: fields.appliance_serial,
+                }}
+                onApplianceChange={(next) =>
+                  setFields((prev) => ({
+                    ...prev,
+                    appliance_type: next.type ?? '',
+                    appliance_make: next.make ?? '',
+                    appliance_model: next.model ?? '',
+                    appliance_location: next.location ?? '',
+                    appliance_serial: next.serial ?? '',
+                  }))
+                }
+                typeOptions={APPLIANCE_TYPE_OPTIONS}
+                showExtendedFields
+                allowMultiple={false}
+                inlineEditor
+              />
               <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                  value={fields.engineer_name}
-                  onChange={(e) => setFields((prev) => ({ ...prev, engineer_name: e.target.value }))}
-                  placeholder="Engineer name"
+                <UnitNumberInput
+                  label="CO reading"
+                  unit="ppm"
+                  value={fields.combustion_co}
+                  onChange={(value) => setFields((prev) => ({ ...prev, combustion_co: value }))}
+                  placeholder="CO (ppm) (optional)"
+                />
+                <UnitNumberInput
+                  label="CO2 reading"
+                  unit="%"
+                  value={fields.combustion_co2}
+                  onChange={(value) => setFields((prev) => ({ ...prev, combustion_co2: value }))}
+                  placeholder="CO2 (%) (optional)"
                 />
                 <Input
-                  value={fields.gas_safe_number}
-                  onChange={(e) => setFields((prev) => ({ ...prev, gas_safe_number: e.target.value }))}
-                  placeholder="Gas Safe registration number"
-                />
-                <Input
-                  value={fields.engineer_id_card_number}
-                  onChange={(e) => setFields((prev) => ({ ...prev, engineer_id_card_number: e.target.value }))}
-                  placeholder="Engineer ID card number (optional)"
-                />
-                <Input
-                  value={fields.company_name}
-                  onChange={(e) => setFields((prev) => ({ ...prev, company_name: e.target.value }))}
-                  placeholder="Company name"
-                />
-                <Input
-                  value={fields.company_address_line1}
-                  onChange={(e) => setFields((prev) => ({ ...prev, company_address_line1: e.target.value }))}
-                  placeholder="Company address line 1"
-                  className="sm:col-span-2"
-                />
-                <Input
-                  value={fields.company_address_line2}
-                  onChange={(e) => setFields((prev) => ({ ...prev, company_address_line2: e.target.value }))}
-                  placeholder="Company address line 2 (optional)"
-                />
-                <Input
-                  value={fields.company_city}
-                  onChange={(e) => setFields((prev) => ({ ...prev, company_city: e.target.value }))}
-                  placeholder="Town/City (optional)"
-                />
-                <Input
-                  value={fields.company_postcode}
-                  onChange={(e) => setFields((prev) => ({ ...prev, company_postcode: e.target.value }))}
-                  placeholder="Company postcode (optional)"
-                />
-                <Input
-                  value={fields.company_tel}
-                  onChange={(e) => setFields((prev) => ({ ...prev, company_tel: e.target.value }))}
-                  placeholder="Company phone (optional)"
+                  value={fields.combustion_ratio}
+                  onChange={(e) => setFields((prev) => ({ ...prev, combustion_ratio: e.target.value }))}
+                  placeholder="CO/CO2 ratio (optional)"
+                  className="rounded-2xl"
                 />
               </div>
-            </CardContent>
-            <CardFooter className="justify-between">
-              <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
-                ← Back
-              </Button>
-              <Button className="rounded-full" onClick={() => handleNext(Step2Schema)} disabled={isPending}>
-                Next → Appliance
-              </Button>
-            </CardFooter>
-          </Card>
+            </div>
+          </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
+              ← Back
+            </Button>
+            <Button className="rounded-full" onClick={() => handleNext(Step2Schema)} disabled={isPending}>
+              Next → Safety
+            </Button>
+          </div>
         </WizardLayout>
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Appliance details" status="Breakdown" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Safety checks" status="Breakdown" onBack={() => setStep(2)}>
+          <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -622,71 +580,112 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
               </Button>
             </div>
           ) : null}
-          <Card>
-            <CardHeader>
-              <CardTitle>Appliance</CardTitle>
-              <CardDescription>Capture appliance details and combustion readings.</CardDescription>
-            </CardHeader>
-          <CardContent>
-              <div className="space-y-4">
-                <ApplianceStep
-                  appliance={{
-                    type: fields.appliance_type,
-                    make: fields.appliance_make,
-                    model: fields.appliance_model,
-                    location: fields.appliance_location,
-                    serial: fields.appliance_serial,
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Safety + breakdown</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Record safety checks and breakdown details.</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <ChecksStep
+                  values={{
+                    operating_pressure: fields.operating_pressure,
+                    heat_input: fields.heat_input,
                   }}
-                  onApplianceChange={(next) =>
+                  onChange={(updates) =>
                     setFields((prev) => ({
                       ...prev,
-                      appliance_type: next.type ?? '',
-                      appliance_make: next.make ?? '',
-                      appliance_model: next.model ?? '',
-                      appliance_location: next.location ?? '',
-                      appliance_serial: next.serial ?? '',
+                      operating_pressure: updates.operating_pressure ?? prev.operating_pressure,
+                      heat_input: updates.heat_input ?? prev.heat_input,
                     }))
                   }
-                  typeOptions={APPLIANCE_TYPE_OPTIONS}
-                  showExtendedFields
+                  operatingPressureLabel="Operating pressure"
                 />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <UnitNumberInput
-                    label="CO reading"
-                    unit="ppm"
-                    value={fields.combustion_co}
-                    onChange={(value) => setFields((prev) => ({ ...prev, combustion_co: value }))}
-                    placeholder="CO (ppm) (optional)"
-                  />
-                  <UnitNumberInput
-                    label="CO2 reading"
-                    unit="%"
-                    value={fields.combustion_co2}
-                    onChange={(value) => setFields((prev) => ({ ...prev, combustion_co2: value }))}
-                    placeholder="CO2 (%) (optional)"
-                  />
-                  <Input
-                    value={fields.combustion_ratio}
-                    onChange={(e) => setFields((prev) => ({ ...prev, combustion_ratio: e.target.value }))}
-                    placeholder="CO/CO2 ratio (optional)"
-                  />
-                </div>
               </div>
-            </CardContent>
-            <CardFooter className="justify-between">
-              <Button variant="outline" className="rounded-full" onClick={() => setStep(2)}>
-                ← Back
-              </Button>
-              <Button className="rounded-full" onClick={() => handleNext(Step3Schema)} disabled={isPending}>
-                Next → Safety
-              </Button>
-            </CardFooter>
-          </Card>
+              <Textarea
+                value={fields.reported_issue}
+                onChange={(e) => setFields((prev) => ({ ...prev, reported_issue: e.target.value }))}
+                placeholder="Reported issue"
+                className="min-h-[90px] rounded-2xl sm:col-span-2"
+              />
+              <Textarea
+                value={fields.diagnostics}
+                onChange={(e) => setFields((prev) => ({ ...prev, diagnostics: e.target.value }))}
+                placeholder="Diagnostics carried out"
+                className="min-h-[90px] rounded-2xl sm:col-span-2"
+              />
+              <Textarea
+                value={fields.actions_taken}
+                onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
+                placeholder="Actions taken"
+                className="min-h-[90px] rounded-2xl sm:col-span-2"
+              />
+              <div className="sm:col-span-2 grid gap-3 rounded-2xl border border-white/40 bg-white/70 p-4 sm:grid-cols-2">
+                {safetyChecksLeft.map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[var(--accent)]"
+                      checked={fields[key]}
+                      onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.checked }))}
+                    />
+                    {label}
+                  </label>
+                ))}
+                {safetyChecksRight.map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[var(--accent)]"
+                      checked={fields[key]}
+                      onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.checked }))}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <Input
+                value={fields.fault_location}
+                onChange={(e) => setFields((prev) => ({ ...prev, fault_location: e.target.value }))}
+                placeholder="Location of fault"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={fields.part_fitted}
+                onChange={(e) => setFields((prev) => ({ ...prev, part_fitted: e.target.value }))}
+                placeholder="Part fitted (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.parts_required}
+                onChange={(e) => setFields((prev) => ({ ...prev, parts_required: e.target.value }))}
+                placeholder="Parts required (optional)"
+                className="rounded-2xl"
+              />
+              <label className="flex items-center gap-3 text-sm text-muted sm:col-span-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--accent)]"
+                  checked={fields.fault_resolved}
+                  onChange={(e) => setFields((prev) => ({ ...prev, fault_resolved: e.target.checked }))}
+                />
+                Fault resolved
+              </label>
+            </div>
+          </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="rounded-full" onClick={() => setStep(2)}>
+              ← Back
+            </Button>
+            <Button className="rounded-full" onClick={() => handleNext(Step3Schema)} disabled={isPending}>
+              Next → Advice
+            </Button>
+          </div>
         </WizardLayout>
       ) : null}
 
       {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Safety checks" status="Breakdown" onBack={() => setStep(3)}>
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Advice + sign-off" status="Breakdown" onBack={() => setStep(3)}>
+          <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -694,189 +693,78 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
               </Button>
             </div>
           ) : null}
-          <Card>
-            <CardHeader>
-              <CardTitle>Safety + breakdown</CardTitle>
-              <CardDescription>Record safety checks and breakdown details.</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Advice + sign-off</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Capture advice, recommendations, and printed names.</p>
+            <div className="mt-4 grid gap-3">
+              <div className="grid gap-3 rounded-2xl border border-white/40 bg-white/70 p-4 sm:grid-cols-2">
+                {adviceChecks.map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[var(--accent)]"
+                      checked={fields[key]}
+                      onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.checked }))}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <Textarea
+                value={fields.advice_text}
+                onChange={(e) => setFields((prev) => ({ ...prev, advice_text: e.target.value }))}
+                placeholder="Advice and recommendations (optional)"
+                className="min-h-[90px] rounded-2xl"
+              />
+              <Textarea
+                value={fields.engineer_comments}
+                onChange={(e) => setFields((prev) => ({ ...prev, engineer_comments: e.target.value }))}
+                placeholder="Engineer comments (optional)"
+                className="min-h-[90px] rounded-2xl"
+              />
+              <div className="rounded-2xl border border-white/40 bg-white/70 p-4">
+                <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {FINAL_EVIDENCE_CATEGORIES.map((item) => (
+                    <EvidenceCard
+                      key={item.key}
+                      title={item.label}
+                      fields={[]}
+                      values={{}}
+                      onChange={() => null}
+                      onPhotoUpload={handleEvidenceUpload(item.key)}
+                    />
+                  ))}
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <ChecksStep
-                    values={{
-                      operating_pressure: fields.operating_pressure,
-                      heat_input: fields.heat_input,
-                    }}
-                    onChange={(updates) =>
-                      setFields((prev) => ({
-                        ...prev,
-                        operating_pressure: updates.operating_pressure ?? prev.operating_pressure,
-                        heat_input: updates.heat_input ?? prev.heat_input,
-                      }))
-                    }
-                    operatingPressureLabel="Operating pressure"
-                  />
-                </div>
-                <Textarea
-                  value={fields.reported_issue}
-                  onChange={(e) => setFields((prev) => ({ ...prev, reported_issue: e.target.value }))}
-                  placeholder="Reported issue"
-                  className="min-h-[90px] sm:col-span-2"
-                />
-                <Textarea
-                  value={fields.diagnostics}
-                  onChange={(e) => setFields((prev) => ({ ...prev, diagnostics: e.target.value }))}
-                  placeholder="Diagnostics carried out"
-                  className="min-h-[90px] sm:col-span-2"
-                />
-                <Textarea
-                  value={fields.actions_taken}
-                  onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
-                  placeholder="Actions taken"
-                  className="min-h-[90px] sm:col-span-2"
-                />
-                <div className="sm:col-span-2 grid gap-3 rounded-2xl border border-white/40 bg-white/70 p-4 sm:grid-cols-2">
-                  {safetyChecksLeft.map(({ key, label }) => (
-                    <label key={key} className="flex items-center gap-3 text-sm text-muted">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-[var(--accent)]"
-                        checked={fields[key]}
-                        onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.checked }))}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                  {safetyChecksRight.map(({ key, label }) => (
-                    <label key={key} className="flex items-center gap-3 text-sm text-muted">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-[var(--accent)]"
-                        checked={fields[key]}
-                        onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.checked }))}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
                 <Input
-                  value={fields.fault_location}
-                  onChange={(e) => setFields((prev) => ({ ...prev, fault_location: e.target.value }))}
-                  placeholder="Location of fault"
-                  className="sm:col-span-2"
+                  value={fields.issued_by_name}
+                  onChange={(e) => setFields((prev) => ({ ...prev, issued_by_name: e.target.value }))}
+                  placeholder="Issued by (print name)"
+                  className="rounded-2xl"
                 />
                 <Input
-                  value={fields.part_fitted}
-                  onChange={(e) => setFields((prev) => ({ ...prev, part_fitted: e.target.value }))}
-                  placeholder="Part fitted (optional)"
+                  value={fields.received_by_name}
+                  onChange={(e) => setFields((prev) => ({ ...prev, received_by_name: e.target.value }))}
+                  placeholder="Received by (print name) (optional)"
+                  className="rounded-2xl"
                 />
-                <Input
-                  value={fields.parts_required}
-                  onChange={(e) => setFields((prev) => ({ ...prev, parts_required: e.target.value }))}
-                  placeholder="Parts required (optional)"
-                />
-                <label className="flex items-center gap-3 text-sm text-muted sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-[var(--accent)]"
-                    checked={fields.fault_resolved}
-                    onChange={(e) => setFields((prev) => ({ ...prev, fault_resolved: e.target.checked }))}
-                  />
-                  Fault resolved
-                </label>
               </div>
-            </CardContent>
-            <CardFooter className="justify-between">
-              <Button variant="outline" className="rounded-full" onClick={() => setStep(3)}>
-                ← Back
-              </Button>
-              <Button className="rounded-full" onClick={() => handleNext(Step4Schema)} disabled={isPending}>
-                Next → Advice
-              </Button>
-            </CardFooter>
-          </Card>
-        </WizardLayout>
-      ) : null}
-
-      {step === 5 ? (
-        <WizardLayout step={offsetStep(5)} total={totalSteps} title="Advice + sign-off" status="Breakdown" onBack={() => setStep(4)}>
-          {demoEnabled ? (
-            <div className="mb-3 flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
-                Fill demo Breakdown
-              </Button>
             </div>
-          ) : null}
-          <Card>
-            <CardHeader>
-              <CardTitle>Advice + sign-off</CardTitle>
-              <CardDescription>Capture advice, recommendations, and printed names.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3">
-                <div className="grid gap-3 rounded-2xl border border-white/40 bg-white/70 p-4 sm:grid-cols-2">
-                  {adviceChecks.map(({ key, label }) => (
-                    <label key={key} className="flex items-center gap-3 text-sm text-muted">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-[var(--accent)]"
-                        checked={fields[key]}
-                        onChange={(e) => setFields((prev) => ({ ...prev, [key]: e.target.checked }))}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-                <Textarea
-                  value={fields.advice_text}
-                  onChange={(e) => setFields((prev) => ({ ...prev, advice_text: e.target.value }))}
-                  placeholder="Advice and recommendations (optional)"
-                  className="min-h-[90px]"
-                />
-                <Textarea
-                  value={fields.engineer_comments}
-                  onChange={(e) => setFields((prev) => ({ ...prev, engineer_comments: e.target.value }))}
-                  placeholder="Engineer comments (optional)"
-                  className="min-h-[90px]"
-                />
-                <div className="rounded-2xl border border-white/40 bg-white/70 p-4">
-                  <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    {FINAL_EVIDENCE_CATEGORIES.map((item) => (
-                      <EvidenceCard
-                        key={item.key}
-                        title={item.label}
-                        fields={[]}
-                        values={{}}
-                        onChange={() => null}
-                        onPhotoUpload={handleEvidenceUpload(item.key)}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    value={fields.issued_by_name}
-                    onChange={(e) => setFields((prev) => ({ ...prev, issued_by_name: e.target.value }))}
-                    placeholder="Issued by (print name)"
-                  />
-                  <Input
-                    value={fields.received_by_name}
-                    onChange={(e) => setFields((prev) => ({ ...prev, received_by_name: e.target.value }))}
-                    placeholder="Received by (print name) (optional)"
-                  />
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="justify-between">
-              <Button variant="outline" className="rounded-full" onClick={() => setStep(4)}>
-                ← Back
-              </Button>
-              <Button className="rounded-full" onClick={handleGenerate} disabled={isPending}>
-                {isPending ? 'Generating...' : 'Generate record'}
-              </Button>
-            </CardFooter>
-          </Card>
+          </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="rounded-full" onClick={() => setStep(4)}>
+              ← Back
+            </Button>
+            <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>
+              Preview PDF
+            </Button>
+            <Button className="rounded-full" onClick={handleGenerate} disabled={isPending}>
+              {isPending ? 'Generating...' : 'Generate record'}
+            </Button>
+          </div>
         </WizardLayout>
       ) : null}
     </>
