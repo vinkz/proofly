@@ -17,6 +17,7 @@ import { createCommissioningChecklistReport, previewCommissioningChecklistReport
 import { uploadJobPhoto } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { PhotoCategory } from '@/types/certificates';
+import { FgaAutofillModal } from '@/components/fga/FgaAutofillModal';
 
 type CommissioningWizardProps = {
   jobId: string;
@@ -148,6 +149,9 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
+  const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : '';
+  const [isHighFgaOpen, setIsHighFgaOpen] = useState(false);
+  const [isLowFgaOpen, setIsLowFgaOpen] = useState(false);
 
   const [fields, setFields] = useState<CommissioningFormState>({
     engineer_name: toText(resolvedFields.engineer_name),
@@ -308,6 +312,25 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
     setStep((prev) => prev + 1);
   };
 
+  const applyFgaValues = (readingSet: 'high' | 'low', values: { co_ppm?: number; co2_pct?: number; ratio?: number }) => {
+    if (readingSet === 'high') {
+      setFields((prev) => ({
+        ...prev,
+        high_combustion_co_ppm: values.co_ppm === undefined ? prev.high_combustion_co_ppm : String(values.co_ppm),
+        high_combustion_co2: values.co2_pct === undefined ? prev.high_combustion_co2 : String(values.co2_pct),
+        high_combustion_ratio: values.ratio === undefined ? prev.high_combustion_ratio : String(values.ratio),
+      }));
+      return;
+    }
+
+    setFields((prev) => ({
+      ...prev,
+      low_combustion_co_ppm: values.co_ppm === undefined ? prev.low_combustion_co_ppm : String(values.co_ppm),
+      low_combustion_co2: values.co2_pct === undefined ? prev.low_combustion_co2 : String(values.co2_pct),
+      low_combustion_ratio: values.ratio === undefined ? prev.low_combustion_ratio : String(values.ratio),
+    }));
+  };
+
   const handleGenerate = () => {
     if (!validateStep(RequiredSchema)) return;
 
@@ -322,7 +345,7 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
           variant: 'success',
         });
         router.refresh();
-        router.push(`/reports/${jobId}`);
+        router.push(`/jobs/${jobId}/pdf`);
         if (result.signedUrl && typeof window !== 'undefined') {
           try {
             window.open(result.signedUrl, '_blank');
@@ -393,12 +416,6 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
             <p className="text-sm font-semibold text-muted">Job address + commissioning date</p>
             <p className="mt-1 text-xs text-muted-foreground/70">Confirm the property and reference details.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Input
-                value={fields.job_reference}
-                onChange={(e) => setFields((prev) => ({ ...prev, job_reference: e.target.value }))}
-                placeholder="Job reference (Cert No.) (optional)"
-                className="rounded-2xl"
-              />
               <Input
                 type="date"
                 value={fields.commissioning_date}
@@ -607,7 +624,12 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
                 onChange={(value) => setFields((prev) => ({ ...prev, inlet_test_point_max_rate_pressure: value }))}
                 placeholder="Working pressure at appliance inlet max rate (optional)"
               />
-              <div className="sm:col-span-2 mt-2 text-sm font-semibold text-muted">Combustion readings (high)</div>
+              <div className="sm:col-span-2 mt-2 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-muted">
+                Combustion readings (high)
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setIsHighFgaOpen(true)}>
+                  Add FGA Evidence (auto-fill)
+                </Button>
+              </div>
               <UnitNumberInput
                 label="CO (high)"
                 unit="ppm"
@@ -628,7 +650,12 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
                 placeholder="CO/CO2 ratio (optional)"
                 className="rounded-2xl"
               />
-              <div className="sm:col-span-2 mt-2 text-sm font-semibold text-muted">Combustion readings (low)</div>
+              <div className="sm:col-span-2 mt-2 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-muted">
+                Combustion readings (low)
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setIsLowFgaOpen(true)}>
+                  Add FGA Evidence (auto-fill)
+                </Button>
+              </div>
               <UnitNumberInput
                 label="CO (low)"
                 unit="ppm"
@@ -662,6 +689,23 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
           </div>
         </WizardLayout>
       ) : null}
+
+      <FgaAutofillModal
+        open={isHighFgaOpen}
+        onOpenChange={setIsHighFgaOpen}
+        jobId={jobId}
+        applianceId={fgaApplianceId}
+        readingSet="high"
+        onApplied={(values) => applyFgaValues('high', values)}
+      />
+      <FgaAutofillModal
+        open={isLowFgaOpen}
+        onOpenChange={setIsLowFgaOpen}
+        jobId={jobId}
+        applianceId={fgaApplianceId}
+        readingSet="low"
+        onApplied={(values) => applyFgaValues('low', values)}
+      />
 
       {step === 4 ? (
         <WizardLayout step={offsetStep(4)} total={totalSteps} title="Comments + sign-off" status="Commissioning" onBack={() => setStep(3)}>

@@ -18,7 +18,7 @@ export function GenerateWizardReportButton({ jobId, reportKind }: { jobId: strin
       try {
         await finalizeJobReport(jobId, reportKind);
         pushToast({ title: 'Report generated', variant: 'success' });
-        router.push(`/jobs/new/${jobId}/report`);
+        router.push(`/jobs/${jobId}/pdf`);
         router.refresh();
       } catch (error) {
         pushToast({

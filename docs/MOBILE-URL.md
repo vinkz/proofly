@@ -1,5 +1,5 @@
 # Mobile Dev URL
 
-Latest: https://stamp-criterion-add-rush.trycloudflare.com
+Latest: https://seventh-sheets-chronicles-approx.trycloudflare.com
 
-Updated: 2025-11-18T02:13:19.657Z
+Updated: 2025-12-29T00:03:59.480Z

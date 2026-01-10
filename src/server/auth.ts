@@ -21,6 +21,10 @@ const SignUpSchema = CredentialsSchema.extend({
   date_of_birth: z.string().min(4, 'Date of birth is required'),
   profession: z.string().min(2, 'Profession is required'),
   business_name: z.string().optional(),
+  company_name: z.string().min(2, 'Company name is required'),
+  default_engineer_name: z.string().min(2, 'Engineer name is required'),
+  default_engineer_id: z.string().min(2, 'Engineer ID card number is required'),
+  gas_safe_number: z.string().min(2, 'Gas Safe number is required'),
   trade_types: z
     .array(z.string())
     .default(defaultTrades)
@@ -80,7 +84,7 @@ export async function signUpWithPassword(payload: unknown) {
       data: {
         full_name: body.full_name,
         profession: body.profession,
-        business_name: body.business_name ?? null,
+        business_name: body.company_name ?? body.business_name ?? null,
         trade_types: body.trade_types,
         certifications: body.certifications,
       },
@@ -98,6 +102,10 @@ export async function signUpWithPassword(payload: unknown) {
     profession: body.profession,
     trade_types: body.trade_types,
     certifications: body.certifications ?? [],
+    company_name: body.company_name ?? null,
+    default_engineer_name: body.default_engineer_name ?? null,
+    default_engineer_id: body.default_engineer_id ?? null,
+    gas_safe_number: body.gas_safe_number ?? null,
     onboarding_complete: true,
   };
 

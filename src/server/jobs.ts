@@ -29,6 +29,7 @@ import { upsertJobAddressForJob } from '@/server/address-service';
 import { ensureJobRecord, updateJobRecord } from '@/server/jobRecords';
 import { renderGasBreakdownRecord } from '@/server/pdf/renderGasBreakdownRecord';
 import { renderCommissioningChecklist } from '@/server/pdf/renderCommissioningChecklist';
+import { buildClientRef, getNextJobCode } from '@/server/id-chain';
 
 const JobId = z.string().uuid();
 const PhotoId = z.string().uuid();
@@ -178,6 +179,7 @@ export async function createJob(form: FormData | Record<string, unknown>) {
     throw new Error('You do not have access to this template');
   }
 
+  const jobCode = await getNextJobCode(sb, user.id);
   const insertPayload = {
     client_name: input.client_name,
     address: input.address,
@@ -185,6 +187,8 @@ export async function createJob(form: FormData | Record<string, unknown>) {
     template_id: templateRow.id,
     user_id: user.id,
     job_type: DEFAULT_JOB_TYPE,
+    job_code: jobCode,
+    client_ref: buildClientRef(jobCode),
   } as Database['public']['Tables']['jobs']['Insert'];
 
   const { data: job, error: jobErr } = await sb
@@ -245,6 +249,7 @@ export async function createJobDraftFromClient(clientId: string) {
   const clientRecord = resolved?.customer ?? null;
   if (!clientRecord) throw new Error('Client not found');
 
+  const jobCode = await getNextJobCode(sb, user.id);
   const insertPayload = {
     client_id: clientRecord.id,
     client_name: clientRecord.name,
@@ -253,6 +258,8 @@ export async function createJobDraftFromClient(clientId: string) {
     user_id: user.id,
     title: `${clientRecord.name} inspection`,
     job_type: DEFAULT_JOB_TYPE,
+    job_code: jobCode,
+    client_ref: buildClientRef(jobCode),
   } as Database['public']['Tables']['jobs']['Insert'];
 
   const { data: job, error: jobErr } = await sb

@@ -3,7 +3,7 @@
 import { useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { sendPdfToClient } from '@/server/certificates';
+import { sendPdfToClient } from '@/server/communications';
 import { useToast } from '@/components/ui/use-toast';
 import type { CertificateType } from '@/types/certificates';
 
@@ -23,7 +23,15 @@ export function PdfActions({
     if (sentAt === null && !jobId) return;
     startTransition(async () => {
       try {
-        await sendPdfToClient({ jobId });
+        const result = await sendPdfToClient({ jobId, pdfPath: null });
+        if (result.status === 'NOT_CONFIGURED') {
+          pushToast({
+            title: 'Email not configured',
+            description: result.message ?? 'Configure an email provider to send PDFs.',
+            variant: 'error',
+          });
+          return;
+        }
         pushToast({ title: 'PDF sent', variant: 'success' });
       } catch (error) {
         pushToast({

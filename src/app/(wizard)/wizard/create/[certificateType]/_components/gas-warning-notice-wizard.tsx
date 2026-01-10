@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -21,13 +21,14 @@ import {
   uploadJobPhoto,
   uploadSignature,
 } from '@/server/certificates';
-import type { CertificateType, PhotoCategory } from '@/types/certificates';
+import type { CertificateType, Cp12Appliance, PhotoCategory } from '@/types/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 
 type GasWarningNoticeWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
   initialJobContext?: InitialJobContext | null;
+  initialAppliances?: Cp12Appliance[];
   certificateType: CertificateType;
   stepOffset?: number;
 };
@@ -80,6 +81,7 @@ export function GasWarningNoticeWizard({
   jobId,
   initialFields,
   initialJobContext = null,
+  initialAppliances = [],
   certificateType,
   stepOffset = 0,
 }: GasWarningNoticeWizardProps) {
@@ -122,8 +124,58 @@ export function GasWarningNoticeWizard({
     issued_at: resolvedFields.issued_at ? resolvedFields.issued_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
   });
 
+  const [jobAddress, setJobAddress] = useState({
+    job_reference: resolvedFields.job_reference ?? '',
+    job_address_name: resolvedFields.job_address_name ?? '',
+    job_address_line1: resolvedFields.job_address_line1 ?? resolvedFields.property_address ?? '',
+    job_address_line2: resolvedFields.job_address_line2 ?? '',
+    job_address_city: resolvedFields.job_address_city ?? '',
+    job_postcode: resolvedFields.job_postcode ?? resolvedFields.postcode ?? '',
+    job_tel: resolvedFields.job_tel ?? resolvedFields.job_phone ?? '',
+  });
+
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+  const didPrefillRef = useRef(false);
+
+  useEffect(() => {
+    if (didPrefillRef.current) return;
+    didPrefillRef.current = true;
+
+    const safeText = (value: string | null | undefined) => (typeof value === 'string' ? value.trim() : '');
+    const primaryAppliance = initialAppliances[0];
+    const cp12SafetyRating = safeText(primaryAppliance?.safety_rating);
+    const cp12ClassificationCode = safeText(primaryAppliance?.classification_code);
+    const cp12DefectDescription = safeText(resolvedFields.defect_description);
+    const cp12RemedialAction = safeText(resolvedFields.remedial_action);
+
+    setFields((prev) => {
+      const next = { ...prev };
+      if (!safeText(next.appliance_location) && primaryAppliance?.location) {
+        next.appliance_location = primaryAppliance.location;
+      }
+      if (!safeText(next.appliance_type) && primaryAppliance?.appliance_type) {
+        next.appliance_type = primaryAppliance.appliance_type;
+      }
+      if (!safeText(next.make_model) && primaryAppliance?.make_model) {
+        next.make_model = primaryAppliance.make_model;
+      }
+      if (!safeText(next.classification)) {
+        if (cp12SafetyRating === 'at risk') next.classification = 'AT_RISK';
+        if (cp12SafetyRating === 'immediately dangerous') next.classification = 'IMMEDIATELY_DANGEROUS';
+      }
+      if (!safeText(next.classification_code) && cp12ClassificationCode) {
+        next.classification_code = cp12ClassificationCode;
+      }
+      if (!safeText(next.unsafe_situation_description) && cp12DefectDescription) {
+        next.unsafe_situation_description = cp12DefectDescription;
+      }
+      if (!safeText(next.actions_taken) && cp12RemedialAction) {
+        next.actions_taken = cp12RemedialAction;
+      }
+      return next;
+    });
+  }, [initialAppliances, resolvedFields]);
 
   const handleDemoFill = () => {
     if (!demoEnabled) return;
@@ -158,6 +210,16 @@ export function GasWarningNoticeWizard({
       issued_at: today,
     };
     setFields(demo);
+    setJobAddress((prev) => ({
+      ...prev,
+      job_reference: 'GW-2401',
+      job_address_name: '',
+      job_address_line1: demo.property_address,
+      job_address_line2: '',
+      job_address_city: 'London',
+      job_postcode: demo.postcode,
+      job_tel: demo.customer_contact,
+    }));
     pushToast({ title: 'Gas Warning demo filled', variant: 'success' });
   };
 
@@ -192,6 +254,13 @@ export function GasWarningNoticeWizard({
             postcode: fields.postcode,
             customer_name: fields.customer_name,
             customer_contact: fields.customer_contact,
+            job_reference: jobAddress.job_reference,
+            job_address_name: jobAddress.job_address_name,
+            job_address_line1: jobAddress.job_address_line1,
+            job_address_line2: jobAddress.job_address_line2,
+            job_address_city: jobAddress.job_address_city,
+            job_postcode: jobAddress.job_postcode,
+            job_tel: jobAddress.job_tel,
           },
         });
         setStep(2);
@@ -276,6 +345,13 @@ export function GasWarningNoticeWizard({
         postcode: fields.postcode,
         customer_name: fields.customer_name,
         customer_contact: fields.customer_contact,
+        job_reference: jobAddress.job_reference,
+        job_address_name: jobAddress.job_address_name,
+        job_address_line1: jobAddress.job_address_line1,
+        job_address_line2: jobAddress.job_address_line2,
+        job_address_city: jobAddress.job_address_city,
+        job_postcode: jobAddress.job_postcode,
+        job_tel: jobAddress.job_tel,
       },
     });
     await saveGasWarningDetails({
@@ -329,19 +405,22 @@ export function GasWarningNoticeWizard({
     startTransition(async () => {
       try {
         await persistAll();
-        const { pdfUrl, jobId: resultJobId } = await generateCertificatePdf({ jobId, certificateType, previewOnly: false, fields });
+        const { jobId: resultJobId } = await generateCertificatePdf({
+          jobId,
+          certificateType,
+          previewOnly: false,
+          fields,
+        });
         pushToast({
           title: 'Gas Warning Notice generated successfully',
-          description: pdfUrl ? (
-            <Link href={pdfUrl} target="_blank" rel="noreferrer" className="text-[var(--action)] underline">
-              View PDF
+          description: (
+            <Link href={`/jobs/${resultJobId}/pdf`} className="text-[var(--action)] underline">
+              Open document preview
             </Link>
-          ) : (
-            'PDF ready. Open from the job detail.'
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}`);
+        router.push(`/jobs/${resultJobId}/pdf`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -378,7 +457,7 @@ export function GasWarningNoticeWizard({
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job / property" status="Gas Warning Notice">
+        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job address" status="Gas Warning Notice">
           <div className="space-y-3">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -388,31 +467,73 @@ export function GasWarningNoticeWizard({
             </div>
           ) : null}
           <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input
-              value={fields.property_address}
-              onChange={(e) => setFields((prev) => ({ ...prev, property_address: e.target.value }))}
-              placeholder="Property address"
-              className="rounded-2xl sm:col-span-2"
-            />
-            <Input
-              value={fields.postcode}
-              onChange={(e) => setFields((prev) => ({ ...prev, postcode: e.target.value }))}
-              placeholder="Postcode"
-              className="rounded-2xl"
-            />
-            <Input
-              value={fields.customer_name}
-              onChange={(e) => setFields((prev) => ({ ...prev, customer_name: e.target.value }))}
-              placeholder="Customer name"
-              className="rounded-2xl"
-            />
-            <Input
-              value={fields.customer_contact}
-              onChange={(e) => setFields((prev) => ({ ...prev, customer_contact: e.target.value }))}
-              placeholder="Customer contact (phone/email)"
-              className="rounded-2xl"
-            />
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Job address</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Input
+                value={jobAddress.job_address_name}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                placeholder="Job address name (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_line1}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                  setFields((prev) => ({ ...prev, property_address: value }));
+                }}
+                placeholder="Job address line 1"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_line2}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                placeholder="Job address line 2 (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_address_city}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                placeholder="Town/City (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_postcode}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+                  setFields((prev) => ({ ...prev, postcode: value }));
+                }}
+                placeholder="Postcode"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_tel}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
+                placeholder="Job phone (optional)"
+                className="rounded-2xl"
+              />
+            </div>
+          </div>
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Customer contact</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Confirm the customer name and contact details.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Input
+                value={fields.customer_name}
+                onChange={(e) => setFields((prev) => ({ ...prev, customer_name: e.target.value }))}
+                placeholder="Customer name"
+                className="rounded-2xl"
+              />
+              <Input
+                value={fields.customer_contact}
+                onChange={(e) => setFields((prev) => ({ ...prev, customer_contact: e.target.value }))}
+                placeholder="Customer contact (phone/email)"
+                className="rounded-2xl"
+              />
+            </div>
           </div>
           </div>
           <div className="mt-6 flex justify-end">

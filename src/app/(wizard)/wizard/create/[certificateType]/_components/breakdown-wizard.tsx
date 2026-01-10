@@ -13,6 +13,7 @@ import { EvidenceCard } from './evidence-card';
 import { ApplianceStep } from '@/components/wizard/steps/appliance-step';
 import { ChecksStep } from '@/components/wizard/steps/checks-step';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
+import { FgaAutofillInline } from '@/components/fga/FgaAutofillInline';
 import { createGasBreakdownReport, previewGasBreakdownReport } from '@/server/jobs';
 import { uploadJobPhoto } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
@@ -91,11 +92,7 @@ type BreakdownFormState = {
   received_by_name: string;
 };
 
-const FINAL_EVIDENCE_CATEGORIES: Array<{ key: PhotoCategory; label: string }> = [
-  { key: 'appliance_photo', label: 'Appliance' },
-  { key: 'issue_photo', label: 'Issue/Defect' },
-  { key: 'site', label: 'Site' },
-];
+const FINAL_EVIDENCE_DEFAULT: PhotoCategory = 'site';
 
 const toText = (value: unknown) => (typeof value === 'string' ? value : '');
 const toDateInput = (value: unknown) => {
@@ -110,7 +107,6 @@ const pickText = (...values: Array<string | null | undefined>) => {
 };
 
 const Step1Schema = z.object({
-  job_reference: z.string().min(1, 'Job reference is required'),
   job_visit_date: z.string().min(1, 'Visit date is required'),
   job_address_line1: z.string().min(1, 'Job address line 1 is required'),
   job_postcode: z.string().min(1, 'Job postcode is required'),
@@ -153,6 +149,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
   const [step, setStep] = useState(1);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
+  const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : null;
   const today = new Date().toISOString().slice(0, 10);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const totalSteps = 4 + stepOffset;
@@ -349,7 +346,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
           variant: 'success',
         });
         router.refresh();
-        router.push(`/reports/${jobId}`);
+        router.push(`/jobs/${jobId}/pdf`);
         if (result.signedUrl && typeof window !== 'undefined') {
           try {
             window.open(result.signedUrl, '_blank');
@@ -437,12 +434,6 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
             <p className="text-sm font-semibold text-muted">Job address</p>
             <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Input
-                value={fields.job_reference}
-                onChange={(e) => setFields((prev) => ({ ...prev, job_reference: e.target.value }))}
-                placeholder="Job reference (Cert No)"
-                className="rounded-2xl"
-              />
               <Input
                 type="date"
                 value={fields.job_visit_date}
@@ -533,6 +524,22 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
                 showExtendedFields
                 allowMultiple={false}
                 inlineEditor
+              />
+              <FgaAutofillInline
+                jobId={jobId}
+                applianceId={fgaApplianceId}
+                readingSet="high"
+                onApply={(values) => {
+                  if (values.co_ppm !== undefined) {
+                    setFields((prev) => ({ ...prev, combustion_co: String(values.co_ppm) }));
+                  }
+                  if (values.co2_pct !== undefined) {
+                    setFields((prev) => ({ ...prev, combustion_co2: String(values.co2_pct) }));
+                  }
+                  if (values.ratio !== undefined) {
+                    setFields((prev) => ({ ...prev, combustion_ratio: String(values.ratio) }));
+                  }
+                }}
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 <UnitNumberInput
@@ -724,17 +731,14 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
               />
               <div className="rounded-2xl border border-white/40 bg-white/70 p-4">
                 <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {FINAL_EVIDENCE_CATEGORIES.map((item) => (
-                    <EvidenceCard
-                      key={item.key}
-                      title={item.label}
-                      fields={[]}
-                      values={{}}
-                      onChange={() => null}
-                      onPhotoUpload={handleEvidenceUpload(item.key)}
-                    />
-                  ))}
+                <div className="mt-3">
+                  <EvidenceCard
+                    title="Upload photos"
+                    fields={[]}
+                    values={{}}
+                    onChange={() => null}
+                    onPhotoUpload={handleEvidenceUpload(FINAL_EVIDENCE_DEFAULT)}
+                  />
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">

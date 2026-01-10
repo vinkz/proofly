@@ -290,7 +290,7 @@ export function GeneralWorksClientStep({ clients, totalSteps }: GeneralWorksClie
           ) : null}
           <div className="mt-4 flex justify-end">
             <Button onClick={handleContinue} disabled={isPending || !jobId || !canContinue}>
-              Continue to evidence
+              Continue to job address
             </Button>
           </div>
         </div>

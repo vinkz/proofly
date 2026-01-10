@@ -34,7 +34,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
-  const totalSteps = 3 + stepOffset;
+  const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
 
   const [info, setInfo] = useState({
@@ -46,6 +46,16 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
     company_name: resolvedFields.company_name ?? '',
     customer_email: resolvedFields.customer_email ?? '',
     customer_phone: resolvedFields.customer_phone ?? '',
+  });
+
+  const [jobAddress, setJobAddress] = useState({
+    job_reference: resolvedFields.job_reference ?? '',
+    job_address_name: resolvedFields.job_address_name ?? '',
+    job_address_line1: resolvedFields.job_address_line1 ?? resolvedFields.property_address ?? '',
+    job_address_line2: resolvedFields.job_address_line2 ?? '',
+    job_address_city: resolvedFields.job_address_city ?? '',
+    job_postcode: resolvedFields.job_postcode ?? resolvedFields.postcode ?? '',
+    job_tel: resolvedFields.job_tel ?? resolvedFields.job_phone ?? '',
   });
 
   const [evidence, setEvidence] = useState({
@@ -151,7 +161,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
     startTransition(async () => {
       try {
         await saveFields({ ...info, ...evidence });
-        setStep(2);
+        setStep(3);
         pushToast({ title: 'Saved evidence', variant: 'success' });
       } catch (error) {
         pushToast({
@@ -163,11 +173,36 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
     });
   };
 
+  const handleJobAddressNext = () => {
+    startTransition(async () => {
+      try {
+        await saveFields({
+          ...info,
+          job_reference: jobAddress.job_reference,
+          job_address_name: jobAddress.job_address_name,
+          job_address_line1: jobAddress.job_address_line1,
+          job_address_line2: jobAddress.job_address_line2,
+          job_address_city: jobAddress.job_address_city,
+          job_postcode: jobAddress.job_postcode,
+          job_tel: jobAddress.job_tel,
+        });
+        setStep(2);
+        pushToast({ title: 'Saved job address', variant: 'success' });
+      } catch (error) {
+        pushToast({
+          title: 'Could not save job address',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
   const handleReviewNext = () => {
     startTransition(async () => {
       try {
         await saveFields({ ...info, ...evidence, ...review });
-        setStep(3);
+        setStep(4);
         pushToast({ title: 'Saved review', variant: 'success' });
       } catch (error) {
         pushToast({
@@ -200,19 +235,17 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
     startTransition(async () => {
       try {
         await persistThroughStep();
-        const { pdfUrl, jobId: resultJobId } = await generateGeneralWorksPdf({ jobId, previewOnly: false });
+        const { jobId: resultJobId } = await generateGeneralWorksPdf({ jobId, previewOnly: false });
         pushToast({
           title: 'General Works generated successfully',
-          description: pdfUrl ? (
-            <Link href={pdfUrl} target="_blank" rel="noreferrer" className="text-[var(--action)] underline">
-              View PDF
+          description: (
+            <Link href={`/jobs/${resultJobId}/pdf`} className="text-[var(--action)] underline">
+              Open document preview
             </Link>
-          ) : (
-            'PDF ready. Open from the job detail.'
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}`);
+        router.push(`/jobs/${resultJobId}/pdf`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -249,7 +282,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Evidence capture" status="Work detail">
+        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job address" status="General works">
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -258,67 +291,146 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
               </Button>
             </div>
           ) : null}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <EvidenceCard
-              title="Work details"
-              fields={GENERAL_WORKS_EVIDENCE_FIELDS}
-              values={evidence}
-              onChange={(key, value) => setEvidence((prev) => ({ ...prev, [key]: value }))}
-              photoPreview={photoPreviews.work_summary}
-              onPhotoUpload={() =>
-                pushToast({
-                  title: 'Use photo cards below',
-                  description: 'Add photos under Site/Before/After/Issue.',
-                  variant: 'default',
-                })
-              }
-              onVoice={() =>
-                pushToast({ title: 'Voice capture coming soon', description: 'Add a quick note instead.', variant: 'default' })
-              }
-              onText={() => pushToast({ title: 'Manual entry', description: 'Edit the fields above.', variant: 'default' })}
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              {GENERAL_WORKS_PHOTO_CATEGORIES.map((category) => (
-                <EvidenceCard
-                  key={category}
-                  title={`Photo: ${category.replace('_', ' ')}`}
-                  fields={[]}
-                  values={{}}
-                  onChange={() => null}
-                  photoPreview={photoPreviews[category]}
-                  onPhotoUpload={(file) => {
-                    const data = new FormData();
-                    data.append('jobId', jobId);
-                    data.append('category', category);
-                    data.append('file', file);
-                    startTransition(async () => {
-                      try {
-                        const { url } = await uploadGeneralWorksPhoto(data);
-                        setPhotoPreviews((prev) => ({ ...prev, [category]: url }));
-                        pushToast({ title: `${category} photo saved`, variant: 'success' });
-                      } catch (error) {
-                        pushToast({
-                          title: 'Upload failed',
-                          description: error instanceof Error ? error.message : 'Please try again.',
-                          variant: 'error',
-                        });
-                      }
-                    });
-                  }}
-                  onVoice={() =>
-                    pushToast({
-                      title: 'Voice capture coming soon',
-                      description: 'Add a quick note instead.',
-                      variant: 'default',
-                    })
-                  }
-                  onText={() => pushToast({ title: 'Manual entry', description: 'Add notes in work details.', variant: 'default' })}
-                />
-              ))}
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Job address</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Input
+                type="date"
+                value={info.work_date}
+                onChange={(e) => setInfo((prev) => ({ ...prev, work_date: e.target.value }))}
+                placeholder="Work date"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_address_name}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                placeholder="Job address name (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_line1}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                  setInfo((prev) => ({ ...prev, property_address: value }));
+                }}
+                placeholder="Job address line 1"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_line2}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                placeholder="Job address line 2 (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_address_city}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                placeholder="Town/City (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_postcode}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+                  setInfo((prev) => ({ ...prev, postcode: value }));
+                }}
+                placeholder="Postcode"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_tel}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
+                placeholder="Job phone (optional)"
+                className="rounded-2xl"
+              />
             </div>
           </div>
           </div>
           <div className="mt-6 flex justify-end">
+            <Button className="rounded-full px-6" onClick={handleJobAddressNext} disabled={isPending}>
+              Next → Evidence
+            </Button>
+          </div>
+        </WizardLayout>
+      ) : null}
+
+      {step === 2 ? (
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Evidence capture" status="Work detail" onBack={() => setStep(1)}>
+          <div className="space-y-4">
+            {demoEnabled ? (
+              <div className="mb-3 flex justify-end">
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                  Fill demo General Works
+                </Button>
+              </div>
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <EvidenceCard
+                title="Work details"
+                fields={GENERAL_WORKS_EVIDENCE_FIELDS}
+                values={evidence}
+                onChange={(key, value) => setEvidence((prev) => ({ ...prev, [key]: value }))}
+                photoPreview={photoPreviews.work_summary}
+                onPhotoUpload={() =>
+                  pushToast({
+                    title: 'Use photo cards below',
+                    description: 'Add photos under Site/Before/After/Issue.',
+                    variant: 'default',
+                  })
+                }
+                onVoice={() =>
+                  pushToast({ title: 'Voice capture coming soon', description: 'Add a quick note instead.', variant: 'default' })
+                }
+                onText={() => pushToast({ title: 'Manual entry', description: 'Edit the fields above.', variant: 'default' })}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                {GENERAL_WORKS_PHOTO_CATEGORIES.map((category) => (
+                  <EvidenceCard
+                    key={category}
+                    title={`Photo: ${category.replace('_', ' ')}`}
+                    fields={[]}
+                    values={{}}
+                    onChange={() => null}
+                    photoPreview={photoPreviews[category]}
+                    onPhotoUpload={(file) => {
+                      const data = new FormData();
+                      data.append('jobId', jobId);
+                      data.append('category', category);
+                      data.append('file', file);
+                      startTransition(async () => {
+                        try {
+                          const { url } = await uploadGeneralWorksPhoto(data);
+                          setPhotoPreviews((prev) => ({ ...prev, [category]: url }));
+                          pushToast({ title: `${category} photo saved`, variant: 'success' });
+                        } catch (error) {
+                          pushToast({
+                            title: 'Upload failed',
+                            description: error instanceof Error ? error.message : 'Please try again.',
+                            variant: 'error',
+                          });
+                        }
+                      });
+                    }}
+                    onVoice={() =>
+                      pushToast({
+                        title: 'Voice capture coming soon',
+                        description: 'Add a quick note instead.',
+                        variant: 'default',
+                      })
+                    }
+                    onText={() => pushToast({ title: 'Manual entry', description: 'Add notes in work details.', variant: 'default' })}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
+              ← Back
+            </Button>
             <Button className="rounded-full px-6" onClick={handleEvidenceNext} disabled={isPending}>
               Next → Review
             </Button>
@@ -326,8 +438,8 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
         </WizardLayout>
       ) : null}
 
-      {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Review & totals" status="Summary" onBack={() => setStep(1)}>
+      {step === 3 ? (
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Review & totals" status="Summary" onBack={() => setStep(2)}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -398,8 +510,8 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
         </WizardLayout>
       ) : null}
 
-      {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(2)}>
+      {step === 4 ? (
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">

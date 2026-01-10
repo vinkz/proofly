@@ -357,7 +357,7 @@ export function CertificateClientStep({ certificateType, clients, totalSteps }: 
             </div>
             <div className="mt-4 flex justify-end">
               <Button onClick={handleCp12Continue} disabled={isPending || !jobId}>
-                Continue to photos
+                Continue to Job Info
               </Button>
             </div>
           </div>

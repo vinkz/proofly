@@ -166,33 +166,3 @@ for each row execute function public.set_updated_at();
 insert into storage.buckets (id, name, public)
 values ('photos', 'photos', false)
 on conflict (id) do nothing;
-
--- Storage policies for job photo uploads
-drop policy if exists "Authenticated users can upload job photos" on storage.objects;
-create policy "Authenticated users can upload job photos"
-on storage.objects
-for insert
-to authenticated
-with check (
-  bucket_id = 'photos'
-  and auth.uid() is not null
-  and name ~ '^photos/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/[0-9a-fA-F-]{8,}\\.[A-Za-z0-9]+$'
-);
-
-drop policy if exists "Authenticated users can read job photos" on storage.objects;
-create policy "Authenticated users can read job photos"
-on storage.objects
-for select
-to authenticated
-using (
-  bucket_id = 'photos'
-);
-
-drop policy if exists "Authenticated users can delete job photos" on storage.objects;
-create policy "Authenticated users can delete job photos"
-on storage.objects
-for delete
-to authenticated
-using (
-  bucket_id = 'photos'
-);

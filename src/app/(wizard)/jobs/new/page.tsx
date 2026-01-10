@@ -28,6 +28,16 @@ export default function NewJobPage() {
             <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
           </Link>
         ))}
+        <Link
+          href="/jobs/scan"
+          className="group flex w-full items-center justify-between rounded-2xl border border-white/30 bg-[var(--muted)]/60 px-4 py-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white"
+        >
+          <div>
+            <p className="text-sm font-semibold text-muted">Scan Job Sheet</p>
+            <p className="text-xs text-muted-foreground/70">Open the QR scanner to start a job.</p>
+          </div>
+          <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
+        </Link>
       </Card>
     </div>
   );

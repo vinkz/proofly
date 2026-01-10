@@ -18,7 +18,7 @@ export function GenerateReportButton({ jobId, reportKind }: { jobId: string; rep
         const { signedUrl } = await finalizeJobReport(jobId, reportKind);
         pushToast({ title: 'Report generated', variant: 'success' });
         router.refresh();
-        router.push(`/reports/${jobId}`);
+        router.push(`/jobs/${jobId}/pdf`);
         if (signedUrl && typeof window !== 'undefined') {
           try {
             window.open(signedUrl, '_blank');

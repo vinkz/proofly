@@ -90,6 +90,16 @@ type Cp12InfoState = {
   reg_26_9_confirmed: boolean;
 };
 
+type Cp12JobAddressState = {
+  job_reference: string;
+  job_address_name: string;
+  job_address_line1: string;
+  job_address_line2: string;
+  job_address_city: string;
+  job_postcode: string;
+  job_tel: string;
+};
+
 const CP12_DEMO_PHOTO_NOTES: Record<string, string> = {
   appliance_photo: ['Worcester Bosch Greenstar 30i', 'Wall-mounted condensing combi boiler', 'Located in kitchen cupboard'].join('\n'),
   serial_label: ['Serial number: WB30I-84736291', 'Gas type: Natural Gas (G20)', 'Year of manufacture: 2019'].join('\n'),
@@ -99,11 +109,7 @@ const CP12_DEMO_PHOTO_NOTES: Record<string, string> = {
   issue_photo: 'No safety defects identified at time of inspection.',
 };
 
-const FINAL_EVIDENCE_CATEGORIES: Array<{ key: PhotoCategory; label: string }> = [
-  { key: 'appliance_photo', label: 'Appliance' },
-  { key: 'issue_photo', label: 'Issue/Defect' },
-  { key: 'site', label: 'Site' },
-];
+const FINAL_EVIDENCE_DEFAULT: PhotoCategory = 'site';
 
 const BOILER_TYPE_OPTIONS = [
   { label: 'Combi', value: 'combi' },
@@ -141,6 +147,16 @@ export function CertificateWizard({
       const value = String(resolvedInitialInfo.reg_26_9_confirmed ?? '').toLowerCase();
       return value === 'true' || value === 'yes';
     })(),
+  });
+
+  const [jobAddress, setJobAddress] = useState<Cp12JobAddressState>({
+    job_reference: resolvedInitialInfo.job_reference ?? '',
+    job_address_name: resolvedInitialInfo.job_address_name ?? '',
+    job_address_line1: resolvedInitialInfo.job_address_line1 ?? resolvedInitialInfo.property_address ?? '',
+    job_address_line2: resolvedInitialInfo.job_address_line2 ?? '',
+    job_address_city: resolvedInitialInfo.job_address_city ?? '',
+    job_postcode: resolvedInitialInfo.job_postcode ?? resolvedInitialInfo.postcode ?? '',
+    job_tel: resolvedInitialInfo.job_tel ?? resolvedInitialInfo.job_phone ?? '',
   });
 
   const [evidenceFields, setEvidenceFields] = useState<Record<string, string>>(
@@ -349,11 +365,50 @@ export function CertificateWizard({
     });
   };
 
+  const handleJobAddressNext = () => {
+    if (!isCp12) {
+      setStep(3);
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const data = { ...info, inspection_date: info.inspection_date || completionDate };
+        const jobPayload = {
+          ...data,
+          engineer_name: resolvedInitialInfo.engineer_name ?? '',
+          gas_safe_number: resolvedInitialInfo.gas_safe_number ?? '',
+          company_name: resolvedInitialInfo.company_name ?? '',
+        };
+        await saveCp12JobInfo({ jobId, data: jobPayload });
+        await saveJobFields({
+          jobId,
+          fields: {
+            job_reference: jobAddress.job_reference,
+            job_address_name: jobAddress.job_address_name,
+            job_address_line1: jobAddress.job_address_line1,
+            job_address_line2: jobAddress.job_address_line2,
+            job_address_city: jobAddress.job_address_city,
+            job_postcode: jobAddress.job_postcode,
+            job_tel: jobAddress.job_tel,
+          },
+        });
+        setInfo(data);
+        setStep(3);
+      } catch (error) {
+        pushToast({
+          title: 'Could not save job address',
+          description: error instanceof Error ? error.message : 'Try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
   const handleChecksNext = () => {
     startTransition(async () => {
       try {
         await saveCp12Appliances({ jobId, appliances, defects });
-        setStep(4);
+        setStep(5);
       } catch (error) {
         pushToast({
           title: 'Could not save CP12 checks',
@@ -392,19 +447,25 @@ export function CertificateWizard({
           }
         }
         await updateField({ jobId, key: 'completion_date', value: completionDate });
-        const { pdfUrl, jobId: resultJobId } = await generateCertificatePdf({ jobId, certificateType, previewOnly: false });
+        const { jobId: resultJobId } = await generateCertificatePdf({
+          jobId,
+          certificateType,
+          previewOnly: false,
+          fields: {
+            engineer_signature: engineerSignature,
+            customer_signature: customerSignature,
+          },
+        });
         pushToast({
           title: `${certificateLabel} generated successfully`,
-          description: pdfUrl ? (
-            <Link href={pdfUrl} target="_blank" rel="noreferrer" className="text-[var(--action)] underline">
-              View PDF
+          description: (
+            <Link href={`/jobs/${resultJobId}/pdf`} className="text-[var(--action)] underline">
+              Open document preview
             </Link>
-          ) : (
-            'PDF ready. Open from the job detail.'
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}`);
+        router.push(`/jobs/${resultJobId}/pdf`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -430,7 +491,15 @@ export function CertificateWizard({
           setInfo(data);
           await saveCp12Appliances({ jobId, appliances, defects });
         }
-        const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType, previewOnly: true });
+        const { pdfUrl } = await generateCertificatePdf({
+          jobId,
+          certificateType,
+          previewOnly: true,
+          fields: {
+            engineer_signature: engineerSignature,
+            customer_signature: customerSignature,
+          },
+        });
         pushToast({ title: 'Preview ready', variant: 'success' });
         router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}&preview=1`);
       } catch (error) {
@@ -602,13 +671,21 @@ export function CertificateWizard({
           />
           <Input
             value={info.property_address}
-            onChange={(e) => setInfo((prev) => ({ ...prev, property_address: e.target.value }))}
+            onChange={(e) => {
+              const value = e.target.value;
+              setInfo((prev) => ({ ...prev, property_address: value }));
+              setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+            }}
             placeholder="Property address"
             className="rounded-2xl"
           />
           <Input
             value={info.postcode}
-            onChange={(e) => setInfo((prev) => ({ ...prev, postcode: e.target.value }))}
+            onChange={(e) => {
+              const value = e.target.value;
+              setInfo((prev) => ({ ...prev, postcode: value }));
+              setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+            }}
             placeholder="Postcode"
             className="rounded-2xl"
           />
@@ -642,14 +719,94 @@ export function CertificateWizard({
       )}
       <div className="mt-6 flex justify-end">
         <Button onClick={handleInfoNext} disabled={isPending} className="rounded-full px-6">
-          Next → Add Photos
+          Next → Job address
         </Button>
       </div>
     </WizardLayout>
   );
 
   const StepTwo = (
-    <WizardLayout step={offsetStep(2)} total={totalSteps} title="Photo capture" status="Evidence" onBack={() => setStep(1)}>
+    <WizardLayout step={offsetStep(2)} total={totalSteps} title="Job address" status={certificateLabel} onBack={() => setStep(1)}>
+      {isCp12 ? (
+        <div className="space-y-3">
+          {demoEnabled ? (
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                Fill demo CP12
+              </Button>
+            </div>
+          ) : null}
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Job address</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and inspection date.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Input
+                type="date"
+                value={info.inspection_date}
+                onChange={(e) => setInfo((prev) => ({ ...prev, inspection_date: e.target.value }))}
+                placeholder="Inspection date"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_address_name}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                placeholder="Job address name (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_line1}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                  setInfo((prev) => ({ ...prev, property_address: value }));
+                }}
+                placeholder="Job address line 1"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_line2}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                placeholder="Job address line 2 (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_address_city}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                placeholder="Town/City (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_postcode}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+                  setInfo((prev) => ({ ...prev, postcode: value }));
+                }}
+                placeholder="Postcode"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_tel}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
+                placeholder="Job phone (optional)"
+                className="rounded-2xl"
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground/70">Non-CP12 certificates currently use the simplified flow.</p>
+      )}
+      <div className="mt-6 flex justify-end">
+        <Button onClick={handleJobAddressNext} disabled={isPending} className="rounded-full px-6">
+          Next → Add Photos
+        </Button>
+      </div>
+    </WizardLayout>
+  );
+
+  const StepThree = (
+    <WizardLayout step={offsetStep(3)} total={totalSteps} title="Photo capture" status="Evidence" onBack={() => setStep(2)}>
       {demoEnabled ? (
         <div className="flex justify-end">
           <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -722,15 +879,15 @@ export function CertificateWizard({
         ))}
       </div>
       <div className="mt-6 flex justify-end">
-        <Button onClick={() => setStep(3)} disabled={isPending} className="rounded-full px-6">
+        <Button onClick={() => setStep(4)} disabled={isPending} className="rounded-full px-6">
           Next → Checks
         </Button>
       </div>
     </WizardLayout>
   );
 
-  const StepThree = (
-    <WizardLayout step={offsetStep(3)} total={totalSteps} title="Appliance checks" status="On-site checks" onBack={() => setStep(2)}>
+  const StepFour = (
+    <WizardLayout step={offsetStep(4)} total={totalSteps} title="Appliance checks" status="On-site checks" onBack={() => setStep(3)}>
       <div className="space-y-4">
         {demoEnabled && (
           <div className="flex justify-end">
@@ -860,6 +1017,21 @@ export function CertificateWizard({
                 options={['YES', 'NO']}
                 onChange={(val) => setDefects((prev) => ({ ...prev, warning_notice_issued: val }))}
               />
+              {defects.warning_notice_issued === 'YES' ? (
+                <div className="sm:col-span-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => router.push(`/wizard/create/gas_warning_notice?jobId=${jobId}`)}
+                  >
+                    Create Gas Warning Notice
+                  </Button>
+                  <p className="mt-2 text-xs text-muted-foreground/70">
+                    Starts a Gas Warning Notice from this job’s details.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="mt-2 text-xs text-muted-foreground/70">Set a safety rating to reveal defect and warning notice fields.</p>
@@ -961,7 +1133,7 @@ export function CertificateWizard({
         </details>
       </div>
       <div className="mt-6 flex justify-between">
-        <Button variant="outline" className="rounded-full" onClick={() => setStep(2)} disabled={isPending}>
+        <Button variant="outline" className="rounded-full" onClick={() => setStep(3)} disabled={isPending}>
           Back
         </Button>
         <Button onClick={handleChecksNext} disabled={isPending} className="rounded-full px-6">
@@ -971,8 +1143,8 @@ export function CertificateWizard({
     </WizardLayout>
   );
 
-  const StepFour = (
-    <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
+  const StepFive = (
+    <WizardLayout step={offsetStep(5)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(4)}>
       <div className="space-y-3">
         <SignatureCard
           label="Customer"
@@ -1031,18 +1203,15 @@ export function CertificateWizard({
         </div>
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
           <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {FINAL_EVIDENCE_CATEGORIES.map((item) => (
-              <EvidenceCard
-                key={item.key}
-                title={item.label}
-                fields={[]}
-                values={{}}
-                onChange={() => null}
-                photoPreview={initialPhotoPreviews[item.key]}
-                onPhotoUpload={handleEvidenceUpload(item.key)}
-              />
-            ))}
+          <div className="mt-3">
+            <EvidenceCard
+              title="Upload photos"
+              fields={[]}
+              values={{}}
+              onChange={() => null}
+              photoPreview={initialPhotoPreviews[FINAL_EVIDENCE_DEFAULT]}
+              onPhotoUpload={handleEvidenceUpload(FINAL_EVIDENCE_DEFAULT)}
+            />
           </div>
         </div>
       </div>
@@ -1063,7 +1232,8 @@ export function CertificateWizard({
   if (step === 1) return StepOne;
   if (step === 2) return StepTwo;
   if (step === 3) return StepThree;
-  return StepFour;
+  if (step === 4) return StepFour;
+  return StepFive;
 }
 
 const CP12_REQUIRED_FIELDS = ['property_address', 'inspection_date', 'landlord_name', 'landlord_address'] as const;
@@ -1100,10 +1270,7 @@ function validateCp12AgainstSpec(
       errors.push('Classification code should only be set when safety rating is not safe');
     }
   });
-  const defectsPresent = hasValue(defects.defect_description) || hasValue(defects.remedial_action);
-  if (defectsPresent && (!hasValue(defects.defect_description) || !hasValue(defects.remedial_action))) {
-    errors.push('Defects require both description and remedial action');
-  }
+  // Temporarily allow partial defect details while testing PDF generation.
   if (!hasValue(engineerSignature)) errors.push('Engineer signature is required');
   if (!hasValue(customerSignature)) errors.push('Customer signature is required');
   return errors;

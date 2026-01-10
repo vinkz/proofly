@@ -13,6 +13,10 @@ export type SignupState = {
   date_of_birth: string;
   profession: string;
   business_name?: string;
+  company_name?: string;
+  default_engineer_name?: string;
+  default_engineer_id?: string;
+  gas_safe_number?: string;
   trade_types: string[];
   certifications: string[];
 };
@@ -26,6 +30,10 @@ const defaultState: SignupState = {
   date_of_birth: '',
   profession: '',
   business_name: '',
+  company_name: '',
+  default_engineer_name: '',
+  default_engineer_id: '',
+  gas_safe_number: '',
   trade_types: [],
   certifications: [],
 };

@@ -2,6 +2,7 @@ import { getProfile } from '@/server/profile';
 import { userHasPassword } from '@/server/auth';
 import { ProfilePreferences } from './profile-preferences';
 import { PasswordSection } from './password-section';
+import { Button } from '@/components/ui/button';
 
 export default async function SettingsPage() {
   const { profile } = await getProfile();
@@ -35,6 +36,11 @@ export default async function SettingsPage() {
         initialGasSafeNumber={gasSafeNumber}
       />
       <PasswordSection hasPassword={hasPassword} />
+      <form action="/logout" method="post" className="flex justify-end">
+        <Button type="submit" variant="outline" className="rounded-full">
+          Sign out
+        </Button>
+      </form>
     </div>
   );
 }

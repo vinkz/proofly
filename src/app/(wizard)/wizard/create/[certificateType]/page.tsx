@@ -34,7 +34,7 @@ const isAuthError = (error: unknown) =>
 const CERTIFICATE_STEP_TOTALS: Record<CertificateType, number> = {
   cp12: 5,
   gas_service: 4,
-  general_works: 3,
+  general_works: 4,
   gas_warning_notice: 3,
   breakdown: 5,
   commissioning: 4,
@@ -209,6 +209,7 @@ export default async function CertificateWizardPage({
         jobId={jobId}
         initialFields={initialInfo}
         initialJobContext={initialJobContext}
+        initialAppliances={wizardState?.appliances ?? []}
         certificateType={normalizedType as CertificateType}
         stepOffset={stepOffset}
       />

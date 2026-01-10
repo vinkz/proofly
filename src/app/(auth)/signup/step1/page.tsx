@@ -66,7 +66,7 @@ export default function SignupStep1Page() {
   };
 
   return (
-    <SignupStepShell step={1} total={3} title="Create your account" description="Set your credentials and name.">
+    <SignupStepShell step={1} total={2} title="Create your account" description="Set your credentials and name.">
       <div className="space-y-3">
         <label className="block text-sm font-semibold text-muted">
           Email

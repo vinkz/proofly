@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 
-import { supabaseServerAction } from '@/lib/supabaseServer';
+import { supabaseServerAction, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import { TRADE_TYPES } from '@/lib/profile-options';
 import type { TablesInsert } from '@/lib/database.types';
 
@@ -15,6 +15,10 @@ const SignupWizardSchema = z.object({
   date_of_birth: z.string().min(4, 'Date of birth required'),
   profession: z.string().min(2, 'Profession required'),
   business_name: z.string().optional(),
+  company_name: z.string().min(2, 'Company name required'),
+  default_engineer_name: z.string().min(2, 'Engineer name required'),
+  default_engineer_id: z.string().min(2, 'Engineer ID card number required'),
+  gas_safe_number: z.string().min(2, 'Gas Safe number required'),
   trade_types: z
     .array(z.string())
     .default(defaultTrades)
@@ -33,7 +37,7 @@ export async function completeSignupWizard(payload: unknown) {
       data: {
         full_name: body.full_name,
         profession: body.profession,
-        business_name: body.business_name ?? null,
+        business_name: body.company_name ?? body.business_name ?? null,
         trade_types: body.trade_types,
         certifications: body.certifications,
       },
@@ -50,10 +54,15 @@ export async function completeSignupWizard(payload: unknown) {
     profession: body.profession,
     trade_types: body.trade_types,
     certifications: body.certifications ?? [],
+    company_name: body.company_name ?? null,
+    default_engineer_name: body.default_engineer_name ?? null,
+    default_engineer_id: body.default_engineer_id ?? null,
+    gas_safe_number: body.gas_safe_number ?? null,
     onboarding_complete: true,
   };
 
-  const { error: profileErr } = await sb.from('profiles').upsert(profile, { onConflict: 'id' });
+  const profileSb = await supabaseServerServiceRole();
+  const { error: profileErr } = await profileSb.from('profiles').upsert(profile, { onConflict: 'id' });
   if (profileErr) throw new Error(profileErr.message);
 
   return { ok: true };

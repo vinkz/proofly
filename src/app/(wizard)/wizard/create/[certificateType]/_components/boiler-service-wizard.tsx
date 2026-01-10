@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { CollapsibleSection } from '@/components/wizard/layout/collapsible-section';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
+import { FgaAutofillInline } from '@/components/fga/FgaAutofillInline';
 import {
   BOILER_SERVICE_DEMO_INFO,
   BOILER_SERVICE_DEMO_DETAILS,
@@ -80,11 +81,7 @@ const EMPTY_CHECKS: BoilerServiceChecks = {
   next_service_due: '',
 };
 
-const FINAL_EVIDENCE_CATEGORIES: Array<{ key: BoilerServicePhotoCategory; label: string }> = [
-  { key: 'boiler', label: 'Boiler' },
-  { key: 'flue', label: 'Flue' },
-  { key: 'issue_defect', label: 'Issue/Defect' },
-];
+const FINAL_EVIDENCE_DEFAULT: BoilerServicePhotoCategory = 'boiler';
 
 const BOILER_SERVICE_EVIDENCE_PHOTOS: Array<{ key: BoilerServicePhotoCategory; label: string }> = [
   { key: 'serial_label', label: 'Serial / Label' },
@@ -118,6 +115,7 @@ export function BoilerServiceWizard({
   const [step, setStep] = useState(1);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
+  const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : null;
 
   const [completionDate, setCompletionDate] = useState(
     resolvedFields.completion_date ? resolvedFields.completion_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -346,19 +344,17 @@ export function BoilerServiceWizard({
         await persistBeforePdf();
         const finalInfo = { ...jobInfo, service_date: jobInfo.service_date || completionDate };
         await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
-        const { pdfUrl, jobId: resultJobId } = await generateGasServicePdf({ jobId, previewOnly: false });
+        const { jobId: resultJobId } = await generateGasServicePdf({ jobId, previewOnly: false });
         pushToast({
           title: 'Boiler Service generated successfully',
-          description: pdfUrl ? (
-            <Link href={pdfUrl} target="_blank" rel="noreferrer" className="text-[var(--action)] underline">
-              View PDF
+          description: (
+            <Link href={`/jobs/${resultJobId}/pdf`} className="text-[var(--action)] underline">
+              Open document preview
             </Link>
-          ) : (
-            'PDF ready. Open from the job detail.'
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}`);
+        router.push(`/jobs/${resultJobId}/pdf`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -534,7 +530,90 @@ export function BoilerServiceWizard({
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Service checks & readings" status="On-site checks" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Job address" status="Boiler service" onBack={() => setStep(1)}>
+          <div className="space-y-3">
+            {demoEnabled ? (
+              <div className="mb-3 flex justify-end">
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                  Fill demo Boiler Service
+                </Button>
+              </div>
+            ) : null}
+            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+              <p className="text-sm font-semibold text-muted">Job address</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Input
+                  type="date"
+                  value={jobAddress.job_visit_date || jobInfo.service_date}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setJobAddress((prev) => ({ ...prev, job_visit_date: value }));
+                    setJobInfo((prev) => ({ ...prev, service_date: value }));
+                  }}
+                  placeholder="Service date"
+                  className="rounded-2xl"
+                />
+                <Input
+                  value={jobAddress.job_address_name}
+                  onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                  placeholder="Job address name (optional)"
+                  className="rounded-2xl sm:col-span-2"
+                />
+                <Input
+                  value={jobAddress.job_address_line1}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                    setJobInfo((prev) => ({ ...prev, property_address: value }));
+                  }}
+                  placeholder="Job address line 1"
+                  className="rounded-2xl sm:col-span-2"
+                />
+                <Input
+                  value={jobAddress.job_address_line2}
+                  onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                  placeholder="Job address line 2 (optional)"
+                  className="rounded-2xl"
+                />
+                <Input
+                  value={jobAddress.job_address_city}
+                  onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                  placeholder="Town/City (optional)"
+                  className="rounded-2xl"
+                />
+                <Input
+                  value={jobAddress.job_postcode}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+                    setJobInfo((prev) => ({ ...prev, postcode: value }));
+                  }}
+                  placeholder="Postcode"
+                  className="rounded-2xl"
+                />
+                <Input
+                  value={jobAddress.job_tel}
+                  onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
+                  placeholder="Job phone (optional)"
+                  className="rounded-2xl"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
+              ← Back
+            </Button>
+            <Button className="rounded-full" onClick={handleJobAddressNext} disabled={isPending}>
+              Next → Checks
+            </Button>
+          </div>
+        </WizardLayout>
+      ) : null}
+
+      {step === 3 ? (
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Service checks & readings" status="On-site checks" onBack={() => setStep(2)}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -581,6 +660,18 @@ export function BoilerServiceWizard({
             subtitle={`${readingsCompleted}/${readingsFields.length} captured`}
             defaultOpen={firstIncompleteKey === 'readings'}
           >
+            <div className="mb-3">
+              <FgaAutofillInline
+                jobId={jobId}
+                applianceId={fgaApplianceId}
+                readingSet="high"
+                onApply={(values) => {
+                  if (values.co_ppm !== undefined) setCheckValue('co_ppm', String(values.co_ppm));
+                  if (values.co2_pct !== undefined) setCheckValue('co2_percent', String(values.co2_pct));
+                  if (values.flue_temp_c !== undefined) setCheckValue('flue_gas_temp_c', String(values.flue_temp_c));
+                }}
+              />
+            </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <Input
                 value={checks.operating_pressure_mbar}
@@ -771,8 +862,8 @@ export function BoilerServiceWizard({
         </WizardLayout>
       ) : null}
 
-      {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(2)}>
+      {step === 4 ? (
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
@@ -792,17 +883,14 @@ export function BoilerServiceWizard({
             </div>
             <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
               <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {FINAL_EVIDENCE_CATEGORIES.map((item) => (
-                  <EvidenceCard
-                    key={item.key}
-                    title={item.label}
-                    fields={[]}
-                    values={{}}
-                    onChange={() => null}
-                    onPhotoUpload={handleEvidenceUpload(item.key)}
-                  />
-                ))}
+              <div className="mt-3">
+                <EvidenceCard
+                  title="Upload photos"
+                  fields={[]}
+                  values={{}}
+                  onChange={() => null}
+                  onPhotoUpload={handleEvidenceUpload(FINAL_EVIDENCE_DEFAULT)}
+                />
               </div>
             </div>
           </div>

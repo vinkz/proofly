@@ -14,12 +14,20 @@ import { JobProgressBar } from '@/components/job-progress-bar';
 import { DeleteJobButton } from '@/components/jobs/delete-job-button';
 import { GenerateJobSheetButton } from '@/components/jobs/generate-job-sheet-button';
 import { Button } from '@/components/ui/button';
+import { JobInvoicesCard } from '@/components/invoices/job-invoices-card';
 import type { Database } from '@/lib/database.types';
 import { isUUID } from '@/lib/ids';
 import { reportKindForJobType } from '@/types/reports';
 import type { CertificateType } from '@/types/certificates';
+import { listInvoicesForJob } from '@/server/invoices';
 
 type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
+type InvoiceSummary = {
+  id: string;
+  invoice_number: string;
+  status: string;
+  vat_rate: string | number | null;
+};
 
 export default async function JobDetailPage({
   params,
@@ -105,6 +113,54 @@ export default async function JobDetailPage({
   }
 
   const generalPhotos = photosByChecklist.general ?? [];
+
+  const invoices = await listInvoicesForJob(jobId);
+  const invoiceIds = invoices.map((invoice) => invoice.id);
+  const invoiceTotals = new Map<string, number>();
+  if (invoiceIds.length) {
+    type UntypedQuery = {
+      select: (columns?: string) => UntypedQuery;
+      eq: (column: string, value: unknown) => UntypedQuery;
+      in: (column: string, values: unknown[]) => UntypedQuery;
+    };
+    type UntypedSupabase = { from: (table: string) => UntypedQuery };
+    const untyped = supabase as unknown as UntypedSupabase;
+    type InvoiceLineItem = { invoice_id: string | null; quantity: number | string | null; unit_price: number | string | null; vat_exempt: boolean | null };
+    const { data: items, error: itemsErr } = await (untyped
+      .from('invoice_line_items')
+      .select('invoice_id, quantity, unit_price, vat_exempt')
+      .in('invoice_id', invoiceIds) as unknown as Promise<{ data: InvoiceLineItem[] | null; error: { message: string } | null }>);
+    if (itemsErr) throw itemsErr;
+    const grouped = (items ?? []).reduce<Record<string, Array<{ quantity: number; unit_price: number; vat_exempt: boolean }>>>(
+      (acc, item) => {
+        const key = item.invoice_id ?? '';
+        if (!key) return acc;
+        const quantity = Number(item.quantity ?? 0);
+        const unitPrice = Number(item.unit_price ?? 0);
+        const vatExempt = Boolean(item.vat_exempt);
+        acc[key] = acc[key]
+          ? [...acc[key], { quantity, unit_price: unitPrice, vat_exempt: vatExempt }]
+          : [{ quantity, unit_price: unitPrice, vat_exempt: vatExempt }];
+        return acc;
+      },
+      {},
+    );
+    invoices.forEach((invoice) => {
+      const vatRate = Number((invoice as unknown as InvoiceSummary).vat_rate ?? 0);
+      const rows = grouped[invoice.id] ?? [];
+      const subtotal = rows.reduce((sum, row) => sum + row.quantity * row.unit_price, 0);
+      const taxable = rows.reduce((sum, row) => sum + (row.vat_exempt ? 0 : row.quantity * row.unit_price), 0);
+      const total = subtotal + taxable * vatRate;
+      invoiceTotals.set(invoice.id, total);
+    });
+  }
+
+  const invoiceSummaries = invoices.map((invoice) => ({
+    id: invoice.id,
+    invoice_number: invoice.invoice_number,
+    status: invoice.status,
+    total: invoiceTotals.get(invoice.id) ?? 0,
+  }));
 
   const initialStatuses = Object.fromEntries(
     items.map((item) => [item.id, (item.result ?? 'pending') as ChecklistResult]),
@@ -205,6 +261,8 @@ export default async function JobDetailPage({
             ))}
           </div>
         </section>
+
+        <JobInvoicesCard jobId={jobId} invoices={invoiceSummaries} />
 
         <section id="certificate-checks" className="mt-8 space-y-4">
           <h2 className="text-lg font-semibold text-muted">Certificate checks</h2>

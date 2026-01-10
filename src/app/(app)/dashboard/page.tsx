@@ -7,7 +7,6 @@ import { listJobs } from '@/server/jobs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { KpiCards, type IconName } from './_components/kpi-cards';
 import { JobsListSection } from '@/app/(app)/jobs/JobsListSection';
 
 type BasicJob = {
@@ -37,25 +36,8 @@ export default async function DashboardPage() {
   const allJobs: BasicJob[] = [...activeJobs, ...completedJobs];
 
   const now = new Date();
-  const completedCount = completedJobs.length;
-  const totalJobs = allJobs.length;
-  const completionRate = totalJobs === 0 ? 0 : Math.round((completedCount / totalJobs) * 100);
   const awaitingSignatures = allJobs.filter((job) => job.status === 'awaiting_signatures').length;
   const followUpsDue = activeJobs.filter((job) => ageInDays(job.created_at, now) >= FOLLOW_UP_THRESHOLD_DAYS).length;
-  const stats: Array<{ label: string; value: number; helper: string; icon: IconName }> = [
-    {
-      label: 'Reports generated',
-      value: completedCount,
-      helper: totalJobs ? `${completionRate}% completion rate` : 'Create your first job to begin',
-      icon: 'reports',
-    },
-    {
-      label: 'Clients awaiting sign-off',
-      value: awaitingSignatures,
-      helper: awaitingSignatures ? `${awaitingSignatures} signatures outstanding` : 'All signatures captured',
-      icon: 'clients',
-    },
-  ];
 
   const currentJob =
     activeJobs.length > 0
@@ -71,6 +53,12 @@ export default async function DashboardPage() {
       ? profile.full_name.trim().split(/\s+/)[0]
       : user.email;
 
+  const invoiceTotalsByMonth = await loadInvoiceTotalsByMonth(supabase, user.id);
+  const upcomingJobs = activeJobs
+    .filter((job) => job.scheduled_for && isWithinDays(job.scheduled_for, now, 30))
+    .sort((a, b) => new Date(a.scheduled_for ?? '').getTime() - new Date(b.scheduled_for ?? '').getTime())
+    .slice(0, 5);
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8 px-4 pb-16 pt-6 font-sans text-gray-900 md:pt-10">
       <section className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
@@ -82,7 +70,7 @@ export default async function DashboardPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" asChild className="rounded-full">
-              <Link href="/jobs/scan">Scan Job Sheet</Link>
+              <Link href="/invoices/new">Create invoice</Link>
             </Button>
             <Button variant="secondary" asChild className="rounded-full">
               <Link href="/jobs/new">+ New Job</Link>
@@ -91,9 +79,66 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <section className="grid gap-4">
         {currentJob ? <CurrentJobTile job={currentJob} /> : <EmptyCurrentJobTile />}
-        <KpiCards stats={stats} />
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <Card className="border border-white/10">
+          <CardHeader>
+            <CardTitle className="text-lg text-muted">Invoice totals</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground/70">
+              Last 6 months, all statuses.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-3">
+              {invoiceTotalsByMonth.map((item) => (
+                <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
+                  <div className="w-full rounded-full bg-[var(--muted)]/70 p-1">
+                    <div
+                      className="w-full rounded-full bg-[var(--accent)]"
+                      style={{ height: `${item.height}px` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground/70">{item.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-between text-xs text-muted-foreground/70">
+              <span>£{invoiceTotalsByMonth[0]?.total.toFixed(0) ?? '0'}</span>
+              <span>£{invoiceTotalsByMonth[invoiceTotalsByMonth.length - 1]?.total.toFixed(0) ?? '0'}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-white/10">
+          <CardHeader>
+            <CardTitle className="text-lg text-muted">Upcoming jobs</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground/70">
+              Next 30 days.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {upcomingJobs.length ? (
+              upcomingJobs.map((job) => (
+                <div key={job.id} className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-muted">
+                      {job.title ?? job.client_name ?? 'Job'}
+                    </p>
+                    <p className="text-xs text-muted-foreground/70">{job.address}</p>
+                  </div>
+                  <span className="rounded-full bg-[var(--muted)] px-3 py-1 text-xs text-muted-foreground/70">
+                    {formatDate(job.scheduled_for ?? '')}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground/70">No scheduled jobs in the next 30 days.</p>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="space-y-4">
@@ -199,6 +244,106 @@ function formatDateTime(dateString: string) {
     day: 'numeric',
     hour: 'numeric',
     minute: 'numeric',
+  });
+}
+
+function isWithinDays(dateString: string | null | undefined, reference: Date, days: number) {
+  if (!dateString) return false;
+  const target = new Date(dateString).getTime();
+  if (Number.isNaN(target)) return false;
+  const diff = target - reference.getTime();
+  return diff >= 0 && diff <= days * DAY_IN_MS;
+}
+
+async function loadInvoiceTotalsByMonth(
+  supabase: Awaited<ReturnType<typeof supabaseServerReadOnly>>,
+  userId: string,
+) {
+  try {
+    type UntypedQuery = {
+      select: (columns?: string) => UntypedQuery;
+      eq: (column: string, value: unknown) => UntypedQuery;
+      in: (column: string, values: unknown[]) => UntypedQuery;
+    };
+    type UntypedSupabase = { from: (table: string) => UntypedQuery };
+    const untyped = supabase as unknown as UntypedSupabase;
+
+    const { data: invoices, error: invoiceErr } = await (untyped
+      .from('invoices')
+      .select('id, issue_date, created_at, vat_rate')
+      .eq('user_id', userId) as unknown as Promise<{ data: unknown; error: { message: string } | null }>);
+    if (invoiceErr) return buildEmptyInvoiceSeries();
+
+    const invoiceRows = (invoices ?? []) as Array<{
+      id: string;
+      issue_date: string | null;
+      created_at: string | null;
+      vat_rate: number | string | null;
+    }>;
+    const ids = invoiceRows.map((row) => row.id);
+    const { data: items, error: itemsErr } = ids.length
+      ? await (untyped
+          .from('invoice_line_items')
+          .select('invoice_id, quantity, unit_price, vat_exempt')
+          .in('invoice_id', ids) as unknown as Promise<{ data: unknown; error: { message: string } | null }>)
+      : { data: [] as Array<Record<string, unknown>>, error: null };
+    if (itemsErr) return buildEmptyInvoiceSeries();
+
+    const totalsByInvoice = new Map<string, number>();
+    const lineRows = (items ?? []) as Array<{ invoice_id: string; quantity: number; unit_price: number; vat_exempt: boolean }>;
+    invoiceRows.forEach((invoice) => {
+      const rows = lineRows.filter((row) => row.invoice_id === invoice.id);
+      const subtotal = rows.reduce((sum, row) => sum + Number(row.quantity ?? 0) * Number(row.unit_price ?? 0), 0);
+      const taxable = rows.reduce(
+        (sum, row) => sum + (row.vat_exempt ? 0 : Number(row.quantity ?? 0) * Number(row.unit_price ?? 0)),
+        0,
+      );
+      const vatRate = Number(invoice.vat_rate ?? 0);
+      totalsByInvoice.set(invoice.id, subtotal + taxable * vatRate);
+    });
+
+    const now = new Date();
+    const months = [...Array(6)].map((_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      return {
+        key: `${date.getFullYear()}-${date.getMonth() + 1}`,
+        label: date.toLocaleDateString(undefined, { month: 'short' }),
+        total: 0,
+      };
+    });
+
+    invoiceRows.forEach((invoice) => {
+      const dateValue = invoice.issue_date ?? invoice.created_at;
+      if (!dateValue) return;
+      const date = new Date(dateValue);
+      if (Number.isNaN(date.getTime())) return;
+      const key = `${date.getFullYear()}-${date.getMonth() + 1}`;
+      const entry = months.find((item) => item.key === key);
+      if (entry) {
+        entry.total += totalsByInvoice.get(invoice.id) ?? 0;
+      }
+    });
+
+    const max = Math.max(...months.map((item) => item.total), 1);
+    return months.map((item) => ({
+      ...item,
+      height: Math.max(8, Math.round((item.total / max) * 80)),
+    }));
+  } catch {
+    return buildEmptyInvoiceSeries();
+  }
+}
+
+function buildEmptyInvoiceSeries() {
+  const now = new Date();
+  return [...Array(6)].map((_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+    return {
+      key: `${date.getFullYear()}-${date.getMonth() + 1}`,
+      label: date.toLocaleDateString(undefined, { month: 'short' }),
+      total: 0,
+      height: 8,
+    };
   });
 }
 

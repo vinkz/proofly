@@ -29,6 +29,7 @@
 - Job sheet PDF: `src/lib/pdf/job-sheet-template.ts` renders a QR-enabled job sheet PDF for scan flows.
 - Job sheet PDF API: `src/app/api/jobs/[jobId]/job-sheet/route.ts` serves the generated job sheet PDF.
 - Job detail actions: job pages include a "Generate Job Sheet" button wired to the job sheet PDF API.
+- Cross-certificate links: CP12 can deep-link to Gas Warning Notice using the same jobId; Gas Warning Notice may prefill from CP12 job fields and appliances when available.
 
 ## PDF Generation
 - Field reports: `src/lib/reporting.ts` builds PDFs with `pdf-lib`; `src/server/jobs.ts` loads photos/signatures, optionally AI-summarizes via OpenAI (`getOpenAIClient` and `OPENAI_API_KEY`), then uploads to the Supabase `reports` bucket and stores `reports` rows.
@@ -58,6 +59,16 @@
 ## Auth & Onboarding
 - Auth supports magic-link (`signInWithOtp`) and password login, plus password change and reset flows; environment requires Supabase keys and `NEXT_PUBLIC_SITE_URL` for reset redirects.
 - Unified signup + onboarding is handled by the wizard at `/signup/step1-3`; incomplete profiles redirect there. Auth helpers include `userHasPassword`, `completeSignupWizard`, `changePassword`, `requestPasswordReset`, and `applyPasswordReset`.
+- Onboarding currently completes on `/signup/step2` and `/signup/step3` redirects back to step 2 (certifications removed for now).
+- Step 2 onboarding collects profession (dropdown + manual fallback), company name, engineer name, engineer ID card number, and Gas Safe registration; these are persisted to `profiles` for certificate defaults.
+- If signup fails with `permission denied for table profiles`, fix the `public.handle_new_user()` trigger to be `SECURITY DEFINER` so it can insert into `public.profiles` under RLS.
+
+## Wizard Flow Notes
+- Job address steps now exist in multiple certificate wizards and follow the same card layout: job reference, address name/lines/city/postcode, and job phone, with job line1/postcode syncing to property address fields.
+- General Works wizard step order: Job address → Evidence → Review → Signatures (client step still precedes wizard).
+- Gas Warning Notice job step includes job address fields plus customer contact card; the job address fields are stored in job_fields and used to update the job address via `saveGasWarningJobInfo`.
+- CP12 includes a CTA on Step 3 when "Warning notice issued" is YES that deep-links to Gas Warning Notice using the same jobId.
+- Public ID chain: jobs get an 8-digit `job_code` and a job-scoped `client_ref` (`{job_code}-01`); certificates get `public_id` (`{job_code}-{CERT_TYPE}-01`). UUIDs remain primary keys for all joins.
 
 ## Testing Guidelines
 - Framework: Vitest; place specs in `tests/` with `*.test.ts`.
