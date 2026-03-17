@@ -46,7 +46,7 @@ importers:
         version: 4.1.0
       next:
         specifier: 15.5.5
-        version: 15.5.5(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 15.5.5(@playwright/test@1.58.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       openai:
         specifier: ^6.3.0
         version: 6.8.1(ws@8.18.3)(zod@4.1.12)
@@ -78,6 +78,9 @@ importers:
       '@eslint/eslintrc':
         specifier: ^3
         version: 3.3.1
+      '@playwright/test':
+        specifier: ^1.49.1
+        version: 1.58.1
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.1.17
@@ -598,6 +601,11 @@ packages:
 
   '@pdf-lib/upng@1.0.1':
     resolution: {integrity: sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==}
+
+  '@playwright/test@1.58.1':
+    resolution: {integrity: sha512-6LdVIUERWxQMmUSSQi0I53GgCBYgM2RpGngCPY7hSeju+VrKjq3lvs7HpJoPbDiY5QM5EYRtRX5fvrinnMAz3w==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@rollup/rollup-android-arm-eabi@4.53.1':
     resolution: {integrity: sha512-bxZtughE4VNVJlL1RdoSE545kc4JxL7op57KKoi59/gwuU5rV6jLWFXXc8jwgFoT6vtj+ZjO+Z2C5nrY0Cl6wA==}
@@ -1590,6 +1598,11 @@ packages:
     resolution: {integrity: sha512-KrGhL9Q4zjj0kiUt5OO4Mr/A/jlI2jDYs5eHBpYHPcBEVSiipAvn2Ko2HnPe20rmcuuvMHNdZFp+4IlGTMF0Ow==}
     engines: {node: '>= 6'}
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -2006,6 +2019,7 @@ packages:
   next@15.5.5:
     resolution: {integrity: sha512-OQVdBPtpBfq7HxFN0kOVb7rXXOSIkt5lTzDJDGRBcOyVvNRIWFauMqi1gIHd1pszq1542vMOGY0HP4CaiALfkA==}
     engines: {node: ^18.18.0 || ^19.8.0 || >= 20.0.0}
+    deprecated: This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/CVE-2025-66478 for more details.
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
@@ -2134,6 +2148,16 @@ packages:
   picomatch@4.0.3:
     resolution: {integrity: sha512-5gTmgEY/sqK6gFXLIsQNH19lWb4ebPDLA4SdLP7dsWkIXHWlG66oPuVvXSGFPppYZz8ZDZq0dYYrbHfBCVUb1Q==}
     engines: {node: '>=12'}
+
+  playwright-core@1.58.1:
+    resolution: {integrity: sha512-bcWzOaTxcW+VOOGBCQgnaKToLJ65d6AqfLVKEWvexyS3AS6rbXl+xdpYRMGSRBClPvyj44njOWoxjNdL/H9UNg==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.58.1:
+    resolution: {integrity: sha512-+2uTZHxSCcxjvGc5C891LrS1/NlxglGxzrC4seZiVjcYVQfUa87wBL6rTDqzGjuoWNjnBzRqKmF6zRYGMvQUaQ==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   pngjs@5.0.0:
     resolution: {integrity: sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw==}
@@ -3029,6 +3053,10 @@ snapshots:
   '@pdf-lib/upng@1.0.1':
     dependencies:
       pako: 1.0.11
+
+  '@playwright/test@1.58.1':
+    dependencies:
+      playwright: 1.58.1
 
   '@rollup/rollup-android-arm-eabi@4.53.1':
     optional: true
@@ -4166,6 +4194,9 @@ snapshots:
       hasown: 2.0.2
       mime-types: 2.1.35
 
+  fsevents@2.3.2:
+    optional: true
+
   fsevents@2.3.3:
     optional: true
 
@@ -4549,7 +4580,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  next@15.5.5(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  next@15.5.5(@playwright/test@1.58.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
       '@next/env': 15.5.5
       '@swc/helpers': 0.5.15
@@ -4567,6 +4598,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 15.5.5
       '@next/swc-win32-arm64-msvc': 15.5.5
       '@next/swc-win32-x64-msvc': 15.5.5
+      '@playwright/test': 1.58.1
       sharp: 0.34.5
     transitivePeerDependencies:
       - '@babel/core'
@@ -4680,6 +4712,14 @@ snapshots:
   picomatch@2.3.1: {}
 
   picomatch@4.0.3: {}
+
+  playwright-core@1.58.1: {}
+
+  playwright@1.58.1:
+    dependencies:
+      playwright-core: 1.58.1
+    optionalDependencies:
+      fsevents: 2.3.2
 
   pngjs@5.0.0: {}
 

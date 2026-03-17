@@ -39,10 +39,18 @@ export async function supabaseServerAction() {
           return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options) {
-          cookieStore.set({ name, value, ...options });
+          try {
+            cookieStore.set({ name, value, ...options });
+          } catch {
+            // In RSC/route contexts where mutation is disallowed, silently skip.
+          }
         },
         remove(name: string, options) {
-          cookieStore.set({ name, value: '', expires: new Date(0), ...options });
+          try {
+            cookieStore.set({ name, value: '', expires: new Date(0), ...options });
+          } catch {
+            // In RSC/route contexts where mutation is disallowed, silently skip.
+          }
         },
       },
     },

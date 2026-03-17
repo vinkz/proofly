@@ -32,7 +32,7 @@ const isAuthError = (error: unknown) =>
   (error.message === 'Unauthorized' || error.message.includes('Auth session missing'));
 
 const CERTIFICATE_STEP_TOTALS: Record<CertificateType, number> = {
-  cp12: 5,
+  cp12: 4,
   gas_service: 4,
   general_works: 4,
   gas_warning_notice: 3,
@@ -45,7 +45,13 @@ export default async function CertificateWizardPage({
   searchParams,
 }: {
   params: Promise<{ certificateType: string }>;
-  searchParams: Promise<{ jobId?: string; clientId?: string; clientStep?: string; skipJobInfo?: string }>;
+  searchParams: Promise<{
+    jobId?: string;
+    clientId?: string;
+    clientStep?: string;
+    skipJobInfo?: string;
+    forceClientStep?: string;
+  }>;
 }) {
   const { certificateType } = await params;
   const resolvedSearchParams = await searchParams;
@@ -58,14 +64,34 @@ export default async function CertificateWizardPage({
     typeof resolvedSearchParams?.clientId === 'string' ? resolvedSearchParams.clientId : null;
   const existingJobId =
     typeof resolvedSearchParams?.jobId === 'string' ? resolvedSearchParams.jobId : null;
-  const clientStep = resolvedSearchParams?.clientStep === '1';
-  const skipJobInfo = resolvedSearchParams?.skipJobInfo === '1';
   const isCp12 = normalizedType === 'cp12';
+  const clientStep = !isCp12 && resolvedSearchParams?.clientStep === '1';
+  const forceClientStep = !isCp12 && resolvedSearchParams?.forceClientStep === '1';
   const baseSteps = CERTIFICATE_STEP_TOTALS[normalizedType as CertificateType] ?? 4;
-  const stepOffset = clientStep && !(isCp12 && skipJobInfo) ? 1 : 0;
-  const totalSteps = isCp12 ? baseSteps : baseSteps + 1;
+  // For CP12 we want the wizard's first step to be job info, even when coming from client selection.
+  const stepOffset = clientStep && !isCp12 ? 1 : 0;
+  let totalSteps = isCp12 ? baseSteps : baseSteps + 1;
+
+  if (clientStep && forceClientStep && isCp12 && existingJobId) {
+    redirect(`/wizard/create/${normalizedType}?jobId=${existingJobId}`);
+  }
 
   if (!existingJobId && !clientId) {
+    if (isCp12) {
+      try {
+        const created = await createJob({ certificateType: normalizedType as CertificateType });
+        return redirect(`/wizard/create/${normalizedType}?jobId=${created.jobId}`);
+      } catch (error) {
+        if (isAuthError(error)) {
+          redirect('/login');
+        }
+        return (
+          <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/70 p-6 text-sm text-muted-foreground/80">
+            This job could not be started.
+          </div>
+        );
+      }
+    }
     try {
       const clients = await listClients();
       if (normalizedType === 'gas_service') {
@@ -179,6 +205,11 @@ export default async function CertificateWizardPage({
     initialJobContext,
   );
 
+  const hideBillingCustomerStep = isCp12 ? true : false;
+  if (isCp12) {
+    totalSteps = baseSteps;
+  }
+
   if (normalizedType === 'gas_service') {
     return (
       <BoilerServiceWizard
@@ -248,7 +279,8 @@ export default async function CertificateWizardPage({
       initialPhotoPreviews={wizardState.photoPreviews}
       initialAppliances={wizardState.appliances}
       stepOffset={stepOffset}
-      startStep={isCp12 && skipJobInfo ? 2 : 1}
+      startStep={1}
+      hideBillingCustomerStep={hideBillingCustomerStep}
     />
   );
 }

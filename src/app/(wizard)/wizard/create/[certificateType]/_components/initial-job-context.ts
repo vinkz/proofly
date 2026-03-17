@@ -44,6 +44,7 @@ export function mergeJobContextFields(
     property_address: propertySummary,
     postcode: pickText(customer?.postcode ?? null, propertyAddress?.postcode ?? null, fields.postcode),
     landlord_name: pickText(customer?.landlord_name ?? null, fields.landlord_name),
+    landlord_company: pickText(customer?.organization ?? null, fields.landlord_company),
     landlord_address: pickText(customer?.landlord_address ?? null, fields.landlord_address),
   };
 }

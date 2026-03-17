@@ -145,18 +145,29 @@ export type Database = {
       cp12_appliances: {
         Row: {
           appliance_type: string | null
+          appliance_serviced: string | null
           classification_code: string | null
+          co_reading_high: string | null
+          co_reading_low: string | null
           co_reading_ppm: string | null
+          combustion_notes: string | null
           created_at: string | null
           flue_condition: string | null
           flue_type: string | null
           gas_tightness_test: string | null
           heat_input: string | null
+          high_co2: string | null
+          high_co_ppm: string | null
+          high_ratio: string | null
           id: string
           job_id: string | null
           location: string | null
+          low_co2: string | null
+          low_co_ppm: string | null
+          low_ratio: string | null
           make_model: string | null
           operating_pressure: string | null
+          safety_devices_correct: string | null
           safety_rating: string | null
           stability_test: string | null
           user_id: string | null
@@ -165,18 +176,29 @@ export type Database = {
         }
         Insert: {
           appliance_type?: string | null
+          appliance_serviced?: string | null
           classification_code?: string | null
+          co_reading_high?: string | null
+          co_reading_low?: string | null
           co_reading_ppm?: string | null
+          combustion_notes?: string | null
           created_at?: string | null
           flue_condition?: string | null
           flue_type?: string | null
           gas_tightness_test?: string | null
           heat_input?: string | null
+          high_co2?: string | null
+          high_co_ppm?: string | null
+          high_ratio?: string | null
           id?: string
           job_id?: string | null
           location?: string | null
+          low_co2?: string | null
+          low_co_ppm?: string | null
+          low_ratio?: string | null
           make_model?: string | null
           operating_pressure?: string | null
+          safety_devices_correct?: string | null
           safety_rating?: string | null
           stability_test?: string | null
           user_id?: string | null
@@ -185,18 +207,29 @@ export type Database = {
         }
         Update: {
           appliance_type?: string | null
+          appliance_serviced?: string | null
           classification_code?: string | null
+          co_reading_high?: string | null
+          co_reading_low?: string | null
           co_reading_ppm?: string | null
+          combustion_notes?: string | null
           created_at?: string | null
           flue_condition?: string | null
           flue_type?: string | null
           gas_tightness_test?: string | null
           heat_input?: string | null
+          high_co2?: string | null
+          high_co_ppm?: string | null
+          high_ratio?: string | null
           id?: string
           job_id?: string | null
           location?: string | null
+          low_co2?: string | null
+          low_co_ppm?: string | null
+          low_ratio?: string | null
           make_model?: string | null
           operating_pressure?: string | null
+          safety_devices_correct?: string | null
           safety_rating?: string | null
           stability_test?: string | null
           user_id?: string | null
@@ -576,6 +609,10 @@ export type Database = {
         Row: {
           certifications: string[] | null
           company_name: string | null
+          company_address: string | null
+          company_postcode: string | null
+          company_phone: string | null
+          company_email: string | null
           created_at: string | null
           date_of_birth: string | null
           default_engineer_id: string | null
@@ -593,6 +630,10 @@ export type Database = {
         Insert: {
           certifications?: string[] | null
           company_name?: string | null
+          company_address?: string | null
+          company_postcode?: string | null
+          company_phone?: string | null
+          company_email?: string | null
           created_at?: string | null
           date_of_birth?: string | null
           default_engineer_id?: string | null
@@ -610,6 +651,10 @@ export type Database = {
         Update: {
           certifications?: string[] | null
           company_name?: string | null
+          company_address?: string | null
+          company_postcode?: string | null
+          company_phone?: string | null
+          company_email?: string | null
           created_at?: string | null
           date_of_birth?: string | null
           default_engineer_id?: string | null

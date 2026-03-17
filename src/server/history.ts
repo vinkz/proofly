@@ -4,8 +4,10 @@ import { z } from 'zod';
 
 import type { Database } from '@/lib/database.types';
 import { supabaseServerAction } from '@/lib/supabaseServer';
+import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 const JobId = z.string().uuid();
+const ClientId = z.string().uuid();
 const JOBS_TABLE = 'jobs' as const;
 const CP12_APPLIANCES_TABLE = 'cp12_appliances' as const;
 const JOB_FIELDS_TABLE = 'job_fields' as const;
@@ -138,4 +140,86 @@ export async function getLatestApplianceDefaultsForJob(jobId: string): Promise<A
       date: previousJob.completed_at ?? previousJob.created_at ?? null,
     },
   };
+}
+
+export type RecentJobAddress = {
+  id: string;
+  summary: string;
+  line1: string;
+  line2: string;
+  city: string;
+  postcode: string;
+};
+
+const uniqueAddresses = (addresses: RecentJobAddress[]) => {
+  const seen = new Set<string>();
+  return addresses.filter((addr) => {
+    const key = `${addr.summary}-${addr.postcode}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+export async function getRecentJobAddressesForClient(clientId: string, excludeJobId?: string): Promise<RecentJobAddress[]> {
+  ClientId.parse(clientId);
+  const sb = await supabaseServerReadOnly();
+  const {
+    data: { user },
+    error: userError,
+  } = await sb.auth.getUser();
+  if (userError || !user) throw new Error(userError?.message ?? 'Unauthorized');
+
+  const { data: jobs, error: jobsError } = await sb
+    .from(JOBS_TABLE)
+    .select('id, address, created_at')
+    .eq('client_id', clientId)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(15);
+  if (jobsError) throw new Error(jobsError.message);
+  const filteredJobs = (jobs ?? []).filter((job) => job.id !== excludeJobId);
+  if (!filteredJobs.length) return [];
+
+  const jobIds = filteredJobs.map((job) => job.id);
+  const { data: fields, error: fieldsError } = await sb
+    .from(JOB_FIELDS_TABLE)
+    .select('job_id, field_key, value')
+    .in('job_id', jobIds)
+    .in('field_key', ['property_address_line1', 'property_address_line2', 'property_town', 'property_postcode']);
+  if (fieldsError) throw new Error(fieldsError.message);
+
+  const fieldMap = (fields ?? []).reduce<Record<string, Record<string, string>>>((acc, field) => {
+    const jobId = (field as JobFieldRow).job_id as string;
+    if (!acc[jobId]) acc[jobId] = {};
+    acc[jobId][(field as JobFieldRow).field_key as string] = toText((field as JobFieldRow).value);
+    return acc;
+  }, {});
+
+  const toSummary = (job: { address: string | null }, map: Record<string, string>) => {
+    const line1 = toText(map.property_address_line1) || toText(job.address);
+    const line2 = toText(map.property_address_line2);
+    const city = toText(map.property_town);
+    const postcode = toText(map.property_postcode);
+    const parts = [line1, line2, city, postcode].filter((val) => val && val.trim());
+    return { summary: parts.join(', '), line1, line2, city, postcode };
+  };
+
+  const addresses: RecentJobAddress[] = filteredJobs
+    .map((job) => {
+      const map = fieldMap[job.id] ?? {};
+      const { summary, line1, line2, city, postcode } = toSummary(job, map);
+      const fallbackSummary = job.address ?? '';
+      return {
+        id: job.id,
+        summary: summary || fallbackSummary,
+        line1: line1 || fallbackSummary,
+        line2,
+        city,
+        postcode,
+      };
+    })
+    .filter((addr) => addr.summary.trim().length > 0);
+
+  return uniqueAddresses(addresses).slice(0, 5);
 }

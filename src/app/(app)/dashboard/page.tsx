@@ -170,7 +170,7 @@ export default async function DashboardPage() {
               title="Follow-up visits"
               value={followUpsDue}
               description="Schedule technicians for unresolved findings."
-              href="/reports"
+              href="/documents"
             />
           </CardContent>
         </Card>

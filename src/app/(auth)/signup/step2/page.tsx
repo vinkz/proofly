@@ -16,6 +16,9 @@ const Step2Schema = z.object({
   date_of_birth: z.string().min(4, 'Date of birth required'),
   profession: z.string().min(2, 'Profession required'),
   company_name: z.string().min(2, 'Company name required'),
+  company_address: z.string().min(4, 'Company address required'),
+  company_postcode: z.string().min(3, 'Company postcode required'),
+  company_phone: z.string().min(6, 'Company phone required'),
   default_engineer_name: z.string().min(2, 'Engineer name required'),
   default_engineer_id: z.string().min(2, 'Engineer ID card number required'),
   gas_safe_number: z.string().min(2, 'Gas Safe number required'),
@@ -32,6 +35,9 @@ export default function SignupStep2Page() {
     date_of_birth: '',
     profession: '',
     company_name: '',
+    company_address: '',
+    company_postcode: '',
+    company_phone: '',
     default_engineer_name: '',
     default_engineer_id: '',
     gas_safe_number: '',
@@ -45,6 +51,9 @@ export default function SignupStep2Page() {
       date_of_birth: state.date_of_birth ?? '',
       profession: state.profession ?? '',
       company_name: state.company_name ?? state.business_name ?? '',
+      company_address: state.company_address ?? '',
+      company_postcode: state.company_postcode ?? '',
+      company_phone: state.company_phone ?? '',
       default_engineer_name: state.default_engineer_name ?? '',
       default_engineer_id: state.default_engineer_id ?? '',
       gas_safe_number: state.gas_safe_number ?? '',
@@ -90,6 +99,9 @@ export default function SignupStep2Page() {
           profession: nextState.profession,
           business_name: nextState.company_name ?? nextState.business_name ?? '',
           company_name: nextState.company_name ?? '',
+          company_address: nextState.company_address ?? '',
+          company_postcode: nextState.company_postcode ?? '',
+          company_phone: nextState.company_phone ?? '',
           default_engineer_name: nextState.default_engineer_name ?? '',
           default_engineer_id: nextState.default_engineer_id ?? '',
           gas_safe_number: nextState.gas_safe_number ?? '',
@@ -177,6 +189,39 @@ export default function SignupStep2Page() {
             value={form.company_name}
             onChange={update('company_name')}
             placeholder="certnow Plumbing Co."
+            className="mt-2"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Company address
+          <Input
+            type="text"
+            value={form.company_address}
+            onChange={update('company_address')}
+            placeholder="123 River St, London"
+            className="mt-2"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Company postcode
+          <Input
+            type="text"
+            value={form.company_postcode}
+            onChange={update('company_postcode')}
+            placeholder="E1 6AN"
+            className="mt-2"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Company phone / Tel No.
+          <Input
+            type="text"
+            value={form.company_phone}
+            onChange={update('company_phone')}
+            placeholder="+44 7..."
             className="mt-2"
             disabled={isPending}
           />

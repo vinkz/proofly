@@ -12,7 +12,7 @@ export default function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const router = useRouter();
 
   const handleRowClick = (job: JobRow) => {
-    const href = job.status === 'completed' ? `/reports/${job.id}` : resumeHref(job);
+  const href = job.status === 'completed' ? `/documents/${job.id}` : resumeHref(job);
     router.push(href);
   };
 

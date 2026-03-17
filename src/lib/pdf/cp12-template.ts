@@ -411,8 +411,23 @@ export async function renderCp12TemplatePdf({ fieldMap, appliances, issuedAt, re
       heat_input: toText(app.heat_input),
       flue_condition: toText(app.flue_condition ?? app.stability_test),
       ventilation: toText(app.ventilation_satisfactory ?? app.ventilation_provision),
-      combustion: toText(app.co_reading_ppm ?? appliance.combustion_reading ?? appliance.co2_percent),
-      safety: toText([app.safety_rating, app.classification_code].filter((s) => s && String(s).trim()).join(' / ')),
+      combustion: (() => {
+        const high = toText(app.co_reading_high);
+        const low = toText(app.co_reading_low);
+        const single = toText(app.co_reading_ppm ?? appliance.combustion_reading ?? appliance.co2_percent);
+        if (high || low) return ['H', high, low ? `L ${low}` : ''].filter(Boolean).join(' ');
+        return single;
+      })(),
+      safety: (() => {
+        const parts = [
+          toText(app.safety_rating),
+          toText(app.classification_code),
+          toText(app.appliance_serviced ? 'Serviced' : ''),
+          toText(app.safety_devices_correct ? 'Safeties OK' : ''),
+          toText(app.flue_performance_test ? 'Flue test' : ''),
+        ].filter((s) => s && s.trim());
+        return parts.join(' / ');
+      })(),
     };
     table.columns.forEach((col) => {
       const raw = cells[col.key] ?? '';

@@ -126,6 +126,7 @@ export function ApplianceStep({
   );
   const [editingIndex, setEditingIndex] = useState(0);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [showOptional, setShowOptional] = useState(false);
 
   useEffect(() => {
     if (isArrayMode) return;
@@ -221,7 +222,7 @@ export function ApplianceStep({
     const next = [...activeAppliances, { ...emptyAppliance }];
     updateAppliances(next);
     setEditingIndex(next.length - 1);
-    setIsEditorOpen(true);
+    if (!inlineEditor) setIsEditorOpen(true);
   };
 
   const removeAppliance = (index: number) => {
@@ -250,150 +251,170 @@ export function ApplianceStep({
 
       <div className="space-y-3">
         {inlineEditor ? (
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-            {(() => {
-              const makeValue = activeAppliances[0]?.make ?? '';
-              const makeIsKnown = isKnownMake(makeValue);
-              const makeSelectValue = makeIsKnown ? makeValue : makeValue ? 'Other' : '';
-              const showOtherMake = makeSelectValue === 'Other';
-              const modelValue = activeAppliances[0]?.model ?? '';
-              const modelsForMake = getModelsForMake(makeValue);
-              const modelIsKnown = modelsForMake.includes(modelValue);
-              const modelSelectValue = modelIsKnown ? modelValue : modelValue ? 'Not listed' : '';
-              const showManualModel = modelSelectValue === 'Not listed';
-              const manualModelValue = modelValue === 'Not listed' ? '' : modelValue;
-              const manualMakeValue = makeValue === 'Other' ? '' : makeValue;
+          activeAppliances.map((appliance, index) => {
+            const makeValue = appliance?.make ?? '';
+            const makeIsKnown = isKnownMake(makeValue);
+            const makeSelectValue = makeIsKnown ? makeValue : makeValue ? 'Other' : '';
+            const showOtherMake = makeSelectValue === 'Other';
+            const modelValue = appliance?.model ?? '';
+            const modelsForMake = getModelsForMake(makeValue);
+            const modelIsKnown = modelsForMake.includes(modelValue);
+            const modelSelectValue = modelIsKnown ? modelValue : modelValue ? 'Not listed' : '';
+            const showManualModel = modelSelectValue === 'Not listed';
+            const manualModelValue = modelValue === 'Not listed' ? '' : modelValue;
+            const manualMakeValue = makeValue === 'Other' ? '' : makeValue;
+            const modelOptionsForMake = [...modelsForMake, 'Not listed'].map((model) => ({ label: model, value: model }));
 
-              return (
+            return (
+              <div key={`appliance-inline-${index}`} className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-muted">Appliance #{index + 1} identity</p>
+                  {allowMultiple && activeAppliances.length > 1 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 rounded-full px-3 text-xs"
+                      onClick={() => removeAppliance(index)}
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
-              <EnumChips
-                label="Appliance type"
-                value={activeAppliances[0]?.type ?? ''}
-                options={typeOptions}
-                onChange={(val) => updateApplianceField(0, 'type', val)}
-              />
-              <SearchableSelect
-                label="Make"
-                value={makeSelectValue}
-                options={resolvedMakeOptions}
-                placeholder="Select or type"
-                onChange={(val) => updateApplianceField(0, 'make', val === 'Other' ? 'Other' : val)}
-              />
-              {showOtherMake ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Other make</p>
-                  <Input
-                    value={manualMakeValue}
-                    onChange={(e) => updateApplianceField(0, 'make', e.target.value)}
-                    placeholder="Type boiler make"
+                  <EnumChips
+                    label="Appliance type"
+                    value={appliance?.type ?? ''}
+                    options={typeOptions}
+                    onChange={(val) => updateApplianceField(index, 'type', val)}
                   />
-                </div>
-              ) : null}
-              {makeIsKnown ? (
-                <SearchableSelect
-                  label="Model"
-                  value={modelSelectValue}
-                  options={modelOptions}
-                  placeholder="Select or type"
-                  onChange={(val) => updateApplianceField(0, 'model', val === 'Not listed' ? 'Not listed' : val)}
-                />
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model</p>
-                  <Input
-                    value={activeAppliances[0]?.model ?? ''}
-                    onChange={(e) => updateApplianceField(0, 'model', e.target.value)}
-                    placeholder="Type model"
+                  <SearchableSelect
+                    label="Make"
+                    value={makeSelectValue}
+                    options={resolvedMakeOptions}
+                    placeholder="Select or type"
+                    onChange={(val) => updateApplianceField(index, 'make', val === 'Other' ? 'Other' : val)}
                   />
-                </div>
-              )}
-              {makeIsKnown && showManualModel ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model (manual)</p>
-                  <Input
-                    value={manualModelValue}
-                    onChange={(e) => updateApplianceField(0, 'model', e.target.value)}
-                    placeholder="Type model"
+                  {showOtherMake ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Other make</p>
+                      <Input
+                        value={manualMakeValue}
+                        onChange={(e) => updateApplianceField(index, 'make', e.target.value)}
+                        placeholder="Type boiler make"
+                      />
+                    </div>
+                  ) : null}
+                  {makeIsKnown ? (
+                    <SearchableSelect
+                      label="Model"
+                      value={modelSelectValue}
+                      options={modelOptionsForMake}
+                      placeholder="Select or type"
+                      onChange={(val) => updateApplianceField(index, 'model', val === 'Not listed' ? 'Not listed' : val)}
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model</p>
+                      <Input
+                        value={appliance?.model ?? ''}
+                        onChange={(e) => updateApplianceField(index, 'model', e.target.value)}
+                        placeholder="Type model"
+                      />
+                    </div>
+                  )}
+                  {makeIsKnown && showManualModel ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model (manual)</p>
+                      <Input
+                        value={manualModelValue}
+                        onChange={(e) => updateApplianceField(index, 'model', e.target.value)}
+                        placeholder="Type model"
+                      />
+                    </div>
+                  ) : null}
+                  <SearchableSelect
+                    label="Location"
+                    value={appliance?.location ?? ''}
+                    options={locationOptions}
+                    placeholder="Select or type"
+                    onChange={(val) => updateApplianceField(index, 'location', val)}
                   />
-                </div>
-              ) : null}
-              <SearchableSelect
-                label="Location"
-                value={activeAppliances[0]?.location ?? ''}
-                options={locationOptions}
-                placeholder="Select or type"
-                onChange={(val) => updateApplianceField(0, 'location', val)}
-              />
-              {showExtendedFields ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Mount type</p>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { label: 'Wall-mounted', value: 'wall' },
-                      { label: 'Floor-standing', value: 'floor' },
-                      { label: 'Unknown', value: 'unknown' },
-                    ].map((option) => (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        variant={(activeAppliances[0]?.mountType ?? '') === option.value ? 'primary' : 'outline'}
-                        className="rounded-full px-3 py-1 text-xs"
-                        onClick={() => updateApplianceField(0, 'mountType', option.value)}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
+                  {showExtendedFields ? (
+                    <div className="sm:col-span-2 space-y-2">
+                      <div className="flex items-center justify-between rounded-2xl border border-white/30 bg-white/60 px-3 py-2">
+                        <p className="text-sm font-semibold text-muted">Optional manufacturer details</p>
+                        <Button type="button" variant="ghost" className="h-8 rounded-full px-3 text-xs" onClick={() => setShowOptional((v) => !v)}>
+                          {showOptional ? 'Hide' : 'Show'}
+                        </Button>
+                      </div>
+                      {showOptional ? (
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Mount type</p>
+                            <div className="flex flex-wrap gap-2">
+                              {[
+                                { label: 'Wall-mounted', value: 'wall' },
+                                { label: 'Floor-standing', value: 'floor' },
+                                { label: 'Unknown', value: 'unknown' },
+                              ].map((option) => (
+                                <Button
+                                  key={option.value}
+                                  type="button"
+                                  variant={(appliance?.mountType ?? '') === option.value ? 'primary' : 'outline'}
+                                  className="rounded-full px-3 py-1 text-xs"
+                                  onClick={() => updateApplianceField(index, 'mountType', option.value)}
+                                >
+                                  {option.label}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Gas type</p>
+                            <Select
+                              value={appliance?.gasType ?? ''}
+                              onChange={(e) => updateApplianceField(index, 'gasType', e.target.value)}
+                            >
+                              <option value="">Select</option>
+                              <option value="natural_gas">Natural Gas (G20)</option>
+                              <option value="lpg">LPG (G31)</option>
+                              <option value="unknown">Unknown</option>
+                            </Select>
+                          </div>
+                          {showYear ? (
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Year of manufacture</p>
+                              <Select
+                                value={appliance?.year ?? ''}
+                                onChange={(e) => updateApplianceField(index, 'year', e.target.value)}
+                              >
+                                <option value="">Select</option>
+                                {yearOptions.map((year) => (
+                                  <option key={year} value={year === 'Unknown' ? 'unknown' : year}>
+                                    {year}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <div className="space-y-2 sm:col-span-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number (optional)</p>
+                    <Input
+                      value={appliance?.serial ?? ''}
+                      onChange={(e) => updateApplianceField(index, 'serial', e.target.value)}
+                      placeholder="Serial number"
+                      inputMode="text"
+                      autoCapitalize="characters"
+                    />
                   </div>
                 </div>
-              ) : null}
-              {showExtendedFields ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Gas type</p>
-                  <Select
-                    value={activeAppliances[0]?.gasType ?? ''}
-                    onChange={(e) => updateApplianceField(0, 'gasType', e.target.value)}
-                  >
-                    <option value="natural_gas">Natural Gas (G20)</option>
-                    <option value="lpg">LPG (G31)</option>
-                    <option value="unknown">Unknown</option>
-                  </Select>
-                </div>
-              ) : null}
-              {showExtendedFields && showYear ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Year of manufacture</p>
-                  <Select
-                    value={activeAppliances[0]?.year ?? ''}
-                    onChange={(e) => updateApplianceField(0, 'year', e.target.value)}
-                  >
-                    {yearOptions.map((year) => (
-                      <option key={year} value={year === 'Unknown' ? 'unknown' : year}>
-                        {year}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              ) : null}
-              <div className="space-y-2 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number</p>
-                <Input
-                  value={activeAppliances[0]?.serial ?? ''}
-                  onChange={(e) => updateApplianceField(0, 'serial', e.target.value)}
-                  placeholder="Serial number"
-                  inputMode="text"
-                  autoCapitalize="characters"
-                />
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground/70">
-                  <span>Usually on data plate/label.</span>
-                  <Button type="button" variant="ghost" className="h-7 rounded-full px-3 text-[11px]" disabled>
-                    Scan label (soon)
-                  </Button>
-                </div>
               </div>
-            </div>
-              );
-            })()}
-          </div>
+            );
+          })
         ) : (
           activeAppliances.map((item, index) => (
             <ApplianceProfileCard
@@ -483,57 +504,69 @@ export function ApplianceStep({
                 onChange={(val) => updateApplianceField(editingIndex, 'location', val)}
               />
               {showExtendedFields ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Mount type</p>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { label: 'Wall-mounted', value: 'wall' },
-                      { label: 'Floor-standing', value: 'floor' },
-                      { label: 'Unknown', value: 'unknown' },
-                    ].map((option) => (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        variant={(activeAppliances[editingIndex]?.mountType ?? '') === option.value ? 'primary' : 'outline'}
-                        className="rounded-full px-3 py-1 text-xs"
-                        onClick={() => updateApplianceField(editingIndex, 'mountType', option.value)}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
+                <div className="sm:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between rounded-2xl border border-white/30 bg-white/60 px-3 py-2">
+                    <p className="text-sm font-semibold text-muted">Optional manufacturer details</p>
+                    <Button type="button" variant="ghost" className="h-8 rounded-full px-3 text-xs" onClick={() => setShowOptional((v) => !v)}>
+                      {showOptional ? 'Hide' : 'Show'}
+                    </Button>
                   </div>
-                </div>
-              ) : null}
-              {showExtendedFields ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Gas type</p>
-                  <Select
-                    value={activeAppliances[editingIndex]?.gasType ?? ''}
-                    onChange={(e) => updateApplianceField(editingIndex, 'gasType', e.target.value)}
-                  >
-                    <option value="natural_gas">Natural Gas (G20)</option>
-                    <option value="lpg">LPG (G31)</option>
-                    <option value="unknown">Unknown</option>
-                  </Select>
-                </div>
-              ) : null}
-              {showExtendedFields && showYear ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Year of manufacture</p>
-                  <Select
-                    value={activeAppliances[editingIndex]?.year ?? ''}
-                    onChange={(e) => updateApplianceField(editingIndex, 'year', e.target.value)}
-                  >
-                    {yearOptions.map((year) => (
-                      <option key={year} value={year === 'Unknown' ? 'unknown' : year}>
-                        {year}
-                      </option>
-                    ))}
-                  </Select>
+                  {showOptional ? (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Mount type</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { label: 'Wall-mounted', value: 'wall' },
+                            { label: 'Floor-standing', value: 'floor' },
+                            { label: 'Unknown', value: 'unknown' },
+                          ].map((option) => (
+                            <Button
+                              key={option.value}
+                              type="button"
+                              variant={(activeAppliances[editingIndex]?.mountType ?? '') === option.value ? 'primary' : 'outline'}
+                              className="rounded-full px-3 py-1 text-xs"
+                              onClick={() => updateApplianceField(editingIndex, 'mountType', option.value)}
+                            >
+                              {option.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Gas type</p>
+                        <Select
+                          value={activeAppliances[editingIndex]?.gasType ?? ''}
+                          onChange={(e) => updateApplianceField(editingIndex, 'gasType', e.target.value)}
+                        >
+                          <option value="">Select</option>
+                          <option value="natural_gas">Natural Gas (G20)</option>
+                          <option value="lpg">LPG (G31)</option>
+                          <option value="unknown">Unknown</option>
+                        </Select>
+                      </div>
+                      {showYear ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Year of manufacture</p>
+                          <Select
+                            value={activeAppliances[editingIndex]?.year ?? ''}
+                            onChange={(e) => updateApplianceField(editingIndex, 'year', e.target.value)}
+                          >
+                            <option value="">Select</option>
+                            {yearOptions.map((year) => (
+                              <option key={year} value={year === 'Unknown' ? 'unknown' : year}>
+                                {year}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <div className="space-y-2 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number (optional)</p>
                 <Input
                   value={activeAppliances[editingIndex]?.serial ?? ''}
                   onChange={(e) => updateApplianceField(editingIndex, 'serial', e.target.value)}
@@ -541,12 +574,6 @@ export function ApplianceStep({
                   inputMode="text"
                   autoCapitalize="characters"
                 />
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground/70">
-                  <span>Usually on data plate/label.</span>
-                  <Button type="button" variant="ghost" className="h-7 rounded-full px-3 text-[11px]" disabled>
-                    Scan label (soon)
-                  </Button>
-                </div>
               </div>
             </div>
               );

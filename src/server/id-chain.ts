@@ -15,7 +15,9 @@ const CERTIFICATE_TOKENS: Record<CertificateType, string> = {
 };
 
 export async function getNextJobCode(sb: DbClient, userId: string) {
-  const { data, error } = await sb.rpc('next_job_code', { p_user_id: userId });
+  // rpc function is not in generated types yet; call via untyped handle.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (sb as any).rpc('next_job_code', { p_user_id: userId });
   if (error) throw new Error(error.message);
   return String(data);
 }
@@ -23,14 +25,11 @@ export async function getNextJobCode(sb: DbClient, userId: string) {
 export async function ensureJobCode(sb: DbClient, jobId: string, userId: string, currentCode?: string | null) {
   if (currentCode && currentCode.trim().length) return currentCode.trim();
   const nextCode = await getNextJobCode(sb, userId);
-  const { error } = await sb
-    .from('jobs')
-    .update({
-      job_code: nextCode,
-      client_ref: `${nextCode}-01`,
-    })
-    .eq('id', jobId)
-    .eq('user_id', userId);
+  const updatePayload = {
+    job_code: nextCode,
+    client_ref: `${nextCode}-01`,
+  } as Record<string, unknown>;
+  const { error } = await sb.from('jobs').update(updatePayload).eq('id', jobId).eq('user_id', userId);
   if (error) throw new Error(error.message);
   return nextCode;
 }

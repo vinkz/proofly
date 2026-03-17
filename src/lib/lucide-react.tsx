@@ -59,3 +59,13 @@ export const ChevronRight = baseIcon(
   [<path key="arrow" d="m9 18 6-6-6-6" />],
   'ChevronRight',
 );
+
+export const Mic = baseIcon(
+  [
+    <path key="body" d="M12 1a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" />,
+    <path key="arc" d="M19 10v2a7 7 0 0 1-14 0v-2" />,
+    <line key="stem" x1="12" x2="12" y1="19" y2="23" />,
+    <line key="base" x1="8" x2="16" y1="23" y2="23" />,
+  ],
+  'Mic',
+);

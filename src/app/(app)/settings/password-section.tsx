@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { changePassword } from '@/server/password';
 
-export function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
+export function PasswordSection({ hasPassword, email }: { hasPassword: boolean; email: string }) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -63,6 +63,16 @@ export function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
       ) : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="block text-sm font-semibold text-muted md:col-span-2">
+          Email
+          <Input
+            type="email"
+            value={email}
+            readOnly
+            className="mt-2"
+            disabled
+          />
+        </label>
         {hasPassword ? (
           <label className="block text-sm font-semibold text-muted">
             Current password

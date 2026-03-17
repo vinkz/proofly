@@ -8,9 +8,11 @@ type UnitNumberInputProps = {
   unit: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  disabled?: boolean;
+  note?: string;
 };
 
-export function UnitNumberInput({ label, value, unit, onChange, placeholder }: UnitNumberInputProps) {
+export function UnitNumberInput({ label, value, unit, onChange, placeholder, disabled = false, note }: UnitNumberInputProps) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
@@ -22,11 +24,13 @@ export function UnitNumberInput({ label, value, unit, onChange, placeholder }: U
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           className="pr-16"
+          disabled={disabled}
         />
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground/70">
           {unit}
         </span>
       </div>
+      {note ? <p className="text-[11px] font-medium text-muted-foreground/70">{note}</p> : null}
     </div>
   );
 }

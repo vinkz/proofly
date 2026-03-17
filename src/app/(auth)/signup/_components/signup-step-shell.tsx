@@ -14,6 +14,9 @@ export type SignupState = {
   profession: string;
   business_name?: string;
   company_name?: string;
+  company_address?: string;
+  company_postcode?: string;
+  company_phone?: string;
   default_engineer_name?: string;
   default_engineer_id?: string;
   gas_safe_number?: string;
@@ -31,6 +34,9 @@ const defaultState: SignupState = {
   profession: '',
   business_name: '',
   company_name: '',
+  company_address: '',
+  company_postcode: '',
+  company_phone: '',
   default_engineer_name: '',
   default_engineer_id: '',
   gas_safe_number: '',

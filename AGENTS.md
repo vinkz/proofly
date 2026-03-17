@@ -21,6 +21,7 @@
 - Data flows through server actions in `src/app` and shared helpers in `src/server`; keep Supabase clients server-side except for SSR helpers in `src/lib`.
 - Client UI pulls typed data via props; shared types in `src/types` keep server/client contracts aligned.
 - Styling uses Tailwind (`tailwind.config.ts`); components favor utility-first classes over bespoke CSS.
+- Document preview is canonical at `/jobs/[id]/pdf` (legacy report/pdf routes should redirect here); saved documents live under `/documents` and use Supabase signed URLs.
 - External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, maps via `@googlemaps/google-maps-services-js`; isolate integration code under `src/server`.
 - Job sheets: `src/server/job-sheets.ts` manages `public.job_sheets` codes (CN-XXXXXX) for the job sheet scan flow.
 - Job sheet lookup API: `src/app/api/job-sheets/lookup/route.ts` resolves CN codes to jobs for the scan flow.
@@ -34,7 +35,12 @@
 ## PDF Generation
 - Field reports: `src/lib/reporting.ts` builds PDFs with `pdf-lib`; `src/server/jobs.ts` loads photos/signatures, optionally AI-summarizes via OpenAI (`getOpenAIClient` and `OPENAI_API_KEY`), then uploads to the Supabase `reports` bucket and stores `reports` rows.
 - Certificates: `src/server/certificates.ts` orchestrates Supabase service-role writes (public.certificates/jobs/job_fields) and storage uploads to the `certificates` bucket (preview vs final), then returns signed URLs; no external PDF API is used.
-- CP12 / Gas Safety (AcroForm): `src/server/pdf/renderCp12Certificate.ts` loads `src/assets/templates/cp12-template.pdf`, reads AcroForm field names, and fills them via a mapping from `Cp12FieldMap` + `ApplianceInput`. It uses `setTextIfExists` to avoid hard failures on missing fields, combines defect/remedial/notes into `comments.comments`, uses fallbacks for signatures and issue dates, and fills appliance rows by `appliance_N.*` fields when present. If appliance fields are missing, it draws the appliance table text at fixed XY positions and adds pages by copying the template. It updates field appearances with Helvetica and leaves fields editable (no flatten).
+- CP12 / Gas Safety (AcroForm): `src/server/pdf/renderCp12Certificate.ts` loads `src/assets/templates/cp12-template.pdf`, reads AcroForm field names, and fills them via `Cp12FieldMap` + `ApplianceInput`. Step 1 mappings now drive PDF blocks explicitly:
+  - Job Address: `job_address.name`, `job_address.address_line_1/2/3`, `job_address.post_code`, `job_address.tel_no` from `job_address_name`, `job_address_line1`, `job_address_line2`, `job_address_city`, `job_postcode`, `job_tel`.
+  - Customer/Landlord: `customer.name`, `customer.company`, `customer.address_line_1/2/3`, `customer.post_code`, `customer.tel_no` from `landlord_name`, `landlord_company`, `landlord_address_line1`, `landlord_address_line2`, `landlord_city`, `landlord_postcode`, `landlord_tel` (with legacy fallback from `landlord_address` when structured fields are missing).
+  - It combines defect/remedial/notes into `comments.comments`, keeps targeted safety checkbox handling for the four `safety_checks.*` fields, and embeds signatures using detected widget placement where possible with fixed page-0 fallback boxes when dedicated signature fields are absent.
+  - If appliance form fields are missing, it draws appliance rows at fixed XY positions and copies template pages as needed.
+  - It updates field appearances with Helvetica and leaves fields editable (no flatten).
 - CP12 / Gas Safety (drawn layout): `src/lib/pdf/cp12-template.ts` is a legacy/manual renderer that draws its own layout and writes text at coordinates (used by some dev routes).
 - Gas Warning Notice: `src/server/pdf/renderGasWarningNoticePdf.ts` loads `src/assets/templates/gas-warning-notice.pdf`, fills AcroForm fields when present, and falls back to XY text drawing if the template is not form-enabled. Signature URLs are drawn into the signature boxes when available.
 - Boiler Service Record: `renderGasServiceRecordTemplatePdf` in `src/lib/pdf/gas-service-template.ts` draws its own layout; wrappers `renderBoilerServicePdf`/`generateBoilerServiceRecordPdf` map certificate fields then call the renderer.
@@ -64,10 +70,18 @@
 - If signup fails with `permission denied for table profiles`, fix the `public.handle_new_user()` trigger to be `SECURITY DEFINER` so it can insert into `public.profiles` under RLS.
 
 ## Wizard Flow Notes
-- Job address steps now exist in multiple certificate wizards and follow the same card layout: job reference, address name/lines/city/postcode, and job phone, with job line1/postcode syncing to property address fields.
+- Job address steps follow the shared card layout: job reference, address name/lines/city/postcode, and site telephone; job line1/postcode sync into property address fields.
 - General Works wizard step order: Job address → Evidence → Review → Signatures (client step still precedes wizard).
 - Gas Warning Notice job step includes job address fields plus customer contact card; the job address fields are stored in job_fields and used to update the job address via `saveGasWarningJobInfo`.
+- CP12 (2026-02 refresh):
+  - Section order mirrors the PDF: Installer (read-only from account) → Job address → Customer/Landlord → Appliance identity → Appliance checks → Signatures.
+  - **Billable customer is removed** from CP12; only job address + landlord/customer are collected.
+  - Installer/company + Gas Safe + ID card come from profile; if missing, issuing is blocked and the user is pushed to Settings.
+  - Step 1 Job location requires `job_address_name`, `job_address_line1`, `job_postcode`, and `job_tel` (site telephone); `job_address_line2` and `job_address_city` are supported and render on separate PDF address lines.
+  - Step 1 Landlord / Property owner uses structured fields: `landlord_name`, `landlord_company` (optional), `landlord_address_line1`, `landlord_address_line2` (optional), `landlord_city`, `landlord_postcode`, `landlord_tel` (optional). For backward compatibility, `landlord_address` is still persisted and used as a fallback.
+  - Appliances capped at 5 rows to match the PDF table capacity.
 - CP12 includes a CTA on Step 3 when "Warning notice issued" is YES that deep-links to Gas Warning Notice using the same jobId.
+- CP12 guardrails (docs/specs/cp12.md): property + landlord addresses required and must differ, landlord name required, Reg 26(9) confirmation required, at least one appliance with location & description, engineer + customer signatures required to issue, and if any appliance is unsafe/defective you must capture defect_description, remedial_action, and a warning_notice_issued choice.
 - Public ID chain: jobs get an 8-digit `job_code` and a job-scoped `client_ref` (`{job_code}-01`); certificates get `public_id` (`{job_code}-{CERT_TYPE}-01`). UUIDs remain primary keys for all joins.
 
 ## Testing Guidelines

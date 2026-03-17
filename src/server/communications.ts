@@ -3,7 +3,7 @@
 import { supabaseServerAction } from '@/lib/supabaseServer';
 export async function sendPdfToClient({
   jobId,
-  pdfPath,
+  pdfPath: _pdfPath,
 }: {
   jobId: string;
   pdfPath: string | null;
@@ -33,9 +33,11 @@ export async function sendPdfToClient({
   if (clientErr) throw new Error(clientErr.message);
   if (!client?.email) throw new Error('Client email not found');
 
+  const pdfPath = _pdfPath ?? 'missing-pdf-path';
+
   return {
     status: 'NOT_CONFIGURED',
     message:
-      'Email sending is not configured. Add your email provider integration (e.g. Resend/Postmark) and send the message.',
+      `Email sending is not configured. Add your email provider integration (e.g. Resend/Postmark) and send the message with the PDF at ${pdfPath}.`,
   };
 }

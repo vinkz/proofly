@@ -29,9 +29,12 @@ export function ApplianceProfileCard({ appliance, onEdit, onRemove }: ApplianceP
     <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-muted">{title || 'Not set'}</p>
-          <p className="text-xs text-muted-foreground/70">{subtitle || 'Not set'}</p>
-          <p className="mt-1 text-xs text-muted-foreground/70">Serial: {serial || 'Not set'}</p>
+          {title ? <p className="text-sm font-semibold text-muted">{title}</p> : null}
+          {subtitle ? <p className="text-xs text-muted-foreground/70">{subtitle}</p> : null}
+          {serial ? <p className="mt-1 text-xs text-muted-foreground/70">Serial: {serial}</p> : null}
+          {!title && !subtitle && !serial ? (
+            <p className="text-xs text-muted-foreground/60">Tap edit to add appliance details</p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {onRemove ? (

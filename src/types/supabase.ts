@@ -533,8 +533,11 @@ export type Database = {
       }
       profiles: {
         Row: {
+          company_address: string | null
           certifications: string[] | null
           company_name: string | null
+          company_phone: string | null
+          company_postcode: string | null
           created_at: string | null
           date_of_birth: string | null
           default_engineer_id: string | null
@@ -550,8 +553,11 @@ export type Database = {
           trade_types: string[] | null
         }
         Insert: {
+          company_address?: string | null
           certifications?: string[] | null
           company_name?: string | null
+          company_phone?: string | null
+          company_postcode?: string | null
           created_at?: string | null
           date_of_birth?: string | null
           default_engineer_id?: string | null
@@ -567,8 +573,11 @@ export type Database = {
           trade_types?: string[] | null
         }
         Update: {
+          company_address?: string | null
           certifications?: string[] | null
           company_name?: string | null
+          company_phone?: string | null
+          company_postcode?: string | null
           created_at?: string | null
           date_of_birth?: string | null
           default_engineer_id?: string | null

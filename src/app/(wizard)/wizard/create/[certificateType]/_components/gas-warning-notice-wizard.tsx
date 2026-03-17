@@ -384,22 +384,7 @@ export function GasWarningNoticeWizard({
     });
   };
 
-  const handlePreview = () => {
-    startTransition(async () => {
-      try {
-        await persistAll();
-        const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType, previewOnly: true, fields });
-        pushToast({ title: 'Preview ready', variant: 'success' });
-        router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}&preview=1`);
-      } catch (error) {
-        pushToast({
-          title: 'Could not preview PDF',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
+  const goBackOneStep = () => setStep((prev) => Math.max(1, prev - 1));
 
   const handleGenerate = () => {
     startTransition(async () => {
@@ -545,7 +530,7 @@ export function GasWarningNoticeWizard({
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance + classification" status="Gas Warning" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance + classification" status="Gas Warning" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -651,7 +636,7 @@ export function GasWarningNoticeWizard({
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Acknowledgement + engineer" status="Gas Warning" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Acknowledgement + engineer" status="Gas Warning" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -744,9 +729,6 @@ export function GasWarningNoticeWizard({
           </CollapsibleSection>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full px-6" onClick={handlePreview} disabled={isPending}>
-              Preview PDF
-            </Button>
             <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
               Generate PDF
             </Button>

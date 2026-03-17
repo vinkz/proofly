@@ -319,24 +319,7 @@ export function BoilerServiceWizard({
     await saveBoilerServiceChecks({ jobId, data: checks });
   };
 
-  const handlePreview = () => {
-    startTransition(async () => {
-      try {
-        await persistBeforePdf();
-        const finalInfo = { ...jobInfo, service_date: jobInfo.service_date || completionDate };
-        await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
-        const { pdfUrl } = await generateGasServicePdf({ jobId, previewOnly: true });
-        pushToast({ title: 'Preview ready', variant: 'success' });
-        router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}&preview=1`);
-      } catch (error) {
-        pushToast({
-          title: 'Could not preview',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
+  const goBackOneStep = () => setStep((prev) => Math.max(1, prev - 1));
 
   const handleGenerate = () => {
     startTransition(async () => {
@@ -530,7 +513,7 @@ export function BoilerServiceWizard({
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Job address" status="Boiler service" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Job address" status="Boiler service" onBack={goBackOneStep}>
           <div className="space-y-3">
             {demoEnabled ? (
               <div className="mb-3 flex justify-end">
@@ -602,7 +585,7 @@ export function BoilerServiceWizard({
             </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
+            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
               ← Back
             </Button>
             <Button className="rounded-full" onClick={handleJobAddressNext} disabled={isPending}>
@@ -613,7 +596,7 @@ export function BoilerServiceWizard({
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Service checks & readings" status="On-site checks" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Service checks & readings" status="On-site checks" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -856,14 +839,14 @@ export function BoilerServiceWizard({
           </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleChecksNext} disabled={isPending}>
-              Next → Sign & Preview
+              Next → Sign & PDF
             </Button>
           </div>
         </WizardLayout>
       ) : null}
 
       {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={goBackOneStep}>
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
@@ -895,9 +878,6 @@ export function BoilerServiceWizard({
             </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>
-              Preview Boiler Service template
-            </Button>
             <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
               {isPending ? 'Generating…' : 'Generate Boiler Service PDF'}
             </Button>

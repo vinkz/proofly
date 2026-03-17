@@ -39,6 +39,10 @@ export async function saveFgaReadings(input: SaveFgaReadingsInput): Promise<FgaR
   } = await sb.auth.getUser();
   if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
 
+  // fga_readings is newly added and not yet in generated types; use an untyped handle.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anySb = sb as any;
+
   const { data: job, error: jobErr } = await sb
     .from('jobs')
     .select('id')
@@ -50,7 +54,7 @@ export async function saveFgaReadings(input: SaveFgaReadingsInput): Promise<FgaR
 
   const applianceId = input.applianceId?.trim() ? input.applianceId : null;
 
-  const { data: inserted, error: insertErr } = await sb
+  const { data: inserted, error: insertErr } = await anySb
     .from('fga_readings')
     .insert({
       job_id: input.jobId,

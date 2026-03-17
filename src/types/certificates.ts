@@ -46,6 +46,14 @@ export type Cp12Appliance = {
   make_model: string;
   operating_pressure: string;
   heat_input: string;
+  high_co_ppm: string;
+  high_co2: string;
+  high_ratio: string;
+  low_co_ppm: string;
+  low_co2: string;
+  low_ratio: string;
+  co_reading_high: string;
+  co_reading_low: string;
   flue_type: string;
   ventilation_provision: string;
   ventilation_satisfactory: string;
@@ -53,6 +61,10 @@ export type Cp12Appliance = {
   stability_test: string;
   gas_tightness_test: string;
   co_reading_ppm: string;
+  safety_devices_correct: string;
+  flue_performance_test: string;
+  appliance_serviced: string;
+  combustion_notes: string;
   safety_rating: string;
   classification_code: string;
 };

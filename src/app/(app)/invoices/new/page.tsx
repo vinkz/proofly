@@ -32,9 +32,12 @@ export default async function NewInvoicePage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  // Invoices table is not in generated types yet; use an untyped handle for this page.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anySupabase = supabase as any;
   const { jobId } = await searchParams;
   if (jobId) {
-    const { data: existing, error: existingErr } = await supabase
+    const { data: existing, error: existingErr } = await anySupabase
       .from('invoices')
       .select('id')
       .eq('job_id', jobId)
@@ -49,21 +52,12 @@ export default async function NewInvoicePage({
     redirect(`/invoices/${invoice.id}`);
   }
 
-  type UntypedQuery = {
-    select: (columns?: string) => UntypedQuery;
-    eq: (column: string, value: unknown) => UntypedQuery;
-    order: (column: string, options?: { ascending?: boolean }) => UntypedQuery;
-    limit: (count: number) => UntypedQuery;
-  };
-  type UntypedSupabase = { from: (table: string) => UntypedQuery };
-  const untyped = supabase as unknown as UntypedSupabase;
-
-  const { data: jobs, error: jobsErr } = await (untyped
+  const { data: jobs, error: jobsErr } = await (anySupabase
     .from('jobs')
     .select('id, client_name, address, title, status, created_at, job_code')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(50) as unknown as Promise<{ data: JobSummary[] | null; error: { message: string } | null }>);
+    .limit(50) as Promise<{ data: JobSummary[] | null; error: { message: string } | null }>);
   if (jobsErr) throw new Error(jobsErr.message);
 
   const jobRows = jobs ?? [];

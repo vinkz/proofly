@@ -1,5 +1,5 @@
 // Customers: CP12 generation resolves customer data from jobs.client_id first, then job fields as fallback.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { Database } from '@/lib/database.types';
@@ -13,6 +13,12 @@ type Cp12ApplianceRow = {
   make_model?: string | null;
   operating_pressure?: string | null;
   heat_input?: string | null;
+  high_co_ppm?: string | null;
+  high_co2?: string | null;
+  high_ratio?: string | null;
+  low_co_ppm?: string | null;
+  low_co2?: string | null;
+  low_ratio?: string | null;
   flue_type?: string | null;
   ventilation_provision?: string | null;
   ventilation_satisfactory?: string | null;
@@ -20,6 +26,12 @@ type Cp12ApplianceRow = {
   stability_test?: string | null;
   gas_tightness_test?: string | null;
   co_reading_ppm?: string | null;
+  co_reading_high?: string | null;
+  co_reading_low?: string | null;
+  combustion_notes?: string | null;
+  appliance_serviced?: string | null;
+  safety_devices_correct?: string | null;
+  flue_performance_test?: string | null;
   safety_rating?: string | null;
   classification_code?: string | null;
 };
@@ -43,6 +55,8 @@ export type GenerateCp12Result = {
   certificateId: string;
   pdfPath: string;
   pdfUrl: string | null;
+  pdfByteLength?: number;
+  pdfHash8?: string;
 };
 
 const CERTIFICATES_BUCKET = 'certificates';
@@ -52,6 +66,7 @@ const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['pu
 
 export async function generateCp12FromJob(jobId: string, currentUserId: string): Promise<GenerateCp12Result> {
   const supabase = await supabaseServerServiceRole();
+  const debugPdf = process.env.CP12_PDF_DEBUG === '1';
 
   const { data: jobData, error: jobError } = await supabase.from('jobs').select('*').eq('id', jobId).maybeSingle();
   if (jobError || !jobData) {
@@ -98,9 +113,55 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
   }
 
   const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
+  const splitAddressParts = (value: unknown) =>
+    String(value ?? '')
+      .split(/[\r\n,]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  const extractPostcode = (value: unknown) => {
+    const match = String(value ?? '').toUpperCase().match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/);
+    return match ? match[0].replace(/\s+/g, ' ').trim() : '';
+  };
+  const buildCombustionSummary = (coPpm: string, co2: string, ratio: string, legacy?: string) => {
+    const parts = [coPpm && `${coPpm}ppm`, co2 && `${co2}%`, ratio && ratio].filter(Boolean);
+    if (parts.length) return parts.join(' / ');
+    return legacy ?? '';
+  };
+  const fallbackJobAddressParts = splitAddressParts(fieldMap.property_address ?? fieldMap.address ?? job.address ?? '');
+  const jobAddressLine1 = toText(fieldMap.job_address_line1 ?? fallbackJobAddressParts[0] ?? '');
+  const jobAddressLine2 = toText(fieldMap.job_address_line2 ?? fallbackJobAddressParts[1] ?? '');
+  const jobAddressTown = toText(
+    fieldMap.job_address_city ?? (fallbackJobAddressParts.length > 2 ? fallbackJobAddressParts.slice(2).join('\n') : ''),
+  );
+  const jobAddressPostcode = toText(fieldMap.job_postcode ?? fieldMap.property_postcode ?? fieldMap.postcode ?? '');
+  const jobAddressName = toText(fieldMap.job_address_name ?? fieldMap.property_name ?? '');
+  const jobAddressTel = toText(fieldMap.job_tel ?? '');
+  const fallbackLandlordParts = splitAddressParts(fieldMap.landlord_address ?? customer?.address ?? '');
+  const landlordLine1 = toText(fieldMap.landlord_address_line1 ?? fallbackLandlordParts[0] ?? '');
+  const landlordLine2 = toText(
+    fieldMap.landlord_address_line2 ?? (fallbackLandlordParts.length > 2 ? fallbackLandlordParts.slice(1, -1).join('\n') : ''),
+  );
+  const landlordCity = toText(
+    fieldMap.landlord_city ?? fieldMap.landlord_town ?? (fallbackLandlordParts.length > 1 ? fallbackLandlordParts.at(-1) ?? '' : ''),
+  );
+  const landlordPostcode = toText(fieldMap.landlord_postcode ?? extractPostcode(fieldMap.landlord_address ?? ''));
+  const landlordTel = toText(fieldMap.landlord_tel ?? '');
+  const cp12SafetyReadback = {
+    emergency_control_accessible: toText(fieldMap.emergency_control_accessible ?? ''),
+    gas_tightness_satisfactory: toText(fieldMap.gas_tightness_satisfactory ?? ''),
+    pipework_visual_satisfactory: toText(fieldMap.pipework_visual_satisfactory ?? ''),
+    equipotential_bonding_satisfactory: toText(fieldMap.equipotential_bonding_satisfactory ?? ''),
+  };
+  console.log('CP12 action readback safety fields', { jobId, cp12SafetyReadback });
 
   const applianceInputs: ApplianceInput[] = (applianceRows ?? []).map((app) => {
     const row = app as Cp12ApplianceRow;
+    const highCoPpm = toText(row.high_co_ppm ?? row.co_reading_high ?? '');
+    const highCo2 = toText(row.high_co2 ?? '');
+    const highRatio = toText(row.high_ratio ?? '');
+    const lowCoPpm = toText(row.low_co_ppm ?? row.co_reading_low ?? '');
+    const lowCo2 = toText(row.low_co2 ?? '');
+    const lowRatio = toText(row.low_ratio ?? '');
     return {
       description: toText(row.make_model ?? row.appliance_type ?? ''),
       location: toText(row.location ?? ''),
@@ -108,12 +169,24 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
       flueType: toText(row.flue_type ?? row.ventilation_provision ?? ''),
       operatingPressure: toText(row.operating_pressure ?? ''),
       heatInput: toText(row.heat_input ?? ''),
-      safetyDevice: toText(row.stability_test ?? ''),
+      safetyDevice: toText(row.safety_devices_correct ?? row.stability_test ?? ''),
       ventilationSatisfactory: toText(row.ventilation_satisfactory ?? row.ventilation_provision ?? ''),
       flueTerminationSatisfactory: toText(row.flue_condition ?? ''),
       spillageTest: toText(row.gas_tightness_test ?? ''),
       applianceSafeToUse: toText(row.safety_rating ?? row.classification_code ?? ''),
       remedialActionTaken: toText(row.classification_code ?? ''),
+      combustionHighCoPpm: highCoPpm,
+      combustionHighCo2: highCo2,
+      combustionHighRatio: highRatio,
+      combustionLowCoPpm: lowCoPpm,
+      combustionLowCo2: lowCo2,
+      combustionLowRatio: lowRatio,
+      combustionHigh: buildCombustionSummary(highCoPpm, highCo2, highRatio, toText(row.co_reading_ppm ?? '')),
+      combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(row.co_reading_low ?? '')),
+      combustionNotes: toText(row.combustion_notes ?? ''),
+      applianceServiced: toText((row as Record<string, unknown>).appliance_serviced ?? ''),
+      applianceInspected: 'Yes',
+      landlordAppliance: 'Yes',
     };
   });
 
@@ -125,14 +198,18 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
     issueDate: toText(fieldMap.inspection_date ?? fieldMap.scheduled_for ?? issuedAtIso),
     nextInspectionDue: toText(fieldMap.next_inspection_due ?? fieldMap.completion_date ?? ''),
     landlordName: toText(fieldMap.landlord_name ?? fieldMap.customer_name ?? customer?.name ?? job.client_name ?? ''),
-    landlordAddressLine1: toText(fieldMap.landlord_address ?? customer?.address ?? ''),
-    landlordAddressLine2: toText(fieldMap.landlord_address_line2 ?? ''),
-    landlordTown: toText(fieldMap.landlord_town ?? ''),
-    landlordPostcode: toText(fieldMap.landlord_postcode ?? fieldMap.postcode ?? ''),
-    propertyAddressLine1: toText(fieldMap.property_address ?? fieldMap.address ?? job.address ?? ''),
-    propertyAddressLine2: toText(fieldMap.property_address_line2 ?? ''),
-    propertyTown: toText(fieldMap.property_town ?? ''),
-    propertyPostcode: toText(fieldMap.property_postcode ?? fieldMap.postcode ?? ''),
+    landlordCompany: toText(fieldMap.landlord_company ?? customer?.organization ?? ''),
+    landlordAddressLine1: landlordLine1,
+    landlordAddressLine2: landlordLine2,
+    landlordTown: landlordCity,
+    landlordPostcode: landlordPostcode,
+    landlordTel: landlordTel,
+    propertyAddressName: jobAddressName,
+    propertyAddressLine1: jobAddressLine1,
+    propertyAddressLine2: jobAddressLine2,
+    propertyTown: jobAddressTown,
+    propertyPostcode: jobAddressPostcode,
+    propertyTel: jobAddressTel,
     companyName: toText(fieldMap.company_name ?? profile.company_name ?? ''),
     companyAddressLine1: toText(fieldMap.company_address ?? profile.company_address_line1 ?? ''),
     companyAddressLine2: toText(profile.company_address_line2 ?? ''),
@@ -151,16 +228,35 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
         profile.full_name ??
         '',
     ),
+    engineerSignatureUrl: toText(fieldMap.engineer_signature ?? ''),
     engineerVisitTime: toText(fieldMap.completion_date ?? fieldMap.inspection_time ?? ''),
     responsiblePersonName: toText(fieldMap.customer_name ?? customer?.name ?? job.client_name ?? ''),
     responsiblePersonSignatureText: toText(
       fieldMap.customer_signature_text ?? fieldMap.customer_name ?? customer?.name ?? job.client_name ?? '',
     ),
+    responsiblePersonSignatureUrl: toText(fieldMap.customer_signature ?? ''),
     responsiblePersonAcknowledgementDate: toText(fieldMap.completion_date ?? issuedAtIso),
     defectsIdentified: toText(fieldMap.defect_description ?? fieldMap.defects_identified ?? job.notes ?? ''),
     remedialWorksRequired: toText(fieldMap.remedial_action ?? fieldMap.remedial_works_required ?? ''),
+    warningNoticeIssued: toText(fieldMap.warning_notice_issued ?? ''),
     additionalNotes: toText(fieldMap.comments ?? fieldMap.additional_notes ?? ''),
+    coAlarmFitted: toText(fieldMap.co_alarm_fitted ?? ''),
+    coAlarmTested: toText(fieldMap.co_alarm_tested ?? ''),
+    coAlarmSatisfactory: toText(fieldMap.co_alarm_satisfactory ?? ''),
+    emergencyControlAccessible: toText(fieldMap.emergency_control_accessible ?? fieldMap.emergency_control ?? ''),
+    gasTightnessSatisfactory: toText(fieldMap.gas_tightness_satisfactory ?? ''),
+    pipeworkVisualSatisfactory: toText(fieldMap.pipework_visual_satisfactory ?? ''),
+    equipotentialBondingSatisfactory: toText(fieldMap.equipotential_bonding_satisfactory ?? ''),
   };
+  console.log('CP12 action mapped safety fields', {
+    jobId,
+    mapped: {
+      emergencyControlAccessible: cp12Fields.emergencyControlAccessible ?? '',
+      gasTightnessSatisfactory: cp12Fields.gasTightnessSatisfactory ?? '',
+      pipeworkVisualSatisfactory: cp12Fields.pipeworkVisualSatisfactory ?? '',
+      equipotentialBondingSatisfactory: cp12Fields.equipotentialBondingSatisfactory ?? '',
+    },
+  });
 
   let companyLogoBytes: Uint8Array | undefined;
   const planTier = (profile.plan_tier ?? '').toLowerCase();
@@ -183,9 +279,32 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
     issuedAt: issuedAtDate,
     companyLogoBytes,
   });
+  const pdfByteLength = pdfBytes.byteLength;
+  const pdfHash8 = createHash('sha256').update(pdfBytes).digest('hex').slice(0, 8);
 
   const certificateId = randomUUID();
-  const pdfPath = `cp12/${jobId}/${certificateId}.pdf`;
+  const pdfPath = debugPdf
+    ? `cp12/${jobId}/${certificateId}-debug-${Date.now()}.pdf`
+    : `cp12/${jobId}/${certificateId}.pdf`;
+  const lastSlash = pdfPath.lastIndexOf('/');
+  const parentDir = lastSlash > 0 ? pdfPath.slice(0, lastSlash) : '';
+  const fileName = lastSlash >= 0 ? pdfPath.slice(lastSlash + 1) : pdfPath;
+  const { data: existingFiles, error: listErr } = await supabase.storage.from(CERTIFICATES_BUCKET).list(parentDir, {
+    search: fileName,
+  });
+  if (listErr) {
+    console.warn('CP12 action: pre-upload list failed', { jobId, certificateId, pdfPath, error: listErr.message });
+  }
+  const existedBeforeUpload = Boolean(existingFiles?.some((entry) => entry.name === fileName));
+  console.log('CP12 action: upload start', {
+    jobId,
+    certificateId,
+    pdfPath,
+    debugPdf,
+    existedBeforeUpload,
+    pdfByteLength,
+    pdfHash8,
+  });
 
   const { error: uploadError } = await supabase.storage.from(CERTIFICATES_BUCKET).upload(pdfPath, Buffer.from(pdfBytes), {
     contentType: 'application/pdf',
@@ -194,6 +313,16 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
   if (uploadError) {
     throw new Error(`Failed to upload CP12 PDF: ${uploadError.message}`);
   }
+  console.log('CP12 action: upload done', {
+    jobId,
+    certificateId,
+    pdfPath,
+    debugPdf,
+    existedBeforeUpload,
+    upsert: true,
+    uploadedPdfByteLength: pdfByteLength,
+    uploadedPdfHash8: pdfHash8,
+  });
 
   const { data: publicUrlData } = supabase.storage.from(CERTIFICATES_BUCKET).getPublicUrl(pdfPath);
   const pdfUrl = publicUrlData?.publicUrl ?? null;
@@ -217,9 +346,20 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
     throw new Error(`Failed to insert certificate row: ${insertError.message}`);
   }
 
+  console.log('CP12 action: return payload', {
+    jobId,
+    certificateId,
+    pdfPath,
+    pdfUrl,
+    returnedPdfByteLength: pdfByteLength,
+    returnedPdfHash8: pdfHash8,
+  });
+
   return {
     certificateId,
     pdfPath,
     pdfUrl,
+    pdfByteLength,
+    pdfHash8,
   };
 }

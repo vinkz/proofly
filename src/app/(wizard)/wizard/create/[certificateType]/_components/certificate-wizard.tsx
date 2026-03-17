@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
+import { Mic } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,8 @@ import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/ste
 import { ChecksStep, type ChecksStepValues } from '@/components/wizard/steps/checks-step';
 import { PrefillBadge } from '@/components/wizard/inputs/prefill-badge';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
+import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
+import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { type CertificateType, type Cp12Appliance, type PhotoCategory } from '@/types/certificates';
 import {
   saveCp12JobInfo,
@@ -26,9 +29,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { getLatestApplianceDefaultsForJob } from '@/server/history';
 import {
-  CP12_APPLIANCE_TYPES,
   CP12_FLUE_TYPES,
-  CP12_LOCATIONS,
   CP12_VENTILATION,
   CP12_DEMO_APPLIANCE,
   CP12_DEMO_INFO,
@@ -47,6 +48,7 @@ type WizardProps = {
   initialAppliances?: Cp12Appliance[];
   stepOffset?: number;
   startStep?: number;
+  hideBillingCustomerStep?: boolean;
 };
 
 const emptyAppliance: Cp12Appliance = {
@@ -55,6 +57,14 @@ const emptyAppliance: Cp12Appliance = {
   make_model: '',
   operating_pressure: '',
   heat_input: '',
+  high_co_ppm: '',
+  high_co2: '',
+  high_ratio: '',
+  low_co_ppm: '',
+  low_co2: '',
+  low_ratio: '',
+  co_reading_high: '',
+  co_reading_low: '',
   flue_type: '',
   ventilation_provision: '',
   ventilation_satisfactory: '',
@@ -62,9 +72,15 @@ const emptyAppliance: Cp12Appliance = {
   stability_test: '',
   gas_tightness_test: '',
   co_reading_ppm: '',
+  safety_devices_correct: '',
+  flue_performance_test: '',
+  appliance_serviced: '',
+  combustion_notes: '',
   safety_rating: '',
   classification_code: '',
 };
+
+const MAX_APPLIANCES = 5;
 
 const KNOWN_MAKES = ['Worcester Bosch', 'Vaillant', 'Ideal', 'Baxi'];
 
@@ -82,12 +98,23 @@ const combineMakeModel = (make: string, model: string) => [make.trim(), model.tr
 
 type Cp12InfoState = {
   customer_name: string;
+  customer_phone: string;
   property_address: string;
   postcode: string;
   inspection_date: string;
   landlord_name: string;
+  landlord_company: string;
+  landlord_address_line1: string;
+  landlord_address_line2: string;
+  landlord_city: string;
+  landlord_postcode: string;
+  landlord_tel: string;
   landlord_address: string;
   reg_26_9_confirmed: boolean;
+  company_address: string;
+  company_postcode: string;
+  company_phone: string;
+  engineer_phone: string;
 };
 
 type Cp12JobAddressState = {
@@ -98,6 +125,51 @@ type Cp12JobAddressState = {
   job_address_city: string;
   job_postcode: string;
   job_tel: string;
+};
+
+type ChecklistItem = {
+  id: string;
+  label: string;
+  ok: boolean;
+  hint?: string;
+  action?: () => void;
+  blocking?: boolean;
+};
+
+const buildPropertyAddressFromJobAddress = (addr: Cp12JobAddressState) =>
+  [addr.job_address_line1, addr.job_address_line2, addr.job_address_city].filter((part) => part && part.trim()).join(', ');
+
+const splitAddressParts = (value: string) =>
+  String(value ?? '')
+    .split(/[\r\n,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+const buildLandlordAddress = (line1: string, line2: string, city: string) =>
+  [line1, line2, city].filter((part) => part && part.trim()).join(', ');
+
+const deriveJobAddressFromFields = (addr: Cp12JobAddressState, info: Cp12InfoState) => {
+  if (addr.job_address_line1.trim() || addr.job_address_line2.trim() || addr.job_address_city.trim()) {
+    return {
+      line1: addr.job_address_line1,
+      line2: addr.job_address_line2,
+      city: addr.job_address_city,
+    };
+  }
+  const primaryAddress =
+    info.property_address.trim() ||
+    buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city).trim() ||
+    info.landlord_address.trim();
+  const parts = primaryAddress
+    ? primaryAddress
+        .split(/[\r\n,]+/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+    : [];
+  const line1 = parts[0] ?? '';
+  const city = parts.length >= 3 ? parts.at(-1) ?? '' : '';
+  const line2 = parts.length >= 3 ? parts.slice(1, -1).join(', ') : parts[1] ?? '';
+  return { line1, line2, city };
 };
 
 const CP12_DEMO_PHOTO_NOTES: Record<string, string> = {
@@ -131,22 +203,47 @@ export function CertificateWizard({
 }: WizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
-  const [step, setStep] = useState(startStep);
+  const [step, setStep] = useState(() => Math.max(startStep, 1));
   const [isPending, startTransition] = useTransition();
+  const [isPostcodeLookupPending, setIsPostcodeLookupPending] = useState(false);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const resolvedInitialInfo = mergeJobContextFields(initialInfo, initialJobContext);
+  const initialLandlordAddressParts = splitAddressParts(String(resolvedInitialInfo.landlord_address ?? ''));
+  const initialLandlordLine1 = resolvedInitialInfo.landlord_address_line1 ?? initialLandlordAddressParts[0] ?? '';
+  const initialLandlordLine2 =
+    resolvedInitialInfo.landlord_address_line2 ??
+    (initialLandlordAddressParts.length > 2 ? initialLandlordAddressParts.slice(1, -1).join(', ') : '');
+  const initialLandlordCity =
+    resolvedInitialInfo.landlord_city ??
+    resolvedInitialInfo.landlord_town ??
+    (initialLandlordAddressParts.length > 1 ? initialLandlordAddressParts.at(-1) ?? '' : '');
+  const initialLandlordPostcode = resolvedInitialInfo.landlord_postcode ?? '';
+  const initialLandlordTel = resolvedInitialInfo.landlord_tel ?? '';
+  const initialLandlordAddress =
+    resolvedInitialInfo.landlord_address ?? buildLandlordAddress(initialLandlordLine1, initialLandlordLine2, initialLandlordCity);
 
   const [info, setInfo] = useState<Cp12InfoState>({
     customer_name: resolvedInitialInfo.customer_name ?? '',
+    customer_phone: resolvedInitialInfo.customer_phone ?? resolvedInitialInfo.job_phone ?? '',
     property_address: resolvedInitialInfo.property_address ?? '',
     postcode: resolvedInitialInfo.postcode ?? '',
     inspection_date: resolvedInitialInfo.inspection_date ?? '',
     landlord_name: resolvedInitialInfo.landlord_name ?? '',
-    landlord_address: resolvedInitialInfo.landlord_address ?? '',
+    landlord_company: resolvedInitialInfo.landlord_company ?? '',
+    landlord_address_line1: initialLandlordLine1,
+    landlord_address_line2: initialLandlordLine2,
+    landlord_city: initialLandlordCity,
+    landlord_postcode: initialLandlordPostcode,
+    landlord_tel: initialLandlordTel,
+    landlord_address: initialLandlordAddress,
     reg_26_9_confirmed: (() => {
       const value = String(resolvedInitialInfo.reg_26_9_confirmed ?? '').toLowerCase();
       return value === 'true' || value === 'yes';
     })(),
+    company_address: resolvedInitialInfo.company_address ?? '',
+    company_postcode: resolvedInitialInfo.company_postcode ?? '',
+    company_phone: resolvedInitialInfo.company_phone ?? '',
+    engineer_phone: resolvedInitialInfo.engineer_phone ?? '',
   });
 
   const [jobAddress, setJobAddress] = useState<Cp12JobAddressState>({
@@ -173,6 +270,14 @@ export function CertificateWizard({
     make_model: appliance.make_model ?? '',
     operating_pressure: appliance.operating_pressure ?? '',
     heat_input: appliance.heat_input ?? '',
+    high_co_ppm: appliance.high_co_ppm ?? '',
+    high_co2: appliance.high_co2 ?? '',
+    high_ratio: appliance.high_ratio ?? '',
+    low_co_ppm: appliance.low_co_ppm ?? '',
+    low_co2: appliance.low_co2 ?? '',
+    low_ratio: appliance.low_ratio ?? '',
+    co_reading_high: appliance.co_reading_high ?? '',
+    co_reading_low: appliance.co_reading_low ?? '',
     flue_type: appliance.flue_type ?? '',
     ventilation_provision: appliance.ventilation_provision ?? '',
     ventilation_satisfactory: appliance.ventilation_satisfactory ?? '',
@@ -180,13 +285,21 @@ export function CertificateWizard({
     stability_test: appliance.stability_test ?? '',
     gas_tightness_test: appliance.gas_tightness_test ?? '',
     co_reading_ppm: appliance.co_reading_ppm ?? '',
+    safety_devices_correct: appliance.safety_devices_correct ?? '',
+    flue_performance_test: appliance.flue_performance_test ?? '',
+    appliance_serviced: appliance.appliance_serviced ?? '',
+    combustion_notes: appliance.combustion_notes ?? '',
     safety_rating: appliance.safety_rating ?? '',
     classification_code: appliance.classification_code ?? '',
   });
 
   const [appliances, setAppliances] = useState<Cp12Appliance[]>(
-    initialAppliances.length ? initialAppliances.map(sanitizeAppliance) : [emptyAppliance],
+    initialAppliances.length
+      ? initialAppliances.slice(0, MAX_APPLIANCES).map(sanitizeAppliance)
+      : [emptyAppliance],
   );
+  const [measurementSource, setMeasurementSource] = useState<'manual' | 'tpi'>('manual');
+  const [combustionOpen, setCombustionOpen] = useState<Record<number, boolean>>({});
   const [defects, setDefects] = useState({
     defect_description: resolvedInitialInfo.defect_description ?? '',
     remedial_action: resolvedInitialInfo.remedial_action ?? '',
@@ -197,10 +310,14 @@ export function CertificateWizard({
   const [customerSignature, setCustomerSignature] = useState(resolvedInitialInfo.customer_signature ?? '');
   const [prefillBadgeText, setPrefillBadgeText] = useState<string | null>(null);
   const prefillAppliedRef = useRef(false);
+  const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const prevApplianceCountRef = useRef(appliances.length);
 
   const isCp12 = useMemo(() => certificateType === 'cp12', [certificateType]);
-  const totalSteps = 4 + stepOffset;
-  const offsetStep = (step: number) => step + stepOffset;
+  const totalSteps = (isCp12 ? 4 : 4) + stepOffset;
+  const baseOffset = stepOffset;
+  const firstStep = 1;
+  const offsetStep = (step: number) => step + baseOffset;
 
   useEffect(() => {
     if (!isCp12 || prefillAppliedRef.current) return;
@@ -249,32 +366,71 @@ export function CertificateWizard({
         console.error('CP12 history defaults failed', error);
       }
     });
-  }, [isCp12, jobId, startTransition]);
+  }, [isCp12, jobId]);
+
+  useEffect(() => {
+    if (appliances.length > prevApplianceCountRef.current) {
+      const lastIndex = appliances.length - 1;
+      const node = applianceRefs.current[lastIndex];
+      if (node) {
+        node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const focusable = node.querySelector('input, select, textarea') as HTMLElement | null;
+        focusable?.focus();
+      }
+    }
+    prevApplianceCountRef.current = appliances.length;
+  }, [appliances.length, appliances]);
 
   const handleDemoFill = () => {
     if (!isCp12 || !demoEnabled) return;
     startTransition(async () => {
       try {
         const today = new Date().toISOString().slice(0, 10);
+        const demoLandlordAddressParts = splitAddressParts(info.landlord_address || CP12_DEMO_INFO.landlord_address);
+        const demoLandlordLine1 = info.landlord_address_line1 || demoLandlordAddressParts[0] || '';
+        const demoLandlordLine2 =
+          info.landlord_address_line2 || (demoLandlordAddressParts.length > 2 ? demoLandlordAddressParts.slice(1, -1).join(', ') : '');
+        const demoLandlordCity = info.landlord_city || (demoLandlordAddressParts.length > 1 ? demoLandlordAddressParts.at(-1) ?? '' : '');
+        const demoLandlordPostcode = info.landlord_postcode || CP12_DEMO_INFO.postcode;
+        const demoLandlordAddress = buildLandlordAddress(demoLandlordLine1, demoLandlordLine2, demoLandlordCity);
         const demoInfo: Cp12InfoState = {
           ...info,
           customer_name: info.customer_name || CP12_DEMO_INFO.customer_name,
+          customer_phone: info.customer_phone || CP12_DEMO_INFO.customer_phone || '',
           property_address: info.property_address || CP12_DEMO_INFO.property_address,
           postcode: info.postcode || CP12_DEMO_INFO.postcode,
           inspection_date: info.inspection_date || today,
           landlord_name: info.landlord_name || CP12_DEMO_INFO.landlord_name,
-          landlord_address: info.landlord_address || CP12_DEMO_INFO.landlord_address,
+          landlord_company: info.landlord_company || '',
+          landlord_address_line1: demoLandlordLine1,
+          landlord_address_line2: demoLandlordLine2,
+          landlord_city: demoLandlordCity,
+          landlord_postcode: demoLandlordPostcode,
+          landlord_tel: info.landlord_tel || '',
+          landlord_address: demoLandlordAddress || CP12_DEMO_INFO.landlord_address,
           reg_26_9_confirmed: true,
+          company_address: info.company_address || CP12_DEMO_INFO.company_address || '',
+          company_postcode: info.company_postcode || CP12_DEMO_INFO.company_postcode || '',
+          company_phone: info.company_phone || CP12_DEMO_INFO.company_phone || '',
+          engineer_phone: info.engineer_phone || CP12_DEMO_INFO.engineer_phone || '',
         };
         const demoJobInfo = {
           ...demoInfo,
           engineer_name: CP12_DEMO_INFO.engineer_name,
           gas_safe_number: CP12_DEMO_INFO.gas_safe_number,
           company_name: CP12_DEMO_INFO.company_name,
+          job_tel: jobAddress.job_tel || demoInfo.customer_phone || CP12_DEMO_INFO.job_tel || '',
         };
 
         const demoAppliance: Cp12Appliance = { ...emptyAppliance, ...CP12_DEMO_APPLIANCE };
         setInfo(demoInfo);
+        setJobAddress((prev) => ({
+          ...prev,
+          job_address_name: prev.job_address_name || 'Flat 2 - Tenant entrance',
+          job_address_line1: prev.job_address_line1 || CP12_DEMO_INFO.property_address || '',
+          job_postcode: prev.job_postcode || CP12_DEMO_INFO.postcode || '',
+          job_tel: prev.job_tel || demoInfo.customer_phone || CP12_DEMO_INFO.job_tel || '',
+        }));
         setAppliances([demoAppliance]);
         setDefects({
           defect_description: CP12_DEMO_INFO.defect_description,
@@ -338,6 +494,53 @@ export function CertificateWizard({
       });
     };
 
+  const handlePostcodeLookup = async () => {
+    const postcode = jobAddress.job_postcode.trim();
+    if (!postcode) {
+      pushToast({ title: 'Enter a postcode first', variant: 'error' });
+      return;
+    }
+    setIsPostcodeLookupPending(true);
+    try {
+      const query = encodeURIComponent(postcode);
+      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&countrycodes=gb&q=${query}`;
+      const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!response.ok) throw new Error('Lookup failed');
+      const results: Array<{ display_name?: string; address?: Record<string, string> }> = await response.json();
+      const first = results[0];
+      const address = first?.address ?? {};
+      const building = address.house_number || address.house_name || address.building || '';
+      const street = address.road || address.pedestrian || '';
+      const line1 = [building, street].filter(Boolean).join(' ').trim() || address.road || '';
+      const line2 = address.suburb || address.neighbourhood || address.residential || '';
+      const city = address.city || address.town || address.village || address.hamlet || '';
+      const resolvedPostcode = address.postcode || postcode;
+      const summary = [line1, city].filter((val) => val && val.trim()).join(', ');
+      if (!line1 && !summary && !street) throw new Error('No address found');
+      setJobAddress((prev) => ({
+        ...prev,
+        job_address_line1: line1 || street || summary,
+        job_address_line2: line2,
+        job_address_city: city,
+        job_postcode: resolvedPostcode,
+      }));
+      setInfo((prev) => ({
+        ...prev,
+        property_address: summary || line1 || street || prev.property_address,
+        postcode: resolvedPostcode,
+      }));
+      pushToast({ title: 'Address found', variant: 'success' });
+    } catch (error) {
+      pushToast({
+        title: 'Address not found',
+        description: error instanceof Error ? error.message : 'Try a full UK postcode.',
+        variant: 'error',
+      });
+    } finally {
+      setIsPostcodeLookupPending(false);
+    }
+  };
+
   const handleInfoNext = () => {
     if (!isCp12) {
       setStep(2);
@@ -345,14 +548,77 @@ export function CertificateWizard({
     }
     startTransition(async () => {
       try {
-        const data = { ...info, inspection_date: info.inspection_date || completionDate };
+        const derivedAddress = deriveJobAddressFromFields(jobAddress, info);
+        const nextJobAddress = { ...jobAddress };
+        if (!nextJobAddress.job_address_line1.trim()) {
+          nextJobAddress.job_address_line1 = derivedAddress.line1;
+        }
+        if (!nextJobAddress.job_address_line2.trim() && derivedAddress.line2) {
+          nextJobAddress.job_address_line2 = derivedAddress.line2;
+        }
+        if (!nextJobAddress.job_address_city.trim() && derivedAddress.city) {
+          nextJobAddress.job_address_city = derivedAddress.city;
+        }
+        if (!nextJobAddress.job_postcode.trim()) {
+          nextJobAddress.job_postcode = info.postcode.trim();
+        }
+        if (!nextJobAddress.job_tel.trim()) {
+          nextJobAddress.job_tel = info.customer_phone.trim();
+        }
+        if (!nextJobAddress.job_address_name.trim()) {
+          throw new Error('Property name / reference is required');
+        }
+        if (!info.landlord_name.trim()) {
+          throw new Error('Landlord / owner name is required');
+        }
+        if (!info.landlord_address_line1.trim()) {
+          throw new Error('Landlord address line 1 is required');
+        }
+        if (!info.landlord_city.trim()) {
+          throw new Error('Landlord city / town is required');
+        }
+        if (!info.landlord_postcode.trim()) {
+          throw new Error('Landlord postcode is required');
+        }
+
+        const combinedPropertyAddress = buildPropertyAddressFromJobAddress(nextJobAddress);
+        const combinedLandlordAddress = buildLandlordAddress(
+          info.landlord_address_line1,
+          info.landlord_address_line2,
+          info.landlord_city,
+        );
+        const data = {
+          ...info,
+          inspection_date: info.inspection_date || completionDate,
+          property_address: combinedPropertyAddress,
+          postcode: nextJobAddress.job_postcode || info.postcode,
+          landlord_address: combinedLandlordAddress,
+        };
         const jobPayload = {
           ...data,
           engineer_name: resolvedInitialInfo.engineer_name ?? '',
           gas_safe_number: resolvedInitialInfo.gas_safe_number ?? '',
           company_name: resolvedInitialInfo.company_name ?? '',
+          company_address: resolvedInitialInfo.company_address ?? '',
+          company_postcode: resolvedInitialInfo.company_postcode ?? '',
+          company_phone: resolvedInitialInfo.company_phone ?? '',
+          engineer_phone: resolvedInitialInfo.engineer_phone ?? '',
+          job_tel: nextJobAddress.job_tel ?? '',
         };
         await saveCp12JobInfo({ jobId, data: jobPayload });
+        await saveJobFields({
+          jobId,
+          fields: {
+            job_reference: nextJobAddress.job_reference,
+            job_address_name: nextJobAddress.job_address_name,
+            job_address_line1: nextJobAddress.job_address_line1,
+            job_address_line2: nextJobAddress.job_address_line2,
+            job_address_city: nextJobAddress.job_address_city,
+            job_postcode: nextJobAddress.job_postcode,
+            job_tel: nextJobAddress.job_tel,
+          },
+        });
+        setJobAddress(nextJobAddress);
         setInfo(data);
         setStep(2);
       } catch (error) {
@@ -365,50 +631,11 @@ export function CertificateWizard({
     });
   };
 
-  const handleJobAddressNext = () => {
-    if (!isCp12) {
-      setStep(3);
-      return;
-    }
-    startTransition(async () => {
-      try {
-        const data = { ...info, inspection_date: info.inspection_date || completionDate };
-        const jobPayload = {
-          ...data,
-          engineer_name: resolvedInitialInfo.engineer_name ?? '',
-          gas_safe_number: resolvedInitialInfo.gas_safe_number ?? '',
-          company_name: resolvedInitialInfo.company_name ?? '',
-        };
-        await saveCp12JobInfo({ jobId, data: jobPayload });
-        await saveJobFields({
-          jobId,
-          fields: {
-            job_reference: jobAddress.job_reference,
-            job_address_name: jobAddress.job_address_name,
-            job_address_line1: jobAddress.job_address_line1,
-            job_address_line2: jobAddress.job_address_line2,
-            job_address_city: jobAddress.job_address_city,
-            job_postcode: jobAddress.job_postcode,
-            job_tel: jobAddress.job_tel,
-          },
-        });
-        setInfo(data);
-        setStep(3);
-      } catch (error) {
-        pushToast({
-          title: 'Could not save job address',
-          description: error instanceof Error ? error.message : 'Try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
-
   const handleChecksNext = () => {
     startTransition(async () => {
       try {
         await saveCp12Appliances({ jobId, appliances, defects });
-        setStep(5);
+        setStep(4);
       } catch (error) {
         pushToast({
           title: 'Could not save CP12 checks',
@@ -421,22 +648,77 @@ export function CertificateWizard({
 
   const handleGenerate = () => {
     startTransition(async () => {
+      let targetJobId = jobId;
       try {
+        const { blockingMissing } = checklist;
+        if (blockingMissing > 0) {
+          pushToast({
+            title: 'Complete required items first',
+            description: 'Review the checklist before issuing the certificate.',
+            variant: 'error',
+          });
+          return;
+        }
         if (isCp12) {
-          const data = { ...info, inspection_date: info.inspection_date || completionDate };
+          const engineerName = resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '';
+          const gasSafeNumber = resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '';
+          const companyName = resolvedInitialInfo.company_name || CP12_DEMO_INFO.company_name || '';
+          const companyAddress = resolvedInitialInfo.company_address || CP12_DEMO_INFO.company_address || '';
+          const companyPostcode = resolvedInitialInfo.company_postcode || CP12_DEMO_INFO.company_postcode || '';
+          const companyPhone = resolvedInitialInfo.company_phone || CP12_DEMO_INFO.company_phone || '';
+
+          const data = {
+            ...info,
+            inspection_date: info.inspection_date || completionDate,
+            landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
+          };
           const jobPayload = {
             ...data,
-            engineer_name: resolvedInitialInfo.engineer_name ?? '',
-            gas_safe_number: resolvedInitialInfo.gas_safe_number ?? '',
-            company_name: resolvedInitialInfo.company_name ?? '',
+            engineer_name: engineerName,
+            gas_safe_number: gasSafeNumber,
+            company_name: companyName,
+            company_address: companyAddress,
+            company_postcode: companyPostcode,
+            company_phone: companyPhone,
+            job_tel: jobAddress.job_tel || info.customer_phone || '',
           };
           await saveCp12JobInfo({ jobId, data: jobPayload });
           setInfo(data);
           await saveCp12Appliances({ jobId, appliances, defects });
+          const cp12SafetyFieldsPayload = {
+            emergency_control_accessible: evidenceFields.emergency_control_accessible ?? '',
+            gas_tightness_satisfactory: evidenceFields.gas_tightness_satisfactory ?? '',
+            pipework_visual_satisfactory: evidenceFields.pipework_visual_satisfactory ?? '',
+            equipotential_bonding_satisfactory: evidenceFields.equipotential_bonding_satisfactory ?? '',
+          };
+          console.log('CP12 issue submit safety payload', {
+            jobId,
+            cp12SafetyFieldsPayload,
+          });
+          await saveJobFields({ jobId, fields: cp12SafetyFieldsPayload });
         }
         if (isCp12) {
-          const normalizedInfo = { ...info, inspection_date: info.inspection_date || completionDate };
-          const errors = validateCp12AgainstSpec(normalizedInfo, appliances, defects, engineerSignature, customerSignature);
+          const normalizedInfo = {
+            ...info,
+            inspection_date: info.inspection_date || completionDate,
+            landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
+          };
+          const errors = validateCp12AgainstSpec(
+            normalizedInfo,
+            appliances,
+            defects,
+            engineerSignature,
+            customerSignature,
+            {
+              engineerName: resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '',
+              gasSafeNumber: resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '',
+              engineerIdCard: resolvedInitialInfo.engineer_id_card_number || '',
+              companyName: resolvedInitialInfo.company_name || CP12_DEMO_INFO.company_name || '',
+              companyAddress: resolvedInitialInfo.company_address || CP12_DEMO_INFO.company_address || '',
+              companyPostcode: resolvedInitialInfo.company_postcode || CP12_DEMO_INFO.company_postcode || '',
+              companyPhone: resolvedInitialInfo.company_phone || CP12_DEMO_INFO.company_phone || '',
+            },
+          );
           if (errors.length) {
             pushToast({
               title: 'CP12 requirements missing',
@@ -456,6 +738,7 @@ export function CertificateWizard({
             customer_signature: customerSignature,
           },
         });
+        targetJobId = resultJobId;
         pushToast({
           title: `${certificateLabel} generated successfully`,
           description: (
@@ -465,52 +748,19 @@ export function CertificateWizard({
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}/pdf`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
           description: error instanceof Error ? error.message : 'Try again.',
           variant: 'error',
         });
+      } finally {
+        router.push(`/jobs/${targetJobId}/pdf`);
       }
     });
   };
 
-  const handlePreview = () => {
-    startTransition(async () => {
-      try {
-        if (isCp12) {
-          const data = { ...info, inspection_date: info.inspection_date || completionDate };
-          const jobPayload = {
-            ...data,
-            engineer_name: resolvedInitialInfo.engineer_name ?? '',
-            gas_safe_number: resolvedInitialInfo.gas_safe_number ?? '',
-            company_name: resolvedInitialInfo.company_name ?? '',
-          };
-          await saveCp12JobInfo({ jobId, data: jobPayload });
-          setInfo(data);
-          await saveCp12Appliances({ jobId, appliances, defects });
-        }
-        const { pdfUrl } = await generateCertificatePdf({
-          jobId,
-          certificateType,
-          previewOnly: true,
-          fields: {
-            engineer_signature: engineerSignature,
-            customer_signature: customerSignature,
-          },
-        });
-        pushToast({ title: 'Preview ready', variant: 'success' });
-        router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}&preview=1`);
-      } catch (error) {
-        pushToast({
-          title: 'Could not preview PDF',
-          description: error instanceof Error ? error.message : 'Try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
+  const goBackOneStep = () => setStep((prev) => Math.max(firstStep, prev - 1));
 
   const setApplianceField = (index: number, key: keyof Cp12Appliance, value: string) => {
     setAppliances((prev) => {
@@ -535,7 +785,18 @@ export function CertificateWizard({
     });
   };
 
-  const addAppliance = () => setAppliances((prev) => [...prev, { ...emptyAppliance }]);
+  const addAppliance = () =>
+    setAppliances((prev) => {
+      if (prev.length >= MAX_APPLIANCES) {
+        pushToast({
+          title: 'Max 5 appliances',
+          description: 'The CP12 PDF table fits five appliances. Create another certificate for more.',
+          variant: 'default',
+        });
+        return prev;
+      }
+      return [...prev, { ...emptyAppliance }];
+    });
   const handlePrefillClick = () => {
     pushToast({ title: 'Prefill applied', description: 'Edit any field to update values.', variant: 'default' });
   };
@@ -555,26 +816,45 @@ export function CertificateWizard({
     });
   };
 
+  const handleSafetyFieldUpdate = (key: string, value: string) => {
+    // Normalize pass/fail toggles to YES/NO for PDF mapping.
+    const normalized = value === 'pass' ? 'YES' : value === 'fail' ? 'NO' : value;
+    setEvidenceFields((prev) => ({ ...prev, [key]: normalized }));
+    startTransition(async () => {
+      try {
+        await saveJobFields({ jobId, fields: { [key]: normalized } });
+      } catch (error) {
+        pushToast({
+          title: 'Could not save field',
+          description: error instanceof Error ? error.message : 'Try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
   const applianceProfiles = useMemo<ApplianceStepValues[]>(
     () =>
-      appliances.map((appliance, index) => {
+      (appliances.length ? appliances : [emptyAppliance]).map((appliance) => {
         const { make, model } = splitMakeModel(appliance.make_model ?? '');
         return {
           type: appliance.appliance_type ?? '',
           make,
           model,
           location: appliance.location ?? '',
-          serial: index === 0 ? (evidenceFields.serial_number ?? '') : '',
+          serial: evidenceFields.serial_number ?? '',
         };
       }),
     [appliances, evidenceFields.serial_number],
   );
 
+  const evidenceByKey = (key: string) => CP12_EVIDENCE_CONFIG.find((cfg) => cfg.key === key);
+
   const handleApplianceProfilesChange = (nextProfiles: ApplianceStepValues[]) => {
     const normalizedProfiles = nextProfiles.length ? nextProfiles : [{ type: '', make: '', model: '', location: '', serial: '' }];
-    setAppliances((prev) =>
+    setAppliances(
       normalizedProfiles.map((profile, index) => {
-        const current = prev[index] ?? { ...emptyAppliance };
+        const current = appliances[index] ?? { ...emptyAppliance };
         return {
           ...current,
           appliance_type: profile.type ?? '',
@@ -591,42 +871,6 @@ export function CertificateWizard({
     }
   };
 
-  const applianceEvidenceProfile = useMemo<ApplianceStepValues>(
-    () => ({
-      type: evidenceFields.boiler_type ?? '',
-      make: evidenceFields.boiler_make ?? '',
-      model: evidenceFields.boiler_model ?? '',
-      location: evidenceFields.location ?? '',
-      serial: evidenceFields.serial_number ?? '',
-      mountType: evidenceFields.mount_type ?? '',
-      gasType: evidenceFields.gas_type ?? '',
-      year: evidenceFields.manufacture_year ?? '',
-    }),
-    [
-      evidenceFields.boiler_type,
-      evidenceFields.boiler_make,
-      evidenceFields.boiler_model,
-      evidenceFields.location,
-      evidenceFields.serial_number,
-      evidenceFields.mount_type,
-      evidenceFields.gas_type,
-      evidenceFields.manufacture_year,
-    ],
-  );
-
-  const handleApplianceEvidenceChange = (next: ApplianceStepValues) => {
-    handleEvidenceFieldsUpdate({
-      boiler_type: next.type ?? '',
-      boiler_make: next.make ?? '',
-      boiler_model: next.model ?? '',
-      location: next.location ?? '',
-      serial_number: next.serial ?? '',
-      mount_type: next.mountType ?? '',
-      gas_type: next.gasType ?? '',
-      manufacture_year: next.year ?? '',
-    });
-  };
-
   const handleApplianceChecksChange = (index: number, updates: Partial<ChecksStepValues>) => {
     const mapField = (key: keyof ChecksStepValues, value: string | undefined) => {
       if (typeof value !== 'string') return;
@@ -636,9 +880,18 @@ export function CertificateWizard({
       if (key === 'gas_tightness_test') setApplianceField(index, 'gas_tightness_test', value);
       if (key === 'operating_pressure') setApplianceField(index, 'operating_pressure', value);
       if (key === 'heat_input') setApplianceField(index, 'heat_input', value);
+      if (key === 'co_reading_high') setApplianceField(index, 'co_reading_high', value);
+      if (key === 'co_reading_low') setApplianceField(index, 'co_reading_low', value);
       if (key === 'co_reading_ppm') setApplianceField(index, 'co_reading_ppm', value);
       if (key === 'safety_rating') setApplianceField(index, 'safety_rating', value);
       if (key === 'classification_code') setApplianceField(index, 'classification_code', value);
+      if (key === 'safety_devices_correct') setApplianceField(index, 'safety_devices_correct', value);
+      if (key === 'flue_performance_test') {
+        setApplianceField(index, 'flue_performance_test', value);
+        // Keep legacy field populated without exposing a separate flue-condition input.
+        setApplianceField(index, 'flue_condition', value);
+      }
+      if (key === 'appliance_serviced') setApplianceField(index, 'appliance_serviced', value);
     };
 
     (Object.entries(updates) as Array<[keyof ChecksStepValues, string | undefined]>).forEach(([key, value]) =>
@@ -650,57 +903,320 @@ export function CertificateWizard({
     const rating = (appliance.safety_rating ?? '').toLowerCase().trim();
     return rating.length > 0 && rating !== 'safe';
   });
+  const warningSelection = (defects.warning_notice_issued ?? '').trim().toUpperCase();
+  const hasDefectText = [defects.defect_description, defects.remedial_action].some(
+    (val) => typeof val === 'string' && val.trim().length > 0,
+  );
+  const showDefectFields = hasUnsafeAppliance || hasDefectText || warningSelection === 'YES';
+  const VoiceButton = ({ onClick }: { onClick: () => void }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/40 bg-white/60 text-muted hover:bg-white"
+      aria-label="Voice capture"
+    >
+      <Mic className="h-3.5 w-3.5" />
+    </button>
+  );
+
+  const checklist = useMemo(() => {
+    const items: ChecklistItem[] = [];
+
+    const engineerName = resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '';
+    const gasSafeNumber = resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '';
+    const companyName = resolvedInitialInfo.company_name || CP12_DEMO_INFO.company_name || '';
+    const engineerIdCard = resolvedInitialInfo.engineer_id_card_number || '';
+    const companyAddress = resolvedInitialInfo.company_address || '';
+    const companyPostcode = resolvedInitialInfo.company_postcode || '';
+    const companyPhone = resolvedInitialInfo.company_phone || '';
+
+    items.push({
+      id: 'installer',
+      label: 'Engineer & company details present',
+      ok:
+        hasValue(engineerName) &&
+        hasValue(gasSafeNumber) &&
+        hasValue(companyName) &&
+        hasValue(engineerIdCard) &&
+        hasValue(companyAddress) &&
+        hasValue(companyPostcode) &&
+        hasValue(companyPhone),
+      hint: 'Set in Settings',
+      blocking: true,
+    });
+
+    const addrOk =
+      hasValue(jobAddress.job_address_name) && hasValue(jobAddress.job_address_line1) && hasValue(jobAddress.job_postcode) && hasValue(jobAddress.job_tel);
+    items.push({
+      id: 'job-address',
+      label: 'Property reference, job address, postcode, and site telephone',
+      ok: addrOk,
+      hint: 'Add in People & location',
+      action: () => setStep(1),
+      blocking: true,
+    });
+
+    const landlordOk =
+      hasValue(info.landlord_name) &&
+      hasValue(info.landlord_address_line1) &&
+      hasValue(info.landlord_city) &&
+      hasValue(info.landlord_postcode);
+    items.push({
+      id: 'landlord',
+      label: 'Landlord / owner details complete',
+      ok: landlordOk,
+      hint: 'Fill in People & location',
+      action: () => setStep(1),
+      blocking: true,
+    });
+
+    const applianceChecks: ChecklistItem[] = appliances.map((app, index) => {
+      const identityOk =
+        hasValue(app.location) && hasValue(app.appliance_type) && hasValue(app.make_model) && hasValue(app.flue_type);
+      const readingsOk =
+        hasValue(app.operating_pressure) &&
+        hasValue(app.heat_input) &&
+        hasValue(app.ventilation_satisfactory) &&
+        hasValue(app.gas_tightness_test) &&
+        hasValue(app.stability_test) &&
+        hasValue(app.safety_devices_correct) &&
+        hasValue(app.flue_performance_test) &&
+        hasValue(app.appliance_serviced) &&
+        hasValue(app.safety_rating);
+      const ok = identityOk && readingsOk;
+      return {
+        id: `appliance-${index}`,
+        label: `Appliance #${index + 1}: identity + readings complete`,
+        ok,
+        hint: ok
+          ? undefined
+          : !identityOk
+            ? 'Edit identity in Photos'
+            : 'Add checks in Appliance checks',
+        action: () => setStep(identityOk ? 3 : 2),
+        blocking: true,
+      };
+    });
+    items.push(...applianceChecks);
+
+    items.push({
+      id: 'reg26',
+      label: 'Regulation 26(9) confirmed',
+      ok: booleanFromField(info.reg_26_9_confirmed),
+      action: () => setStep(1),
+      blocking: true,
+    });
+
+    items.push({
+      id: 'signatures',
+      label: 'Engineer and customer signatures',
+      ok: hasValue(engineerSignature) && hasValue(customerSignature),
+      action: () => setStep(4),
+      blocking: true,
+    });
+
+    items.push({
+      id: 'completion',
+      label: 'Issue date set',
+      ok: hasValue(completionDate),
+      blocking: true,
+    });
+
+    // Non-blocking reminders for fields not yet captured in UI
+    items.push({
+      id: 'co-alarms',
+      label: 'CO alarms fitted & tested',
+      ok: hasValue(evidenceFields.co_alarm_fitted) && hasValue(evidenceFields.co_alarm_tested),
+      hint: 'Not captured in app yet',
+      blocking: false,
+    });
+    items.push({
+      id: 'next-inspection',
+      label: 'Next inspection due date',
+      ok: hasValue(evidenceFields.next_inspection_due) || hasValue(evidenceFields.next_inspection_date) || hasValue(completionDate),
+      hint: 'Defaults to completion date',
+      blocking: false,
+    });
+
+    const blockingMissing = items.filter((item) => item.blocking !== false && !item.ok).length;
+    return { items, blockingMissing };
+  }, [
+    appliances,
+    completionDate,
+    resolvedInitialInfo.company_address,
+    resolvedInitialInfo.company_phone,
+    resolvedInitialInfo.company_postcode,
+    resolvedInitialInfo.engineer_id_card_number,
+    evidenceFields.co_alarm_fitted,
+    evidenceFields.co_alarm_tested,
+    evidenceFields.next_inspection_date,
+    evidenceFields.next_inspection_due,
+    info.landlord_address_line1,
+    info.landlord_city,
+    info.landlord_postcode,
+    info.landlord_name,
+    info.reg_26_9_confirmed,
+    jobAddress.job_address_name,
+    jobAddress.job_address_line1,
+    jobAddress.job_postcode,
+    jobAddress.job_tel,
+    resolvedInitialInfo.company_name,
+    resolvedInitialInfo.engineer_name,
+    resolvedInitialInfo.gas_safe_number,
+    engineerSignature,
+    customerSignature,
+  ]);
+
 
   const StepOne = (
-    <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job info" status={certificateLabel}>
+    <WizardLayout step={offsetStep(1)} total={totalSteps} title="People & location" status={certificateLabel}>
       {isCp12 ? (
         <div className="space-y-3">
           {demoEnabled ? (
             <div className="flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full text-xs"
+                onClick={handleDemoFill}
+                disabled={isPending}
+                data-testid="cp12-demo-fill"
+              >
                 Fill demo CP12
               </Button>
             </div>
           ) : null}
           <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
-          <Input
-            value={info.customer_name}
-            onChange={(e) => setInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
-            placeholder="Customer name"
-            className="rounded-2xl"
-          />
-          <Input
-            value={info.property_address}
-            onChange={(e) => {
-              const value = e.target.value;
-              setInfo((prev) => ({ ...prev, property_address: value }));
-              setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
-            }}
-            placeholder="Property address"
-            className="rounded-2xl"
-          />
-          <Input
-            value={info.postcode}
-            onChange={(e) => {
-              const value = e.target.value;
-              setInfo((prev) => ({ ...prev, postcode: value }));
-              setJobAddress((prev) => ({ ...prev, job_postcode: value }));
-            }}
-            placeholder="Postcode"
-            className="rounded-2xl"
-          />
-          <Input
-            value={info.landlord_name}
-            onChange={(e) => setInfo((prev) => ({ ...prev, landlord_name: e.target.value }))}
-            placeholder="Landlord / Agent name"
-            className="rounded-2xl"
-          />
-          <Textarea
-            value={info.landlord_address}
-            onChange={(e) => setInfo((prev) => ({ ...prev, landlord_address: e.target.value }))}
-            placeholder="Landlord / Agent address"
-            className="min-h-[70px] rounded-2xl"
-          />
+          <div className="grid gap-3 rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Job location</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                type="date"
+                value={info.inspection_date}
+                onChange={(e) => setInfo((prev) => ({ ...prev, inspection_date: e.target.value }))}
+                placeholder="Inspection date"
+                className="rounded-2xl"
+              />
+              <Input
+                value={jobAddress.job_address_name}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                placeholder="Property name / reference"
+                required
+                className="rounded-2xl"
+              />
+              <p className="text-xs text-muted-foreground/70 sm:col-span-2">
+                Shown as “Name” in the Job Address section of the certificate.
+              </p>
+              <Input
+                value={jobAddress.job_address_line1}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                  setInfo((prev) => ({
+                    ...prev,
+                    property_address: buildPropertyAddressFromJobAddress({ ...jobAddress, job_address_line1: value }),
+                  }));
+                }}
+                placeholder="Job address line 1"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_line2}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                placeholder="Job address line 2"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_city}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                placeholder="City / Town"
+                className="rounded-2xl"
+              />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={jobAddress.job_postcode}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+                    setInfo((prev) => ({ ...prev, postcode: value }));
+                  }}
+                  placeholder="Postcode"
+                  className="rounded-2xl sm:flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePostcodeLookup}
+                  disabled={isPostcodeLookupPending}
+                  className="sm:w-40"
+                >
+                  {isPostcodeLookupPending ? 'Finding…' : 'Find address'}
+                </Button>
+              </div>
+              <Input
+                value={jobAddress.job_tel}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
+                placeholder="Site telephone number"
+                className="rounded-2xl"
+              />
+              <p className="text-xs text-muted-foreground/70 sm:col-span-2">
+                Shown as &apos;Tel. No&apos; in the Job Address section of the certificate.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Landlord / Property owner</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              Required for CP12. This is the property owner, not the billable agent.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Input
+                value={info.landlord_name}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_name: e.target.value }))}
+                placeholder="Landlord / Owner name"
+                className="rounded-2xl"
+                data-testid="cp12-landlord-name"
+              />
+              <Input
+                value={info.landlord_company}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_company: e.target.value }))}
+                placeholder="Company (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                value={info.landlord_address_line1}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_address_line1: e.target.value }))}
+                placeholder="Address line 1"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={info.landlord_address_line2}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_address_line2: e.target.value }))}
+                placeholder="Address line 2 (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={info.landlord_city}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_city: e.target.value }))}
+                placeholder="City / Town"
+                className="rounded-2xl"
+              />
+              <Input
+                value={info.landlord_postcode}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_postcode: e.target.value }))}
+                placeholder="Postcode"
+                className="rounded-2xl"
+              />
+              <Input
+                value={info.landlord_tel}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_tel: e.target.value }))}
+                placeholder="Tel. No. (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+            </div>
+          </div>
+
           <div className="flex items-start gap-3 rounded-2xl border border-white/40 bg-white/70 p-3">
             <input
               type="checkbox"
@@ -718,95 +1234,26 @@ export function CertificateWizard({
         <p className="text-sm text-muted-foreground/70">Non-CP12 certificates currently use the simplified flow.</p>
       )}
       <div className="mt-6 flex justify-end">
-        <Button onClick={handleInfoNext} disabled={isPending} className="rounded-full px-6">
-          Next → Job address
+        <Button
+          onClick={handleInfoNext}
+          disabled={isPending}
+          className="rounded-full px-6"
+          data-testid="cp12-step1-next"
+        >
+          Next → Appliances
         </Button>
       </div>
     </WizardLayout>
   );
 
   const StepTwo = (
-    <WizardLayout step={offsetStep(2)} total={totalSteps} title="Job address" status={certificateLabel} onBack={() => setStep(1)}>
-      {isCp12 ? (
-        <div className="space-y-3">
-          {demoEnabled ? (
-            <div className="flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
-                Fill demo CP12
-              </Button>
-            </div>
-          ) : null}
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-            <p className="text-sm font-semibold text-muted">Job address</p>
-            <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and inspection date.</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Input
-                type="date"
-                value={info.inspection_date}
-                onChange={(e) => setInfo((prev) => ({ ...prev, inspection_date: e.target.value }))}
-                placeholder="Inspection date"
-                className="rounded-2xl"
-              />
-              <Input
-                value={jobAddress.job_address_name}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                placeholder="Job address name (optional)"
-                className="rounded-2xl sm:col-span-2"
-              />
-              <Input
-                value={jobAddress.job_address_line1}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
-                  setInfo((prev) => ({ ...prev, property_address: value }));
-                }}
-                placeholder="Job address line 1"
-                className="rounded-2xl sm:col-span-2"
-              />
-              <Input
-                value={jobAddress.job_address_line2}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
-                placeholder="Job address line 2 (optional)"
-                className="rounded-2xl"
-              />
-              <Input
-                value={jobAddress.job_address_city}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
-                placeholder="Town/City (optional)"
-                className="rounded-2xl"
-              />
-              <Input
-                value={jobAddress.job_postcode}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setJobAddress((prev) => ({ ...prev, job_postcode: value }));
-                  setInfo((prev) => ({ ...prev, postcode: value }));
-                }}
-                placeholder="Postcode"
-                className="rounded-2xl"
-              />
-              <Input
-                value={jobAddress.job_tel}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
-                placeholder="Job phone (optional)"
-                className="rounded-2xl"
-              />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground/70">Non-CP12 certificates currently use the simplified flow.</p>
-      )}
-      <div className="mt-6 flex justify-end">
-        <Button onClick={handleJobAddressNext} disabled={isPending} className="rounded-full px-6">
-          Next → Add Photos
-        </Button>
-      </div>
-    </WizardLayout>
-  );
-
-  const StepThree = (
-    <WizardLayout step={offsetStep(3)} total={totalSteps} title="Photo capture" status="Evidence" onBack={() => setStep(2)}>
+    <WizardLayout
+      step={offsetStep(2)}
+      total={totalSteps}
+      title="Appliance details"
+      status="Identity & photos"
+      onBack={goBackOneStep}
+    >
       {demoEnabled ? (
         <div className="flex justify-end">
           <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -821,21 +1268,69 @@ export function CertificateWizard({
       ) : null}
       <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
         <p className="text-sm font-semibold text-muted">Appliance profile</p>
-        <div className="mt-3">
+        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm space-y-3">
           <ApplianceStep
-            appliance={applianceEvidenceProfile}
-            onApplianceChange={handleApplianceEvidenceChange}
+            appliances={applianceProfiles}
+            onAppliancesChange={handleApplianceProfilesChange}
             typeOptions={BOILER_TYPE_OPTIONS}
-            allowMultiple={false}
-            showExtendedFields
+            allowMultiple
+            showExtendedFields={false}
+            showYear={false}
+            applyExtendedDefaults={false}
+            onPrefillClick={handlePrefillClick}
+            prefillText={prefillBadgeText ? `${prefillBadgeText} — tap to change` : null}
             inlineEditor
           />
+          <div className="mt-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Flue & ventilation</p>
+            {appliances.map((appliance, index) => (
+              <div key={`flue-${index}`} className="grid gap-2 sm:grid-cols-2 rounded-2xl border border-white/30 bg-white/70 p-3">
+                <SearchableSelect
+                  label={`Appliance ${index + 1} flue type`}
+                  value={appliance.flue_type ?? ''}
+                  options={[...CP12_FLUE_TYPES]}
+                  placeholder="Select or type"
+                  onChange={(val) => setApplianceField(index, 'flue_type', val)}
+                />
+                <SearchableSelect
+                  label={`Appliance ${index + 1} ventilation provision`}
+                  value={appliance.ventilation_provision ?? ''}
+                  options={[...CP12_VENTILATION]}
+                  placeholder="Select or type"
+                  onChange={(val) => setApplianceField(index, 'ventilation_provision', val)}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-col items-end gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={addAppliance}
+              disabled={appliances.length >= MAX_APPLIANCES}
+            >
+              + Add another appliance
+            </Button>
+            {appliances.length >= MAX_APPLIANCES ? (
+              <p className="text-xs text-muted-foreground/70">
+                CP12 PDF fits up to five appliances. Start another certificate for more.
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {CP12_EVIDENCE_CONFIG.filter(
           (category) =>
-            !['appliance_photo', 'serial_label', 'flue_photo', 'meter_reading', 'ventilation', 'issue_photo'].includes(category.key),
+            ![
+              'flue_photo',
+              'meter_reading',
+              'issue_photo',
+              'appliance_photo',
+              'ventilation',
+              'serial_label',
+            ].includes(category.key),
         ).map((category) => (
           <EvidenceCard
             key={category.key}
@@ -879,15 +1374,15 @@ export function CertificateWizard({
         ))}
       </div>
       <div className="mt-6 flex justify-end">
-        <Button onClick={() => setStep(4)} disabled={isPending} className="rounded-full px-6">
+        <Button onClick={() => setStep(3)} disabled={isPending} className="rounded-full px-6">
           Next → Checks
         </Button>
       </div>
     </WizardLayout>
   );
 
-  const StepFour = (
-    <WizardLayout step={offsetStep(4)} total={totalSteps} title="Appliance checks" status="On-site checks" onBack={() => setStep(3)}>
+  const StepThree = (
+    <WizardLayout step={offsetStep(3)} total={totalSteps} title="Appliance checks" status="On-site checks" onBack={goBackOneStep}>
       <div className="space-y-4">
         {demoEnabled && (
           <div className="flex justify-end">
@@ -896,90 +1391,56 @@ export function CertificateWizard({
             </Button>
           </div>
         )}
-        <div className="grid gap-3 sm:grid-cols-2">
-          {CP12_EVIDENCE_CONFIG.filter((category) =>
-            ['flue_photo', 'meter_reading', 'ventilation', 'issue_photo'].includes(category.key),
-          ).map((category) => (
-            <EvidenceCard
-              key={category.key}
-              title={category.title}
-              fields={category.fields}
-              values={evidenceFields}
-              onChange={(key, value) => {
-                handleEvidenceFieldsUpdate({ [key]: value });
-              }}
-              photoPreview={initialPhotoPreviews[category.key]}
-              onPhotoUpload={(file) => {
-                startTransition(async () => {
-                  const data = new FormData();
-                  data.append('jobId', jobId);
-                  data.append('category', category.key);
-                  data.append('file', file);
-                  try {
-                    await uploadJobPhoto(data);
-                    pushToast({ title: `${category.title} photo saved`, variant: 'success' });
-                  } catch (error) {
-                    pushToast({
-                      title: 'Upload failed',
-                      description: error instanceof Error ? error.message : 'Try again.',
-                      variant: 'error',
-                    });
-                  }
-                });
-              }}
-              onVoice={() =>
-                pushToast({
-                  title: 'Voice capture',
-                  description: 'Whisper capture coming soon. Add a quick text note for now.',
-                  variant: 'default',
-                })
-              }
-              onText={() => {
-                pushToast({ title: 'Manual entry', description: 'Edit the fields directly above.', variant: 'default' });
-              }}
-            />
-          ))}
+        <div className="flex flex-wrap items-center gap-2 rounded-3xl border border-white/20 bg-white/80 p-3">
+          <p className="text-sm font-semibold text-muted">Measurement source</p>
+          <div className="flex gap-2">
+            {(['manual', 'tpi'] as const).map((source) => (
+              <Button
+                key={source}
+                type="button"
+                variant={measurementSource === source ? 'primary' : 'outline'}
+                className="rounded-full text-xs"
+                onClick={() => setMeasurementSource(source)}
+              >
+                {source === 'manual' ? 'Manual entry' : 'TPI connected'}
+              </Button>
+            ))}
+          </div>
+          {measurementSource === 'tpi' ? (
+            <p className="text-xs text-muted-foreground/70">Readings are locked and treated as captured from the meter.</p>
+          ) : (
+            <p className="text-xs text-muted-foreground/70">Default: enter measurements by hand.</p>
+          )}
         </div>
-        <ApplianceStep
-          appliances={applianceProfiles}
-          onAppliancesChange={handleApplianceProfilesChange}
-          typeOptions={[...CP12_APPLIANCE_TYPES]}
-          locationOptions={[...CP12_LOCATIONS]}
-          allowMultiple
-          prefillText={prefillBadgeText ? `${prefillBadgeText} — tap to change` : null}
-          onPrefillClick={handlePrefillClick}
-        />
+        <div className="flex items-center justify-between rounded-3xl border border-white/20 bg-white/80 p-3">
+          <p className="text-sm text-muted">Need to edit make/model/type/location? Jump back to identity.</p>
+          <Button type="button" variant="outline" className="rounded-full" onClick={() => setStep(2)}>
+            Edit identity
+          </Button>
+        </div>
 
         <div className="space-y-4">
           {appliances.map((appliance, index) => (
-            <div key={`checks-${index}`} className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <div
+              key={`checks-${index}`}
+              ref={(el) => {
+                applianceRefs.current[index] = el;
+              }}
+              className="rounded-3xl border border-white/40 bg-white p-4 shadow-md"
+            >
               <p className="text-sm font-semibold text-muted">Appliance #{index + 1} checks</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <SearchableSelect
-                  label="Flue type"
-                  value={appliance.flue_type ?? ''}
-                  options={[...CP12_FLUE_TYPES]}
-                  placeholder="Select or type"
-                  onChange={(val) => setApplianceField(index, 'flue_type', val)}
-                />
-                <SearchableSelect
-                  label="Ventilation provision"
-                  value={appliance.ventilation_provision ?? ''}
-                  options={[...CP12_VENTILATION]}
-                  placeholder="Select or type"
-                  onChange={(val) => setApplianceField(index, 'ventilation_provision', val)}
-                />
-              </div>
               <div className="mt-4">
                 <ChecksStep
                   values={{
                     ventilation_satisfactory: appliance.ventilation_satisfactory ?? '',
-                    flue_condition: appliance.flue_condition ?? '',
                     stability_test: appliance.stability_test ?? '',
                     gas_tightness_test: appliance.gas_tightness_test ?? '',
                     operating_pressure: appliance.operating_pressure ?? '',
                     heat_input: appliance.heat_input ?? '',
                     co_reading_ppm: appliance.co_reading_ppm ?? '',
+                    safety_devices_correct: appliance.safety_devices_correct ?? '',
+                    flue_performance_test: appliance.flue_performance_test ?? '',
+                    appliance_serviced: appliance.appliance_serviced ?? '',
                     safety_rating: appliance.safety_rating ?? '',
                     classification_code: appliance.classification_code ?? '',
                   }}
@@ -989,39 +1450,335 @@ export function CertificateWizard({
                     { label: 'At Risk', value: 'at risk' },
                     { label: 'Immediately Dangerous', value: 'immediately dangerous' },
                   ]}
+                  measurementSource={measurementSource}
+                  measurementReadOnly={measurementSource === 'tpi'}
                 />
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-white/30 bg-white/75 p-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Combustion readings</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full px-3 py-1 text-xs"
+                    onClick={() =>
+                      setCombustionOpen((prev) => ({
+                        ...prev,
+                        [index]: !(prev[index] ?? false),
+                      }))
+                    }
+                  >
+                    {combustionOpen[index] ? 'Hide' : 'Show'}
+                  </Button>
+                </div>
+                {combustionOpen[index] ? (
+                  <div className="mt-3 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/25 bg-white/80 p-3 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">High combustion reading</p>
+                        <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                          <UnitNumberInput
+                            label="CO ppm"
+                            unit="ppm"
+                            value={appliance.high_co_ppm ?? ''}
+                            onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
+                            disabled={measurementSource === 'tpi'}
+                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                          />
+                          <UnitNumberInput
+                            label="CO2 %"
+                            unit="%"
+                            value={appliance.high_co2 ?? ''}
+                            onChange={(val) => setApplianceField(index, 'high_co2', val)}
+                            disabled={measurementSource === 'tpi'}
+                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                          />
+                          <UnitNumberInput
+                            label="Ratio"
+                            unit="ratio"
+                            value={appliance.high_ratio ?? ''}
+                            onChange={(val) => setApplianceField(index, 'high_ratio', val)}
+                            disabled={measurementSource === 'tpi'}
+                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                          />
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-white/25 bg-white/80 p-3 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Low combustion reading</p>
+                        <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                          <UnitNumberInput
+                            label="CO ppm"
+                            unit="ppm"
+                            value={appliance.low_co_ppm ?? ''}
+                            onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
+                            disabled={measurementSource === 'tpi'}
+                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                          />
+                          <UnitNumberInput
+                            label="CO2 %"
+                            unit="%"
+                            value={appliance.low_co2 ?? ''}
+                            onChange={(val) => setApplianceField(index, 'low_co2', val)}
+                            disabled={measurementSource === 'tpi'}
+                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                          />
+                          <UnitNumberInput
+                            label="Ratio"
+                            unit="ratio"
+                            value={appliance.low_ratio ?? ''}
+                            onChange={(val) => setApplianceField(index, 'low_ratio', val)}
+                            disabled={measurementSource === 'tpi'}
+                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                        <span>Combustion notes (optional)</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
+                            onClick={() =>
+                              pushToast({
+                                title: 'Photo',
+                                description: 'Attach FGA screenshots via Photos on the next step.',
+                                variant: 'default',
+                              })
+                            }
+                          >
+                            📷 Photo
+                          </button>
+                          <VoiceButton
+                            onClick={() =>
+                              pushToast({
+                                title: 'Voice capture',
+                                description: 'Whisper capture will drop notes here soon.',
+                                variant: 'default',
+                              })
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
+                            onClick={() =>
+                              pushToast({
+                                title: 'Text',
+                                description: 'Add any notes below.',
+                                variant: 'default',
+                              })
+                            }
+                          >
+                            ⌨️ Text
+                          </button>
+                        </div>
+                      </div>
+                      <Textarea
+                        value={appliance.combustion_notes ?? ''}
+                        onChange={(e) => setApplianceField(index, 'combustion_notes', e.target.value)}
+                        placeholder="Any combustion notes or analyser references"
+                        className="min-h-[90px]"
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
         </div>
 
+        <div className="grid gap-3 sm:grid-cols-2">
+          {['flue_photo', 'meter_reading']
+            .map((key) => evidenceByKey(key))
+            .filter(Boolean)
+            .map((category) => (
+              <div key={category!.key} className="space-y-2">
+                <EvidenceCard
+                  title={category!.title}
+                  fields={category!.fields}
+                  values={evidenceFields}
+                  onChange={(key, value) => {
+                    handleEvidenceFieldsUpdate({ [key]: value });
+                  }}
+                  photoPreview={initialPhotoPreviews[category!.key]}
+                  onPhotoUpload={(file) => {
+                    startTransition(async () => {
+                      const data = new FormData();
+                      data.append('jobId', jobId);
+                      data.append('category', category!.key);
+                      data.append('file', file);
+                      try {
+                        await uploadJobPhoto(data);
+                        pushToast({ title: `${category!.title} photo saved`, variant: 'success' });
+                      } catch (error) {
+                        pushToast({
+                          title: 'Upload failed',
+                          description: error instanceof Error ? error.message : 'Try again.',
+                          variant: 'error',
+                        });
+                      }
+                    });
+                  }}
+                  onVoice={() =>
+                    pushToast({
+                      title: 'Voice capture',
+                      description: 'Whisper capture coming soon. Add a quick text note for now.',
+                      variant: 'default',
+                    })
+                  }
+                  onText={() =>
+                    pushToast({ title: 'Manual entry', description: 'Edit the fields directly above.', variant: 'default' })
+                  }
+                />
+                {category!.key === 'meter_reading' ? (
+                  <p className="px-1 text-xs text-muted-foreground/70">
+                    Optional — stored for job records, not printed on the CP12.
+                  </p>
+                ) : null}
+              </div>
+            ))}
+        </div>
+
+        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <p className="text-sm font-semibold text-muted">Whole-house safety</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <PassFailToggle
+              label="Emergency control accessible"
+              value={booleanFromField(evidenceFields.emergency_control_accessible) ? 'pass' : null}
+              onChange={(val) => handleSafetyFieldUpdate('emergency_control_accessible', val ?? '')}
+            />
+            <PassFailToggle
+              label="Gas tightness satisfactory"
+              value={booleanFromField(evidenceFields.gas_tightness_satisfactory) ? 'pass' : null}
+              onChange={(val) => handleSafetyFieldUpdate('gas_tightness_satisfactory', val ?? '')}
+            />
+            <PassFailToggle
+              label="Pipework visual inspection satisfactory"
+              value={booleanFromField(evidenceFields.pipework_visual_satisfactory) ? 'pass' : null}
+              onChange={(val) => handleSafetyFieldUpdate('pipework_visual_satisfactory', val ?? '')}
+            />
+            <PassFailToggle
+              label="Equipotential bonding satisfactory"
+              value={booleanFromField(evidenceFields.equipotential_bonding_satisfactory) ? 'pass' : null}
+              onChange={(val) => handleSafetyFieldUpdate('equipotential_bonding_satisfactory', val ?? '')}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <p className="text-sm font-semibold text-muted">CO alarms</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <PassFailToggle
+              label="CO alarm fitted"
+              value={booleanFromField(evidenceFields.co_alarm_fitted) ? 'pass' : null}
+              onChange={(val) => handleSafetyFieldUpdate('co_alarm_fitted', val ?? '')}
+            />
+            <PassFailToggle
+              label="CO alarm tested"
+              value={booleanFromField(evidenceFields.co_alarm_tested) ? 'pass' : null}
+              onChange={(val) => handleSafetyFieldUpdate('co_alarm_tested', val ?? '')}
+            />
+            <PassFailToggle
+              label="CO alarm satisfactory"
+              value={booleanFromField(evidenceFields.co_alarm_satisfactory) ? 'pass' : null}
+              onChange={(val) => handleSafetyFieldUpdate('co_alarm_satisfactory', val ?? '')}
+            />
+          </div>
+        </div>
+
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
           <p className="text-sm font-semibold text-muted">Defects & actions</p>
-          {hasUnsafeAppliance ? (
+          {showDefectFields ? (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Textarea
-                value={defects.defect_description ?? ''}
-                onChange={(e) => setDefects((prev) => ({ ...prev, defect_description: e.target.value }))}
-                placeholder="Defect description"
-                className="min-h-[90px]"
-              />
-              <Textarea
-                value={defects.remedial_action ?? ''}
-                onChange={(e) => setDefects((prev) => ({ ...prev, remedial_action: e.target.value }))}
-                placeholder="Remedial action"
-                className="min-h-[90px]"
-              />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  <span>Defect description</span>
+                  <VoiceButton
+                    onClick={() =>
+                      pushToast({ title: 'Voice capture', description: 'Whisper will fill this soon.', variant: 'default' })
+                    }
+                  />
+                </div>
+                <Textarea
+                  value={defects.defect_description ?? ''}
+                  onChange={(e) => setDefects((prev) => ({ ...prev, defect_description: e.target.value }))}
+                  placeholder="Defect description"
+                  className="min-h-[90px]"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  <span>Remedial action</span>
+                  <VoiceButton
+                    onClick={() =>
+                      pushToast({ title: 'Voice capture', description: 'Whisper will fill this soon.', variant: 'default' })
+                    }
+                  />
+                </div>
+                <Textarea
+                  value={defects.remedial_action ?? ''}
+                  onChange={(e) => setDefects((prev) => ({ ...prev, remedial_action: e.target.value }))}
+                  placeholder="Remedial action"
+                  className="min-h-[90px]"
+                />
+              </div>
               <SelectRow
                 label="Warning notice issued"
                 value={defects.warning_notice_issued ?? 'NO'}
                 options={['YES', 'NO']}
                 onChange={(val) => setDefects((prev) => ({ ...prev, warning_notice_issued: val }))}
               />
+              {(() => {
+                const category = evidenceByKey('issue_photo');
+                if (!category) return null;
+                return (
+                  <EvidenceCard
+                    key={category.key}
+                    title={category.title}
+                    fields={category.fields}
+                    values={evidenceFields}
+                    onChange={(key, value) => {
+                      handleEvidenceFieldsUpdate({ [key]: value });
+                    }}
+                    photoPreview={initialPhotoPreviews[category.key]}
+                    onPhotoUpload={(file) => {
+                      startTransition(async () => {
+                        const data = new FormData();
+                        data.append('jobId', jobId);
+                        data.append('category', category.key);
+                        data.append('file', file);
+                        try {
+                          await uploadJobPhoto(data);
+                          pushToast({ title: `${category.title} photo saved`, variant: 'success' });
+                        } catch (error) {
+                          pushToast({
+                            title: 'Upload failed',
+                            description: error instanceof Error ? error.message : 'Try again.',
+                            variant: 'error',
+                          });
+                        }
+                      });
+                    }}
+                    onVoice={() =>
+                      pushToast({
+                        title: 'Voice capture',
+                        description: 'Whisper capture coming soon. Add a quick text note for now.',
+                        variant: 'default',
+                      })
+                    }
+                    onText={() =>
+                      pushToast({ title: 'Manual entry', description: 'Edit the fields directly above.', variant: 'default' })
+                    }
+                  />
+                );
+              })()}
               {defects.warning_notice_issued === 'YES' ? (
                 <div className="sm:col-span-2">
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="primary"
                     className="rounded-full"
                     onClick={() => router.push(`/wizard/create/gas_warning_notice?jobId=${jobId}`)}
                   >
@@ -1031,109 +1788,40 @@ export function CertificateWizard({
                     Starts a Gas Warning Notice from this job’s details.
                   </p>
                 </div>
-              ) : null}
+              ) : (
+                <p className="sm:col-span-2 text-xs text-muted-foreground/60">
+                  Set &quot;Warning notice issued&quot; to YES to create a Gas Warning Notice from this job.
+                </p>
+              )}
             </div>
           ) : (
-            <p className="mt-2 text-xs text-muted-foreground/70">Set a safety rating to reveal defect and warning notice fields.</p>
+            <p className="mt-2 text-xs text-muted-foreground/70">
+              Mark an appliance as unsafe/at risk to record the required defect and warning notice details.
+            </p>
           )}
         </div>
 
-        <details className="rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm">
-          <summary className="cursor-pointer text-sm font-semibold text-muted">Manual entry (fallback)</summary>
-          <div className="mt-3 space-y-4">
-            {appliances.map((appliance, index) => (
-              <div key={`manual-${index}`} className="grid gap-3 sm:grid-cols-2">
-                <OptionSelect
-                  label="Appliance type"
-                  value={appliance.appliance_type}
-                  options={CP12_APPLIANCE_TYPES}
-                  onChange={(val) => setApplianceField(index, 'appliance_type', val)}
-                />
-                <OptionSelect
-                  label="Location"
-                  value={appliance.location}
-                  options={CP12_LOCATIONS}
-                  onChange={(val) => setApplianceField(index, 'location', val)}
-                />
-                <Input
-                  value={appliance.make_model}
-                  onChange={(e) => setApplianceField(index, 'make_model', e.target.value)}
-                  placeholder="Make / Model"
-                />
-                <Input
-                  value={appliance.operating_pressure}
-                  onChange={(e) => setApplianceField(index, 'operating_pressure', e.target.value)}
-                  placeholder="Operating pressure (mbar)"
-                />
-                <Input
-                  value={appliance.heat_input}
-                  onChange={(e) => setApplianceField(index, 'heat_input', e.target.value)}
-                  placeholder="Heat input (kW)"
-                />
-                <OptionSelect
-                  label="Flue type"
-                  value={appliance.flue_type}
-                  options={CP12_FLUE_TYPES}
-                  onChange={(val) => setApplianceField(index, 'flue_type', val)}
-                />
-                <OptionSelect
-                  label="Ventilation provision"
-                  value={appliance.ventilation_provision}
-                  options={CP12_VENTILATION}
-                  onChange={(val) => setApplianceField(index, 'ventilation_provision', val)}
-                />
-                <SelectRow
-                  label="Ventilation satisfactory"
-                  value={appliance.ventilation_satisfactory}
-                  options={['PASS', 'FAIL']}
-                  onChange={(val) => setApplianceField(index, 'ventilation_satisfactory', val)}
-                />
-                <SelectRow
-                  label="Flue condition"
-                  value={appliance.flue_condition}
-                  options={['PASS', 'FAIL']}
-                  onChange={(val) => setApplianceField(index, 'flue_condition', val)}
-                />
-                <SelectRow
-                  label="Stability test"
-                  value={appliance.stability_test}
-                  options={['PASS', 'FAIL']}
-                  onChange={(val) => setApplianceField(index, 'stability_test', val)}
-                />
-                <SelectRow
-                  label="Gas tightness test"
-                  value={appliance.gas_tightness_test}
-                  options={['PASS', 'FAIL']}
-                  onChange={(val) => setApplianceField(index, 'gas_tightness_test', val)}
-                />
-                <Input
-                  value={appliance.co_reading_ppm}
-                  onChange={(e) => setApplianceField(index, 'co_reading_ppm', e.target.value)}
-                  placeholder="CO reading (ppm)"
-                />
-                <SelectRow
-                  label="Safety rating"
-                  value={appliance.safety_rating}
-                  options={['Safe', 'At Risk', 'Immediately Dangerous']}
-                  onChange={(val) => setApplianceField(index, 'safety_rating', val)}
-                />
-                <SelectRow
-                  label="Classification code"
-                  value={appliance.classification_code}
-                  options={['AR', 'ID', 'NCS']}
-                  onChange={(val) => setApplianceField(index, 'classification_code', val)}
-                  disabled={(appliance.safety_rating ?? '').toLowerCase() === 'safe'}
-                />
-              </div>
-            ))}
-            <Button type="button" variant="outline" className="rounded-full" onClick={addAppliance}>
-              + Add appliance
-            </Button>
+        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <div className="flex items-center justify-between text-sm font-semibold text-muted">
+            <span>Comments (optional)</span>
+            <VoiceButton
+              onClick={() =>
+                pushToast({ title: 'Voice capture', description: 'Whisper will fill this soon.', variant: 'default' })
+              }
+            />
           </div>
-        </details>
+          <Textarea
+            className="mt-3 min-h-[90px]"
+            value={evidenceFields.comments ?? ''}
+            onChange={(e) => handleEvidenceFieldsUpdate({ comments: e.target.value })}
+            placeholder="Site notes or comments that appear on the CP12"
+          />
+        </div>
+
+        
       </div>
-      <div className="mt-6 flex justify-between">
-        <Button variant="outline" className="rounded-full" onClick={() => setStep(3)} disabled={isPending}>
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <Button variant="outline" className="rounded-full" onClick={goBackOneStep} disabled={isPending}>
           Back
         </Button>
         <Button onClick={handleChecksNext} disabled={isPending} className="rounded-full px-6">
@@ -1143,9 +1831,38 @@ export function CertificateWizard({
     </WizardLayout>
   );
 
-  const StepFive = (
-    <WizardLayout step={offsetStep(5)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(4)}>
+  const StepFour = (
+    <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={goBackOneStep}>
       <div className="space-y-3">
+        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-muted">Ready to issue?</p>
+            <p className="text-xs text-muted-foreground/70">
+              {checklist.blockingMissing > 0 ? `${checklist.blockingMissing} required item(s) missing` : 'All required items complete'}
+            </p>
+          </div>
+          <div className="mt-3 space-y-2">
+            {checklist.items.map((item) => (
+              <div
+                key={item.id}
+                className={`flex items-start gap-2 rounded-2xl px-3 py-2 text-sm ${
+                  item.ok ? 'bg-[var(--muted)]/40 text-muted' : item.blocking !== false ? 'bg-amber-50 text-amber-900' : 'bg-white/60 text-muted'
+                }`}
+              >
+                <span className="mt-1 text-base">{item.ok ? '✅' : item.blocking === false ? 'ℹ️' : '⚠️'}</span>
+                <div className="flex-1">
+                  <p className="font-semibold">{item.label}</p>
+                  {!item.ok && item.hint ? <p className="text-xs text-muted-foreground/80">{item.hint}</p> : null}
+                </div>
+                {!item.ok && item.action ? (
+                  <Button type="button" variant="ghost" className="rounded-full px-3 py-1 text-xs" onClick={item.action}>
+                    Go
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
         <SignatureCard
           label="Customer"
           existingUrl={customerSignature as string}
@@ -1216,14 +1933,16 @@ export function CertificateWizard({
         </div>
       </div>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>
-          Preview CP12 template
-        </Button>
         <Button variant="outline" className="rounded-full" onClick={() => router.push(`/jobs/${jobId}`)}>
           Edit before send
         </Button>
-        <Button className="rounded-full bg-[var(--action)] px-6 text-white" disabled={isPending} onClick={handleGenerate}>
-          {isPending ? 'Generating…' : 'Generate PDF'}
+        <Button
+          className="rounded-full bg-[var(--action)] px-6 text-white"
+          disabled={isPending || checklist.blockingMissing > 0}
+          onClick={handleGenerate}
+          data-testid="cp12-issue"
+        >
+          {isPending ? 'Issuing…' : 'Issue Certificate'}
         </Button>
       </div>
     </WizardLayout>
@@ -1232,11 +1951,10 @@ export function CertificateWizard({
   if (step === 1) return StepOne;
   if (step === 2) return StepTwo;
   if (step === 3) return StepThree;
-  if (step === 4) return StepFour;
-  return StepFive;
+  return StepFour;
 }
 
-const CP12_REQUIRED_FIELDS = ['property_address', 'inspection_date', 'landlord_name', 'landlord_address'] as const;
+const CP12_REQUIRED_FIELDS = ['property_address', 'inspection_date', 'landlord_name'] as const;
 
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
@@ -1245,18 +1963,66 @@ const booleanFromField = (val: unknown) => val === true || val === 'true' || val
 function validateCp12AgainstSpec(
   info: Cp12InfoState,
   appliances: Cp12Appliance[],
-  defects: { defect_description?: string | null; remedial_action?: string | null },
+  defects: { defect_description?: string | null; remedial_action?: string | null; warning_notice_issued?: string | null },
   engineerSignature: string,
   customerSignature: string,
+  profileDefaults: {
+    engineerName?: string;
+    gasSafeNumber?: string;
+    engineerIdCard?: string;
+    companyName?: string;
+    companyAddress?: string;
+    companyPostcode?: string;
+    companyPhone?: string;
+  },
 ) {
   const errors: string[] = [];
   CP12_REQUIRED_FIELDS.forEach((key) => {
     if (!hasValue(info[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
   });
+  if (!hasValue(info.landlord_address_line1)) {
+    errors.push('landlord address line 1 is required');
+  }
+  if (!hasValue(info.landlord_city)) {
+    errors.push('landlord city is required');
+  }
+  if (!hasValue(info.landlord_postcode)) {
+    errors.push('landlord postcode is required');
+  }
+  const propertyAddress = (info.property_address ?? '').trim();
+  const landlordAddress = buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city).trim();
+  if (propertyAddress && landlordAddress && propertyAddress === landlordAddress) {
+    errors.push('Landlord address must be different from the property address');
+  }
+  if (!hasValue(profileDefaults.engineerName)) {
+    errors.push('Engineer name is required (set it in Settings)');
+  }
+  if (!hasValue(profileDefaults.gasSafeNumber)) {
+    errors.push('Gas Safe registration number is required (set it in Settings)');
+  }
+  if (!hasValue(profileDefaults.engineerIdCard)) {
+    errors.push('Engineer ID card number is required (set it in Settings)');
+  }
+  if (!hasValue(profileDefaults.companyName)) {
+    errors.push('Company name is required (set it in Settings)');
+  }
+  if (!hasValue(profileDefaults.companyAddress)) {
+    errors.push('Company address is required (set it in Settings)');
+  }
+  if (!hasValue(profileDefaults.companyPostcode)) {
+    errors.push('Company postcode is required (set it in Settings)');
+  }
+  if (!hasValue(profileDefaults.companyPhone)) {
+    errors.push('Company phone is required (set it in Settings)');
+  }
   // Engineer/company details are sourced from account settings and signatures; no field entry required here.
   if (!booleanFromField(info.reg_26_9_confirmed)) {
     errors.push('Regulation 26(9) confirmation is required');
   }
+  if ((appliances ?? []).length > MAX_APPLIANCES) {
+    errors.push(`Only ${MAX_APPLIANCES} appliances can be added to a single CP12`);
+  }
+
   const applianceRows = (appliances ?? []).filter(
     (app) => hasValue(app?.appliance_type) || hasValue(app?.location),
   );
@@ -1265,12 +2031,36 @@ function validateCp12AgainstSpec(
   } else if (applianceRows.some((app) => !hasValue(app?.location) || !hasValue(app?.appliance_type))) {
     errors.push('Each appliance must include location and description');
   }
+  applianceRows.forEach((app, index) => {
+    const missing: string[] = [];
+    if (!hasValue(app.operating_pressure)) missing.push('operating pressure');
+    if (!hasValue(app.heat_input)) missing.push('heat input');
+    if (!hasValue(app.safety_devices_correct)) missing.push('safety devices check');
+    if (!hasValue(app.ventilation_satisfactory)) missing.push('ventilation check');
+    if (!hasValue(app.flue_performance_test)) missing.push('flue performance test');
+    if (!hasValue(app.appliance_serviced)) missing.push('appliance serviced');
+    if (!hasValue(app.safety_rating)) missing.push('safety rating');
+    if (!hasValue(app.gas_tightness_test)) missing.push('gas tightness');
+    if (!hasValue(app.stability_test)) missing.push('stability test');
+    if (missing.length) errors.push(`Appliance #${index + 1}: ${missing.join(', ')} required`);
+  });
   applianceRows.forEach((app) => {
     if (hasValue(app.classification_code) && (app.safety_rating ?? '').toLowerCase() === 'safe') {
       errors.push('Classification code should only be set when safety rating is not safe');
     }
   });
-  // Temporarily allow partial defect details while testing PDF generation.
+  const hasUnsafeAppliance = applianceRows.some((app) => {
+    const rating = (app.safety_rating ?? '').toLowerCase().trim();
+    return rating.length > 0 && rating !== 'safe';
+  });
+  const warningSelection = (defects.warning_notice_issued ?? '').trim().toUpperCase();
+  const hasDefectText = hasValue(defects.defect_description) || hasValue(defects.remedial_action);
+  const requiresDefectDetails = hasUnsafeAppliance || hasDefectText || warningSelection === 'YES';
+  if (requiresDefectDetails) {
+    if (!hasValue(defects.defect_description)) errors.push('Defect description is required when an appliance is unsafe');
+    if (!hasValue(defects.warning_notice_issued)) errors.push('Confirm whether a warning notice was issued');
+  }
+
   if (!hasValue(engineerSignature)) errors.push('Engineer signature is required');
   if (!hasValue(customerSignature)) errors.push('Customer signature is required');
   return errors;
@@ -1310,38 +2100,6 @@ function SelectRow({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function OptionSelect({
-  label,
-  value,
-  options,
-  placeholder = 'Select',
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: readonly { value: string; label: string }[];
-  placeholder?: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
-      <select
-        className="w-full rounded-2xl border border-white/40 bg-white/80 px-3 py-2 text-sm text-muted shadow-sm"
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">{placeholder}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }

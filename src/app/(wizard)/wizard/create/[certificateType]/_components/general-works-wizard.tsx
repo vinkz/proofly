@@ -214,22 +214,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
     });
   };
 
-  const handlePreview = () => {
-    startTransition(async () => {
-      try {
-        await persistThroughStep();
-        const { pdfUrl } = await generateGeneralWorksPdf({ jobId, previewOnly: true });
-        pushToast({ title: 'Preview ready', variant: 'success' });
-        router.push(`/jobs/${jobId}/pdf?url=${encodeURIComponent(pdfUrl)}&preview=1`);
-      } catch (error) {
-        pushToast({
-          title: 'Could not preview PDF',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
+  const goBackOneStep = () => setStep((prev) => Math.max(1, prev - 1));
 
   const handleGenerate = () => {
     startTransition(async () => {
@@ -358,7 +343,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Evidence capture" status="Work detail" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Evidence capture" status="Work detail" onBack={goBackOneStep}>
           <div className="space-y-4">
             {demoEnabled ? (
               <div className="mb-3 flex justify-end">
@@ -428,7 +413,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
             </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
+            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
               ← Back
             </Button>
             <Button className="rounded-full px-6" onClick={handleEvidenceNext} disabled={isPending}>
@@ -439,7 +424,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Review & totals" status="Summary" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Review & totals" status="Summary" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -511,7 +496,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
       ) : null}
 
       {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={() => setStep(3)}>
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -541,9 +526,6 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
           </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>
-              Preview General Works template
-            </Button>
             <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
               {isPending ? 'Generating…' : 'Generate PDF'}
             </Button>

@@ -1,8 +1,16 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import { redirect } from 'next/navigation';
 
 import { CERTIFICATE_LABELS, CERTIFICATE_TYPES } from '@/types/certificates';
 import { Card } from '@/components/ui/card';
+import { createJob } from '@/server/certificates';
+
+async function startCp12() {
+  'use server';
+  const { jobId } = await createJob({ certificateType: 'cp12' });
+  redirect(`/wizard/create/cp12?jobId=${jobId}`);
+}
 
 export default function NewJobPage() {
   return (
@@ -10,24 +18,41 @@ export default function NewJobPage() {
       <div className="space-y-2">
         <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Start a new job</p>
         <h1 className="text-3xl font-bold text-[var(--brand)]">Select record type</h1>
-        <p className="text-sm text-muted-foreground/80">
-          You will select or create a client in step 1 of the wizard.
-        </p>
+        <p className="text-sm text-muted-foreground/80">Jobs start immediately; you can add contact details in the wizard.</p>
       </div>
       <Card className="mt-6 space-y-3 border border-white/50 bg-white/95 p-4 shadow">
-        {CERTIFICATE_TYPES.map((type) => (
-          <Link
-            key={type}
-            href={`/wizard/create/${type}`}
-            className="group flex w-full items-center justify-between rounded-2xl border border-white/30 bg-[var(--muted)]/60 px-4 py-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white"
-          >
-            <div>
-              <p className="text-sm font-semibold text-muted">{CERTIFICATE_LABELS[type]}</p>
-              <p className="text-xs text-muted-foreground/70">Create a new {CERTIFICATE_LABELS[type]}</p>
-            </div>
-            <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
-          </Link>
-        ))}
+        {CERTIFICATE_TYPES.map((type) =>
+          type === 'cp12' ? (
+            <form
+              key={type}
+              action={startCp12}
+              className="group flex w-full items-center justify-between rounded-2xl border border-white/30 bg-[var(--muted)]/60 px-4 py-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white"
+            >
+              <button
+                type="submit"
+                className="flex w-full items-center justify-between border-0 bg-transparent p-0 text-left text-inherit"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-muted">{CERTIFICATE_LABELS[type]}</p>
+                  <p className="text-xs text-muted-foreground/70">Create a new {CERTIFICATE_LABELS[type]}</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
+              </button>
+            </form>
+          ) : (
+            <Link
+              key={type}
+              href={`/wizard/create/${type}`}
+              className="group flex w-full items-center justify-between rounded-2xl border border-white/30 bg-[var(--muted)]/60 px-4 py-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white"
+            >
+              <div>
+                <p className="text-sm font-semibold text-muted">{CERTIFICATE_LABELS[type]}</p>
+                <p className="text-xs text-muted-foreground/70">Create a new {CERTIFICATE_LABELS[type]}</p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
+            </Link>
+          ),
+        )}
         <Link
           href="/jobs/scan"
           className="group flex w-full items-center justify-between rounded-2xl border border-white/30 bg-[var(--muted)]/60 px-4 py-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white"

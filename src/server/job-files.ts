@@ -40,6 +40,10 @@ export async function uploadJobFile(input: UploadJobFileInput): Promise<{
   } = await sb.auth.getUser();
   if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
 
+  // job_files table is newly added and not in generated types; use an untyped handle.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anySb = sb as any;
+
   const { data: job, error: jobErr } = await sb
     .from('jobs')
     .select('id')
@@ -64,7 +68,7 @@ export async function uploadJobFile(input: UploadJobFileInput): Promise<{
   });
   if (uploadErr) throw new Error(uploadErr.message);
 
-  const { data: insertRow, error: insertErr } = await sb
+  const { data: insertRow, error: insertErr } = await anySb
     .from('job_files')
     .insert({
       job_id: input.jobId,
@@ -112,17 +116,21 @@ export async function getSignedJobFileUrl({
   } = await sb.auth.getUser();
   if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
 
+  // job_files/reports tables are new; use an untyped handle for lookups.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anySb = sb as any;
+
   if (!bucket || !path) throw new Error('Bucket and path are required');
 
   let jobId = extractJobIdFromPath(path);
 
   if (!jobId) {
     if (bucket === 'job-files') {
-      const { data, error } = await sb.from('job_files').select('job_id').eq('storage_path', path).maybeSingle();
+      const { data, error } = await anySb.from('job_files').select('job_id').eq('storage_path', path).maybeSingle();
       if (error) throw new Error(error.message);
       jobId = data?.job_id ?? null;
     } else if (bucket === 'reports') {
-      const { data, error } = await sb.from('reports').select('job_id').eq('storage_path', path).maybeSingle();
+      const { data, error } = await anySb.from('reports').select('job_id').eq('storage_path', path).maybeSingle();
       if (error) throw new Error(error.message);
       jobId = data?.job_id ?? null;
     } else if (bucket === 'certificates') {

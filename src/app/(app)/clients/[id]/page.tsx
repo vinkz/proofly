@@ -82,7 +82,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     View job
                   </Link>
                   <Link
-                    href={`/reports/${job.id}`}
+                    href={`/documents/${job.id}`}
                     className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
                   >
                     Report

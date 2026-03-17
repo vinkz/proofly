@@ -4,6 +4,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 import { cookies } from 'next/headers';
@@ -242,21 +243,23 @@ export async function assignClientToJob(payload: z.infer<typeof AssignClientSche
     .select('id, user_id, client_name, address, job_code, client_ref')
     .eq('id', input.jobId as JobRow['id'])
     .maybeSingle();
-  if (jobErr || !job) throw new Error(jobErr?.message ?? 'Job not found');
-  if (job.user_id && job.user_id !== user.id) throw new Error('Unauthorized');
+  if (jobErr) throw new Error(jobErr.message);
+  const jobRow = job as (JobRow & { job_code?: string | null; client_ref?: string | null }) | null;
+  if (!jobRow) throw new Error('Job not found');
+  if (jobRow.user_id && jobRow.user_id !== user.id) throw new Error('Unauthorized');
 
   const client = await getCustomerById(input.clientId, { sb, userId: user.id, requireOwner: true });
   if (!client) throw new Error('Client not found');
 
-  const nextClientName = pickText(job.client_name ?? null, client.name);
-  const nextAddress = pickText(job.address ?? null, client.address ?? null);
+  const nextClientName = pickText(jobRow.client_name ?? null, client.name);
+  const nextAddress = pickText(jobRow.address ?? null, client.address ?? null);
 
-  const jobCode = await ensureJobCode(sb, input.jobId, user.id, job.job_code ?? null);
+  const jobCode = await ensureJobCode(sb, input.jobId, user.id, jobRow.job_code ?? null);
   const updatePayload = {
     client_id: client.id,
     client_name: nextClientName || null,
     address: nextAddress || null,
-    client_ref: job.client_ref ?? buildClientRef(jobCode),
+    client_ref: jobRow.client_ref ?? buildClientRef(jobCode),
   } as Database['public']['Tables']['jobs']['Update'];
 
   const { error: updateErr } = await sb
@@ -266,7 +269,7 @@ export async function assignClientToJob(payload: z.infer<typeof AssignClientSche
     .eq('user_id', user.id);
   if (updateErr) throw new Error(updateErr.message);
 
-  if (nextAddress && nextAddress !== job.address) {
+  if (nextAddress && nextAddress !== jobRow.address) {
     await upsertJobAddressForJob({
       jobId: input.jobId,
       fields: { line1: nextAddress },
@@ -333,7 +336,18 @@ export async function saveJobFields(payload: z.infer<typeof SaveJobFieldsSchema>
     error,
   } = await sb.auth.getUser();
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
-  console.log('saveJobFields called', { jobId: input.jobId, keys: Object.keys(input.fields) });
+  const cp12SafetyKeys = [
+    'emergency_control_accessible',
+    'gas_tightness_satisfactory',
+    'pipework_visual_satisfactory',
+    'equipotential_bonding_satisfactory',
+  ] as const;
+  const cp12SafetySnapshot = Object.fromEntries(cp12SafetyKeys.map((key) => [key, input.fields[key] ?? null]));
+  console.log('saveJobFields called', {
+    jobId: input.jobId,
+    keys: Object.keys(input.fields),
+    cp12SafetySnapshot,
+  });
   const entries = Object.entries(input.fields).map(([key, value]) => ({
     job_id: input.jobId,
     field_key: key,
@@ -412,7 +426,9 @@ export async function getCertificateWizardState(jobId: string) {
 
   const { data: profileRow, error: profileErr } = await sb
     .from('profiles')
-    .select('company_name, default_engineer_name, default_engineer_id, gas_safe_number, full_name')
+    .select(
+      'company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, full_name',
+    )
     .eq('id', user.id)
     .maybeSingle();
   if (profileErr && profileErr.code !== '42703') {
@@ -431,6 +447,10 @@ export async function getCertificateWizardState(jobId: string) {
     applyDefault('engineer_name', engineerName);
     applyDefault('company_name', profileRow.company_name ?? null);
     applyDefault('engineer_company', profileRow.company_name ?? null);
+    applyDefault('company_address', profileRow.company_address ?? null);
+    applyDefault('company_postcode', profileRow.company_postcode ?? null);
+    applyDefault('company_phone', profileRow.company_phone ?? null);
+    applyDefault('engineer_phone', profileRow.company_phone ?? null);
     applyDefault('gas_safe_number', profileRow.gas_safe_number ?? null);
     applyDefault('engineer_id_card_number', profileRow.default_engineer_id ?? null);
   }
@@ -895,15 +915,27 @@ const Cp12JobSchema = z.object({
   jobId: z.string().uuid(),
   data: z.object({
     customer_name: optionalText,
+    customer_phone: optionalText,
     property_address: optionalText,
     postcode: optionalText,
     inspection_date: optionalText,
     landlord_name: optionalText,
+    landlord_company: optionalText,
+    landlord_address_line1: optionalText,
+    landlord_address_line2: optionalText,
+    landlord_city: optionalText,
+    landlord_postcode: optionalText,
+    landlord_tel: optionalText,
     landlord_address: optionalText,
     engineer_name: optionalText,
     gas_safe_number: optionalText,
     reg_26_9_confirmed: z.boolean().optional().default(false),
     company_name: optionalText,
+    company_address: optionalText,
+    company_postcode: optionalText,
+    company_phone: optionalText,
+    engineer_phone: optionalText,
+    job_tel: optionalText,
   }),
 });
 
@@ -957,6 +989,14 @@ const Cp12ApplianceSchema = z.object({
       make_model: optionalText,
       operating_pressure: optionalText,
       heat_input: optionalText,
+      high_co_ppm: optionalText,
+      high_co2: optionalText,
+      high_ratio: optionalText,
+      low_co_ppm: optionalText,
+      low_co2: optionalText,
+      low_ratio: optionalText,
+      co_reading_high: optionalText,
+      co_reading_low: optionalText,
       flue_type: optionalText,
       ventilation_provision: optionalText,
       ventilation_satisfactory: optionalText,
@@ -964,6 +1004,10 @@ const Cp12ApplianceSchema = z.object({
       stability_test: optionalText,
       gas_tightness_test: optionalText,
       co_reading_ppm: optionalText,
+      safety_devices_correct: optionalText,
+      flue_performance_test: optionalText,
+      appliance_serviced: optionalText,
+      combustion_notes: optionalText,
       safety_rating: optionalText,
       classification_code: optionalText,
     }),
@@ -1084,6 +1128,24 @@ function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp1
     if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
   });
 
+  const propertyAddress = String(fieldMap.property_address ?? '').trim();
+  const landlordLine1 = String(fieldMap.landlord_address_line1 ?? '').trim();
+  const landlordLine2 = String(fieldMap.landlord_address_line2 ?? '').trim();
+  const landlordCity = String(fieldMap.landlord_city ?? fieldMap.landlord_town ?? '').trim();
+  const landlordAddress =
+    String(fieldMap.landlord_address ?? '').trim() ||
+    [landlordLine1, landlordLine2, landlordCity].filter((part) => part.length > 0).join(', ');
+  const landlordPostcode = String(fieldMap.landlord_postcode ?? '').trim();
+  if (!landlordAddress) {
+    errors.push('Landlord address is required');
+  }
+  if (!landlordPostcode && !String(fieldMap.landlord_address ?? '').trim()) {
+    errors.push('Landlord postcode is required');
+  }
+  if (propertyAddress && landlordAddress && propertyAddress === landlordAddress) {
+    errors.push('Landlord address must be different from the property address');
+  }
+
   if (!booleanFromField(fieldMap.reg_26_9_confirmed)) {
     errors.push('Regulation 26(9) confirmation is required');
   }
@@ -1102,7 +1164,21 @@ function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp1
     }
   });
 
-  // Temporarily allow partial defect details while testing PDF generation.
+  const warningSelection = String(fieldMap.warning_notice_issued ?? '').trim().toUpperCase();
+  const hasDefectText = hasValue(fieldMap.defect_description) || hasValue(fieldMap.remedial_action);
+  const hasUnsafeAppliance = applianceRows.some((app) => {
+    const rating = (app.safety_rating ?? '').toLowerCase().trim();
+    return rating.length > 0 && rating !== 'safe';
+  });
+  const requiresDefectDetails = hasUnsafeAppliance || hasDefectText || warningSelection === 'YES';
+  if (requiresDefectDetails) {
+    if (!hasValue(fieldMap.defect_description)) {
+      errors.push('Defect description is required when an appliance is unsafe');
+    }
+    if (!warningSelection) {
+      errors.push('Confirm whether a warning notice was issued');
+    }
+  }
 
   if (!hasValue(fieldMap.engineer_signature)) errors.push('Engineer signature is required');
   if (!hasValue(fieldMap.customer_signature)) errors.push('Customer signature is required');
@@ -1335,7 +1411,7 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   console.log('GW: auth user', authUser, authErr);
 
   const jobContext = await loadJobContext(supabase, input.jobId, 'generateGeneralWorksPdf');
-  const jobOwnerId = jobContext.job.user_id ?? authUser?.id ?? null;
+  const jobOwnerId = jobContext.job.user_id ?? authUser?.user?.id ?? null;
   if (!jobOwnerId) throw new Error('Job owner not found');
   const jobCode = await ensureJobCode(supabase, input.jobId, jobOwnerId, jobContext.job.job_code ?? null);
   const publicId = buildCertificatePublicId(jobCode, 'general_works');
@@ -1349,7 +1425,6 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
   const baseFieldMap = {
     ...fieldMap,
-    ...(input.fields ?? {}),
   } as Record<string, unknown>;
   const customer = resolveJobCustomer(jobContext, {
     name: typeof baseFieldMap.customer_name === 'string' ? baseFieldMap.customer_name : undefined,
@@ -1418,7 +1493,7 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
     .maybeSingle();
   if (existingCertErr) throw new Error(existingCertErr.message);
 
-  const basePayload: Record<string, unknown> = { job_id: input.jobId, public_id: publicId, user_id: user.id };
+  const basePayload: Record<string, unknown> = { job_id: input.jobId, public_id: publicId, user_id: jobOwnerId };
   const certificatePayload: Record<string, unknown> = { ...basePayload, pdf_path: path };
   const writeCertificate = (payload: Record<string, unknown>) =>
     existingCertificate
@@ -1671,13 +1746,6 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     console.log('GAS SERVICE PDF preview generated', { jobId: input.jobId, path });
     return { pdfUrl: signed.signedUrl, preview: true, jobId: input.jobId };
   }
-
-  const { data: existingCertificate, error: existingCertErr } = await admin
-    .from('certificates')
-    .select('id, job_id, pdf_path, pdf_url')
-    .eq('job_id', input.jobId)
-    .maybeSingle();
-  if (existingCertErr) throw new Error(existingCertErr.message);
 
   const baseCertificatePayload: Record<string, unknown> = {
     job_id: input.jobId,
@@ -2023,15 +2091,76 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   );
 
   const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
+  const splitAddressParts = (value: unknown) =>
+    String(value ?? '')
+      .split(/[\r\n,]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  const extractPostcode = (value: unknown) => {
+    const match = String(value ?? '').toUpperCase().match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/);
+    return match ? match[0].replace(/\s+/g, ' ').trim() : '';
+  };
+  const buildCombustionSummary = (coPpm: string, co2: string, ratio: string, legacy?: string) => {
+    const parts = [coPpm && `${coPpm}ppm`, co2 && `${co2}%`, ratio && ratio].filter(Boolean);
+    if (parts.length) return parts.join(' / ');
+    return legacy ?? '';
+  };
+  const fallbackJobAddressParts = splitAddressParts(
+    mergedFieldMap.property_address ?? mergedFieldMap.address ?? propertyAddress.summary ?? '',
+  );
+  const jobAddressLine1 = toText(mergedFieldMap.job_address_line1 ?? fallbackJobAddressParts[0] ?? '');
+  const jobAddressLine2 = toText(mergedFieldMap.job_address_line2 ?? fallbackJobAddressParts[1] ?? '');
+  const jobAddressTown = toText(
+    mergedFieldMap.job_address_city ?? (fallbackJobAddressParts.length > 2 ? fallbackJobAddressParts.slice(2).join('\n') : ''),
+  );
+  const jobAddressPostcode = pickText(
+    toText(mergedFieldMap.job_postcode ?? ''),
+    toText(mergedFieldMap.property_postcode ?? ''),
+    propertyAddress.postcode,
+    toText(mergedFieldMap.postcode ?? ''),
+  );
+  const jobAddressName = toText(mergedFieldMap.job_address_name ?? mergedFieldMap.property_name ?? '');
+  const jobAddressTel = toText(mergedFieldMap.job_tel ?? '');
+  const fallbackLandlordParts = splitAddressParts(
+    mergedFieldMap.landlord_address ?? customer.address ?? '',
+  );
+  const landlordLine1 = toText(mergedFieldMap.landlord_address_line1 ?? fallbackLandlordParts[0] ?? '');
+  const landlordLine2 = toText(
+    mergedFieldMap.landlord_address_line2 ??
+      (fallbackLandlordParts.length > 2 ? fallbackLandlordParts.slice(1, -1).join('\n') : ''),
+  );
+  const landlordCity = toText(
+    mergedFieldMap.landlord_city ?? mergedFieldMap.landlord_town ?? (fallbackLandlordParts.length > 1 ? fallbackLandlordParts.at(-1) ?? '' : ''),
+  );
+  const landlordPostcode = toText(mergedFieldMap.landlord_postcode ?? extractPostcode(mergedFieldMap.landlord_address ?? ''));
+  const landlordTel = toText(mergedFieldMap.landlord_tel ?? '');
+  const cp12SafetyReadback = {
+    emergency_control_accessible: toText(mergedFieldMap.emergency_control_accessible ?? ''),
+    gas_tightness_satisfactory: toText(mergedFieldMap.gas_tightness_satisfactory ?? ''),
+    pipework_visual_satisfactory: toText(mergedFieldMap.pipework_visual_satisfactory ?? ''),
+    equipotential_bonding_satisfactory: toText(mergedFieldMap.equipotential_bonding_satisfactory ?? ''),
+  };
+  console.log('CP12 issue readback safety fields', {
+    jobId: input.jobId,
+    cp12SafetyReadback,
+  });
   const cp12Fields: Cp12FieldMap = {
     certNumber: toText(mergedFieldMap.record_id ?? mergedFieldMap.certificate_number ?? ''),
     issueDate: toText(mergedFieldMap.inspection_date ?? mergedFieldMap.scheduled_for ?? '') || undefined,
     nextInspectionDue: toText(mergedFieldMap.next_inspection_due ?? mergedFieldMap.completion_date ?? ''),
     landlordName: toText(mergedFieldMap.landlord_name ?? customer.name ?? ''),
-    landlordAddressLine1: toText(mergedFieldMap.landlord_address ?? ''),
-    landlordPostcode: toText(mergedFieldMap.postcode ?? ''),
-    propertyAddressLine1: pickText(propertyAddress.summary, toText(mergedFieldMap.property_address ?? mergedFieldMap.address ?? '')),
-    propertyPostcode: pickText(propertyAddress.postcode, toText(mergedFieldMap.postcode ?? '')),
+    landlordCompany: toText(mergedFieldMap.landlord_company ?? customer.organization ?? ''),
+    landlordAddressLine1: landlordLine1,
+    landlordAddressLine2: landlordLine2,
+    landlordTown: landlordCity,
+    landlordPostcode: landlordPostcode,
+    landlordTel: landlordTel,
+    propertyAddressName: jobAddressName,
+    propertyAddressLine1: jobAddressLine1,
+    propertyAddressLine2: jobAddressLine2,
+    propertyTown: jobAddressTown,
+    propertyPostcode: jobAddressPostcode,
+    propertyTel: jobAddressTel,
     companyName: toText(mergedFieldMap.company_name ?? ''),
     companyAddressLine1: toText(mergedFieldMap.company_address ?? ''),
     companyTown: '',
@@ -2042,17 +2171,42 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     engineerName: toText(mergedFieldMap.engineer_name ?? ''),
     engineerIdNumber: toText(mergedFieldMap.engineer_id ?? ''),
     engineerSignatureText: toText(mergedFieldMap.engineer_name ?? ''),
+    engineerSignatureUrl: toText(mergedFieldMap.engineer_signature ?? mergedFieldMap.engineer_signature_url ?? ''),
     engineerVisitTime: toText(mergedFieldMap.completion_date ?? ''),
     responsiblePersonName: toText(customer.name ?? ''),
     responsiblePersonSignatureText: toText(customer.name ?? ''),
+    responsiblePersonSignatureUrl: toText(mergedFieldMap.customer_signature ?? mergedFieldMap.customer_signature_url ?? ''),
     responsiblePersonAcknowledgementDate: toText(mergedFieldMap.completion_date ?? ''),
     defectsIdentified: toText(mergedFieldMap.defect_description ?? ''),
     remedialWorksRequired: toText(mergedFieldMap.remedial_action ?? ''),
+    warningNoticeIssued: toText(mergedFieldMap.warning_notice_issued ?? ''),
     additionalNotes: toText(mergedFieldMap.comments ?? mergedFieldMap.additional_notes ?? ''),
+    coAlarmFitted: toText(mergedFieldMap.co_alarm_fitted ?? ''),
+    coAlarmTested: toText(mergedFieldMap.co_alarm_tested ?? ''),
+    coAlarmSatisfactory: toText(mergedFieldMap.co_alarm_satisfactory ?? ''),
+    emergencyControlAccessible: toText(mergedFieldMap.emergency_control_accessible ?? mergedFieldMap.emergency_control ?? ''),
+    gasTightnessSatisfactory: toText(mergedFieldMap.gas_tightness_satisfactory ?? ''),
+    pipeworkVisualSatisfactory: toText(mergedFieldMap.pipework_visual_satisfactory ?? ''),
+    equipotentialBondingSatisfactory: toText(mergedFieldMap.equipotential_bonding_satisfactory ?? ''),
   };
+  console.log('CP12 issue mapped safety fields', {
+    jobId: input.jobId,
+    mapped: {
+      emergencyControlAccessible: cp12Fields.emergencyControlAccessible ?? '',
+      gasTightnessSatisfactory: cp12Fields.gasTightnessSatisfactory ?? '',
+      pipeworkVisualSatisfactory: cp12Fields.pipeworkVisualSatisfactory ?? '',
+      equipotentialBondingSatisfactory: cp12Fields.equipotentialBondingSatisfactory ?? '',
+    },
+  });
 
   const applianceInputs: ApplianceInput[] = (appliances ?? []).map((app) => {
     const appExtras = app as Cp12Appliance & { appliance_make_model?: string };
+    const highCoPpm = toText(app.high_co_ppm ?? app.co_reading_high ?? '');
+    const highCo2 = toText(app.high_co2 ?? '');
+    const highRatio = toText(app.high_ratio ?? '');
+    const lowCoPpm = toText(app.low_co_ppm ?? app.co_reading_low ?? '');
+    const lowCo2 = toText(app.low_co2 ?? '');
+    const lowRatio = toText(app.low_ratio ?? '');
     return {
       description: toText(app.make_model ?? appExtras.appliance_make_model ?? app.appliance_type ?? ''),
       location: toText(app.location ?? ''),
@@ -2060,12 +2214,24 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
       operatingPressure: toText(app.operating_pressure ?? ''),
       heatInput: toText(app.heat_input ?? ''),
-      safetyDevice: toText(app.stability_test ?? ''),
+      safetyDevice: toText(app.safety_devices_correct ?? app.stability_test ?? ''),
       ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
       flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
       spillageTest: toText(app.gas_tightness_test ?? ''),
       applianceSafeToUse: toText(app.safety_rating ?? app.classification_code ?? ''),
       remedialActionTaken: toText(app.classification_code ?? ''),
+      combustionHighCoPpm: highCoPpm,
+      combustionHighCo2: highCo2,
+      combustionHighRatio: highRatio,
+      combustionLowCoPpm: lowCoPpm,
+      combustionLowCo2: lowCo2,
+      combustionLowRatio: lowRatio,
+      combustionHigh: buildCombustionSummary(highCoPpm, highCo2, highRatio, toText(app.co_reading_ppm ?? '')),
+      combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? '')),
+      combustionNotes: toText(app.combustion_notes ?? ''),
+      applianceServiced: toText(app.appliance_serviced ?? ''),
+      applianceInspected: 'Yes',
+      landlordAppliance: 'Yes',
     };
   });
 
@@ -2075,12 +2241,50 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     issuedAt,
     recordId: input.jobId,
   });
+  const cp12PdfByteLength = pdfBytes.byteLength;
+  const cp12PdfHash8 = createHash('sha256').update(pdfBytes).digest('hex').slice(0, 8);
+  const cp12DebugMode = process.env.CP12_PDF_DEBUG === '1';
+  const appendCacheBust = (url: string, token: string) => `${url}${url.includes('?') ? '&' : '?'}cb=${encodeURIComponent(token)}`;
   const pathBase = previewOnly ? 'cp12/previews' : 'cp12';
-  const path = `${pathBase}/${user.id}/${input.jobId}-${previewOnly ? 'preview' : Date.now()}.pdf`;
-  console.log('CP12: uploading certificate PDF', { path, previewOnly });
+  const path = cp12DebugMode
+    ? `${pathBase}/${user.id}/${input.jobId}-${publicId}-debug-${Date.now()}.pdf`
+    : `${pathBase}/${user.id}/${input.jobId}-${previewOnly ? `preview-${Date.now()}-${cp12PdfHash8}` : Date.now()}.pdf`;
+  const lastSlash = path.lastIndexOf('/');
+  const parentDir = lastSlash > 0 ? path.slice(0, lastSlash) : '';
+  const fileName = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
+  const { data: existingFiles, error: cp12ListErr } = await admin.storage.from('certificates').list(parentDir, {
+    search: fileName,
+  });
+  if (cp12ListErr) {
+    console.warn('CP12: pre-upload list failed', { jobId: input.jobId, path, error: cp12ListErr.message });
+  }
+  const existedBeforeUpload = Boolean(existingFiles?.some((entry) => entry.name === fileName));
+  console.log('CP12: uploading certificate PDF', {
+    path,
+    previewOnly,
+    cp12DebugMode,
+    jobId: input.jobId,
+    certificateId: publicId,
+    existedBeforeUpload,
+    pdfByteLength: cp12PdfByteLength,
+    pdfHash8: cp12PdfHash8,
+  });
   const upload = await admin.storage
     .from('certificates')
     .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', upsert: true });
+  console.log('CP12: upload result', {
+    path,
+    previewOnly,
+    cp12DebugMode,
+    jobId: input.jobId,
+    certificateId: publicId,
+    existedBeforeUpload,
+    upsert: true,
+    uploadedPdfByteLength: cp12PdfByteLength,
+    uploadedPdfHash8: cp12PdfHash8,
+    uploadDataPath: upload.data?.path ?? null,
+    hasUploadError: Boolean(upload.error),
+  });
   if (upload.error || !upload.data?.path) {
     console.error('CP12: upload error', {
       path,
@@ -2100,8 +2304,16 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     if (signedErr || !signed?.signedUrl) {
       throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
     }
-    console.log('CERTIFICATE PDF preview generated', { jobId: input.jobId, path });
-    return { pdfUrl: signed.signedUrl, preview: true, jobId: input.jobId };
+    const finalPreviewUrl = appendCacheBust(signed.signedUrl, cp12PdfHash8);
+    console.log('CERTIFICATE PDF preview generated', {
+      jobId: input.jobId,
+      path,
+      finalUrl: finalPreviewUrl,
+      pdfHash: cp12PdfHash8,
+      returnedPdfByteLength: cp12PdfByteLength,
+      returnedPdfHash8: cp12PdfHash8,
+    });
+    return { pdfUrl: finalPreviewUrl, preview: true, jobId: input.jobId };
   }
 
   const baseCertificatePayload: Record<string, unknown> = {
@@ -2169,7 +2381,15 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   if (signedErr || !signed?.signedUrl) {
     throw new Error(signedErr?.message ?? 'Unable to create certificate link');
   }
-  console.log('CERTIFICATE PDF signed URL generated', { jobId: input.jobId, path });
+  const finalSignedUrl = appendCacheBust(signed.signedUrl, cp12PdfHash8);
+  console.log('CERTIFICATE PDF signed URL generated', {
+    jobId: input.jobId,
+    path,
+    finalUrl: finalSignedUrl,
+    pdfHash: cp12PdfHash8,
+    returnedPdfByteLength: cp12PdfByteLength,
+    returnedPdfHash8: cp12PdfHash8,
+  });
 
   await sb
     .from(JOB_FIELDS_TABLE)
@@ -2179,7 +2399,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
 
   await sb.from('jobs').update({ status: 'completed' }).eq('id', input.jobId);
   revalidatePath(`/jobs/${input.jobId}`);
-  return { pdfUrl: signed.signedUrl, jobId: input.jobId };
+  return { pdfUrl: finalSignedUrl, jobId: input.jobId };
 }
 
 export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCertificatePdfSignedUrlSchema> | string) {

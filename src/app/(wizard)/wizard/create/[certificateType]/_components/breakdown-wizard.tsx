@@ -14,7 +14,7 @@ import { ApplianceStep } from '@/components/wizard/steps/appliance-step';
 import { ChecksStep } from '@/components/wizard/steps/checks-step';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { FgaAutofillInline } from '@/components/fga/FgaAutofillInline';
-import { createGasBreakdownReport, previewGasBreakdownReport } from '@/server/jobs';
+import { createGasBreakdownReport } from '@/server/jobs';
 import { uploadJobPhoto } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { PhotoCategory } from '@/types/certificates';
@@ -364,35 +364,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
     });
   };
 
-  const handlePreview = () => {
-    if (!validateStep(RequiredSchema)) return;
-
-    startTransition(async () => {
-      try {
-        const result = await previewGasBreakdownReport({
-          jobId,
-          fields,
-        });
-        pushToast({
-          title: 'Preview ready',
-          variant: 'success',
-        });
-        if (result.pdfUrl && typeof window !== 'undefined') {
-          try {
-            window.open(result.pdfUrl, '_blank');
-          } catch {
-            // ignore window blocking
-          }
-        }
-      } catch (error) {
-        pushToast({
-          title: 'Could not load preview',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
+  const goBackOneStep = () => setStep((prev) => Math.max(1, prev - 1));
 
   const safetyChecksLeft = [
     { key: 'safety_operating_correctly', label: 'Operating correctly' },
@@ -489,7 +461,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance details" status="Breakdown" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance details" status="Breakdown" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -567,7 +539,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
           </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
+            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
               ← Back
             </Button>
             <Button className="rounded-full" onClick={() => handleNext(Step2Schema)} disabled={isPending}>
@@ -578,7 +550,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Safety checks" status="Breakdown" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Safety checks" status="Breakdown" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -680,7 +652,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
           </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={() => setStep(2)}>
+            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
               ← Back
             </Button>
             <Button className="rounded-full" onClick={() => handleNext(Step3Schema)} disabled={isPending}>
@@ -691,7 +663,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
       ) : null}
 
       {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Advice + sign-off" status="Breakdown" onBack={() => setStep(3)}>
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Advice + sign-off" status="Breakdown" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -759,11 +731,8 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
           </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={() => setStep(4)}>
+            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
               ← Back
-            </Button>
-            <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>
-              Preview PDF
             </Button>
             <Button className="rounded-full" onClick={handleGenerate} disabled={isPending}>
               {isPending ? 'Generating...' : 'Generate record'}

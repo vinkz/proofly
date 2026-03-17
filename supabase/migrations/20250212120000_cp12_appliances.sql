@@ -8,6 +8,8 @@ create table if not exists public.cp12_appliances (
   make_model text,
   operating_pressure text,
   heat_input text,
+  co_reading_high text,
+  co_reading_low text,
   flue_type text,
   ventilation_provision text,
   ventilation_satisfactory text,
@@ -15,6 +17,9 @@ create table if not exists public.cp12_appliances (
   stability_test text,
   gas_tightness_test text,
   co_reading_ppm text,
+  safety_devices_correct text,
+  flue_performance_test text,
+  appliance_serviced text,
   safety_rating text,
   classification_code text,
   created_at timestamptz default now()

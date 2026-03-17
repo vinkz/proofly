@@ -13,7 +13,7 @@ import { EvidenceCard } from './evidence-card';
 import { ApplianceStep } from '@/components/wizard/steps/appliance-step';
 import { ChecksStep } from '@/components/wizard/steps/checks-step';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
-import { createCommissioningChecklistReport, previewCommissioningChecklistReport } from '@/server/jobs';
+import { createCommissioningChecklistReport } from '@/server/jobs';
 import { uploadJobPhoto } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { PhotoCategory } from '@/types/certificates';
@@ -363,35 +363,7 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
     });
   };
 
-  const handlePreview = () => {
-    if (!validateStep(RequiredSchema)) return;
-
-    startTransition(async () => {
-      try {
-        const result = await previewCommissioningChecklistReport({
-          jobId,
-          fields,
-        });
-        pushToast({
-          title: 'Preview ready',
-          variant: 'success',
-        });
-        if (result.pdfUrl && typeof window !== 'undefined') {
-          try {
-            window.open(result.pdfUrl, '_blank');
-          } catch {
-            // ignore window blocking
-          }
-        }
-      } catch (error) {
-        pushToast({
-          title: 'Could not load preview',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
+  const goBackOneStep = () => setStep((prev) => Math.max(1, prev - 1));
 
   const safetyChecks = [
     { key: 'safety_devices', label: 'Safety devices correct operation' },
@@ -471,7 +443,7 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance details" status="Commissioning" onBack={() => setStep(1)}>
+        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance details" status="Commissioning" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -534,7 +506,7 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
           </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
+            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
               ← Back
             </Button>
             <Button className="rounded-full" onClick={() => handleNext(Step2Schema)} disabled={isPending}>
@@ -545,7 +517,7 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Safety + gas checks" status="Commissioning" onBack={() => setStep(2)}>
+        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Safety + gas checks" status="Commissioning" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -680,7 +652,7 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
           </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={() => setStep(2)}>
+            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
               ← Back
             </Button>
             <Button className="rounded-full" onClick={() => handleNext(z.object({}))} disabled={isPending}>
@@ -708,7 +680,7 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
       />
 
       {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Comments + sign-off" status="Commissioning" onBack={() => setStep(3)}>
+        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Comments + sign-off" status="Commissioning" onBack={goBackOneStep}>
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -798,11 +770,8 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
           </div>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={() => setStep(3)}>
+            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
               ← Back
-            </Button>
-            <Button variant="outline" className="rounded-full" onClick={handlePreview} disabled={isPending}>
-              Preview PDF
             </Button>
             <Button className="rounded-full" onClick={handleGenerate} disabled={isPending}>
               {isPending ? 'Generating...' : 'Generate checklist'}

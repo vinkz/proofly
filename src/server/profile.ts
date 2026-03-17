@@ -39,9 +39,9 @@ async function upsertProfile(
 export async function getProfile() {
   const { sb, user } = await requireUser();
   const selectVariants = [
-    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, default_engineer_name, default_engineer_id, gas_safe_number',
-    'id, full_name, profession, trade_types, certifications, company_name, default_engineer_name, default_engineer_id, gas_safe_number',
-    'id, full_name, profession, trade_types, certifications',
+    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number',
+    'id, full_name, profession, trade_types, certifications, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number',
+    'id, full_name, profession, trade_types, certifications, company_name, company_address, company_postcode, company_phone',
   ];
 
   let data: Tables<'profiles'> | null = null;
@@ -102,6 +102,11 @@ export async function updateProfileBasics(payload: {
   date_of_birth?: string;
   profession?: string;
   company_name?: string;
+  company_address?: string;
+  company_address_line2?: string;
+  company_town?: string;
+  company_postcode?: string;
+  company_phone?: string;
   default_engineer_name?: string;
   default_engineer_id?: string;
   gas_safe_number?: string;
@@ -112,6 +117,11 @@ export async function updateProfileBasics(payload: {
       date_of_birth: z.string().min(4).optional(),
       profession: z.string().min(2).optional(),
       company_name: z.string().min(2).optional(),
+      company_address: z.string().min(4).optional(),
+      company_address_line2: z.string().min(2).optional(),
+      company_town: z.string().min(2).optional(),
+      company_postcode: z.string().min(3).optional(),
+      company_phone: z.string().min(6).optional(),
       default_engineer_name: z.string().min(2).optional(),
       default_engineer_id: z.string().min(2).optional(),
       gas_safe_number: z.string().min(2).optional(),
@@ -121,20 +131,33 @@ export async function updateProfileBasics(payload: {
       date_of_birth: data.date_of_birth?.trim() || undefined,
       profession: data.profession?.trim(),
       company_name: data.company_name?.trim(),
+      company_address: data.company_address?.trim(),
+      company_address_line2: data.company_address_line2?.trim(),
+      company_town: data.company_town?.trim(),
+      company_postcode: data.company_postcode?.trim(),
+      company_phone: data.company_phone?.trim(),
       default_engineer_name: data.default_engineer_name?.trim(),
       default_engineer_id: data.default_engineer_id?.trim(),
       gas_safe_number: data.gas_safe_number?.trim(),
     }));
   const parsed = schema.parse(payload);
   const { sb, user } = await requireUser({ write: true });
-  await upsertProfile(sb, user.id, {
+  const profilePatch: Partial<Tables<'profiles'>> & { id?: string } = {
     full_name: parsed.full_name ?? null,
     date_of_birth: parsed.date_of_birth ?? null,
     profession: parsed.profession ?? null,
     company_name: parsed.company_name ?? null,
+    company_address: parsed.company_address ?? null,
+    company_postcode: parsed.company_postcode ?? null,
+    company_phone: parsed.company_phone ?? null,
     default_engineer_name: parsed.default_engineer_name ?? null,
     default_engineer_id: parsed.default_engineer_id ?? null,
     gas_safe_number: parsed.gas_safe_number ?? null,
-  });
+  };
+  const extendedPatch = profilePatch as Record<string, unknown>;
+  extendedPatch.company_address_line2 = parsed.company_address_line2 ?? null;
+  extendedPatch.company_town = parsed.company_town ?? null;
+  await upsertProfile(sb, user.id, extendedPatch as Partial<Tables<'profiles'>> & { id?: string });
   revalidatePath('/dashboard');
+  revalidatePath('/settings');
 }

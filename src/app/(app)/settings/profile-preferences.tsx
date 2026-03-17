@@ -4,64 +4,79 @@ import { useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { CERTIFICATIONS } from '@/lib/profile-options';
-import { updateCertifications, markOnboardingComplete, updateProfileBasics } from '@/server/profile';
+import { updateProfileBasics } from '@/server/profile';
 
-export function ProfilePreferences({
-  initialCerts,
-  initialName = '',
-  initialDob = '',
-  initialProfession = '',
-  initialCompanyName = '',
-  initialEngineerName = '',
-  initialEngineerId = '',
-  initialGasSafeNumber = '',
-}: {
-  initialCerts: string[];
+type ProfilePreferencesProps = {
   initialName?: string;
-  initialDob?: string;
-  initialProfession?: string;
   initialCompanyName?: string;
-  initialEngineerName?: string;
+  initialCompanyAddressLine1?: string;
+  initialCompanyAddressLine2?: string;
+  initialCompanyAddressLine3?: string;
+  initialCompanyPostcode?: string;
+  initialCompanyPhone?: string;
   initialEngineerId?: string;
   initialGasSafeNumber?: string;
-}) {
-  const [certs, setCerts] = useState<string[]>(initialCerts);
-  const [fullName, setFullName] = useState(initialName);
-  const [dob, setDob] = useState(initialDob);
-  const [profession, setProfession] = useState(initialProfession);
+};
+
+export function ProfilePreferences({
+  initialName = '',
+  initialCompanyName = '',
+  initialCompanyAddressLine1 = '',
+  initialCompanyAddressLine2 = '',
+  initialCompanyAddressLine3 = '',
+  initialCompanyPostcode = '',
+  initialCompanyPhone = '',
+  initialEngineerId = '',
+  initialGasSafeNumber = '',
+}: ProfilePreferencesProps) {
+  const [name, setName] = useState(initialName);
   const [companyName, setCompanyName] = useState(initialCompanyName);
-  const [engineerName, setEngineerName] = useState(initialEngineerName);
-  const [engineerId, setEngineerId] = useState(initialEngineerId);
+  const [companyAddressLine1, setCompanyAddressLine1] = useState(initialCompanyAddressLine1);
+  const [companyAddressLine2, setCompanyAddressLine2] = useState(initialCompanyAddressLine2);
+  const [companyAddressLine3, setCompanyAddressLine3] = useState(initialCompanyAddressLine3);
+  const [companyPostcode, setCompanyPostcode] = useState(initialCompanyPostcode);
+  const [companyPhone, setCompanyPhone] = useState(initialCompanyPhone);
   const [gasSafeNumber, setGasSafeNumber] = useState(initialGasSafeNumber);
+  const [engineerId, setEngineerId] = useState(initialEngineerId);
   const [isPending, startTransition] = useTransition();
   const { pushToast } = useToast();
 
-  const toggle = (value: string, setter: (val: string[]) => void, current: string[]) => {
-    setter(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
-  };
-
   const handleSave = () => {
+    const missing = [
+      { key: 'Name', value: name },
+      { key: 'Company', value: companyName },
+      { key: 'Address line 1', value: companyAddressLine1 },
+      { key: 'Postcode', value: companyPostcode },
+      { key: 'Tel No.', value: companyPhone },
+      { key: 'Gas Safe Reg', value: gasSafeNumber },
+      { key: 'ID Card No.', value: engineerId },
+    ].filter((item) => !item.value || !item.value.trim());
+    if (missing.length) {
+      pushToast({
+        title: 'Required fields missing',
+        description: `Fill: ${missing.map((m) => m.key).join(', ')}`,
+        variant: 'error',
+      });
+      return;
+    }
+
     startTransition(async () => {
       try {
         await updateProfileBasics({
-          full_name: fullName.trim() || undefined,
-          date_of_birth: dob.trim() || undefined,
-          profession: profession.trim() || undefined,
+          default_engineer_name: name.trim() || undefined,
           company_name: companyName.trim() || undefined,
-          default_engineer_name: engineerName.trim() || undefined,
-          default_engineer_id: engineerId.trim() || undefined,
+          company_address: companyAddressLine1.trim() || undefined,
+          company_address_line2: companyAddressLine2.trim() || undefined,
+          company_town: companyAddressLine3.trim() || undefined,
+          company_postcode: companyPostcode.trim() || undefined,
+          company_phone: companyPhone.trim() || undefined,
           gas_safe_number: gasSafeNumber.trim() || undefined,
+          default_engineer_id: engineerId.trim() || undefined,
         });
-        const certsChanged = certs.sort().join(',') !== initialCerts.sort().join(',');
-        if (certsChanged) {
-          await updateCertifications(certs);
-        }
-        await markOnboardingComplete();
-        pushToast({ title: 'Profile updated', description: 'Preferences saved.', variant: 'success' });
+        pushToast({ title: 'Settings updated', description: 'Company / installer details saved.', variant: 'success' });
       } catch (error) {
         pushToast({
-          title: 'Unable to save preferences',
+          title: 'Unable to save settings',
           description: error instanceof Error ? error.message : 'Please try again.',
           variant: 'error',
         });
@@ -70,23 +85,24 @@ export function ProfilePreferences({
   };
 
   const dirty =
-    certs.sort().join(',') !== initialCerts.sort().join(',') ||
-    fullName !== initialName ||
-    dob !== initialDob ||
-    profession !== initialProfession ||
+    name !== initialName ||
     companyName !== initialCompanyName ||
-    engineerName !== initialEngineerName ||
-    engineerId !== initialEngineerId ||
-    gasSafeNumber !== initialGasSafeNumber;
+    companyAddressLine1 !== initialCompanyAddressLine1 ||
+    companyAddressLine2 !== initialCompanyAddressLine2 ||
+    companyAddressLine3 !== initialCompanyAddressLine3 ||
+    companyPostcode !== initialCompanyPostcode ||
+    companyPhone !== initialCompanyPhone ||
+    gasSafeNumber !== initialGasSafeNumber ||
+    engineerId !== initialEngineerId;
 
   return (
     <section className="rounded-3xl border border-white/20 bg-white/80 p-6 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Profile preferences</p>
-          <h2 className="text-lg font-semibold text-muted">Onboarding details</h2>
+          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Account details</p>
+          <h2 className="text-lg font-semibold text-muted">Company / installer</h2>
           <p className="text-sm text-muted-foreground/70">
-            Update your profile and certifications. This controls certificate filtering and onboarding status.
+            These values prefill PDF company / installer sections.
           </p>
         </div>
         <Button onClick={handleSave} disabled={isPending || !dirty}>
@@ -94,148 +110,89 @@ export function ProfilePreferences({
         </Button>
       </div>
 
-      <div className="mt-6 grid gap-5 md:grid-cols-2">
-        <div className="space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-muted">Profile</p>
-            <p className="text-xs text-muted-foreground/70">Update your name, birth date, and profession.</p>
-          </div>
-          <label className="block text-sm font-semibold text-muted">
-            Full name
-            <input
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              disabled={isPending}
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Date of birth
-            <input
-              value={dob ?? ''}
-              onChange={(e) => setDob(e.target.value)}
-              type="date"
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              disabled={isPending}
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Profession
-            <input
-              value={profession ?? ''}
-              onChange={(e) => setProfession(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              placeholder="Plumber, Gas Engineer..."
-              disabled={isPending}
-            />
-          </label>
-          <div className="pt-2">
-            <p className="text-sm font-semibold text-muted">Engineer & company</p>
-            <p className="text-xs text-muted-foreground/70">
-              These details prefill engineer and company fields on certificates.
-            </p>
-          </div>
-          <label className="block text-sm font-semibold text-muted">
-            Engineer name
-            <input
-              value={engineerName ?? ''}
-              onChange={(e) => setEngineerName(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              placeholder="Engineer name"
-              disabled={isPending}
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Company name
-            <input
-              value={companyName ?? ''}
-              onChange={(e) => setCompanyName(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              placeholder="Company name"
-              disabled={isPending}
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Engineer ID card number
-            <input
-              value={engineerId ?? ''}
-              onChange={(e) => setEngineerId(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              placeholder="Optional"
-              disabled={isPending}
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Gas Safe number
-            <input
-              value={gasSafeNumber ?? ''}
-              onChange={(e) => setGasSafeNumber(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              placeholder="Optional"
-              disabled={isPending}
-            />
-          </label>
-        </div>
-        <PreferenceGroup
-          title="Certifications"
-          subtitle="Select your current credentials."
-          options={CERTIFICATIONS as unknown as string[]}
-          selected={certs}
-          onToggle={(value) => toggle(value, setCerts, certs)}
-        />
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <label className="block text-sm font-semibold text-muted">
+          Name
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Company
+          <input
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted md:col-span-2">
+          Address line 1
+          <input
+            value={companyAddressLine1}
+            onChange={(e) => setCompanyAddressLine1(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted md:col-span-2">
+          Address line 2
+          <input
+            value={companyAddressLine2}
+            onChange={(e) => setCompanyAddressLine2(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted md:col-span-2">
+          Address line 3
+          <input
+            value={companyAddressLine3}
+            onChange={(e) => setCompanyAddressLine3(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Postcode
+          <input
+            value={companyPostcode}
+            onChange={(e) => setCompanyPostcode(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Tel No.
+          <input
+            value={companyPhone}
+            onChange={(e) => setCompanyPhone(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Gas Safe Reg
+          <input
+            value={gasSafeNumber}
+            onChange={(e) => setGasSafeNumber(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          ID Card No.
+          <input
+            value={engineerId}
+            onChange={(e) => setEngineerId(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
       </div>
-      <p className="mt-4 text-xs text-muted-foreground/70">
-        Saving marks onboarding as complete. You can update these anytime.
-      </p>
     </section>
-  );
-}
-
-function PreferenceGroup({
-  title,
-  subtitle,
-  options,
-  selected,
-  onToggle,
-}: {
-  title: string;
-  subtitle: string;
-  options: string[];
-  selected: string[];
-  onToggle: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <p className="text-sm font-semibold text-muted">{title}</p>
-        <p className="text-xs text-muted-foreground/70">{subtitle}</p>
-      </div>
-      <div className="grid gap-2">
-        {options.map((option) => {
-          const isSelected = selected.includes(option);
-          return (
-            <button
-              key={option}
-              type="button"
-              onClick={() => onToggle(option)}
-              className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
-                isSelected
-                  ? 'border-[var(--action)] bg-[var(--action)]/10 text-[var(--brand)]'
-                  : 'border-white/50 bg-white/80 text-muted hover:border-[var(--accent)]/50'
-              }`}
-            >
-              <span className="font-semibold">{option}</span>
-              {isSelected ? (
-                <span className="rounded-full bg-[var(--action)] px-3 py-1 text-[11px] font-bold uppercase text-white">
-                  Selected
-                </span>
-              ) : (
-                <span className="text-[11px] font-semibold uppercase text-muted-foreground/60">Tap to select</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
   );
 }

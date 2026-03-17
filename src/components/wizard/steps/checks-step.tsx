@@ -14,6 +14,8 @@ export type ChecksStepValues = {
   operating_pressure?: string;
   gas_rate?: string;
   co_reading_ppm?: string;
+  co_reading_high?: string;
+  co_reading_low?: string;
   co2_reading?: string;
   heat_input?: string;
   safety_rating?: string;
@@ -21,6 +23,9 @@ export type ChecksStepValues = {
   warning_notice_issued?: string;
   remedial_action?: string;
   defect_description?: string;
+  safety_devices_correct?: string;
+  flue_performance_test?: string;
+  appliance_serviced?: string;
 };
 
 export type ChecksStepNotes = {
@@ -44,6 +49,10 @@ type ChecksStepProps = {
   heatInputUnit?: string;
   coReadingLabel?: string;
   co2ReadingLabel?: string;
+  combustionHighLabel?: string;
+  combustionLowLabel?: string;
+  measurementSource?: 'manual' | 'tpi';
+  measurementReadOnly?: boolean;
 };
 
 const hasKey = (values: ChecksStepValues, key: keyof ChecksStepValues) =>
@@ -75,6 +84,10 @@ export function ChecksStep({
   heatInputUnit = 'kW',
   coReadingLabel = 'CO reading',
   co2ReadingLabel = 'CO2 reading',
+  combustionHighLabel = 'Combustion (high)',
+  combustionLowLabel = 'Combustion (low)',
+  measurementSource = 'manual',
+  measurementReadOnly = false,
 }: ChecksStepProps) {
   const ventilationValue = normalizePassFail(values.ventilation_satisfactory);
   const flueValue = normalizePassFail(values.flue_condition);
@@ -82,10 +95,38 @@ export function ChecksStep({
   const tightnessValue = normalizePassFail(values.gas_tightness_test);
   const safetyValue = values.safety_rating ?? '';
   const isSafe = safetyValue.toLowerCase() === 'safe';
+  const measurementNote = measurementSource === 'tpi' ? 'Captured from meter' : undefined;
 
   return (
     <div className="space-y-4">
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Measurements</p>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
+        {hasKey(values, 'co_reading_high') ? (
+          <UnitNumberInput
+            label={combustionHighLabel}
+            unit="ppm"
+            value={values.co_reading_high ?? ''}
+            onChange={(val) => onChange({ co_reading_high: val })}
+            placeholder={combustionHighLabel}
+            disabled={measurementReadOnly}
+            note={measurementNote}
+          />
+        ) : null}
+
+        {hasKey(values, 'co_reading_low') ? (
+          <UnitNumberInput
+            label={combustionLowLabel}
+            unit="ppm"
+            value={values.co_reading_low ?? ''}
+            onChange={(val) => onChange({ co_reading_low: val })}
+            placeholder={combustionLowLabel}
+            disabled={measurementReadOnly}
+            note={measurementNote}
+          />
+        ) : null}
+
         {hasKey(values, 'ventilation_satisfactory') ? (
           <div className="space-y-2">
             <PassFailToggle
@@ -165,6 +206,8 @@ export function ChecksStep({
             value={values.operating_pressure ?? ''}
             onChange={(val) => onChange({ operating_pressure: val })}
             placeholder={operatingPressureLabel}
+            disabled={measurementReadOnly}
+            note={measurementNote}
           />
         ) : null}
 
@@ -175,6 +218,8 @@ export function ChecksStep({
             value={values.gas_rate ?? ''}
             onChange={(val) => onChange({ gas_rate: val })}
             placeholder={gasRateLabel}
+            disabled={measurementReadOnly}
+            note={measurementNote}
           />
         ) : null}
 
@@ -185,6 +230,8 @@ export function ChecksStep({
             value={values.co_reading_ppm ?? ''}
             onChange={(val) => onChange({ co_reading_ppm: val })}
             placeholder={coReadingLabel}
+            disabled={measurementReadOnly}
+            note={measurementNote}
           />
         ) : null}
 
@@ -195,6 +242,8 @@ export function ChecksStep({
             value={values.co2_reading ?? ''}
             onChange={(val) => onChange({ co2_reading: val })}
             placeholder={co2ReadingLabel}
+            disabled={measurementReadOnly}
+            note={measurementNote}
           />
         ) : null}
 
@@ -205,12 +254,38 @@ export function ChecksStep({
             value={values.heat_input ?? ''}
             onChange={(val) => onChange({ heat_input: val })}
             placeholder={heatInputLabel}
+            disabled={measurementReadOnly}
+            note={measurementNote}
           />
         ) : null}
       </div>
 
       {hasKey(values, 'safety_rating') ? (
         <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Safety checks</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {hasKey(values, 'safety_devices_correct') ? (
+              <PassFailToggle
+                label="Safety devices correct"
+                value={normalizePassFail(values.safety_devices_correct)}
+                onChange={(val) => onChange({ safety_devices_correct: val ?? '' })}
+              />
+            ) : null}
+            {hasKey(values, 'flue_performance_test') ? (
+              <PassFailToggle
+                label="Flue performance test"
+                value={normalizePassFail(values.flue_performance_test)}
+                onChange={(val) => onChange({ flue_performance_test: val ?? '' })}
+              />
+            ) : null}
+            {hasKey(values, 'appliance_serviced') ? (
+              <PassFailToggle
+                label="Appliance serviced"
+                value={normalizePassFail(values.appliance_serviced)}
+                onChange={(val) => onChange({ appliance_serviced: val ?? '' })}
+              />
+            ) : null}
+          </div>
           <EnumChips label="Safety rating" value={safetyValue} options={safetyOptions} onChange={(val) => onChange({ safety_rating: val })} />
           {!isSafe ? (
             <div className="grid gap-3 sm:grid-cols-2">

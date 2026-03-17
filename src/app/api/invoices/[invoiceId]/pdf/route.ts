@@ -17,7 +17,11 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: invoice, error: invoiceErr } = await sb
+  // Invoices tables are not in the generated types yet; use an untyped handle.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anySb = sb as any;
+
+  const { data: invoice, error: invoiceErr } = await anySb
     .from('invoices')
     .select('*')
     .eq('id', invoiceId)
@@ -27,7 +31,7 @@ export async function POST(
     return NextResponse.json({ error: invoiceErr?.message ?? 'Invoice not found' }, { status: 404 });
   }
 
-  const { data: lineItems, error: itemsErr } = await sb
+  const { data: lineItems, error: itemsErr } = await anySb
     .from('invoice_line_items')
     .select('*')
     .eq('invoice_id', invoiceId)
@@ -56,6 +60,14 @@ export async function POST(
     .eq('id', user.id)
     .maybeSingle();
 
+  type InvoiceLineItem = {
+    description?: string | null;
+    quantity?: number | null;
+    unit_price?: number | null;
+    vat_exempt?: boolean | null;
+  };
+  const normalizedItems = (lineItems ?? []) as InvoiceLineItem[];
+
   const pdfBytes = await renderInvoicePdf({
     invoice_number: invoice.invoice_number ?? 'Invoice',
     status: invoice.status ?? 'draft',
@@ -80,7 +92,7 @@ export async function POST(
       title: job?.title ?? null,
       address: job?.address ?? null,
     },
-    lineItems: (lineItems ?? []).map((item) => ({
+    lineItems: normalizedItems.map((item) => ({
       description: item.description ?? '',
       quantity: Number(item.quantity ?? 0),
       unit_price: Number(item.unit_price ?? 0),
@@ -89,8 +101,10 @@ export async function POST(
   });
 
   const admin = await supabaseServerServiceRole();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anyAdmin = admin as any;
   const storagePath = `${user.id}/${invoiceId}.pdf`;
-  const { error: uploadErr } = await admin.storage.from('invoices').upload(storagePath, pdfBytes, {
+  const { error: uploadErr } = await anyAdmin.storage.from('invoices').upload(storagePath, pdfBytes, {
     contentType: 'application/pdf',
     upsert: true,
   });
@@ -98,9 +112,9 @@ export async function POST(
     return NextResponse.json({ error: uploadErr.message }, { status: 500 });
   }
 
-  await admin.from('invoices').update({ pdf_path: storagePath }).eq('id', invoiceId);
+  await anyAdmin.from('invoices').update({ pdf_path: storagePath }).eq('id', invoiceId);
 
-  const { data: signed, error: signedErr } = await admin.storage
+  const { data: signed, error: signedErr } = await anyAdmin.storage
     .from('invoices')
     .createSignedUrl(storagePath, 60 * 60 * 24);
   if (signedErr || !signed?.signedUrl) {

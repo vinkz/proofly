@@ -111,10 +111,11 @@ export async function createInvoiceForJob(jobId: string) {
     .maybeSingle();
   if (insertErr || !created) throw new Error(insertErr?.message ?? 'Unable to create invoice');
 
-  const invoiceNumber = buildInvoiceNumber(created.id);
+  const createdRow = created as { id: string };
+  const invoiceNumber = buildInvoiceNumber(createdRow.id);
   const { data: updated, error: updateErr } = await fromInvoices(sb)
     .update({ invoice_number: invoiceNumber })
-    .eq('id', created.id)
+    .eq('id', createdRow.id)
     .select('*')
     .maybeSingle();
   if (updateErr || !updated) throw new Error(updateErr?.message ?? 'Unable to set invoice number');
@@ -132,10 +133,10 @@ export async function getInvoice(invoiceId: string) {
     .maybeSingle();
   if (invoiceErr || !invoice) throw new Error(invoiceErr?.message ?? 'Invoice not found');
 
-  const { data: lineItems, error: itemsErr } = await fromInvoiceLineItems(sb)
+  const { data: lineItems, error: itemsErr } = await (fromInvoiceLineItems(sb)
     .select('*')
     .eq('invoice_id', invoiceId)
-    .order('position', { ascending: true });
+    .order('position', { ascending: true }) as unknown as Promise<{ data: InvoiceLineItemRow[] | null; error: { message: string } | null }>);
   if (itemsErr) throw new Error(itemsErr.message);
 
   return {
@@ -146,11 +147,11 @@ export async function getInvoice(invoiceId: string) {
 
 export async function listInvoicesForJob(jobId: string) {
   const { sb, user } = await getAuthedClient();
-  const { data, error } = await fromInvoices(sb)
+  const { data, error } = await (fromInvoices(sb)
     .select('*')
     .eq('job_id', jobId)
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }) as unknown as Promise<{ data: InvoiceRow[] | null; error: { message: string } | null }>);
   if (error) throw new Error(error.message);
   return (data ?? []) as InvoiceRow[];
 }
@@ -165,7 +166,9 @@ export async function upsertLineItems(invoiceId: string, items: InvoiceLineItemI
     .maybeSingle();
   if (invoiceErr || !invoice) throw new Error(invoiceErr?.message ?? 'Invoice not found');
 
-  const { error: deleteErr } = await fromInvoiceLineItems(sb).delete().eq('invoice_id', invoiceId);
+  const { error: deleteErr } = await (fromInvoiceLineItems(sb).delete().eq('invoice_id', invoiceId) as unknown as Promise<{
+    error: { message: string } | null;
+  }>);
   if (deleteErr) throw new Error(deleteErr.message);
 
   if (!items.length) return [];
@@ -179,10 +182,10 @@ export async function upsertLineItems(invoiceId: string, items: InvoiceLineItemI
     vat_exempt: item.vat_exempt ?? false,
   }));
 
-  const { data: inserted, error: insertErr } = await fromInvoiceLineItems(sb)
+  const { data: inserted, error: insertErr } = await (fromInvoiceLineItems(sb)
     .insert(rows)
     .select('*')
-    .order('position', { ascending: true });
+    .order('position', { ascending: true }) as unknown as Promise<{ data: InvoiceLineItemRow[] | null; error: { message: string } | null }>);
   if (insertErr) throw new Error(insertErr.message);
 
   return (inserted ?? []) as InvoiceLineItemRow[];

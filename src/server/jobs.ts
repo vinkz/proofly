@@ -857,7 +857,7 @@ export async function finalizeJobReport(jobId: string, kind: ReportKind) {
 
   revalidatePath('/dashboard');
   revalidatePath(`/jobs/${jobId}`);
-  revalidatePath(`/reports/${jobId}`);
+  revalidatePath(`/documents/${jobId}`);
   revalidatePath(`/jobs/new/${jobId}/ai`);
 
   return { storagePath, signedUrl, summary };
@@ -881,7 +881,7 @@ export async function createGasBreakdownReport(payload: ReportPdfInput) {
   });
 
   revalidatePath(`/jobs/${input.jobId}`);
-  revalidatePath(`/reports/${input.jobId}`);
+  revalidatePath(`/documents/${input.jobId}`);
 
   return { ...renderResult, storagePath, signedUrl };
 }
@@ -929,7 +929,7 @@ export async function createCommissioningChecklistReport(payload: ReportPdfInput
   });
 
   revalidatePath(`/jobs/${input.jobId}`);
-  revalidatePath(`/reports/${input.jobId}`);
+  revalidatePath(`/documents/${input.jobId}`);
 
   return { ...renderResult, storagePath, signedUrl };
 }
@@ -1012,6 +1012,6 @@ export async function sendReportEmail(jobId: string, payload: FormData | Record<
   });
   if (insertErr) throw new Error(insertErr.message);
 
-  revalidatePath(`/reports/${jobId}`);
+  revalidatePath(`/documents/${jobId}`);
   return { ok: true };
 }

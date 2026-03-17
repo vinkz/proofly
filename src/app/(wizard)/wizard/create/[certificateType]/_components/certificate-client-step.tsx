@@ -7,8 +7,7 @@ import { useForm } from 'react-hook-form';
 import type { CertificateType } from '@/types/certificates';
 import type { ClientListItem } from '@/types/client';
 import { createClient } from '@/server/clients';
-import { assignClientToJob, createJob, saveCp12JobInfo } from '@/server/certificates';
-import { getProfile } from '@/server/profile';
+import { assignClientToJob, createJob } from '@/server/certificates';
 import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,29 +26,22 @@ type CertificateClientStepProps = {
   certificateType: CertificateType;
   clients: ClientListItem[];
   totalSteps: number;
+  jobId?: string | null;
 };
 
-export function CertificateClientStep({ certificateType, clients, totalSteps }: CertificateClientStepProps) {
+export function CertificateClientStep({
+  certificateType,
+  clients,
+  totalSteps,
+  jobId: initialJobId = null,
+}: CertificateClientStepProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [clientOptions, setClientOptions] = useState(clients);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [showNewClientForm, setShowNewClientForm] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [profileDefaults, setProfileDefaults] = useState({
-    engineer_name: '',
-    gas_safe_number: '',
-    company_name: '',
-  });
-  const [cp12Info, setCp12Info] = useState({
-    customer_name: '',
-    property_address: '',
-    postcode: '',
-    landlord_name: '',
-    landlord_address: '',
-    reg_26_9_confirmed: false,
-  });
+  const [jobId, setJobId] = useState<string | null>(initialJobId);
   const { register, handleSubmit, reset } = useForm<ClientFormValues>({
     defaultValues: { name: '', organization: '', email: '', phone: '', address: '' },
   });
@@ -61,55 +53,24 @@ export function CertificateClientStep({ certificateType, clients, totalSteps }: 
     router.push(`/wizard/create/${certificateType}?jobId=${jobId}&clientStep=1`);
   };
 
-  const findClient = (clientId: string) =>
-    clientOptions.find(
-      (client) => client.id === clientId || (client.client_ids ?? []).includes(clientId),
-    ) ?? null;
-
-  const applyClientDefaults = (client: ClientListItem | null) => {
-    if (!client) return;
-    setCp12Info((prev) => ({
-      customer_name: prev.customer_name.trim() || client.name || '',
-      property_address: prev.property_address.trim() || client.address || '',
-      postcode: prev.postcode.trim() || client.postcode || '',
-      landlord_name: prev.landlord_name.trim() || client.landlord_name || '',
-      landlord_address: prev.landlord_address.trim() || client.landlord_address || '',
-      reg_26_9_confirmed: prev.reg_26_9_confirmed,
-    }));
-  };
-
-  const loadProfileDefaults = async () => {
-    try {
-      const { profile } = await getProfile();
-      setProfileDefaults({
-        engineer_name: profile?.default_engineer_name ?? profile?.full_name ?? '',
-        gas_safe_number: profile?.gas_safe_number ?? '',
-        company_name: profile?.company_name ?? '',
-      });
-    } catch {
-      setProfileDefaults({ engineer_name: '', gas_safe_number: '', company_name: '' });
-    }
-  };
-
   const handleSelect = (clientId: string) => {
     startTransition(async () => {
       try {
         setShowNewClientForm(false);
-        const client = findClient(clientId);
-        if (isCp12 && jobId) {
-          await assignClientToJob({ jobId, clientId });
-          applyClientDefaults(client);
+        let targetJobId = jobId;
+        if (isCp12) {
+          if (targetJobId) {
+            await assignClientToJob({ jobId: targetJobId, clientId });
+          } else {
+            const { jobId: createdJobId } = await createJob({ certificateType, clientId });
+            targetJobId = createdJobId;
+            setJobId(createdJobId);
+          }
           pushToast({ title: 'Client selected', variant: 'success' });
+          router.push(`/wizard/create/${certificateType}?jobId=${targetJobId}`);
           return;
         }
         const { jobId: createdJobId } = await createJob({ certificateType, clientId });
-        if (isCp12) {
-          setJobId(createdJobId);
-          applyClientDefaults(client);
-          await loadProfileDefaults();
-          pushToast({ title: 'Client selected', variant: 'success' });
-          return;
-        }
         pushToast({ title: 'Client selected', variant: 'success' });
         redirectToWizard(createdJobId);
       } catch (error) {
@@ -144,17 +105,18 @@ export function CertificateClientStep({ certificateType, clients, totalSteps }: 
         setClientOptions((prev) => [newClient, ...prev]);
         setSelectedClientId(id);
         if (isCp12) {
-          if (jobId) {
-            await assignClientToJob({ jobId, clientId: id });
+          let targetJobId = jobId;
+          if (targetJobId) {
+            await assignClientToJob({ jobId: targetJobId, clientId: id });
           } else {
             const { jobId: createdJobId } = await createJob({ certificateType, clientId: id });
+            targetJobId = createdJobId;
             setJobId(createdJobId);
           }
-          applyClientDefaults(newClient);
-          await loadProfileDefaults();
           pushToast({ title: 'Client created', variant: 'success' });
           reset();
           setShowNewClientForm(false);
+          router.push(`/wizard/create/${certificateType}?jobId=${targetJobId}`);
           return;
         }
         const { jobId: createdJobId } = await createJob({ certificateType, clientId: id });
@@ -170,40 +132,6 @@ export function CertificateClientStep({ certificateType, clients, totalSteps }: 
       }
     });
   });
-
-  const handleCp12Continue = () => {
-    if (!jobId) {
-      pushToast({ title: 'Select a client first', description: 'Choose a client to continue.', variant: 'error' });
-      return;
-    }
-    startTransition(async () => {
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        await saveCp12JobInfo({
-          jobId,
-          data: {
-            customer_name: cp12Info.customer_name,
-            property_address: cp12Info.property_address,
-            postcode: cp12Info.postcode,
-            inspection_date: today,
-            landlord_name: cp12Info.landlord_name,
-            landlord_address: cp12Info.landlord_address,
-            reg_26_9_confirmed: cp12Info.reg_26_9_confirmed,
-            engineer_name: profileDefaults.engineer_name,
-            gas_safe_number: profileDefaults.gas_safe_number,
-            company_name: profileDefaults.company_name,
-          },
-        });
-        router.push(`/wizard/create/cp12?jobId=${jobId}&clientStep=1&skipJobInfo=1`);
-      } catch (error) {
-        pushToast({
-          title: 'Unable to save job info',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
 
   return (
     <WizardLayout step={1} total={totalSteps} title="Select or create client" status="Client">
@@ -309,59 +237,6 @@ export function CertificateClientStep({ certificateType, clients, totalSteps }: 
           ) : null}
         </div>
 
-        {isCp12 ? (
-          <div className="rounded-2xl border border-white/20 bg-white/70 p-4 shadow-inner">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                value={cp12Info.customer_name}
-                onChange={(e) => setCp12Info((prev) => ({ ...prev, customer_name: e.target.value }))}
-                placeholder="Customer name"
-                disabled={!jobId}
-              />
-              <Input
-                value={cp12Info.property_address}
-                onChange={(e) => setCp12Info((prev) => ({ ...prev, property_address: e.target.value }))}
-                placeholder="Property address"
-                className="sm:col-span-2"
-                disabled={!jobId}
-              />
-              <Input
-                value={cp12Info.postcode}
-                onChange={(e) => setCp12Info((prev) => ({ ...prev, postcode: e.target.value }))}
-                placeholder="Postcode"
-                disabled={!jobId}
-              />
-              <Input
-                value={cp12Info.landlord_name}
-                onChange={(e) => setCp12Info((prev) => ({ ...prev, landlord_name: e.target.value }))}
-                placeholder="Landlord / Agent name"
-                disabled={!jobId}
-              />
-              <Input
-                value={cp12Info.landlord_address}
-                onChange={(e) => setCp12Info((prev) => ({ ...prev, landlord_address: e.target.value }))}
-                placeholder="Landlord / Agent address"
-                className="sm:col-span-2"
-                disabled={!jobId}
-              />
-              <label className="flex items-start gap-3 text-sm text-muted sm:col-span-2">
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
-                  checked={cp12Info.reg_26_9_confirmed}
-                  onChange={(e) => setCp12Info((prev) => ({ ...prev, reg_26_9_confirmed: e.target.checked }))}
-                  disabled={!jobId}
-                />
-                Regulation 26(9) confirmed
-              </label>
-            </div>
-            <div className="mt-4 flex justify-end">
-              <Button onClick={handleCp12Continue} disabled={isPending || !jobId}>
-                Continue to Job Info
-              </Button>
-            </div>
-          </div>
-        ) : null}
       </div>
     </WizardLayout>
   );

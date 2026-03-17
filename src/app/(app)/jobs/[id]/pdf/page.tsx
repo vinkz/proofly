@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { PdfPreview } from '@/components/certificates/pdf-preview';
 import { DocumentActions } from './_components/document-actions';
+import { DocumentBackButton } from './_components/back-button';
 import { isUUID } from '@/lib/ids';
 import { getCertificatePdfSignedUrl, getCertificateState } from '@/server/certificates';
 import { listInvoicesForJob } from '@/server/invoices';
@@ -46,6 +47,17 @@ export default async function JobPdfPage({
   if (jobError) throw new Error(jobError.message);
   if (!job) notFound();
   const jobRow = job as Database['public']['Tables']['jobs']['Row'];
+  const clientId = jobRow.client_id;
+  const client =
+    clientId && typeof clientId === 'string'
+      ? (
+          await supabase
+            .from('clients')
+            .select('id, name, email, phone')
+            .eq('id', clientId)
+            .maybeSingle()
+        ).data
+      : null;
 
   let pdfUrl: string | null = null;
   let pdfError: string | null = null;
@@ -82,10 +94,12 @@ export default async function JobPdfPage({
 
   const title = jobRow.title ?? 'Document';
   const invoice = invoices[0] ?? null;
+  const hasDocument = Boolean(report?.id);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
+        <DocumentBackButton fallbackHref={`/jobs/${id}`} />
         <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Document Preview</p>
         <h1 className="text-2xl font-semibold text-muted">{title}</h1>
         <p className="text-sm text-muted-foreground/70">
@@ -95,9 +109,13 @@ export default async function JobPdfPage({
 
       <DocumentActions
         jobId={id}
+        jobTitle={title}
         pdfUrl={pdfUrl}
         pdfPath={pdfPath}
         invoiceId={invoice?.id ?? null}
+        hasDocument={hasDocument}
+        clientEmail={(client as { email?: string | null } | null)?.email ?? null}
+        clientPhone={(client as { phone?: string | null } | null)?.phone ?? null}
       />
       <PdfPreview url={pdfUrl} error={pdfError} />
     </div>
