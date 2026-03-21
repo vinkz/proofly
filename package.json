@@ -2,6 +2,7 @@
   "name": "plumblog",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -26,13 +27,13 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "next": "15.5.5",
+    "next": "15.5.7",
     "openai": "^6.3.0",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "19.1.2",
+    "react-dom": "19.1.2",
     "react-hook-form": "^7.65.0",
     "uuid": "^13.0.0",
     "zod": "^4.1.12"
@@ -46,7 +47,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.5.5",
+    "eslint-config-next": "15.5.7",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.2.4"
