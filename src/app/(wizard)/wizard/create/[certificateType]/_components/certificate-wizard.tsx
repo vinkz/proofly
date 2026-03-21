@@ -37,6 +37,7 @@ import {
 } from '@/types/cp12';
 import { saveJobFields } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
+import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
 
 type WizardProps = {
   jobId: string;
@@ -136,6 +137,12 @@ type ChecklistItem = {
   blocking?: boolean;
 };
 
+type AddressLookupApiResponse = {
+  suggestions?: AddressLookupSuggestion[];
+  address?: AddressLookupResult;
+  error?: string;
+};
+
 const buildPropertyAddressFromJobAddress = (addr: Cp12JobAddressState) =>
   [addr.job_address_line1, addr.job_address_line2, addr.job_address_city].filter((part) => part && part.trim()).join(', ');
 
@@ -206,6 +213,8 @@ export function CertificateWizard({
   const [step, setStep] = useState(() => Math.max(startStep, 1));
   const [isPending, startTransition] = useTransition();
   const [isPostcodeLookupPending, setIsPostcodeLookupPending] = useState(false);
+  const [postcodeSuggestions, setPostcodeSuggestions] = useState<AddressLookupSuggestion[]>([]);
+  const [selectedPostcodeMatchId, setSelectedPostcodeMatchId] = useState<string | null>(null);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const resolvedInitialInfo = mergeJobContextFields(initialInfo, initialJobContext);
   const initialLandlordAddressParts = splitAddressParts(String(resolvedInitialInfo.landlord_address ?? ''));
@@ -503,37 +512,68 @@ export function CertificateWizard({
     setIsPostcodeLookupPending(true);
     try {
       const query = encodeURIComponent(postcode);
-      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&countrycodes=gb&q=${query}`;
-      const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
-      if (!response.ok) throw new Error('Lookup failed');
-      const results: Array<{ display_name?: string; address?: Record<string, string> }> = await response.json();
-      const first = results[0];
-      const address = first?.address ?? {};
-      const building = address.house_number || address.house_name || address.building || '';
-      const street = address.road || address.pedestrian || '';
-      const line1 = [building, street].filter(Boolean).join(' ').trim() || address.road || '';
-      const line2 = address.suburb || address.neighbourhood || address.residential || '';
-      const city = address.city || address.town || address.village || address.hamlet || '';
-      const resolvedPostcode = address.postcode || postcode;
-      const summary = [line1, city].filter((val) => val && val.trim()).join(', ');
-      if (!line1 && !summary && !street) throw new Error('No address found');
-      setJobAddress((prev) => ({
-        ...prev,
-        job_address_line1: line1 || street || summary,
-        job_address_line2: line2,
-        job_address_city: city,
-        job_postcode: resolvedPostcode,
-      }));
-      setInfo((prev) => ({
-        ...prev,
-        property_address: summary || line1 || street || prev.property_address,
-        postcode: resolvedPostcode,
-      }));
-      pushToast({ title: 'Address found', variant: 'success' });
+      const response = await fetch(`/api/address-search?postcode=${query}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const payload = (await response.json()) as AddressLookupApiResponse;
+      if (!response.ok) {
+        throw new Error(payload.error || 'Lookup failed');
+      }
+      const suggestions = payload.suggestions ?? [];
+      if (!suggestions.length) {
+        setPostcodeSuggestions([]);
+        setSelectedPostcodeMatchId(null);
+        throw new Error('No addresses found for that postcode');
+      }
+      setPostcodeSuggestions(suggestions);
+      setSelectedPostcodeMatchId(null);
+      pushToast({
+        title: `${suggestions.length} ${suggestions.length === 1 ? 'address' : 'addresses'} found`,
+        description: 'Select the right property from the list below.',
+        variant: 'success',
+      });
     } catch (error) {
       pushToast({
         title: 'Address not found',
         description: error instanceof Error ? error.message : 'Try a full UK postcode.',
+        variant: 'error',
+      });
+    } finally {
+      setIsPostcodeLookupPending(false);
+    }
+  };
+
+  const handleAddressMatchSelect = async (suggestion: AddressLookupSuggestion) => {
+    setIsPostcodeLookupPending(true);
+    setSelectedPostcodeMatchId(suggestion.id);
+    try {
+      const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const payload = (await response.json()) as AddressLookupApiResponse;
+      if (!response.ok || !payload.address) {
+        throw new Error(payload.error || 'Lookup failed');
+      }
+      const address = payload.address;
+      setJobAddress((prev) => ({
+        ...prev,
+        job_address_name: prev.job_address_name.trim() || address.name,
+        job_address_line1: address.line1,
+        job_address_line2: address.line2,
+        job_address_city: address.city,
+        job_postcode: address.postcode || prev.job_postcode,
+      }));
+      setInfo((prev) => ({
+        ...prev,
+        property_address: address.summary || prev.property_address,
+        postcode: address.postcode || prev.postcode,
+      }));
+      pushToast({ title: 'Address selected', variant: 'success' });
+    } catch (error) {
+      setSelectedPostcodeMatchId(null);
+      pushToast({
+        title: 'Address not found',
+        description: error instanceof Error ? error.message : 'Try again.',
         variant: 'error',
       });
     } finally {
@@ -1139,6 +1179,8 @@ export function CertificateWizard({
                     const value = e.target.value;
                     setJobAddress((prev) => ({ ...prev, job_postcode: value }));
                     setInfo((prev) => ({ ...prev, postcode: value }));
+                    setPostcodeSuggestions([]);
+                    setSelectedPostcodeMatchId(null);
                   }}
                   placeholder="Postcode"
                   className="rounded-2xl sm:flex-1"
@@ -1153,6 +1195,33 @@ export function CertificateWizard({
                   {isPostcodeLookupPending ? 'Finding…' : 'Find address'}
                 </Button>
               </div>
+              {postcodeSuggestions.length ? (
+                <div className="rounded-2xl border border-[var(--line)] bg-white/80 p-3 sm:col-span-2">
+                  <p className="text-sm font-semibold text-muted">Select property</p>
+                  <p className="mt-1 text-xs text-muted-foreground/70">
+                    Choose the correct address for this job from the postcode results.
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {postcodeSuggestions.map((suggestion) => {
+                      const isSelected = selectedPostcodeMatchId === suggestion.id;
+                      return (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          onClick={() => void handleAddressMatchSelect(suggestion)}
+                          className={`rounded-2xl border px-4 py-3 text-left transition ${
+                            isSelected
+                              ? 'border-[var(--action)] bg-[color:var(--action-soft)]'
+                              : 'border-[var(--line)] bg-white hover:border-[var(--brand)] hover:bg-[color:var(--brand-soft)]'
+                          }`}
+                        >
+                          <div className="text-sm font-medium text-muted">{suggestion.label}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
               <Input
                 value={jobAddress.job_tel}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
