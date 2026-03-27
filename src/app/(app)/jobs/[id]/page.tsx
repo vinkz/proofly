@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { JobInvoicesCard } from '@/components/invoices/job-invoices-card';
 import type { Database } from '@/lib/database.types';
 import { isUUID } from '@/lib/ids';
-import { reportKindForJobType } from '@/types/reports';
+import { reportKindForJobType, type ReportKind } from '@/types/reports';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import { listInvoicesForJob } from '@/server/invoices';
 
@@ -45,6 +45,27 @@ const formatLabel = (value: string | null | undefined, fallback: string) =>
 
 const certificateLabelFor = (value: string | null | undefined) =>
   value && value in CERTIFICATE_LABELS ? CERTIFICATE_LABELS[value as CertificateType] : null;
+
+const certificateLabelForReportKind = (value: ReportKind | null | undefined) => {
+  switch (value) {
+    case 'cp12':
+      return CERTIFICATE_LABELS.cp12;
+    case 'boiler_service':
+      return CERTIFICATE_LABELS.gas_service;
+    case 'warning_notice':
+      return CERTIFICATE_LABELS.gas_warning_notice;
+    case 'general_works':
+      return CERTIFICATE_LABELS.general_works;
+    case 'breakdown':
+      return CERTIFICATE_LABELS.breakdown;
+    case 'commissioning':
+      return CERTIFICATE_LABELS.commissioning;
+    case 'job_sheet':
+      return 'Job sheet';
+    default:
+      return null;
+  }
+};
 
 export default async function JobDetailPage({
   params,
@@ -143,7 +164,7 @@ export default async function JobDetailPage({
 
   const relatedCertificates = (certificatesData ?? []) as RelatedCertificate[];
   const primaryCertificateLabel =
-    certificateLabelFor(relatedCertificates[0]?.cert_type) ?? CERTIFICATE_LABELS[reportKind];
+    certificateLabelFor(relatedCertificates[0]?.cert_type) ?? certificateLabelForReportKind(reportKind);
   const jobTitle = job.title?.trim() || primaryCertificateLabel || 'Untitled job';
   const generalPhotos = photosByChecklist.general ?? [];
 
