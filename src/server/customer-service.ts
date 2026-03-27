@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '@/lib/database.types';
-import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 
 export type Customer = {
   id: string;
@@ -138,9 +138,10 @@ export async function upsertCustomerFromJobFields(params: {
   sb?: SupabaseClient<Database>;
   userId?: string | null;
 }) {
-  const sb = params.sb ?? (await supabaseServerServiceRole());
-  const userId = await resolveUserId(sb, 'upsertCustomerFromJobFields', params.userId);
+  const authSb = await supabaseServerAction();
+  const userId = await resolveUserId(authSb, 'upsertCustomerFromJobFields', params.userId);
   if (!userId) throw new Error('Unauthorized');
+  const sb = authSb;
 
   const { data: job, error: jobErr } = await sb
     .from('jobs')

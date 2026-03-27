@@ -21,6 +21,7 @@
 - Data flows through server actions in `src/app` and shared helpers in `src/server`; keep Supabase clients server-side except for SSR helpers in `src/lib`.
 - Client UI pulls typed data via props; shared types in `src/types` keep server/client contracts aligned.
 - Styling uses Tailwind (`tailwind.config.ts`); components favor utility-first classes over bespoke CSS.
+- App navigation is now explicitly client-first: `/dashboard` is the operational home, `/clients` is a first-class destination, and `/jobs/[id]` is treated as a job record with related client/property context.
 - Document preview is canonical at `/jobs/[id]/pdf` (legacy report/pdf routes should redirect here); saved documents live under `/documents` and use Supabase signed URLs.
 - External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, maps via `@googlemaps/google-maps-services-js`; isolate integration code under `src/server`.
 - Job sheets: `src/server/job-sheets.ts` manages `public.job_sheets` codes (CN-XXXXXX) for the job sheet scan flow.
@@ -77,12 +78,22 @@
   - Section order mirrors the PDF: Installer (read-only from account) → Job address → Customer/Landlord → Appliance identity → Appliance checks → Signatures.
   - **Billable customer is removed** from CP12; only job address + landlord/customer are collected.
   - Installer/company + Gas Safe + ID card come from profile; if missing, issuing is blocked and the user is pushed to Settings.
+  - Step 1 now supports inline **client selection/creation** inside the wizard. New clients require only `name`; `phone` and `email` are optional. The job stores the linked `client_id` as the canonical key.
+  - When a client is linked, Step 1 prefills from the canonical client record and can also offer **saved properties** derived from that client’s prior jobs/job fields.
+  - Saved property selection fills property-side fields only: `job_address_name`, `job_address_line1`, `job_address_line2`, `job_address_city`, `job_postcode`, and `job_tel`. Landlord/property-owner fields remain separate for CP12 compliance.
   - Step 1 Job location requires `job_address_name`, `job_address_line1`, `job_postcode`, and `job_tel` (site telephone); `job_address_line2` and `job_address_city` are supported and render on separate PDF address lines.
   - Step 1 Landlord / Property owner uses structured fields: `landlord_name`, `landlord_company` (optional), `landlord_address_line1`, `landlord_address_line2` (optional), `landlord_city`, `landlord_postcode`, `landlord_tel` (optional). For backward compatibility, `landlord_address` is still persisted and used as a fallback.
+  - CP12 Step 1 also supports a **prepare-only** entry path from dashboard upcoming jobs via `?prepare=1`; saving People & Location persists Step 1 data and returns to `/dashboard` without forcing the rest of the wizard.
   - Appliances capped at 5 rows to match the PDF table capacity.
 - CP12 includes a CTA on Step 3 when "Warning notice issued" is YES that deep-links to Gas Warning Notice using the same jobId.
 - CP12 guardrails (docs/specs/cp12.md): property + landlord addresses required and must differ, landlord name required, Reg 26(9) confirmation required, at least one appliance with location & description, engineer + customer signatures required to issue, and if any appliance is unsafe/defective you must capture defect_description, remedial_action, and a warning_notice_issued choice.
 - Public ID chain: jobs get an 8-digit `job_code` and a job-scoped `client_ref` (`{job_code}-01`); certificates get `public_id` (`{job_code}-{CERT_TYPE}-01`). UUIDs remain primary keys for all joins.
+
+## Dashboard & Client-First UX
+- `/dashboard` is now an operational board, not a completed-jobs archive. It emphasizes the current job, grouped upcoming jobs (`Today`, `Tomorrow`, `This week`), and recent clients.
+- Upcoming jobs compute a prep state from saved Step 1 fields. Unprepared jobs show `Prepare`; prepared jobs show `Start`.
+- `/clients` is the main browse surface for customer history and `/clients/[id]` groups that client’s work into current jobs, completed jobs, reports, and calendar context.
+- `/jobs/[id]` now presents job identity first: job title/type/status at the top, with linked client/property context and related certificates/invoices below.
 
 ## Testing Guidelines
 - Framework: Vitest; place specs in `tests/` with `*.test.ts`.

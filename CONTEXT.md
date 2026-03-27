@@ -9,6 +9,11 @@ We focus on the **“Sole Trader Speed”** niche: engineers who need paperwork 
 CertNow is **not** a complex CRM.  
 It is a **high-speed documentation engine**.
 
+The current product direction is now **client-first operationally**:
+- the dashboard is for **upcoming/prep work**
+- clients are the home for **history and completed work**
+- jobs remain the execution record that connects clients to certificates and invoices
+
 ---
 
 ## Core Product Pillars
@@ -89,10 +94,17 @@ Instant generation of branded, industry-standard PDFs that are:
 ### CP12 Wizard (2026-02 refresh)
 - Sections follow the PDF order for a minimal pass: **Installer (prefilled from account) → Job address → Customer/Landlord → Appliance identity → Appliance checks → Sign**.
 - Installer/company + engineer + Gas Safe + ID card values are **pulled from account settings**; the wizard never asks for them. If missing, the issue flow is blocked until the user updates their profile.
+- Step 1 now supports **selecting or creating a client inline**. New client creation requires only:
+  - `name`
+  - `phone` optional
+  - `email` optional
+- When a client is selected, the wizard uses the internal `client_id` as the source of truth and prefills Step 1 from saved client data.
+- If that client has previous jobs, Step 1 can also offer a **saved property** so engineers can reuse property/location details before arriving on site.
 - Job address captures **Name, Address lines, City, Post Code, Tel. No. (site)** and writes to `job_address_*` + `property_postcode`.
 - Customer/Landlord card captures **Name, Company, Address, Post Code, Tel. No.** and writes to `landlord_*` fields; billable customer is **removed** from CP12.
 - Appliance identity captures **Location, Appliance Type, Make, Model, Flue type** (up to **5 appliances** to match the PDF table capacity).
 - Appliance checks capture the inspection table values: **Operating Pressure, Heat Input, combustion readings (hi/lo), Safety device operation, Ventilation, Flue visual/performance, Appliance serviced, Appliance safe to use**, plus defect + warning notice logic.
+- Upcoming jobs can now enter a **prepare-only** CP12 Step 1 flow from the dashboard. Saving Step 1 persists People & Location details and returns the engineer to the dashboard without forcing the full wizard.
 
 - **Logic-Gate Wizard**
   - Mandatory Gas Safe compliance fields
@@ -132,8 +144,8 @@ Instant generation of branded, industry-standard PDFs that are:
 
 ## The “Site-to-Done” UX Flow
 
-1. **Start Job**  
-   Select **CP12**. Choose existing client or *Add New*.
+1. **Prepare or Start Job**  
+   From the dashboard, open an upcoming job. If prep is incomplete, choose **Prepare** to complete Step 1 ahead of the visit. Select an existing client, add a new one, and optionally reuse a saved property.
 
 2. **The Meter**  
    Enter standing and working pressure.  
@@ -161,6 +173,23 @@ Instant generation of branded, industry-standard PDFs that are:
 7. **Done**  
    The engineer walks to the van.  
    Admin is **100% finished**.
+
+---
+
+## Dashboard Direction
+
+The dashboard is intentionally **not** a completed-jobs homepage anymore.
+
+It focuses on:
+- **Current job**
+- **Upcoming jobs** grouped into:
+  - Today
+  - Tomorrow
+  - This week
+- **Recent clients**
+- **Prep state** for upcoming jobs so engineers know whether a visit is ready to start
+
+Completed work is primarily surfaced from the relevant **client page**, not from the homepage.
 
 ---
 

@@ -4,10 +4,10 @@ import { redirect } from 'next/navigation';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import { listJobs } from '@/server/jobs';
+import { listClients } from '@/server/clients';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { JobsListSection } from '@/app/(app)/jobs/JobsListSection';
 
 type BasicJob = {
   id: string;
@@ -18,9 +18,30 @@ type BasicJob = {
   title?: string | null;
   scheduled_for?: string | null;
 };
+type UpcomingJob = BasicJob & { prepComplete: boolean };
+
+type BasicClient = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  updated_at: string | null;
+  created_at: string | null;
+};
+type UpcomingJobGroup = { label: string; jobs: UpcomingJob[] };
 
 const DAY_IN_MS = 86_400_000;
 const FOLLOW_UP_THRESHOLD_DAYS = 7;
+const PREP_REQUIRED_FIELD_KEYS = [
+  'job_address_name',
+  'job_address_line1',
+  'job_postcode',
+  'job_tel',
+  'landlord_name',
+  'landlord_address_line1',
+  'landlord_city',
+  'landlord_postcode',
+] as const;
 
 export default async function DashboardPage() {
   const supabase = await supabaseServerReadOnly();
@@ -30,13 +51,12 @@ export default async function DashboardPage() {
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups] = await Promise.all([getProfile(), listJobs()]);
+  const [{ profile }, jobGroups, clients] = await Promise.all([getProfile(), listJobs(), listClients()]);
   const activeJobs = jobGroups.active as BasicJob[];
-  const completedJobs = jobGroups.completed as BasicJob[];
-  const allJobs: BasicJob[] = [...activeJobs, ...completedJobs];
+  const recentClients = (clients as BasicClient[]).slice(0, 6);
 
   const now = new Date();
-  const awaitingSignatures = allJobs.filter((job) => job.status === 'awaiting_signatures').length;
+  const awaitingSignatures = activeJobs.filter((job) => job.status === 'awaiting_signatures').length;
   const followUpsDue = activeJobs.filter((job) => ageInDays(job.created_at, now) >= FOLLOW_UP_THRESHOLD_DAYS).length;
 
   const currentJob =
@@ -53,11 +73,42 @@ export default async function DashboardPage() {
       ? profile.full_name.trim().split(/\s+/)[0]
       : user.email;
 
-  const invoiceTotalsByMonth = await loadInvoiceTotalsByMonth(supabase, user.id);
-  const upcomingJobs = activeJobs
-    .filter((job) => job.scheduled_for && isWithinDays(job.scheduled_for, now, 30))
+  const upcomingJobsBase = activeJobs
+    .filter((job) => job.scheduled_for && isTodayOrFuture(job.scheduled_for, now))
     .sort((a, b) => new Date(a.scheduled_for ?? '').getTime() - new Date(b.scheduled_for ?? '').getTime())
-    .slice(0, 5);
+    .slice(0, 6);
+  const upcomingJobIds = upcomingJobsBase.map((job) => job.id);
+  const { data: prepFieldRows, error: prepFieldErr } = upcomingJobIds.length
+    ? await supabase
+        .from('job_fields')
+        .select('job_id, field_key, value')
+        .in('job_id', upcomingJobIds)
+        .in('field_key', [...PREP_REQUIRED_FIELD_KEYS])
+    : { data: [], error: null };
+  if (prepFieldErr) throw new Error(prepFieldErr.message);
+
+  const prepFieldsByJob = (prepFieldRows ?? []).reduce<Record<string, Set<string>>>((acc, row) => {
+    const jobId = row.job_id ?? '';
+    const fieldKey = row.field_key ?? '';
+    if (!jobId || !fieldKey || !row.value?.trim()) return acc;
+    const current = acc[jobId] ?? new Set<string>();
+    current.add(fieldKey);
+    acc[jobId] = current;
+    return acc;
+  }, {});
+
+  const upcomingJobs: UpcomingJob[] = upcomingJobsBase.map((job) => {
+    const savedFields = prepFieldsByJob[job.id] ?? new Set<string>();
+    return {
+      ...job,
+      prepComplete: PREP_REQUIRED_FIELD_KEYS.every((field) => savedFields.has(field)),
+    };
+  });
+  const upcomingJobGroups: UpcomingJobGroup[] = [
+    { label: 'Today', jobs: upcomingJobs.filter((job) => isSameDay(job.scheduled_for ?? '', now)) },
+    { label: 'Tomorrow', jobs: upcomingJobs.filter((job) => isTomorrow(job.scheduled_for ?? '', now)) },
+    { label: 'This week', jobs: upcomingJobs.filter((job) => isLaterThisWeek(job.scheduled_for ?? '', now)) },
+  ].filter((group) => group.jobs.length > 0);
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8 px-4 pb-16 pt-6 font-sans text-gray-900 md:pt-10">
@@ -86,69 +137,82 @@ export default async function DashboardPage() {
       <section className="grid gap-4 md:grid-cols-2">
         <Card className="border border-white/10">
           <CardHeader>
-            <CardTitle className="text-lg text-muted">Invoice totals</CardTitle>
+            <CardTitle className="text-lg text-muted">Upcoming jobs</CardTitle>
             <CardDescription className="text-sm text-muted-foreground/70">
-              Last 6 months, all statuses.
+              Scheduled today or later.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-3">
-              {invoiceTotalsByMonth.map((item) => (
-                <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
-                  <div className="w-full rounded-full bg-[var(--muted)]/70 p-1">
-                    <div
-                      className="w-full rounded-full bg-[var(--accent)]"
-                      style={{ height: `${item.height}px` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground/70">{item.label}</p>
+          <CardContent className="space-y-3">
+            {upcomingJobGroups.length ? (
+              upcomingJobGroups.map((group) => (
+                <div key={group.label} className="space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{group.label}</p>
+                  {group.jobs.map((job) => (
+                    <div key={job.id} className="rounded-2xl border border-white/10 bg-white/40 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-muted">{job.client_name ?? job.title ?? 'Job'}</p>
+                          <p className="text-xs text-muted-foreground/70">{job.address}</p>
+                          <p className="mt-1 text-xs text-muted-foreground/70">
+                            {formatDateTime(job.scheduled_for ?? '')}
+                          </p>
+                          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                            {job.prepComplete ? 'Prepared' : 'Prep needed'}
+                          </p>
+                        </div>
+                        <Badge variant="brand" className="uppercase">
+                          {job.status ?? 'draft'}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 flex justify-end">
+                        <Button asChild variant="secondary" className="rounded-full">
+                          <Link href={job.prepComplete ? `/jobs/${job.id}` : `/wizard/create/cp12?jobId=${job.id}&prepare=1`}>
+                            {getUpcomingJobActionLabel(job.prepComplete)}
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="mt-3 flex justify-between text-xs text-muted-foreground/70">
-              <span>£{invoiceTotalsByMonth[0]?.total.toFixed(0) ?? '0'}</span>
-              <span>£{invoiceTotalsByMonth[invoiceTotalsByMonth.length - 1]?.total.toFixed(0) ?? '0'}</span>
-            </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground/70">No upcoming scheduled jobs.</p>
+            )}
           </CardContent>
         </Card>
 
         <Card className="border border-white/10">
           <CardHeader>
-            <CardTitle className="text-lg text-muted">Upcoming jobs</CardTitle>
+            <CardTitle className="text-lg text-muted">Recent clients</CardTitle>
             <CardDescription className="text-sm text-muted-foreground/70">
-              Next 30 days.
+              Recently updated client records.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {upcomingJobs.length ? (
-              upcomingJobs.map((job) => (
-                <div key={job.id} className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-muted">
-                      {job.title ?? job.client_name ?? 'Job'}
-                    </p>
-                    <p className="text-xs text-muted-foreground/70">{job.address}</p>
+            {recentClients.length ? (
+              recentClients.map((client) => (
+                <div key={client.id} className="rounded-2xl border border-white/10 bg-white/40 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-muted">{client.name}</p>
+                      <p className="text-xs text-muted-foreground/70">
+                        {client.phone ?? client.email ?? 'No contact details'}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground/70">
+                        Last activity {formatDateTime(client.updated_at ?? client.created_at ?? '')}
+                      </p>
+                    </div>
+                    <Button asChild variant="secondary" className="rounded-full">
+                      <Link href={`/clients/${client.id}`}>Open</Link>
+                    </Button>
                   </div>
-                  <span className="rounded-full bg-[var(--muted)] px-3 py-1 text-xs text-muted-foreground/70">
-                    {formatDate(job.scheduled_for ?? '')}
-                  </span>
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground/70">No scheduled jobs in the next 30 days.</p>
+              <p className="text-sm text-muted-foreground/70">No clients yet.</p>
             )}
           </CardContent>
         </Card>
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-xl font-semibold text-muted">Jobs</h2>
-          <p className="text-sm text-muted-foreground/70">
-            Search, filter, and jump into any job in your pipeline.
-          </p>
-        </div>
-        <JobsListSection jobs={[...activeJobs, ...completedJobs] as Array<Record<string, unknown>>} />
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[2fr,1fr]">
@@ -239,6 +303,7 @@ function formatDate(dateString: string) {
 }
 
 function formatDateTime(dateString: string) {
+  if (!dateString) return 'Unknown';
   return new Date(dateString).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -247,104 +312,48 @@ function formatDateTime(dateString: string) {
   });
 }
 
-function isWithinDays(dateString: string | null | undefined, reference: Date, days: number) {
+function isTodayOrFuture(dateString: string | null | undefined, reference: Date) {
   if (!dateString) return false;
   const target = new Date(dateString).getTime();
   if (Number.isNaN(target)) return false;
-  const diff = target - reference.getTime();
-  return diff >= 0 && diff <= days * DAY_IN_MS;
+  const todayStart = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate()).getTime();
+  return target >= todayStart;
 }
 
-async function loadInvoiceTotalsByMonth(
-  supabase: Awaited<ReturnType<typeof supabaseServerReadOnly>>,
-  userId: string,
-) {
-  try {
-    type UntypedQuery = {
-      select: (columns?: string) => UntypedQuery;
-      eq: (column: string, value: unknown) => UntypedQuery;
-      in: (column: string, values: unknown[]) => UntypedQuery;
-    };
-    type UntypedSupabase = { from: (table: string) => UntypedQuery };
-    const untyped = supabase as unknown as UntypedSupabase;
-
-    const { data: invoices, error: invoiceErr } = await (untyped
-      .from('invoices')
-      .select('id, issue_date, created_at, vat_rate')
-      .eq('user_id', userId) as unknown as Promise<{ data: unknown; error: { message: string } | null }>);
-    if (invoiceErr) return buildEmptyInvoiceSeries();
-
-    const invoiceRows = (invoices ?? []) as Array<{
-      id: string;
-      issue_date: string | null;
-      created_at: string | null;
-      vat_rate: number | string | null;
-    }>;
-    const ids = invoiceRows.map((row) => row.id);
-    const { data: items, error: itemsErr } = ids.length
-      ? await (untyped
-          .from('invoice_line_items')
-          .select('invoice_id, quantity, unit_price, vat_exempt')
-          .in('invoice_id', ids) as unknown as Promise<{ data: unknown; error: { message: string } | null }>)
-      : { data: [] as Array<Record<string, unknown>>, error: null };
-    if (itemsErr) return buildEmptyInvoiceSeries();
-
-    const totalsByInvoice = new Map<string, number>();
-    const lineRows = (items ?? []) as Array<{ invoice_id: string; quantity: number; unit_price: number; vat_exempt: boolean }>;
-    invoiceRows.forEach((invoice) => {
-      const rows = lineRows.filter((row) => row.invoice_id === invoice.id);
-      const subtotal = rows.reduce((sum, row) => sum + Number(row.quantity ?? 0) * Number(row.unit_price ?? 0), 0);
-      const taxable = rows.reduce(
-        (sum, row) => sum + (row.vat_exempt ? 0 : Number(row.quantity ?? 0) * Number(row.unit_price ?? 0)),
-        0,
-      );
-      const vatRate = Number(invoice.vat_rate ?? 0);
-      totalsByInvoice.set(invoice.id, subtotal + taxable * vatRate);
-    });
-
-    const now = new Date();
-    const months = [...Array(6)].map((_, index) => {
-      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
-      return {
-        key: `${date.getFullYear()}-${date.getMonth() + 1}`,
-        label: date.toLocaleDateString(undefined, { month: 'short' }),
-        total: 0,
-      };
-    });
-
-    invoiceRows.forEach((invoice) => {
-      const dateValue = invoice.issue_date ?? invoice.created_at;
-      if (!dateValue) return;
-      const date = new Date(dateValue);
-      if (Number.isNaN(date.getTime())) return;
-      const key = `${date.getFullYear()}-${date.getMonth() + 1}`;
-      const entry = months.find((item) => item.key === key);
-      if (entry) {
-        entry.total += totalsByInvoice.get(invoice.id) ?? 0;
-      }
-    });
-
-    const max = Math.max(...months.map((item) => item.total), 1);
-    return months.map((item) => ({
-      ...item,
-      height: Math.max(8, Math.round((item.total / max) * 80)),
-    }));
-  } catch {
-    return buildEmptyInvoiceSeries();
-  }
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
 }
 
-function buildEmptyInvoiceSeries() {
-  const now = new Date();
-  return [...Array(6)].map((_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
-    return {
-      key: `${date.getFullYear()}-${date.getMonth() + 1}`,
-      label: date.toLocaleDateString(undefined, { month: 'short' }),
-      total: 0,
-      height: 8,
-    };
-  });
+function isSameDay(dateString: string | null | undefined, reference: Date) {
+  if (!dateString) return false;
+  const target = new Date(dateString);
+  if (Number.isNaN(target.getTime())) return false;
+  return startOfDay(target).getTime() === startOfDay(reference).getTime();
+}
+
+function isTomorrow(dateString: string | null | undefined, reference: Date) {
+  if (!dateString) return false;
+  const target = new Date(dateString);
+  if (Number.isNaN(target.getTime())) return false;
+  const tomorrow = startOfDay(reference);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return startOfDay(target).getTime() === tomorrow.getTime();
+}
+
+function isLaterThisWeek(dateString: string | null | undefined, reference: Date) {
+  if (!dateString) return false;
+  const target = new Date(dateString);
+  if (Number.isNaN(target.getTime())) return false;
+  const targetDay = startOfDay(target).getTime();
+  const tomorrow = startOfDay(reference);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const weekEnd = startOfDay(reference);
+  weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()));
+  return targetDay > tomorrow.getTime() && targetDay < weekEnd.getTime();
+}
+
+function getUpcomingJobActionLabel(prepComplete: boolean) {
+  return prepComplete ? 'Start' : 'Prepare';
 }
 
 function friendlyStage(status: string | null | undefined) {

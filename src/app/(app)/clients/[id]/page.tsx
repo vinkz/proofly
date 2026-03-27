@@ -30,6 +30,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     scheduled_for: job.scheduled_for ?? null,
     created_at: job.created_at ?? null,
   }));
+  const activeJobs = detail.jobs.filter((job) => job.status !== 'completed');
+  const completedJobs = detail.jobs.filter((job) => job.status === 'completed');
 
   return (
     <div className="space-y-6">
@@ -61,35 +63,84 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <h2 className="text-lg font-semibold text-muted">Jobs</h2>
           <p className="text-xs text-muted-foreground/60">{detail.jobs.length} records</p>
           <ul className="mt-3 space-y-3 text-sm text-muted-foreground/80">
-            {detail.jobs.map((job) => (
-              <li key={job.id} className="rounded-2xl border border-white/20 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-muted">{job.title ?? 'Untitled job'}</p>
-                    <p className="text-xs text-muted-foreground/60">
-                      {job.scheduled_for ? new Date(job.scheduled_for).toLocaleString() : 'Not scheduled'}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-muted/40 px-3 py-1 text-xs font-semibold uppercase text-muted-foreground/80">
-                    {job.status ?? 'draft'}
-                  </span>
+            {activeJobs.length ? (
+              <li className="rounded-2xl border border-white/15 bg-white/50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Current jobs</p>
+                  <span className="text-xs text-muted-foreground/60">{activeJobs.length}</span>
                 </div>
-                <div className="mt-3 flex gap-2 text-xs">
-                  <Link
-                    href={`/jobs/${job.id}`}
-                    className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
-                  >
-                    View job
-                  </Link>
-                  <Link
-                    href={`/documents/${job.id}`}
-                    className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
-                  >
-                    Report
-                  </Link>
-                </div>
+                <ul className="space-y-3">
+                  {activeJobs.map((job) => (
+                    <li key={job.id} className="rounded-2xl border border-white/20 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-muted">{job.title ?? 'Untitled job'}</p>
+                          <p className="text-xs text-muted-foreground/60">
+                            {job.scheduled_for ? new Date(job.scheduled_for).toLocaleString() : 'Not scheduled'}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-muted/40 px-3 py-1 text-xs font-semibold uppercase text-muted-foreground/80">
+                          {job.status ?? 'draft'}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex gap-2 text-xs">
+                        <Link
+                          href={`/jobs/${job.id}`}
+                          className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
+                        >
+                          View job
+                        </Link>
+                        <Link
+                          href={`/documents/${job.id}`}
+                          className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
+                        >
+                          Report
+                        </Link>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </li>
-            ))}
+            ) : null}
+            {completedJobs.length ? (
+              <li className="rounded-2xl border border-white/15 bg-white/50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Completed jobs</p>
+                  <span className="text-xs text-muted-foreground/60">{completedJobs.length}</span>
+                </div>
+                <ul className="space-y-3">
+                  {completedJobs.map((job) => (
+                    <li key={job.id} className="rounded-2xl border border-white/20 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-muted">{job.title ?? 'Untitled job'}</p>
+                          <p className="text-xs text-muted-foreground/60">
+                            {job.scheduled_for ? new Date(job.scheduled_for).toLocaleString() : 'Not scheduled'}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-muted/40 px-3 py-1 text-xs font-semibold uppercase text-muted-foreground/80">
+                          {job.status ?? 'completed'}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex gap-2 text-xs">
+                        <Link
+                          href={`/jobs/${job.id}`}
+                          className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
+                        >
+                          View job
+                        </Link>
+                        <Link
+                          href={`/documents/${job.id}`}
+                          className="rounded-full border border-white/30 px-3 py-1 text-muted-foreground/70 hover:bg-white/70"
+                        >
+                          Report
+                        </Link>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ) : null}
             {detail.jobs.length === 0 ? (
               <li className="rounded-2xl border border-dashed border-white/30 p-4 text-sm text-muted-foreground/70">
                 No jobs yet for this client.

@@ -19,7 +19,7 @@ export default async function ClientsPage({
   const { data: jobs } = clientIds.length
     ? await supabase
         .from('jobs')
-        .select('client_id, status')
+        .select('id, client_id, status, created_at, completed_at')
         .in('client_id', clientIds)
     : { data: [] };
   const clientIdMap = new Map<string, string>();
@@ -27,19 +27,35 @@ export default async function ClientsPage({
     const ids = client.client_ids ?? [client.id];
     ids.forEach((id) => clientIdMap.set(id, client.id));
   });
-  const jobStats = (jobs ?? []).reduce<Record<string, { open: number; total: number }>>((acc, job) => {
+  const jobsByGroup = (jobs ?? []).reduce<Record<string, Array<{ id: string; status: string | null; created_at: string | null; completed_at: string | null }>>>((acc, job) => {
     const key = job.client_id ?? '';
     const groupKey = key ? clientIdMap.get(key) ?? '' : '';
+    if (!groupKey || !job.id) return acc;
+    const entry = {
+      id: job.id,
+      status: job.status ?? null,
+      created_at: job.created_at ?? null,
+      completed_at: job.completed_at ?? null,
+    };
+    acc[groupKey] = acc[groupKey] ? [...acc[groupKey], entry] : [entry];
+    return acc;
+  }, {});
+
+  const jobIds = (jobs ?? []).map((job) => job.id).filter((id): id is string => typeof id === 'string');
+  const { data: certificates } = jobIds.length
+    ? await supabase
+        .from('certificates')
+        .select('job_id, created_at')
+        .in('job_id', jobIds)
+    : { data: [] };
+  const groupKeyByJobId = new Map<string, string>();
+  Object.entries(jobsByGroup).forEach(([groupKey, clientJobs]) => {
+    clientJobs.forEach((job) => groupKeyByJobId.set(job.id, groupKey));
+  });
+  const certificateCounts = (certificates ?? []).reduce<Record<string, number>>((acc, certificate) => {
+    const groupKey = certificate.job_id ? groupKeyByJobId.get(certificate.job_id) ?? '' : '';
     if (!groupKey) return acc;
-    acc[groupKey] = acc[groupKey]
-      ? {
-          open: acc[groupKey].open + (job.status === 'completed' ? 0 : 1),
-          total: acc[groupKey].total + 1,
-        }
-      : {
-          open: job.status === 'completed' ? 0 : 1,
-          total: 1,
-        };
+    acc[groupKey] = (acc[groupKey] ?? 0) + 1;
     return acc;
   }, {});
 
@@ -71,7 +87,26 @@ export default async function ClientsPage({
 
       <section className="grid gap-4 md:grid-cols-2">
         {clients.map((client) => {
-          const stats = jobStats[client.id] ?? { open: 0, total: 0 };
+          const clientJobs = jobsByGroup[client.id] ?? [];
+          const openJobs = clientJobs.filter((job) => job.status !== 'completed').length;
+          const totalJobs = clientJobs.length;
+          const certificateCount = certificateCounts[client.id] ?? 0;
+          const lastJobActivity = clientJobs.reduce((latest, job) => {
+            const candidate = job.completed_at ?? job.created_at;
+            if (!candidate) return latest;
+            return !latest || new Date(candidate).getTime() > new Date(latest).getTime() ? candidate : latest;
+          }, null as string | null);
+          const lastCertificateActivity = (certificates ?? []).reduce((latest, certificate) => {
+            const groupKey = certificate.job_id ? groupKeyByJobId.get(certificate.job_id) ?? '' : '';
+            if (groupKey !== client.id || !certificate.created_at) return latest;
+            return !latest || new Date(certificate.created_at).getTime() > new Date(latest).getTime()
+              ? certificate.created_at
+              : latest;
+          }, null as string | null);
+          const lastActivity = [lastJobActivity, lastCertificateActivity]
+            .filter((value): value is string => Boolean(value))
+            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
+
           return (
             <div
               key={client.id}
@@ -85,7 +120,7 @@ export default async function ClientsPage({
                   <p className="text-xs text-muted-foreground/60">{client.organization ?? 'Individual'}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold text-[var(--accent)]">{stats.open}</p>
+                  <p className="text-3xl font-bold text-[var(--accent)]">{openJobs}</p>
                   <p className="text-xs text-muted-foreground/60">Open jobs</p>
                 </div>
               </div>
@@ -100,9 +135,12 @@ export default async function ClientsPage({
                 {client.phone ? <p>{client.phone}</p> : null}
                 {client.address ? <p>{client.address}</p> : null}
               </div>
-              <div className="mt-4 text-xs text-muted-foreground/60">
-                {stats.total} total jobs · Created{' '}
-                {client.created_at ? new Date(client.created_at).toLocaleDateString() : 'N/A'}
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground/60">
+                <span>{totalJobs} jobs</span>
+                <span>{certificateCount} certificates</span>
+                <span>
+                  Last activity {lastActivity ? new Date(lastActivity).toLocaleDateString() : 'N/A'}
+                </span>
               </div>
             </div>
           );

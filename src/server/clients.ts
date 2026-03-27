@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { supabaseServerAction, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import type { Database } from '@/lib/database.types';
 import type { ClientListItem } from '@/types/client';
 
@@ -178,7 +178,7 @@ export async function createClient(payload: FormData | Record<string, unknown>) 
     landlord_address: normalizeOptional(body.landlord_address),
   };
 
-  const sb = await supabaseServerServiceRole();
+  const sb = await supabaseServerAction();
   const {
     data: { user },
     error,
@@ -449,7 +449,7 @@ export async function updateClient(payload: FormData | Record<string, unknown>) 
   } = await readClient.auth.getUser();
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
-  const sb = await supabaseServerServiceRole();
+  const sb = await supabaseServerAction();
 
   const { data: clientRows, error: loadErr } = await sb
     .from('clients')
@@ -510,7 +510,7 @@ export async function deleteClient(id: string) {
   } = await readClient.auth.getUser();
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
-  const sb = await supabaseServerServiceRole();
+  const sb = await supabaseServerAction();
 
   const { data: clientRows, error: loadErr } = await sb
     .from('clients')

@@ -3,42 +3,46 @@ import { describe, expect, it } from 'vitest';
 import { normalizeAddressLookupResult, normalizeAddressLookupSuggestions } from '@/lib/address-lookup';
 
 describe('normalizeAddressLookupSuggestions', () => {
-  it('returns unique getAddress suggestions for the postcode dropdown', () => {
+  it('returns unique Ideal Postcodes suggestions for the dropdown', () => {
     const suggestions = normalizeAddressLookupSuggestions({
-      suggestions: [
-        { id: 'one', address: '10 Downing Street, Westminster, London, SW1A 2AA' },
-        { id: 'one', address: '10 Downing Street, Westminster, London, SW1A 2AA' },
-        { id: 'two', address: '11 Downing Street, Westminster, London, SW1A 2AA' },
-      ],
+      result: {
+        hits: [
+          { id: 'paf_1', suggestion: '10 Downing Street, Westminster, London, SW1A 2AA' },
+          { id: 'paf_1', suggestion: '10 Downing Street, Westminster, London, SW1A 2AA' },
+          { id: 'paf_2', suggestion: '11 Downing Street, Westminster, London, SW1A 2AA' },
+        ],
+      },
     });
 
     expect(suggestions).toEqual([
-      { id: 'one', address: '10 Downing Street, Westminster, London, SW1A 2AA', label: '10 Downing Street, Westminster, London, SW1A 2AA' },
-      { id: 'two', address: '11 Downing Street, Westminster, London, SW1A 2AA', label: '11 Downing Street, Westminster, London, SW1A 2AA' },
+      { id: 'paf_1', address: '10 Downing Street, Westminster, London, SW1A 2AA', label: '10 Downing Street, Westminster, London, SW1A 2AA' },
+      { id: 'paf_2', address: '11 Downing Street, Westminster, London, SW1A 2AA', label: '11 Downing Street, Westminster, London, SW1A 2AA' },
     ]);
   });
 });
 
 describe('normalizeAddressLookupResult', () => {
-  it('maps getAddress details into the CP12 address fields', () => {
+  it('maps Ideal Postcodes resolve data into the CP12 address fields', () => {
     const result = normalizeAddressLookupResult({
-      id: 'addr_123',
-      line_1: 'Flat 2',
-      line_2: '10 Downing Street',
-      town_or_city: 'London',
-      postcode: 'sw1a2aa',
-      sub_building_name: 'Flat 2',
+      result: {
+        id: 'paf_824800',
+        line_1: '10 Downing Street',
+        line_2: 'Flat 2',
+        post_town: 'London',
+        postcode: 'sw1a2aa',
+        sub_building_name: 'Flat 2',
+      },
     });
 
     expect(result).toEqual({
-      id: 'addr_123',
+      id: 'paf_824800',
       name: 'Flat 2',
-      line1: 'Flat 2',
-      line2: '10 Downing Street',
+      line1: '10 Downing Street',
+      line2: 'Flat 2',
       city: 'London',
       postcode: 'SW1A 2AA',
-      summary: 'Flat 2, 10 Downing Street, London',
-      label: 'Flat 2, 10 Downing Street, London, SW1A 2AA',
+      summary: '10 Downing Street, Flat 2, London',
+      label: '10 Downing Street, Flat 2, London, SW1A 2AA',
     });
   });
 });

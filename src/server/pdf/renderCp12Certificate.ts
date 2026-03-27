@@ -167,6 +167,10 @@ const APPLIANCE_TABLE = {
   },
 } as const;
 
+const FLUE_TYPE_PREFERRED_FONT_SIZE = 6;
+const FLUE_TYPE_MIN_FONT_SIZE = 4;
+const FLUE_TYPE_TEXT_PADDING = 2;
+
 function getApplianceFieldNames(index: number): Record<keyof ApplianceInput, FormFieldName> {
   const i = index + 1;
   return {
@@ -204,6 +208,24 @@ function getFormFieldNames(form: ReturnType<PDFDocument['getForm']>) {
 function normalizeText(value: string | undefined) {
   if (value === undefined || value === null) return '';
   return String(value).trim();
+}
+
+function getFittedFontSize(params: {
+  text: string;
+  font: PDFFont;
+  maxWidth: number;
+  preferredSize: number;
+  minSize: number;
+}) {
+  const { text, font, maxWidth, preferredSize, minSize } = params;
+  const normalized = normalizeText(text);
+  if (!normalized || maxWidth <= 0) return preferredSize;
+
+  let size = preferredSize;
+  while (size > minSize && font.widthOfTextAtSize(normalized, size) > maxWidth) {
+    size = Math.max(minSize, size - 0.25);
+  }
+  return size;
 }
 
 function toFieldNameList(fieldName: FormFieldName) {
@@ -808,8 +830,18 @@ async function drawAppliances(
         value = appliance[field] as string | undefined;
       }
       if (!value) return;
-      const size = field === 'flueType' ? 6 : 8;
-      currentPage.drawText(String(value), {
+      const text = String(value);
+      const size =
+        field === 'flueType'
+          ? getFittedFontSize({
+              text,
+              font,
+              maxWidth: colCfg.width - FLUE_TYPE_TEXT_PADDING,
+              preferredSize: FLUE_TYPE_PREFERRED_FONT_SIZE,
+              minSize: FLUE_TYPE_MIN_FONT_SIZE,
+            })
+          : 8;
+      currentPage.drawText(text, {
         x: startX + colCfg.xOffset,
         y: currentY,
         size,
@@ -847,6 +879,37 @@ async function drawAppliances(
     currentY -= rowHeight;
     rowIndex += 1;
   }
+}
+
+function configureFlueTypeFieldAppearance(params: {
+  form: ReturnType<PDFDocument['getForm']>;
+  fieldNames: Set<string>;
+  font: PDFFont;
+}) {
+  const { form, fieldNames, font } = params;
+  [...fieldNames]
+    .filter((name) => /^appliance_\d+\.flue_type$/.test(name))
+    .forEach((name) => {
+      try {
+        const field = form.getTextField(name);
+        const text = normalizeText(field.getText() ?? '');
+        if (!text) return;
+
+        const widget = field.acroField.getWidgets()[0];
+        const rect = widget?.getRectangle();
+        const maxWidth = rect ? rect.width - FLUE_TYPE_TEXT_PADDING : 0;
+        const fittedSize = getFittedFontSize({
+          text,
+          font,
+          maxWidth,
+          preferredSize: FLUE_TYPE_PREFERRED_FONT_SIZE,
+          minSize: FLUE_TYPE_MIN_FONT_SIZE,
+        });
+        field.setFontSize(fittedSize);
+      } catch {
+        // Ignore font-size override failures for flue type fields.
+      }
+    });
 }
 
 export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput): Promise<Uint8Array> {
@@ -999,6 +1062,12 @@ export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput
   } else {
     await drawAppliances(pdfDoc, templateDoc, page, regularFont, input.appliances ?? []);
   }
+
+  configureFlueTypeFieldAppearance({
+    form,
+    fieldNames: formFieldNames,
+    font: regularFont,
+  });
 
   const safetyExecutionOrder: string[] = [];
   safetyExecutionOrder.push('all_other_fields_complete');

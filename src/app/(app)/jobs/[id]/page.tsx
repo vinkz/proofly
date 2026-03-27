@@ -18,7 +18,7 @@ import { JobInvoicesCard } from '@/components/invoices/job-invoices-card';
 import type { Database } from '@/lib/database.types';
 import { isUUID } from '@/lib/ids';
 import { reportKindForJobType } from '@/types/reports';
-import type { CertificateType } from '@/types/certificates';
+import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import { listInvoicesForJob } from '@/server/invoices';
 
 type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
@@ -28,6 +28,23 @@ type InvoiceSummary = {
   status: string;
   vat_rate: string | number | null;
 };
+type RelatedCertificate = Pick<
+  Database['public']['Tables']['certificates']['Row'],
+  'id' | 'cert_type' | 'status' | 'created_at' | 'issued_at'
+>;
+
+const formatDateTime = (value: string | null | undefined, fallback: string) =>
+  value ? new Date(value).toLocaleString() : fallback;
+
+const formatLabel = (value: string | null | undefined, fallback: string) =>
+  value
+    ? value
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : fallback;
+
+const certificateLabelFor = (value: string | null | undefined) =>
+  value && value in CERTIFICATE_LABELS ? CERTIFICATE_LABELS[value as CertificateType] : null;
 
 export default async function JobDetailPage({
   params,
@@ -64,8 +81,13 @@ export default async function JobDetailPage({
   const clientName = job.client_name ?? 'Client';
   const jobAddress = job.address ?? 'No address provided';
   const jobStatus = job.status ?? 'pending';
-  const createdLabel = job.created_at ? new Date(job.created_at).toLocaleString() : 'Unknown';
+  const createdLabel = formatDateTime(job.created_at, 'Unknown');
   const reportKind = reportKindForJobType(job.job_type ?? null);
+  const clientHref = job.client_id ? `/clients/${job.client_id}` : null;
+  const propertyHref =
+    job.address && job.address.trim().length
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`
+      : null;
   const certificateActions = [
     { type: 'cp12', label: 'Start CP12', variant: 'primary' },
     { type: 'gas_service', label: 'Start Gas Service', variant: 'secondary' },
@@ -112,6 +134,17 @@ export default async function JobDetailPage({
     reportSignedUrl = signed?.signedUrl ?? null;
   }
 
+  const { data: certificatesData, error: certificatesErr } = await supabase
+    .from('certificates')
+    .select('id, cert_type, status, created_at, issued_at')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: false });
+  if (certificatesErr) throw new Error(certificatesErr.message);
+
+  const relatedCertificates = (certificatesData ?? []) as RelatedCertificate[];
+  const primaryCertificateLabel =
+    certificateLabelFor(relatedCertificates[0]?.cert_type) ?? CERTIFICATE_LABELS[reportKind];
+  const jobTitle = job.title?.trim() || primaryCertificateLabel || 'Untitled job';
   const generalPhotos = photosByChecklist.general ?? [];
 
   const invoices = await listInvoicesForJob(jobId);
@@ -177,11 +210,19 @@ export default async function JobDetailPage({
         <JobProgressBar total={items.length} />
         <div className="flex flex-col gap-2 border-b border-white/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Link href="/jobs" className="text-xs uppercase tracking-wide text-accent">
-              ← Back to jobs
-            </Link>
-            <h1 className="mt-2 text-2xl font-semibold text-muted">{clientName}</h1>
-            <p className="text-sm text-muted-foreground/70">{jobAddress}</p>
+            <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-wide">
+              <Link href="/jobs" className="text-accent">
+                ← Back to jobs
+              </Link>
+              {clientHref ? (
+                <Link href={clientHref} className="text-muted-foreground/60 hover:text-muted">
+                  View client
+                </Link>
+              ) : null}
+            </div>
+            <p className="mt-2 text-xs uppercase tracking-wide text-accent">Job</p>
+            <h1 className="text-2xl font-semibold text-muted">{jobTitle}</h1>
+            <p className="text-sm text-muted-foreground/70">{primaryCertificateLabel}</p>
             <p className="text-xs text-muted-foreground/50">Opened {createdLabel}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -190,7 +231,7 @@ export default async function JobDetailPage({
                 jobStatus === 'completed' ? 'bg-brand/20 text-brand' : 'bg-accent/10 text-accent'
               }`}
             >
-              {jobStatus}
+              {formatLabel(jobStatus, 'Pending')}
             </span>
             <SignatureModal jobId={jobId} signatures={signaturePreviews} />
             <GenerateJobSheetButton jobId={jobId} />
@@ -208,6 +249,49 @@ export default async function JobDetailPage({
             <DeleteJobButton jobId={jobId} />
           </div>
         </div>
+
+        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">Status</p>
+            <p className="mt-2 text-sm font-semibold text-muted">{formatLabel(jobStatus, 'Pending')}</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">{primaryCertificateLabel}</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">Client</p>
+            {clientHref ? (
+              <Link href={clientHref} className="mt-2 block text-sm font-semibold text-muted hover:text-accent">
+                {clientName}
+              </Link>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-muted">{clientName}</p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground/70">Related client record</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">Property</p>
+            {propertyHref ? (
+              <Link
+                href={propertyHref}
+                target="_blank"
+                className="mt-2 block text-sm font-semibold text-muted hover:text-accent"
+              >
+                {jobAddress}
+              </Link>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-muted">{jobAddress}</p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground/70">Site address</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">Schedule</p>
+            <p className="mt-2 text-sm font-semibold text-muted">
+              {formatDateTime(job.scheduled_for, 'Not scheduled')}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              {job.completed_at ? `Completed ${formatDateTime(job.completed_at, 'Unknown')}` : 'Open job record'}
+            </p>
+          </div>
+        </section>
 
         {showResume ? (
           <section className="mt-6 rounded-2xl border border-[var(--accent)]/40 bg-white/80 p-4 shadow-sm">
@@ -250,8 +334,41 @@ export default async function JobDetailPage({
 
         <section id="certificates" className="mt-8 space-y-3">
           <div>
-            <h2 className="text-lg font-semibold text-muted">Certificates</h2>
-            <p className="text-sm text-muted-foreground/70">Start a new certificate for this job.</p>
+            <h2 className="text-lg font-semibold text-muted">Related certificates</h2>
+            <p className="text-sm text-muted-foreground/70">View the certificate record for this job or start a new one.</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            {relatedCertificates.length ? (
+              <div className="space-y-3">
+                {relatedCertificates.map((certificate) => (
+                  <div
+                    key={certificate.id}
+                    className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-muted">
+                        {certificateLabelFor(certificate.cert_type) ?? formatLabel(certificate.cert_type, 'Certificate')}
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        {certificate.issued_at
+                          ? `Issued ${formatDateTime(certificate.issued_at, 'Unknown')}`
+                          : `Created ${formatDateTime(certificate.created_at, 'Unknown')}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs uppercase text-muted-foreground/70">
+                        {formatLabel(certificate.status, 'Ready')}
+                      </p>
+                      <Button asChild variant="outline" className="rounded-full">
+                        <Link href={`/jobs/${job.id}/pdf`}>Open</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground/80">No certificates recorded for this job yet.</p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {certificateActions.map((action) => (
@@ -265,7 +382,7 @@ export default async function JobDetailPage({
         <JobInvoicesCard jobId={jobId} invoices={invoiceSummaries} />
 
         <section id="certificate-checks" className="mt-8 space-y-4">
-          <h2 className="text-lg font-semibold text-muted">Certificate checks</h2>
+          <h2 className="text-lg font-semibold text-muted">Job checklist</h2>
           {items.length ? (
             <div className="grid gap-4">
               {items.map((item, index) => (

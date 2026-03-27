@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -25,9 +25,11 @@ import {
   generateCertificatePdf,
   saveCp12Appliances,
   uploadSignature,
+  assignClientToJob,
 } from '@/server/certificates';
 import { useToast } from '@/components/ui/use-toast';
 import { getLatestApplianceDefaultsForJob } from '@/server/history';
+import { createClient } from '@/server/clients';
 import {
   CP12_FLUE_TYPES,
   CP12_VENTILATION,
@@ -38,6 +40,19 @@ import {
 import { saveJobFields } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
+import type { ClientListItem } from '@/types/client';
+import { Select } from '@/components/ui/select';
+
+export type SavedPropertyOption = {
+  key: string;
+  label: string;
+  job_address_name: string;
+  job_address_line1: string;
+  job_address_line2: string;
+  job_address_city: string;
+  job_postcode: string;
+  job_tel: string;
+};
 
 type WizardProps = {
   jobId: string;
@@ -45,11 +60,14 @@ type WizardProps = {
   certificateLabel: string;
   initialInfo?: Record<string, string | null | undefined>;
   initialJobContext?: InitialJobContext | null;
+  clients?: ClientListItem[];
+  savedProperties?: SavedPropertyOption[];
   initialPhotoPreviews?: Record<string, string>;
   initialAppliances?: Cp12Appliance[];
   stepOffset?: number;
   startStep?: number;
   hideBillingCustomerStep?: boolean;
+  prepareOnly?: boolean;
 };
 
 const emptyAppliance: Cp12Appliance = {
@@ -143,6 +161,8 @@ type AddressLookupApiResponse = {
   error?: string;
 };
 
+const ADDRESS_SEARCH_MIN_QUERY_LENGTH = 3;
+
 const buildPropertyAddressFromJobAddress = (addr: Cp12JobAddressState) =>
   [addr.job_address_line1, addr.job_address_line2, addr.job_address_city].filter((part) => part && part.trim()).join(', ');
 
@@ -203,20 +223,44 @@ export function CertificateWizard({
   certificateLabel,
   initialInfo = {},
   initialJobContext = null,
+  clients = [],
+  savedProperties = [],
   initialPhotoPreviews = {},
   initialAppliances = [],
   stepOffset = 0,
   startStep = 1,
+  prepareOnly = false,
 }: WizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [step, setStep] = useState(() => Math.max(startStep, 1));
   const [isPending, startTransition] = useTransition();
+  const resolvedInitialInfo = mergeJobContextFields(initialInfo, initialJobContext);
   const [isPostcodeLookupPending, setIsPostcodeLookupPending] = useState(false);
   const [postcodeSuggestions, setPostcodeSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedPostcodeMatchId, setSelectedPostcodeMatchId] = useState<string | null>(null);
+  const [addressSearchQuery, setAddressSearchQuery] = useState(
+    resolvedInitialInfo.job_address_line1 ?? resolvedInitialInfo.property_address ?? '',
+  );
+  const [addressSearchError, setAddressSearchError] = useState<string | null>(null);
+  const [isLandlordLookupPending, setIsLandlordLookupPending] = useState(false);
+  const [landlordAddressSuggestions, setLandlordAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
+  const [selectedLandlordMatchId, setSelectedLandlordMatchId] = useState<string | null>(null);
+  const [landlordAddressSearchQuery, setLandlordAddressSearchQuery] = useState(
+    resolvedInitialInfo.landlord_address_line1 ?? resolvedInitialInfo.landlord_address ?? '',
+  );
+  const [landlordAddressSearchError, setLandlordAddressSearchError] = useState<string | null>(null);
+  const [clientOptions, setClientOptions] = useState(clients);
+  const [clientQuery, setClientQuery] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState(initialJobContext?.customer?.id ?? '');
+  const [selectedPropertyKey, setSelectedPropertyKey] = useState('');
+  const [showNewClientForm, setShowNewClientForm] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
-  const resolvedInitialInfo = mergeJobContextFields(initialInfo, initialJobContext);
+  const deferredAddressSearchQuery = useDeferredValue(addressSearchQuery.trim());
+  const deferredLandlordAddressSearchQuery = useDeferredValue(landlordAddressSearchQuery.trim());
   const initialLandlordAddressParts = splitAddressParts(String(resolvedInitialInfo.landlord_address ?? ''));
   const initialLandlordLine1 = resolvedInitialInfo.landlord_address_line1 ?? initialLandlordAddressParts[0] ?? '';
   const initialLandlordLine2 =
@@ -273,6 +317,41 @@ export function CertificateWizard({
       ]),
     ),
   );
+  const filteredClients = useMemo(() => {
+    const term = clientQuery.trim().toLowerCase();
+    if (!term) return clientOptions;
+    return clientOptions.filter((client) =>
+      [client.name, client.organization, client.email, client.phone]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .some((value) => value.toLowerCase().includes(term)),
+    );
+  }, [clientOptions, clientQuery]);
+
+  const handleSavedPropertySelect = (propertyKey: string) => {
+    setSelectedPropertyKey(propertyKey);
+    const property = savedProperties.find((item) => item.key === propertyKey);
+    if (!property) return;
+
+    const nextJobAddress = {
+      ...jobAddress,
+      job_address_name: property.job_address_name,
+      job_address_line1: property.job_address_line1,
+      job_address_line2: property.job_address_line2,
+      job_address_city: property.job_address_city,
+      job_postcode: property.job_postcode,
+      job_tel: property.job_tel,
+    };
+
+    setJobAddress(nextJobAddress);
+    setAddressSearchQuery(property.job_address_line1);
+    setAddressSearchError(null);
+    setSelectedPostcodeMatchId(null);
+    setInfo((prev) => ({
+      ...prev,
+      property_address: buildPropertyAddressFromJobAddress(nextJobAddress),
+      postcode: property.job_postcode || prev.postcode,
+    }));
+  };
   const sanitizeAppliance = (appliance: Cp12Appliance): Cp12Appliance => ({
     appliance_type: appliance.appliance_type ?? '',
     location: appliance.location ?? '',
@@ -390,6 +469,120 @@ export function CertificateWizard({
     prevApplianceCountRef.current = appliances.length;
   }, [appliances.length, appliances]);
 
+  useEffect(() => {
+    if (!isCp12) return;
+
+    if (!deferredAddressSearchQuery) {
+      setPostcodeSuggestions([]);
+      setSelectedPostcodeMatchId(null);
+      setAddressSearchError(null);
+      setIsPostcodeLookupPending(false);
+      return;
+    }
+
+    if (deferredAddressSearchQuery.length < ADDRESS_SEARCH_MIN_QUERY_LENGTH) {
+      setPostcodeSuggestions([]);
+      setSelectedPostcodeMatchId(null);
+      setAddressSearchError(`Type at least ${ADDRESS_SEARCH_MIN_QUERY_LENGTH} characters to search.`);
+      setIsPostcodeLookupPending(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsPostcodeLookupPending(true);
+      setAddressSearchError(null);
+
+      try {
+        const query = encodeURIComponent(deferredAddressSearchQuery);
+        const response = await fetch(`/api/address-search?q=${query}`, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as AddressLookupApiResponse;
+        if (!response.ok) {
+          throw new Error(payload.error || 'Lookup failed');
+        }
+
+        const suggestions = payload.suggestions ?? [];
+        setPostcodeSuggestions(suggestions);
+        setSelectedPostcodeMatchId(null);
+        setAddressSearchError(suggestions.length ? null : 'No addresses found. Try a postcode or add more detail.');
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setPostcodeSuggestions([]);
+        setSelectedPostcodeMatchId(null);
+        setAddressSearchError(error instanceof Error ? error.message : 'Try another search.');
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsPostcodeLookupPending(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [deferredAddressSearchQuery, isCp12]);
+
+  useEffect(() => {
+    if (!isCp12) return;
+
+    if (!deferredLandlordAddressSearchQuery) {
+      setLandlordAddressSuggestions([]);
+      setSelectedLandlordMatchId(null);
+      setLandlordAddressSearchError(null);
+      setIsLandlordLookupPending(false);
+      return;
+    }
+
+    if (deferredLandlordAddressSearchQuery.length < ADDRESS_SEARCH_MIN_QUERY_LENGTH) {
+      setLandlordAddressSuggestions([]);
+      setSelectedLandlordMatchId(null);
+      setLandlordAddressSearchError(`Type at least ${ADDRESS_SEARCH_MIN_QUERY_LENGTH} characters to search.`);
+      setIsLandlordLookupPending(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsLandlordLookupPending(true);
+      setLandlordAddressSearchError(null);
+
+      try {
+        const query = encodeURIComponent(deferredLandlordAddressSearchQuery);
+        const response = await fetch(`/api/address-search?q=${query}`, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as AddressLookupApiResponse;
+        if (!response.ok) {
+          throw new Error(payload.error || 'Lookup failed');
+        }
+
+        const suggestions = payload.suggestions ?? [];
+        setLandlordAddressSuggestions(suggestions);
+        setSelectedLandlordMatchId(null);
+        setLandlordAddressSearchError(suggestions.length ? null : 'No addresses found. Try a postcode or add more detail.');
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setLandlordAddressSuggestions([]);
+        setSelectedLandlordMatchId(null);
+        setLandlordAddressSearchError(error instanceof Error ? error.message : 'Try another search.');
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLandlordLookupPending(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [deferredLandlordAddressSearchQuery, isCp12]);
+
   const handleDemoFill = () => {
     if (!isCp12 || !demoEnabled) return;
     startTransition(async () => {
@@ -503,49 +696,10 @@ export function CertificateWizard({
       });
     };
 
-  const handlePostcodeLookup = async () => {
-    const postcode = jobAddress.job_postcode.trim();
-    if (!postcode) {
-      pushToast({ title: 'Enter a postcode first', variant: 'error' });
-      return;
-    }
-    setIsPostcodeLookupPending(true);
-    try {
-      const query = encodeURIComponent(postcode);
-      const response = await fetch(`/api/address-search?postcode=${query}`, {
-        headers: { Accept: 'application/json' },
-      });
-      const payload = (await response.json()) as AddressLookupApiResponse;
-      if (!response.ok) {
-        throw new Error(payload.error || 'Lookup failed');
-      }
-      const suggestions = payload.suggestions ?? [];
-      if (!suggestions.length) {
-        setPostcodeSuggestions([]);
-        setSelectedPostcodeMatchId(null);
-        throw new Error('No addresses found for that postcode');
-      }
-      setPostcodeSuggestions(suggestions);
-      setSelectedPostcodeMatchId(null);
-      pushToast({
-        title: `${suggestions.length} ${suggestions.length === 1 ? 'address' : 'addresses'} found`,
-        description: 'Select the right property from the list below.',
-        variant: 'success',
-      });
-    } catch (error) {
-      pushToast({
-        title: 'Address not found',
-        description: error instanceof Error ? error.message : 'Try a full UK postcode.',
-        variant: 'error',
-      });
-    } finally {
-      setIsPostcodeLookupPending(false);
-    }
-  };
-
   const handleAddressMatchSelect = async (suggestion: AddressLookupSuggestion) => {
     setIsPostcodeLookupPending(true);
     setSelectedPostcodeMatchId(suggestion.id);
+    setAddressSearchError(null);
     try {
       const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`, {
         headers: { Accept: 'application/json' },
@@ -568,9 +722,12 @@ export function CertificateWizard({
         property_address: address.summary || prev.property_address,
         postcode: address.postcode || prev.postcode,
       }));
+      setAddressSearchQuery(address.line1 || suggestion.label);
+      setPostcodeSuggestions([]);
       pushToast({ title: 'Address selected', variant: 'success' });
     } catch (error) {
       setSelectedPostcodeMatchId(null);
+      setAddressSearchError(error instanceof Error ? error.message : 'Try again.');
       pushToast({
         title: 'Address not found',
         description: error instanceof Error ? error.message : 'Try again.',
@@ -578,6 +735,43 @@ export function CertificateWizard({
       });
     } finally {
       setIsPostcodeLookupPending(false);
+    }
+  };
+
+  const handleLandlordAddressMatchSelect = async (suggestion: AddressLookupSuggestion) => {
+    setIsLandlordLookupPending(true);
+    setSelectedLandlordMatchId(suggestion.id);
+    setLandlordAddressSearchError(null);
+    try {
+      const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const payload = (await response.json()) as AddressLookupApiResponse;
+      if (!response.ok || !payload.address) {
+        throw new Error(payload.error || 'Lookup failed');
+      }
+      const address = payload.address;
+      setInfo((prev) => ({
+        ...prev,
+        landlord_address_line1: address.line1,
+        landlord_address_line2: address.line2,
+        landlord_city: address.city,
+        landlord_postcode: address.postcode || prev.landlord_postcode,
+        landlord_address: buildLandlordAddress(address.line1, address.line2, address.city),
+      }));
+      setLandlordAddressSearchQuery(address.line1 || suggestion.label);
+      setLandlordAddressSuggestions([]);
+      pushToast({ title: 'Landlord address selected', variant: 'success' });
+    } catch (error) {
+      setSelectedLandlordMatchId(null);
+      setLandlordAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      pushToast({
+        title: 'Address not found',
+        description: error instanceof Error ? error.message : 'Try again.',
+        variant: 'error',
+      });
+    } finally {
+      setIsLandlordLookupPending(false);
     }
   };
 
@@ -660,10 +854,78 @@ export function CertificateWizard({
         });
         setJobAddress(nextJobAddress);
         setInfo(data);
+        if (prepareOnly) {
+          router.push('/dashboard');
+          return;
+        }
         setStep(2);
       } catch (error) {
         pushToast({
           title: 'Could not save job info',
+          description: error instanceof Error ? error.message : 'Try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
+  const handleAssignClient = () => {
+    if (!selectedClientId) return;
+    startTransition(async () => {
+      try {
+        await assignClientToJob({ jobId, clientId: selectedClientId });
+        pushToast({ title: 'Client linked', variant: 'success' });
+        router.refresh();
+      } catch (error) {
+        pushToast({
+          title: 'Could not link client',
+          description: error instanceof Error ? error.message : 'Try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
+  const handleCreateAndAssignClient = () => {
+    startTransition(async () => {
+      try {
+        const name = newClientName.trim();
+        if (!name) {
+          throw new Error('Client name required');
+        }
+        const { id } = await createClient({
+          name,
+          phone: newClientPhone.trim() || undefined,
+          email: newClientEmail.trim() || undefined,
+        });
+        await assignClientToJob({ jobId, clientId: id });
+        setClientOptions((prev) => [
+          {
+            id,
+            name,
+            organization: null,
+            email: newClientEmail.trim() || null,
+            phone: newClientPhone.trim() || null,
+            address: null,
+            postcode: null,
+            landlord_name: null,
+            landlord_address: null,
+            user_id: null,
+            created_at: null,
+            updated_at: null,
+          },
+          ...prev,
+        ]);
+        setSelectedClientId(id);
+        setShowNewClientForm(false);
+        setNewClientName('');
+        setNewClientPhone('');
+        setNewClientEmail('');
+        pushToast({ title: 'Client created', variant: 'success' });
+        router.refresh();
+      } catch (error) {
+        pushToast({
+          title: 'Could not create client',
           description: error instanceof Error ? error.message : 'Try again.',
           variant: 'error',
         });
@@ -1127,6 +1389,114 @@ export function CertificateWizard({
             </div>
           ) : null}
           <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
+          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-muted">Client</p>
+                <p className="mt-1 text-xs text-muted-foreground/70">Select an existing client or create one to prefill Step 1.</p>
+              </div>
+              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setShowNewClientForm((prev) => !prev)}>
+                {showNewClientForm ? 'Cancel' : 'New client'}
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr),minmax(0,1fr),auto]">
+              <Input
+                value={clientQuery}
+                onChange={(e) => setClientQuery(e.target.value)}
+                placeholder="Search clients by name, phone, or email"
+                className="rounded-2xl"
+              />
+              <Select
+                value={selectedClientId}
+                onChange={(e) => setSelectedClientId(e.target.value)}
+                className="rounded-2xl"
+              >
+                <option value="">Select client</option>
+                {filteredClients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                    {client.phone ? ` · ${client.phone}` : client.email ? ` · ${client.email}` : ''}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-full"
+                onClick={handleAssignClient}
+                disabled={isPending || !selectedClientId}
+              >
+                Use client
+              </Button>
+            </div>
+            {initialJobContext?.customer ? (
+              <p className="mt-2 text-xs text-muted-foreground/70">
+                Linked client: {initialJobContext.customer.name}
+              </p>
+            ) : null}
+            {!filteredClients.length ? (
+              <p className="mt-2 text-xs text-muted-foreground/70">No matching clients. Create one below.</p>
+            ) : null}
+            {initialJobContext?.customer && savedProperties.length ? (
+              <div className="mt-4 rounded-2xl border border-white/20 bg-white/70 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Saved property</p>
+                <div className="mt-2 grid gap-3 sm:grid-cols-[minmax(0,1fr),auto]">
+                  <Select
+                    value={selectedPropertyKey}
+                    onChange={(e) => handleSavedPropertySelect(e.target.value)}
+                    className="rounded-2xl"
+                  >
+                    <option value="">Enter new property manually</option>
+                    {savedProperties.map((property) => (
+                      <option key={property.key} value={property.key}>
+                        {property.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => handleSavedPropertySelect(selectedPropertyKey)}
+                    disabled={!selectedPropertyKey}
+                  >
+                    Use property
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground/70">
+                  Selecting a saved property fills the job location fields only. Landlord details stay separate.
+                </p>
+              </div>
+            ) : null}
+            {showNewClientForm ? (
+              <div className="mt-4 grid gap-3 rounded-2xl border border-white/20 bg-white/70 p-4 sm:grid-cols-2">
+                <Input
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  placeholder="Client name"
+                  className="rounded-2xl sm:col-span-2"
+                />
+                <Input
+                  value={newClientPhone}
+                  onChange={(e) => setNewClientPhone(e.target.value)}
+                  placeholder="Phone (optional)"
+                  className="rounded-2xl"
+                />
+                <Input
+                  type="email"
+                  value={newClientEmail}
+                  onChange={(e) => setNewClientEmail(e.target.value)}
+                  placeholder="Email (optional)"
+                  className="rounded-2xl"
+                />
+                <div className="sm:col-span-2 flex justify-end">
+                  <Button type="button" className="rounded-full" onClick={handleCreateAndAssignClient} disabled={isPending}>
+                    {isPending ? 'Saving…' : 'Create and use client'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
           <div className="grid gap-3 rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
             <p className="text-sm font-semibold text-muted">Job location</p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1147,19 +1517,53 @@ export function CertificateWizard({
               <p className="text-xs text-muted-foreground/70 sm:col-span-2">
                 Shown as “Name” in the Job Address section of the certificate.
               </p>
-              <Input
-                value={jobAddress.job_address_line1}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
-                  setInfo((prev) => ({
-                    ...prev,
-                    property_address: buildPropertyAddressFromJobAddress({ ...jobAddress, job_address_line1: value }),
-                  }));
-                }}
-                placeholder="Job address line 1"
-                className="rounded-2xl sm:col-span-2"
-              />
+              <div className="relative sm:col-span-2">
+                <Input
+                  value={addressSearchQuery}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setAddressSearchQuery(value);
+                    setAddressSearchError(null);
+                    setSelectedPostcodeMatchId(null);
+                    setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                    setInfo((prev) => ({
+                      ...prev,
+                      property_address: buildPropertyAddressFromJobAddress({ ...jobAddress, job_address_line1: value }),
+                    }));
+                  }}
+                  placeholder="Start typing address or postcode"
+                  className="rounded-2xl"
+                />
+                {isPostcodeLookupPending && !postcodeSuggestions.length ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                    Searching addresses…
+                  </div>
+                ) : null}
+                {postcodeSuggestions.length ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
+                    <div className="max-h-72 overflow-y-auto p-2">
+                      {postcodeSuggestions.map((suggestion) => {
+                        const isSelected = selectedPostcodeMatchId === suggestion.id;
+                        return (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            onClick={() => void handleAddressMatchSelect(suggestion)}
+                            className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                              isSelected
+                                ? 'bg-[color:var(--action-soft)] text-muted'
+                                : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                            }`}
+                          >
+                            <div className="text-sm font-medium">{suggestion.label}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                {addressSearchError ? <p className="mt-2 text-xs text-red-600">{addressSearchError}</p> : null}
+              </div>
               <Input
                 value={jobAddress.job_address_line2}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
@@ -1179,49 +1583,11 @@ export function CertificateWizard({
                     const value = e.target.value;
                     setJobAddress((prev) => ({ ...prev, job_postcode: value }));
                     setInfo((prev) => ({ ...prev, postcode: value }));
-                    setPostcodeSuggestions([]);
-                    setSelectedPostcodeMatchId(null);
                   }}
                   placeholder="Postcode"
                   className="rounded-2xl sm:flex-1"
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handlePostcodeLookup}
-                  disabled={isPostcodeLookupPending}
-                  className="sm:w-40"
-                >
-                  {isPostcodeLookupPending ? 'Finding…' : 'Find address'}
-                </Button>
               </div>
-              {postcodeSuggestions.length ? (
-                <div className="rounded-2xl border border-[var(--line)] bg-white/80 p-3 sm:col-span-2">
-                  <p className="text-sm font-semibold text-muted">Select property</p>
-                  <p className="mt-1 text-xs text-muted-foreground/70">
-                    Choose the correct address for this job from the postcode results.
-                  </p>
-                  <div className="mt-3 grid gap-2">
-                    {postcodeSuggestions.map((suggestion) => {
-                      const isSelected = selectedPostcodeMatchId === suggestion.id;
-                      return (
-                        <button
-                          key={suggestion.id}
-                          type="button"
-                          onClick={() => void handleAddressMatchSelect(suggestion)}
-                          className={`rounded-2xl border px-4 py-3 text-left transition ${
-                            isSelected
-                              ? 'border-[var(--action)] bg-[color:var(--action-soft)]'
-                              : 'border-[var(--line)] bg-white hover:border-[var(--brand)] hover:bg-[color:var(--brand-soft)]'
-                          }`}
-                        >
-                          <div className="text-sm font-medium text-muted">{suggestion.label}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
               <Input
                 value={jobAddress.job_tel}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
@@ -1253,21 +1619,74 @@ export function CertificateWizard({
                 placeholder="Company (optional)"
                 className="rounded-2xl"
               />
-              <Input
-                value={info.landlord_address_line1}
-                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_address_line1: e.target.value }))}
-                placeholder="Address line 1"
-                className="rounded-2xl sm:col-span-2"
-              />
+              <div className="relative sm:col-span-2">
+                <Input
+                  value={landlordAddressSearchQuery}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setLandlordAddressSearchQuery(value);
+                    setLandlordAddressSearchError(null);
+                    setSelectedLandlordMatchId(null);
+                    setInfo((prev) => ({
+                      ...prev,
+                      landlord_address_line1: value,
+                      landlord_address: buildLandlordAddress(value, prev.landlord_address_line2, prev.landlord_city),
+                    }));
+                  }}
+                  placeholder="Start typing address or postcode"
+                  className="rounded-2xl"
+                />
+                {isLandlordLookupPending && !landlordAddressSuggestions.length ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                    Searching addresses…
+                  </div>
+                ) : null}
+                {landlordAddressSuggestions.length ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
+                    <div className="max-h-72 overflow-y-auto p-2">
+                      {landlordAddressSuggestions.map((suggestion) => {
+                        const isSelected = selectedLandlordMatchId === suggestion.id;
+                        return (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            onClick={() => void handleLandlordAddressMatchSelect(suggestion)}
+                            className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                              isSelected
+                                ? 'bg-[color:var(--action-soft)] text-muted'
+                                : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                            }`}
+                          >
+                            <div className="text-sm font-medium">{suggestion.label}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                {landlordAddressSearchError ? <p className="mt-2 text-xs text-red-600">{landlordAddressSearchError}</p> : null}
+              </div>
               <Input
                 value={info.landlord_address_line2}
-                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_address_line2: e.target.value }))}
+                onChange={(e) =>
+                  setInfo((prev) => ({
+                    ...prev,
+                    landlord_address_line2: e.target.value,
+                    landlord_address: buildLandlordAddress(prev.landlord_address_line1, e.target.value, prev.landlord_city),
+                  }))
+                }
                 placeholder="Address line 2 (optional)"
                 className="rounded-2xl sm:col-span-2"
               />
               <Input
                 value={info.landlord_city}
-                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_city: e.target.value }))}
+                onChange={(e) =>
+                  setInfo((prev) => ({
+                    ...prev,
+                    landlord_city: e.target.value,
+                    landlord_address: buildLandlordAddress(prev.landlord_address_line1, prev.landlord_address_line2, e.target.value),
+                  }))
+                }
                 placeholder="City / Town"
                 className="rounded-2xl"
               />
@@ -1309,7 +1728,7 @@ export function CertificateWizard({
           className="rounded-full px-6"
           data-testid="cp12-step1-next"
         >
-          Next → Appliances
+          {isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next → Appliances'}
         </Button>
       </div>
     </WizardLayout>

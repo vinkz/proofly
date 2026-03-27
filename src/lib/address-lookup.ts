@@ -15,30 +15,35 @@ export type AddressLookupResult = {
   label: string;
 };
 
-export type GetAddressAutocompleteSuggestion = {
+export type IdealAutocompleteHit = {
   id?: string;
-  address?: string;
+  suggestion?: string;
 };
 
-export type GetAddressAutocompleteResponse = {
-  suggestions?: GetAddressAutocompleteSuggestion[];
+export type IdealAutocompleteResponse = {
+  result?: {
+    hits?: IdealAutocompleteHit[];
+  };
+  code?: number;
+  message?: string;
 };
 
-export type GetAddressDetailsResponse = {
-  id?: string;
-  postcode?: string;
-  line_1?: string;
-  line_2?: string;
-  line_3?: string;
-  line_4?: string;
-  locality?: string;
-  town_or_city?: string;
-  county?: string;
-  building_name?: string;
-  building_number?: string;
-  sub_building_name?: string;
-  sub_building_number?: string;
-  formatted_address?: string[];
+export type IdealResolveResponse = {
+  result?: {
+    id?: string;
+    line_1?: string;
+    line_2?: string;
+    line_3?: string;
+    post_town?: string;
+    postcode?: string;
+    building_name?: string;
+    building_number?: string;
+    sub_building_name?: string;
+    organisation_name?: string;
+    premise?: string;
+  };
+  code?: number;
+  message?: string;
 };
 
 const pickText = (...values: Array<string | null | undefined>) => {
@@ -56,14 +61,14 @@ export function normalizeUkPostcode(value: string) {
   return `${compact.slice(0, -3)} ${compact.slice(-3)}`;
 }
 
-export function normalizeAddressLookupSuggestions(response: GetAddressAutocompleteResponse) {
+export function normalizeAddressLookupSuggestions(response: IdealAutocompleteResponse) {
   const seen = new Set<string>();
-  return (response.suggestions ?? [])
-    .map((suggestion) => {
-      const id = suggestion.id?.trim();
-      const address = suggestion.address?.trim();
-      if (!id || !address) return null;
-      return { id, address, label: address };
+  return (response.result?.hits ?? [])
+    .map((hit) => {
+      const id = hit.id?.trim();
+      const suggestion = hit.suggestion?.trim();
+      if (!id || !suggestion) return null;
+      return { id, address: suggestion, label: suggestion };
     })
     .filter((suggestion): suggestion is AddressLookupSuggestion => Boolean(suggestion))
     .filter((suggestion) => {
@@ -74,18 +79,21 @@ export function normalizeAddressLookupSuggestions(response: GetAddressAutocomple
     });
 }
 
-export function normalizeAddressLookupResult(result: GetAddressDetailsResponse): AddressLookupResult | null {
-  const line1 = pickText(result.line_1, result.formatted_address?.[0]);
-  const line2 = [result.line_2, result.line_3, result.line_4, result.locality].filter((value) => value && value.trim()).join(', ');
-  const city = pickText(result.town_or_city, result.formatted_address?.[3], result.county);
-  const postcode = normalizeUkPostcode(pickText(result.postcode, result.formatted_address?.at(-1)));
+export function normalizeAddressLookupResult(response: IdealResolveResponse): AddressLookupResult | null {
+  const result = response.result;
+  if (!result) return null;
+
+  const line1 = pickText(result.line_1);
+  const line2 = [result.line_2, result.line_3].filter((value) => value && value.trim()).join(', ');
+  const city = pickText(result.post_town);
+  const postcode = normalizeUkPostcode(pickText(result.postcode));
   const summary = [line1, line2, city].filter(Boolean).join(', ');
 
   if (!line1) return null;
 
   return {
     id: String(result.id ?? summary),
-    name: pickText(result.sub_building_name, result.building_name, result.sub_building_number, result.building_number),
+    name: pickText(result.sub_building_name, result.organisation_name, result.building_name, result.building_number, result.premise),
     line1,
     line2,
     city,
