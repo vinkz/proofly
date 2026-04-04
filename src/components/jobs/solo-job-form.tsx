@@ -629,14 +629,8 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
     });
   };
 
-  const renderFormActions = (sticky = false) => (
-    <div
-      className={`flex items-center justify-end gap-3 ${
-        sticky
-          ? 'sticky top-[78px] z-20 rounded-2xl border border-white/10 bg-white/85 px-4 py-3 shadow-sm backdrop-blur'
-          : ''
-      }`}
-    >
+  const renderFormActions = () => (
+    <div className="flex items-center justify-end gap-3">
       <Button type="button" variant="secondary" onClick={() => router.push('/dashboard')} disabled={isPending}>
         Cancel
       </Button>
@@ -687,8 +681,6 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
           ) : null}
         </CardContent>
       </Card>
-
-      {renderFormActions(true)}
 
       <Card className="border border-white/10">
         <CardHeader>
