@@ -8,32 +8,42 @@ import { isUUID } from '@/lib/ids';
 import { getCertificatePdfSignedUrl, getCertificateState } from '@/server/certificates';
 import { listInvoicesForJob } from '@/server/invoices';
 import type { Database } from '@/lib/database.types';
+import { CERTIFICATE_TYPES, type CertificateType } from '@/types/certificates';
+
+const parseCertificateType = (value: string | undefined): CertificateType | null => {
+  if (!value) return null;
+  return CERTIFICATE_TYPES.includes(value as CertificateType) ? (value as CertificateType) : null;
+};
 
 export default async function JobPdfPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ url?: string }>;
+  searchParams: Promise<{ url?: string; certificateType?: string }>;
 }) {
   const { id } = await params;
   const qs = await searchParams;
   if (!isUUID(id)) notFound();
+  const selectedCertificateType = parseCertificateType(qs.certificateType);
 
   const supabase = await supabaseServerReadOnly();
+  let certificateQuery = supabase
+    .from('certificates')
+    .select('id, job_id, cert_type, pdf_path, pdf_url, created_at')
+    .eq('job_id', id)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (selectedCertificateType) {
+    certificateQuery = certificateQuery.eq('cert_type', selectedCertificateType);
+  }
   const [
     { data: certificate, error: certificateError },
     { data: job, error: jobError },
     { data: report, error: reportError },
     invoices,
   ] = await Promise.all([
-    supabase
-      .from('certificates')
-      .select('id, job_id, pdf_path, pdf_url, created_at')
-      .eq('job_id', id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    certificateQuery.maybeSingle(),
     supabase.from('jobs').select('*').eq('id', id).maybeSingle(),
     supabase
       .from('reports')
@@ -69,7 +79,10 @@ export default async function JobPdfPage({
     const certificateState = await getCertificateState(certificate ?? null);
     if (!certificateError && certificateState !== 'missing') {
       try {
-        const signed = await getCertificatePdfSignedUrl(id);
+        const signed = await getCertificatePdfSignedUrl({
+          jobId: id,
+          certificateType: selectedCertificateType ?? undefined,
+        });
         pdfUrl = signed.url;
       } catch (error) {
         pdfError = error instanceof Error ? error.message : 'Unable to load PDF.';

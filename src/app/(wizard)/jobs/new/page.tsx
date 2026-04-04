@@ -1,68 +1,114 @@
-import Link from 'next/link';
-import { ChevronRight } from 'lucide-react';
-import { redirect } from 'next/navigation';
-
-import { CERTIFICATE_LABELS, CERTIFICATE_TYPES } from '@/types/certificates';
 import { Card } from '@/components/ui/card';
-import { createJob } from '@/server/certificates';
+import { SoloJobForm, type SavedPropertyOption } from '@/components/jobs/solo-job-form';
+import { supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { listClients } from '@/server/clients';
 
-async function startCp12() {
-  'use server';
-  const { jobId } = await createJob({ certificateType: 'cp12' });
-  redirect(`/wizard/create/cp12?jobId=${jobId}`);
-}
+const pickText = (...values: Array<string | null | undefined>) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  }
+  return '';
+};
 
-export default function NewJobPage() {
+const splitAddressParts = (value: string | null | undefined) =>
+  String(value ?? '')
+    .split(/[\r\n,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+export default async function NewJobPage() {
+  const clients = await listClients();
+  const supabase = await supabaseServerReadOnly();
+
+  const clientIdToPrimary = new Map<string, string>();
+  clients.forEach((client) => {
+    const ids = client.client_ids ?? [client.id];
+    ids.forEach((id) => clientIdToPrimary.set(id, client.id));
+  });
+
+  const clientIds = Array.from(clientIdToPrimary.keys());
+  const { data: clientJobs, error: jobsErr } = clientIds.length
+    ? await supabase.from('jobs').select('id, client_id, address, created_at').in('client_id', clientIds).order('created_at', { ascending: false })
+    : { data: [], error: null };
+  if (jobsErr) throw new Error(jobsErr.message);
+
+  const propertyJobIds = (clientJobs ?? [])
+    .map((job) => job.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+  const fieldKeys = ['job_address_name', 'job_address_line1', 'job_address_city', 'job_postcode', 'job_tel'];
+  const { data: propertyFieldRows, error: propertyFieldsErr } = propertyJobIds.length
+    ? await supabase.from('job_fields').select('job_id, field_key, value').in('job_id', propertyJobIds).in('field_key', fieldKeys)
+    : { data: [], error: null };
+  if (propertyFieldsErr) throw new Error(propertyFieldsErr.message);
+
+  const fieldsByJob = (propertyFieldRows ?? []).reduce<Record<string, Record<string, string>>>((acc, row) => {
+    const jobId = row.job_id ?? '';
+    const fieldKey = row.field_key ?? '';
+    const value = row.value?.trim() ?? '';
+    if (!jobId || !fieldKey || !value) return acc;
+    acc[jobId] = acc[jobId] ?? {};
+    acc[jobId][fieldKey] = value;
+    return acc;
+  }, {});
+
+  const propertiesByClientId = clients.reduce<Record<string, SavedPropertyOption[]>>((acc, client) => {
+    acc[client.id] = [];
+    return acc;
+  }, {});
+  const seenByClient = new Map<string, Set<string>>();
+
+  (clientJobs ?? []).forEach((job) => {
+    const rawClientId = job.client_id ?? '';
+    const clientId = rawClientId ? clientIdToPrimary.get(rawClientId) ?? rawClientId : '';
+    if (!clientId || !propertiesByClientId[clientId]) return;
+
+    const fields = fieldsByJob[job.id] ?? {};
+    const parts = splitAddressParts(job.address);
+    const property: SavedPropertyOption = {
+      key: job.id,
+      label: '',
+      job_address_name: pickText(fields.job_address_name),
+      job_address_line1: pickText(fields.job_address_line1, parts[0]),
+      job_address_city: pickText(fields.job_address_city, parts.length > 1 ? parts.at(-1) ?? '' : ''),
+      job_postcode: pickText(fields.job_postcode),
+      job_tel: pickText(fields.job_tel),
+    };
+
+    if (!property.job_address_line1) return;
+
+    property.label = [property.job_address_name || property.job_address_line1, [property.job_address_line1, property.job_address_city, property.job_postcode].filter(Boolean).join(', ')]
+      .filter(Boolean)
+      .join(' - ');
+
+    const dedupeKey = [
+      property.job_address_name,
+      property.job_address_line1,
+      property.job_address_city,
+      property.job_postcode,
+      property.job_tel,
+    ]
+      .join('::')
+      .toLowerCase();
+    const seen = seenByClient.get(clientId) ?? new Set<string>();
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    seenByClient.set(clientId, seen);
+    propertiesByClientId[clientId].push(property);
+  });
+
   return (
-    <div className="mx-auto max-w-2xl py-10">
+    <div className="mx-auto max-w-4xl space-y-6 py-10">
       <div className="space-y-2">
-        <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Start a new job</p>
-        <h1 className="text-3xl font-bold text-[var(--brand)]">Select record type</h1>
-        <p className="text-sm text-muted-foreground/80">Jobs start immediately; you can add contact details in the wizard.</p>
+        <p className="text-xs uppercase tracking-wide text-[var(--accent)]">New job</p>
+        <h1 className="text-3xl font-bold text-[var(--brand)]">Create an upcoming job</h1>
+        <p className="text-sm text-muted-foreground/80">
+          Save the key job details first. CP12 upcoming jobs use the same Job Address and Landlord fields as Step 1.
+        </p>
       </div>
-      <Card className="mt-6 space-y-3 border border-white/50 bg-white/95 p-4 shadow">
-        {CERTIFICATE_TYPES.map((type) =>
-          type === 'cp12' ? (
-            <form
-              key={type}
-              action={startCp12}
-              className="group flex w-full items-center justify-between rounded-2xl border border-white/30 bg-[var(--muted)]/60 px-4 py-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white"
-            >
-              <button
-                type="submit"
-                className="flex w-full items-center justify-between border-0 bg-transparent p-0 text-left text-inherit"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-muted">{CERTIFICATE_LABELS[type]}</p>
-                  <p className="text-xs text-muted-foreground/70">Create a new {CERTIFICATE_LABELS[type]}</p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
-              </button>
-            </form>
-          ) : (
-            <Link
-              key={type}
-              href={`/wizard/create/${type}`}
-              className="group flex w-full items-center justify-between rounded-2xl border border-white/30 bg-[var(--muted)]/60 px-4 py-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white"
-            >
-              <div>
-                <p className="text-sm font-semibold text-muted">{CERTIFICATE_LABELS[type]}</p>
-                <p className="text-xs text-muted-foreground/70">Create a new {CERTIFICATE_LABELS[type]}</p>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
-            </Link>
-          ),
-        )}
-        <Link
-          href="/jobs/scan"
-          className="group flex w-full items-center justify-between rounded-2xl border border-white/30 bg-[var(--muted)]/60 px-4 py-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white"
-        >
-          <div>
-            <p className="text-sm font-semibold text-muted">Scan Job Sheet</p>
-            <p className="text-xs text-muted-foreground/70">Open the QR scanner to start a job.</p>
-          </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1" />
-        </Link>
+
+      <Card className="border border-white/10 bg-white/95 p-6 shadow">
+        <SoloJobForm clients={clients} propertiesByClientId={propertiesByClientId} />
       </Card>
     </div>
   );

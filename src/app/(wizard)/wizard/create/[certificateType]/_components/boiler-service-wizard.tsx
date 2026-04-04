@@ -10,16 +10,15 @@ import { SignatureCard } from '@/components/certificates/signature-card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { CollapsibleSection } from '@/components/wizard/layout/collapsible-section';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
-import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { FgaAutofillInline } from '@/components/fga/FgaAutofillInline';
 import {
   BOILER_SERVICE_DEMO_INFO,
   BOILER_SERVICE_DEMO_DETAILS,
   BOILER_SERVICE_DEMO_CHECKS,
-  BOILER_SERVICE_FLUE_TYPES,
   BOILER_SERVICE_TYPES,
   type BoilerServiceChecks,
   type BoilerServiceDetails,
@@ -43,6 +42,7 @@ type BoilerServiceWizardProps = {
   initialJobContext?: InitialJobContext | null;
   initialPhotoPreviews?: Record<string, string>;
   stepOffset?: number;
+  startStep?: number;
 };
 
 type BoilerServiceJobAddress = {
@@ -54,6 +54,17 @@ type BoilerServiceJobAddress = {
   job_address_city: string;
   job_postcode: string;
   job_tel: string;
+};
+
+const BOILER_SERVICE_DEMO_JOB_ADDRESS: BoilerServiceJobAddress = {
+  job_reference: 'BSR-DEMO-001',
+  job_visit_date: '',
+  job_address_name: 'Flat 2 - Plant room',
+  job_address_line1: '42 Station Road',
+  job_address_line2: 'Rear access gate',
+  job_address_city: 'London',
+  job_postcode: 'E2 2AA',
+  job_tel: '020 7000 0000',
 };
 
 const EMPTY_CHECKS: BoilerServiceChecks = {
@@ -69,10 +80,21 @@ const EMPTY_CHECKS: BoilerServiceChecks = {
   service_leaks_checked: '',
   operating_pressure_mbar: '',
   inlet_pressure_mbar: '',
+  heat_input: '',
   co_ppm: '',
   co2_percent: '',
   flue_gas_temp_c: '',
   system_pressure_bar: '',
+  appliance_conforms_standards: '',
+  cylinder_condition_checked: '',
+  co_alarm_fitted: '',
+  all_functional_parts_available: '',
+  warm_air_grills_working: '',
+  magnetic_filter_fitted: '',
+  water_quality_acceptable: '',
+  warning_notice_explained: '',
+  appliance_replacement_recommended: '',
+  system_improvements_recommended: '',
   service_summary: '',
   recommendations: '',
   defects_found: '',
@@ -82,13 +104,6 @@ const EMPTY_CHECKS: BoilerServiceChecks = {
 };
 
 const FINAL_EVIDENCE_DEFAULT: BoilerServicePhotoCategory = 'boiler';
-
-const BOILER_SERVICE_EVIDENCE_PHOTOS: Array<{ key: BoilerServicePhotoCategory; label: string }> = [
-  { key: 'serial_label', label: 'Serial / Label' },
-  { key: 'flue', label: 'Flue evidence' },
-  { key: 'before_after', label: 'Before / After' },
-  { key: 'issue_defect', label: 'Issue / Defect' },
-];
 
 const normalizeGasType = (value: string) => {
   const normalized = value.toLowerCase().replace(/\s+/g, '_');
@@ -103,19 +118,52 @@ const denormalizeGasType = (value: string) => {
   return value === 'unknown' ? '' : value || '';
 };
 
+const makeDemoSignatureDataUrl = (label: string, stroke: string) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="320" height="90" viewBox="0 0 320 90">
+      <rect width="320" height="90" fill="white" fill-opacity="0" />
+      <path d="M16 62 C42 24, 78 82, 116 38 S178 78, 214 34 S270 72, 304 30" fill="none" stroke="${stroke}" stroke-width="4" stroke-linecap="round" />
+      <text x="18" y="82" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#334155">${label}</text>
+    </svg>
+  `.trim();
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+};
+
+const splitAddressParts = (value: string | null | undefined) =>
+  String(value ?? '')
+    .split(/[\r\n,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+const composeAddress = (...parts: Array<string | null | undefined>) =>
+  parts
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(', ');
+
 export function BoilerServiceWizard({
   jobId,
   initialFields,
   initialJobContext = null,
-  initialPhotoPreviews = {},
   stepOffset = 0,
+  startStep = 1,
 }: BoilerServiceWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
-  const [step, setStep] = useState(1);
+  const initialStep = Math.min(4, Math.max(1, startStep - stepOffset));
+  const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : null;
+  const customerAddressParts = splitAddressParts(
+    resolvedFields.customer_address ?? initialJobContext?.customer?.address ?? '',
+  );
+  const customerAddressLine2 =
+    resolvedFields.customer_address_line2 ??
+    (customerAddressParts.length > 2 ? customerAddressParts.slice(1, -1).join(', ') : '');
+  const customerCity =
+    resolvedFields.customer_city ??
+    (customerAddressParts.length > 1 ? customerAddressParts.at(-1) ?? '' : '');
 
   const [completionDate, setCompletionDate] = useState(
     resolvedFields.completion_date ? resolvedFields.completion_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -123,6 +171,12 @@ export function BoilerServiceWizard({
 
   const [jobInfo, setJobInfo] = useState<BoilerServiceJobInfo>({
     customer_name: resolvedFields.customer_name ?? '',
+    customer_company: resolvedFields.customer_company ?? initialJobContext?.customer?.organization ?? '',
+    customer_address_line1: resolvedFields.customer_address_line1 ?? customerAddressParts[0] ?? '',
+    customer_address_line2: customerAddressLine2,
+    customer_city: customerCity,
+    customer_postcode: resolvedFields.customer_postcode ?? initialJobContext?.customer?.postcode ?? '',
+    customer_phone: resolvedFields.customer_phone ?? resolvedFields.customer_contact ?? initialJobContext?.customer?.phone ?? '',
     property_address: resolvedFields.property_address ?? '',
     postcode: resolvedFields.postcode ?? '',
     service_date: resolvedFields.service_date ? resolvedFields.service_date.slice(0, 10) : '',
@@ -163,7 +217,6 @@ export function BoilerServiceWizard({
     }, {}),
   });
 
-  const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>(initialPhotoPreviews);
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
@@ -196,25 +249,62 @@ export function BoilerServiceWizard({
     startTransition(async () => {
       try {
         const today = new Date().toISOString().slice(0, 10);
+        const nextServiceDue = checks.next_service_due || `${new Date().getFullYear() + 1}-01-15`;
         const demoInfo: typeof jobInfo = {
           ...jobInfo,
           ...BOILER_SERVICE_DEMO_INFO,
-          service_date: BOILER_SERVICE_DEMO_INFO.service_date ?? today,
+          customer_name: 'Jordan Smith',
+          customer_company: 'Smith Lettings',
+          customer_address_line1: '9 Office Park',
+          customer_address_line2: 'Floor 2',
+          customer_city: 'London',
+          customer_postcode: 'SE1 2BB',
+          customer_phone: '07700 900456',
+          property_address: '42 Station Road',
+          postcode: 'E2 2AA',
+          service_date: today,
+        };
+        const demoJobAddress: BoilerServiceJobAddress = {
+          ...BOILER_SERVICE_DEMO_JOB_ADDRESS,
+          job_visit_date: today,
         };
         const demoDetails = { ...BOILER_SERVICE_DEMO_DETAILS };
-        const demoChecks = { ...BOILER_SERVICE_DEMO_CHECKS };
+        const demoChecks = { ...BOILER_SERVICE_DEMO_CHECKS, next_service_due: nextServiceDue };
+        const nextCompletionDate = today;
+        const demoEngineerSignature = makeDemoSignatureDataUrl('Engineer signature', '#0f172a');
+        const demoCustomerSignature = makeDemoSignatureDataUrl('Customer signature', '#1d4ed8');
 
         setJobInfo(demoInfo);
+        setJobAddress(demoJobAddress);
         setDetails(demoDetails);
         setChecks(demoChecks);
+        setCompletionDate(nextCompletionDate);
+        setEngineerSignature(demoEngineerSignature);
+        setCustomerSignature(demoCustomerSignature);
 
         await saveBoilerServiceJobInfo({ jobId, data: demoInfo });
+        await saveJobFields({
+          jobId,
+          fields: {
+            job_reference: demoJobAddress.job_reference,
+            job_address_name: demoJobAddress.job_address_name,
+            job_address_line1: demoJobAddress.job_address_line1,
+            job_address_line2: demoJobAddress.job_address_line2,
+            job_address_city: demoJobAddress.job_address_city,
+            job_postcode: demoJobAddress.job_postcode,
+            job_tel: demoJobAddress.job_tel,
+            job_visit_date: demoJobAddress.job_visit_date,
+            completion_date: nextCompletionDate,
+            engineer_signature: demoEngineerSignature,
+            customer_signature: demoCustomerSignature,
+          },
+        });
         await saveBoilerServiceDetails({ jobId, data: demoDetails });
         await saveBoilerServiceChecks({ jobId, data: demoChecks });
-        pushToast({ title: 'Boiler Service demo filled', variant: 'success' });
+        pushToast({ title: 'Boiler Service autofill applied', variant: 'success' });
       } catch (error) {
         pushToast({
-          title: 'Could not fill demo data',
+          title: 'Could not autofill test data',
           description: error instanceof Error ? error.message : 'Please try again.',
           variant: 'error',
         });
@@ -243,29 +333,18 @@ export function BoilerServiceWizard({
       });
     };
 
-  const handleDetailsNext = () => {
-    startTransition(async () => {
-      try {
-        await saveBoilerServiceDetails({ jobId, data: details });
-        setStep(2);
-        pushToast({ title: 'Saved boiler details', variant: 'success' });
-      } catch (error) {
-        pushToast({
-          title: 'Could not save details',
-          description: error instanceof Error ? error.message : 'Please try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
-
-  const handleJobAddressNext = () => {
+  const handleJobInfoNext = () => {
     startTransition(async () => {
       try {
         const serviceDate = jobAddress.job_visit_date || jobInfo.service_date || completionDate;
+        const propertyAddress = composeAddress(
+          jobAddress.job_address_line1,
+          jobAddress.job_address_line2,
+          jobAddress.job_address_city,
+        );
         const nextInfo = {
           ...jobInfo,
-          property_address: jobAddress.job_address_line1 || jobInfo.property_address,
+          property_address: propertyAddress || jobInfo.property_address,
           postcode: jobAddress.job_postcode || jobInfo.postcode,
           service_date: serviceDate,
         };
@@ -284,11 +363,27 @@ export function BoilerServiceWizard({
           },
         });
         setJobInfo(nextInfo);
-        setStep(3);
-        pushToast({ title: 'Saved job address', variant: 'success' });
+        setStep(2);
+        pushToast({ title: 'Saved job and client details', variant: 'success' });
       } catch (error) {
         pushToast({
-          title: 'Could not save job address',
+          title: 'Could not save job details',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
+  const handleDetailsNext = () => {
+    startTransition(async () => {
+      try {
+        await saveBoilerServiceDetails({ jobId, data: details });
+        setStep(3);
+        pushToast({ title: 'Saved boiler details', variant: 'success' });
+      } catch (error) {
+        pushToast({
+          title: 'Could not save details',
           description: error instanceof Error ? error.message : 'Please try again.',
           variant: 'error',
         });
@@ -313,8 +408,33 @@ export function BoilerServiceWizard({
   };
 
   const persistBeforePdf = async () => {
-    const infoToSave = { ...jobInfo, service_date: jobInfo.service_date || completionDate };
+    const serviceDate = completionDate || jobAddress.job_visit_date || jobInfo.service_date;
+    const propertyAddress = composeAddress(
+      jobAddress.job_address_line1,
+      jobAddress.job_address_line2,
+      jobAddress.job_address_city,
+    );
+    const infoToSave = {
+      ...jobInfo,
+      property_address: propertyAddress || jobInfo.property_address,
+      postcode: jobAddress.job_postcode || jobInfo.postcode,
+      service_date: serviceDate,
+    };
     await saveBoilerServiceJobInfo({ jobId, data: infoToSave });
+    await saveJobFields({
+      jobId,
+      fields: {
+        job_reference: jobAddress.job_reference,
+        job_address_name: jobAddress.job_address_name,
+        job_address_line1: jobAddress.job_address_line1,
+        job_address_line2: jobAddress.job_address_line2,
+        job_address_city: jobAddress.job_address_city,
+        job_postcode: jobAddress.job_postcode,
+        job_tel: jobAddress.job_tel,
+        job_visit_date: serviceDate,
+        completion_date: completionDate || serviceDate,
+      },
+    });
     await saveBoilerServiceDetails({ jobId, data: details });
     await saveBoilerServiceChecks({ jobId, data: checks });
   };
@@ -325,19 +445,19 @@ export function BoilerServiceWizard({
     startTransition(async () => {
       try {
         await persistBeforePdf();
-        const finalInfo = { ...jobInfo, service_date: jobInfo.service_date || completionDate };
+        const finalInfo = { ...jobInfo, service_date: completionDate || jobInfo.service_date };
         await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
         const { jobId: resultJobId } = await generateGasServicePdf({ jobId, previewOnly: false });
         pushToast({
           title: 'Boiler Service generated successfully',
           description: (
-            <Link href={`/jobs/${resultJobId}/pdf`} className="text-[var(--action)] underline">
+            <Link href={`/jobs/${resultJobId}/pdf?certificateType=gas_service`} className="text-[var(--action)] underline">
               Open document preview
             </Link>
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}/pdf`);
+        router.push(`/jobs/${resultJobId}/pdf?certificateType=gas_service`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -387,16 +507,30 @@ export function BoilerServiceWizard({
     { key: 'service_controls_checked', label: 'Controls checked' },
     { key: 'service_leaks_checked', label: 'Leaks checked' },
   ];
+  const additionalTemplateChecks: Array<{ key: keyof BoilerServiceChecks; label: string }> = [
+    { key: 'appliance_conforms_standards', label: 'Appliance conforms to standards' },
+    { key: 'cylinder_condition_checked', label: 'Cylinder condition checked' },
+    { key: 'co_alarm_fitted', label: 'CO alarm fitted' },
+    { key: 'all_functional_parts_available', label: 'All functional parts available' },
+    { key: 'warm_air_grills_working', label: 'Warm air grills working' },
+    { key: 'magnetic_filter_fitted', label: 'Magnetic filter fitted' },
+    { key: 'water_quality_acceptable', label: 'Water quality acceptable' },
+    { key: 'warning_notice_explained', label: 'Warning notice explained' },
+    { key: 'appliance_replacement_recommended', label: 'Appliance replacement recommended' },
+    { key: 'system_improvements_recommended', label: 'System improvements recommended' },
+  ];
   const hasValue = (value: string) => value.trim().length > 0;
   const readingsFields: Array<keyof BoilerServiceChecks> = [
     'operating_pressure_mbar',
     'inlet_pressure_mbar',
+    'heat_input',
     'co_ppm',
     'co2_percent',
     'flue_gas_temp_c',
     'system_pressure_bar',
   ];
   const checksCompleted = checkItems.filter((item) => hasValue(checks[item.key] ?? '')).length;
+  const templateChecksCompleted = additionalTemplateChecks.filter((item) => hasValue(checks[item.key] ?? '')).length;
   const readingsCompleted = readingsFields.filter((key) => hasValue(checks[key] ?? '')).length;
   const summaryComplete = hasValue(checks.service_summary) && hasValue(checks.recommendations);
   const defectsActive = (checks.defects_found ?? '') === 'yes';
@@ -404,6 +538,7 @@ export function BoilerServiceWizard({
   const nextServiceComplete = hasValue(checks.next_service_due ?? '');
   const sectionOrder = [
     { key: 'checks', complete: checksCompleted === checkItems.length },
+    { key: 'template', complete: templateChecksCompleted === additionalTemplateChecks.length },
     { key: 'readings', complete: readingsCompleted === readingsFields.length },
     { key: 'summary', complete: summaryComplete },
     { key: 'defects', complete: defectsComplete },
@@ -417,14 +552,213 @@ export function BoilerServiceWizard({
         <WizardLayout
           step={offsetStep(1)}
           total={totalSteps}
-          title="Appliance details"
-          status="Boiler profile"
+          title="Job Address & Client"
+          status="Visit details"
+          actions={
+            <div className="flex justify-end">
+              <Button className="rounded-full px-6" onClick={handleJobInfoNext} disabled={isPending}>
+                Next → Boiler details
+              </Button>
+            </div>
+          }
         >
           <div className="space-y-4">
             {demoEnabled ? (
               <div className="flex justify-end">
                 <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
-                  Fill demo Boiler Service
+                  Autofill test Boiler Service
+                </Button>
+              </div>
+            ) : null}
+            <Card className="border border-white/10">
+              <CardHeader>
+                <CardTitle className="text-lg text-muted">Job Address</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    Service date
+                  </label>
+                  <Input
+                    type="date"
+                    value={jobAddress.job_visit_date || jobInfo.service_date}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setJobAddress((prev) => ({ ...prev, job_visit_date: value }));
+                      setJobInfo((prev) => ({ ...prev, service_date: value }));
+                    }}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    Property name / reference
+                  </label>
+                  <Input
+                    value={jobAddress.job_address_name}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                    placeholder="Boiler room"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    Address line 1
+                  </label>
+                  <Input
+                    value={jobAddress.job_address_line1}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line1: e.target.value }))}
+                    placeholder="123 High Street"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    Address line 2
+                  </label>
+                  <Input
+                    value={jobAddress.job_address_line2}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                    placeholder="Optional"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">City / town</label>
+                  <Input
+                    value={jobAddress.job_address_city}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                    placeholder="London"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Postcode</label>
+                  <Input
+                    value={jobAddress.job_postcode}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+                      setJobInfo((prev) => ({ ...prev, postcode: value }));
+                    }}
+                    placeholder="SW1A 1AA"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Site telephone</label>
+                  <Input
+                    value={jobAddress.job_tel}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
+                    placeholder="020 7946 0958"
+                    className="mt-1"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border border-white/10">
+              <CardHeader>
+                <CardTitle className="text-lg text-muted">Client</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Name</label>
+                  <Input
+                    value={jobInfo.customer_name}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
+                    placeholder="Client name"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Company</label>
+                  <Input
+                    value={jobInfo.customer_company}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_company: e.target.value }))}
+                    placeholder="Optional"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    Address line 1
+                  </label>
+                  <Input
+                    value={jobInfo.customer_address_line1}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_address_line1: e.target.value }))}
+                    placeholder="Address line 1"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                    Address line 2
+                  </label>
+                  <Input
+                    value={jobInfo.customer_address_line2}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_address_line2: e.target.value }))}
+                    placeholder="Optional"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">City / town</label>
+                  <Input
+                    value={jobInfo.customer_city}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_city: e.target.value }))}
+                    placeholder="London"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Postcode</label>
+                  <Input
+                    value={jobInfo.customer_postcode}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_postcode: e.target.value }))}
+                    placeholder="SW1A 1AA"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Tel. No.</label>
+                  <Input
+                    value={jobInfo.customer_phone}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_phone: e.target.value }))}
+                    placeholder="Optional"
+                    className="mt-1"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button className="rounded-full px-6" onClick={handleJobInfoNext} disabled={isPending}>
+              Next → Boiler details
+            </Button>
+          </div>
+        </WizardLayout>
+      ) : null}
+
+      {step === 2 ? (
+        <WizardLayout
+          step={offsetStep(2)}
+          total={totalSteps}
+          title="Boiler details"
+          status="Boiler profile"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex justify-end">
+              <Button className="rounded-full px-6" onClick={handleDetailsNext} disabled={isPending}>
+                Next → Checks
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            {demoEnabled ? (
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                  Autofill test Boiler Service
                 </Button>
               </div>
             ) : null}
@@ -436,159 +770,16 @@ export function BoilerServiceWizard({
                   onApplianceChange={handleApplianceProfileChange}
                   typeOptions={[...BOILER_SERVICE_TYPES]}
                   allowMultiple={false}
-                  showExtendedFields
+                  showExtendedFields={false}
                   showYear={false}
                   applyExtendedDefaults={false}
                   inlineEditor
                 />
               </div>
             </div>
-            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-              <p className="text-sm font-semibold text-muted">Flue type</p>
-              <div className="mt-3">
-                <SearchableSelect
-                  label="Flue type"
-                  value={details.flue_type ?? ''}
-                  options={[...BOILER_SERVICE_FLUE_TYPES].map((option) => ({
-                    label: option.label,
-                    value: option.value,
-                  }))}
-                  placeholder="Select or type"
-                  onChange={(val) => setDetails((prev) => ({ ...prev, flue_type: val }))}
-                />
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {BOILER_SERVICE_EVIDENCE_PHOTOS.map((card) => (
-                <EvidenceCard
-                  key={card.key}
-                  title={card.label}
-                  fields={[]}
-                  values={{}}
-                  onChange={() => null}
-                  photoPreview={photoPreviews[card.key]}
-                  onPhotoUpload={(file) => {
-                    const data = new FormData();
-                    data.append('jobId', jobId);
-                    data.append('category', card.key);
-                    data.append('file', file);
-                    startTransition(async () => {
-                      try {
-                        const { url } = await uploadBoilerServicePhoto(data);
-                        setPhotoPreviews((prev) => ({ ...prev, [card.key]: url }));
-                        pushToast({ title: `${card.label} photo saved`, variant: 'success' });
-                      } catch (error) {
-                        pushToast({
-                          title: 'Upload failed',
-                          description: error instanceof Error ? error.message : 'Please try again.',
-                          variant: 'error',
-                        });
-                      }
-                    });
-                  }}
-                  onVoice={() =>
-                    pushToast({
-                      title: 'Voice capture coming soon',
-                      description: 'Add a quick note instead.',
-                      variant: 'default',
-                    })
-                  }
-                  onText={() =>
-                    pushToast({
-                      title: 'Manual entry',
-                      description: 'Edit the fields above to capture details.',
-                      variant: 'default',
-                    })
-                  }
-                />
-              ))}
-            </div>
           </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleDetailsNext} disabled={isPending}>
-              Next → Job
-            </Button>
-          </div>
-        </WizardLayout>
-      ) : null}
-
-      {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Job address" status="Boiler service" onBack={goBackOneStep}>
-          <div className="space-y-3">
-            {demoEnabled ? (
-              <div className="mb-3 flex justify-end">
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
-                  Fill demo Boiler Service
-                </Button>
-              </div>
-            ) : null}
-            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-              <p className="text-sm font-semibold text-muted">Job address</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Input
-                  type="date"
-                  value={jobAddress.job_visit_date || jobInfo.service_date}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setJobAddress((prev) => ({ ...prev, job_visit_date: value }));
-                    setJobInfo((prev) => ({ ...prev, service_date: value }));
-                  }}
-                  placeholder="Service date"
-                  className="rounded-2xl"
-                />
-                <Input
-                  value={jobAddress.job_address_name}
-                  onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                  placeholder="Job address name (optional)"
-                  className="rounded-2xl sm:col-span-2"
-                />
-                <Input
-                  value={jobAddress.job_address_line1}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
-                    setJobInfo((prev) => ({ ...prev, property_address: value }));
-                  }}
-                  placeholder="Job address line 1"
-                  className="rounded-2xl sm:col-span-2"
-                />
-                <Input
-                  value={jobAddress.job_address_line2}
-                  onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
-                  placeholder="Job address line 2 (optional)"
-                  className="rounded-2xl"
-                />
-                <Input
-                  value={jobAddress.job_address_city}
-                  onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
-                  placeholder="Town/City (optional)"
-                  className="rounded-2xl"
-                />
-                <Input
-                  value={jobAddress.job_postcode}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setJobAddress((prev) => ({ ...prev, job_postcode: value }));
-                    setJobInfo((prev) => ({ ...prev, postcode: value }));
-                  }}
-                  placeholder="Postcode"
-                  className="rounded-2xl"
-                />
-                <Input
-                  value={jobAddress.job_tel}
-                  onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
-                  placeholder="Job phone (optional)"
-                  className="rounded-2xl"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
-              ← Back
-            </Button>
-            <Button className="rounded-full" onClick={handleJobAddressNext} disabled={isPending}>
               Next → Checks
             </Button>
           </div>
@@ -596,12 +787,25 @@ export function BoilerServiceWizard({
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Service checks & readings" status="On-site checks" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(3)}
+          total={totalSteps}
+          title="Checks & Readings"
+          status="On-site checks"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex justify-end">
+              <Button className="rounded-full px-6" onClick={handleChecksNext} disabled={isPending}>
+                Next → Summary & Signatures
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
-                Fill demo Boiler Service
+                Autofill test Boiler Service
               </Button>
             </div>
           ) : null}
@@ -612,6 +816,39 @@ export function BoilerServiceWizard({
           >
             <div className="space-y-2">
               {checkItems.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/30 bg-white/80 px-3 py-2 shadow-sm"
+                >
+                  <p className="text-sm font-semibold text-muted">{item.label}</p>
+                  <div className="flex gap-2">
+                    {['yes', 'no'].map((choice) => (
+                      <button
+                        key={choice}
+                        type="button"
+                        onClick={() => setCheckValue(item.key, choice)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          checks[item.key] === choice
+                            ? 'bg-[var(--accent)] text-white'
+                            : 'bg-[var(--muted)] text-gray-700'
+                        }`}
+                      >
+                        {choice.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Additional template fields"
+            subtitle={`${templateChecksCompleted}/${additionalTemplateChecks.length} complete`}
+            defaultOpen={firstIncompleteKey === 'template'}
+          >
+            <div className="space-y-2">
+              {additionalTemplateChecks.map((item) => (
                 <div
                   key={item.key}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/30 bg-white/80 px-3 py-2 shadow-sm"
@@ -667,6 +904,11 @@ export function BoilerServiceWizard({
                 placeholder="Inlet pressure (mbar)"
               />
               <Input
+                value={checks.heat_input}
+                onChange={(e) => setCheckValue('heat_input', e.target.value)}
+                placeholder="Heat input (kW)"
+              />
+              <Input
                 value={checks.flue_gas_temp_c}
                 onChange={(e) => setCheckValue('flue_gas_temp_c', e.target.value)}
                 placeholder="Flue gas temp (°C)"
@@ -681,128 +923,43 @@ export function BoilerServiceWizard({
             </div>
           </CollapsibleSection>
 
-          <CollapsibleSection
-            title="Summary & recommendations"
-            subtitle={summaryComplete ? 'Required notes complete' : 'Required notes missing'}
-            defaultOpen={firstIncompleteKey === 'summary'}
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Textarea
-                value={checks.service_summary}
-                onChange={(e) => setCheckValue('service_summary', e.target.value)}
-                placeholder="Service summary (required)"
-                className="min-h-[80px]"
-              />
-              <Textarea
-                value={checks.recommendations}
-                onChange={(e) => setCheckValue('recommendations', e.target.value)}
-                placeholder="Recommendations (required)"
-                className="min-h-[80px]"
-              />
-            </div>
-          </CollapsibleSection>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button className="rounded-full px-6" onClick={handleChecksNext} disabled={isPending}>
+              Next → Summary & Signatures
+            </Button>
+          </div>
+        </WizardLayout>
+      ) : null}
 
-          <CollapsibleSection
-            title="Defects & parts"
-            subtitle={checks.defects_found === 'yes' ? 'Defects recorded' : 'No defects'}
-            defaultOpen={firstIncompleteKey === 'defects'}
-          >
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
-                <p className="text-sm font-semibold text-muted">Defects found?</p>
-                <div className="mt-2 flex gap-2">
-                  {['yes', 'no'].map((choice) => (
-                    <button
-                      key={choice}
-                      type="button"
-                      onClick={() => setCheckValue('defects_found', choice)}
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        checks.defects_found === choice ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-gray-700'
-                      }`}
-                    >
-                      {choice.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {defectsActive ? (
-                <div className="grid gap-3 sm:grid-cols-[1fr,1fr]">
-                  <Textarea
-                    value={checks.defects_details}
-                    onChange={(e) => setCheckValue('defects_details', e.target.value)}
-                    placeholder="Defect details (required if yes)"
-                    className="min-h-[70px]"
-                  />
-                  <Textarea
-                    value={checks.parts_used}
-                    onChange={(e) => setCheckValue('parts_used', e.target.value)}
-                    placeholder="Parts used (optional)"
-                    className="min-h-[70px]"
-                  />
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground/70">No defects recorded for this service.</p>
-              )}
+      {step === 4 ? (
+        <WizardLayout
+          step={offsetStep(4)}
+          total={totalSteps}
+          title="Summary, Next Service & Signatures"
+          status="Finish"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
+                {isPending ? 'Generating…' : 'Generate Boiler Service PDF'}
+              </Button>
             </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Next service due"
-            subtitle={checks.next_service_due ? checks.next_service_due : 'Set a reminder'}
-            defaultOpen={firstIncompleteKey === 'next'}
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                value={checks.next_service_due}
-                onChange={(e) => setCheckValue('next_service_due', e.target.value)}
-                placeholder="Next service due (date or note)"
-              />
-            </div>
-          </CollapsibleSection>
-
-          <details className="rounded-3xl border border-white/20 bg-white/70 p-4 shadow-sm">
-            <summary className="cursor-pointer text-sm font-semibold text-muted">Manual entry (fallback)</summary>
-            <div className="mt-3 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                {checkItems.map((item) => (
-                  <div key={`fallback-${item.key}`} className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{item.label}</p>
-                    <select
-                      className="w-full rounded-2xl border border-white/40 bg-white/80 px-3 py-2 text-sm text-muted shadow-sm"
-                      value={checks[item.key] || ''}
-                      onChange={(e) => setCheckValue(item.key, e.target.value)}
-                    >
-                      <option value="">Select</option>
-                      <option value="yes">YES</option>
-                      <option value="no">NO</option>
-                    </select>
-                  </div>
-                ))}
+          }
+        >
+          <div className="space-y-4">
+            {demoEnabled ? (
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                  Autofill test Boiler Service
+                </Button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Input
-                  value={checks.operating_pressure_mbar}
-                  onChange={(e) => setCheckValue('operating_pressure_mbar', e.target.value)}
-                  placeholder="Operating pressure (mbar)"
-                />
-                <Input
-                  value={checks.inlet_pressure_mbar}
-                  onChange={(e) => setCheckValue('inlet_pressure_mbar', e.target.value)}
-                  placeholder="Inlet pressure (mbar)"
-                />
-                <Input
-                  value={checks.flue_gas_temp_c}
-                  onChange={(e) => setCheckValue('flue_gas_temp_c', e.target.value)}
-                  placeholder="Flue gas temp (°C)"
-                />
-                <Input value={checks.co_ppm} onChange={(e) => setCheckValue('co_ppm', e.target.value)} placeholder="CO (ppm)" />
-                <Input value={checks.co2_percent} onChange={(e) => setCheckValue('co2_percent', e.target.value)} placeholder="CO₂ (%)" />
-                <Input
-                  value={checks.system_pressure_bar}
-                  onChange={(e) => setCheckValue('system_pressure_bar', e.target.value)}
-                  placeholder="System pressure (bar)"
-                />
-              </div>
+            ) : null}
+            <CollapsibleSection
+              title="Summary & recommendations"
+              subtitle={summaryComplete ? 'Required notes complete' : 'Required notes missing'}
+              defaultOpen={firstIncompleteKey === 'summary'}
+            >
               <div className="grid gap-3 sm:grid-cols-2">
                 <Textarea
                   value={checks.service_summary}
@@ -816,38 +973,64 @@ export function BoilerServiceWizard({
                   placeholder="Recommendations (required)"
                   className="min-h-[80px]"
                 />
-                <Textarea
-                  value={checks.defects_details}
-                  onChange={(e) => setCheckValue('defects_details', e.target.value)}
-                  placeholder="Defect details"
-                  className="min-h-[70px]"
-                />
-                <Textarea
-                  value={checks.parts_used}
-                  onChange={(e) => setCheckValue('parts_used', e.target.value)}
-                  placeholder="Parts used (optional)"
-                  className="min-h-[70px]"
-                />
+              </div>
+            </CollapsibleSection>
+            <CollapsibleSection
+              title="Defects & parts"
+              subtitle={checks.defects_found === 'yes' ? 'Defects recorded' : 'No defects'}
+              defaultOpen={firstIncompleteKey === 'defects'}
+            >
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                  <p className="text-sm font-semibold text-muted">Defects found?</p>
+                  <div className="mt-2 flex gap-2">
+                    {['yes', 'no'].map((choice) => (
+                      <button
+                        key={choice}
+                        type="button"
+                        onClick={() => setCheckValue('defects_found', choice)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          checks.defects_found === choice ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-gray-700'
+                        }`}
+                      >
+                        {choice.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {defectsActive ? (
+                  <div className="grid gap-3 sm:grid-cols-[1fr,1fr]">
+                    <Textarea
+                      value={checks.defects_details}
+                      onChange={(e) => setCheckValue('defects_details', e.target.value)}
+                      placeholder="Defect details (required if yes)"
+                      className="min-h-[70px]"
+                    />
+                    <Textarea
+                      value={checks.parts_used}
+                      onChange={(e) => setCheckValue('parts_used', e.target.value)}
+                      placeholder="Parts used (optional)"
+                      className="min-h-[70px]"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground/70">No defects recorded for this service.</p>
+                )}
+              </div>
+            </CollapsibleSection>
+            <CollapsibleSection
+              title="Next service due"
+              subtitle={checks.next_service_due ? checks.next_service_due : 'Set a reminder'}
+              defaultOpen={firstIncompleteKey === 'next'}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Input
                   value={checks.next_service_due}
                   onChange={(e) => setCheckValue('next_service_due', e.target.value)}
                   placeholder="Next service due (date or note)"
                 />
               </div>
-            </div>
-          </details>
-          </div>
-          <div className="mt-6 flex justify-end">
-            <Button className="rounded-full px-6" onClick={handleChecksNext} disabled={isPending}>
-              Next → Sign & PDF
-            </Button>
-          </div>
-        </WizardLayout>
-      ) : null}
-
-      {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={goBackOneStep}>
-          <div className="space-y-4">
+            </CollapsibleSection>
             <div className="grid gap-4 sm:grid-cols-2">
               <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
@@ -864,8 +1047,8 @@ export function BoilerServiceWizard({
                 className="mt-2"
               />
             </div>
-            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-              <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
+            <details className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+              <summary className="cursor-pointer text-sm font-semibold text-muted">Internal evidence (optional)</summary>
               <div className="mt-3">
                 <EvidenceCard
                   title="Upload photos"
@@ -875,7 +1058,7 @@ export function BoilerServiceWizard({
                   onPhotoUpload={handleEvidenceUpload(FINAL_EVIDENCE_DEFAULT)}
                 />
               </div>
-            </div>
+            </details>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>

@@ -953,7 +953,7 @@ export type Database = {
     }
     Enums: {
       job_item_status: "pending" | "pass" | "fail"
-      job_type: "general" | "safety_check" | "service" | "breakdown" | "installation"
+      job_type: "general" | "safety_check" | "service" | "breakdown" | "installation" | "warning_notice"
       job_status:
         | "draft"
         | "active"

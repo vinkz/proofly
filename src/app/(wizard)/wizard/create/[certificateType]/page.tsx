@@ -1,13 +1,12 @@
 // Jobs-centric flow: wizard bootstraps from jobId and prefers job/client data over job_fields for customer/address defaults.
 import { notFound, redirect } from 'next/navigation';
 
-import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { createJob, getCertificateWizardState } from '@/server/certificates';
 import { listClients } from '@/server/clients';
 import { CERTIFICATE_TYPES, CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import type { Database } from '@/lib/database.types';
 import type { InitialJobContext } from './_components/initial-job-context';
-import { CertificateWizard, type SavedPropertyOption } from './_components/certificate-wizard';
+import { CertificateWizard } from './_components/certificate-wizard';
 import { BoilerServiceWizard } from './_components/boiler-service-wizard';
 import { GeneralWorksWizard } from './_components/general-works-wizard';
 import { GasWarningNoticeWizard } from './_components/gas-warning-notice-wizard';
@@ -27,12 +26,6 @@ const pickText = (...values: Array<string | null | undefined>) => {
   }
   return '';
 };
-
-const splitAddressParts = (value: string | null | undefined) =>
-  String(value ?? '')
-    .split(/[\r\n,]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
 
 const isAuthError = (error: unknown) =>
   error instanceof Error &&
@@ -59,6 +52,7 @@ export default async function CertificateWizardPage({
     skipJobInfo?: string;
     forceClientStep?: string;
     prepare?: string;
+    startStep?: string;
   }>;
 }) {
   const { certificateType } = await params;
@@ -74,6 +68,9 @@ export default async function CertificateWizardPage({
     typeof resolvedSearchParams?.jobId === 'string' ? resolvedSearchParams.jobId : null;
   const isCp12 = normalizedType === 'cp12';
   const prepareOnly = isCp12 && resolvedSearchParams?.prepare === '1';
+  const startStepParam =
+    typeof resolvedSearchParams?.startStep === 'string' ? Number.parseInt(resolvedSearchParams.startStep, 10) : NaN;
+  const requestedStartStep = Number.isFinite(startStepParam) ? Math.max(1, startStepParam) : 1;
   const clientStep = !isCp12 && resolvedSearchParams?.clientStep === '1';
   const forceClientStep = !isCp12 && resolvedSearchParams?.forceClientStep === '1';
   const baseSteps = CERTIFICATE_STEP_TOTALS[normalizedType as CertificateType] ?? 4;
@@ -140,8 +137,6 @@ export default async function CertificateWizardPage({
   let jobId = '';
   let wizardState: Awaited<ReturnType<typeof getCertificateWizardState>> | null = null;
   let initialJobContext: InitialJobContext | null = null;
-  let availableClients: Awaited<ReturnType<typeof listClients>> = [];
-  let savedProperties: SavedPropertyOption[] = [];
 
   if (existingJobId) {
     try {
@@ -183,95 +178,6 @@ export default async function CertificateWizardPage({
         This job could not be loaded.
       </div>
     );
-  }
-
-  if (isCp12) {
-    try {
-      availableClients = await listClients();
-    } catch (error) {
-      if (isAuthError(error)) {
-        redirect('/login');
-      }
-      return (
-        <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/70 p-6 text-sm text-muted-foreground/80">
-          Client records could not be loaded.
-        </div>
-      );
-    }
-  }
-
-  if (isCp12 && wizardState.client?.id) {
-    const supabase = await supabaseServerReadOnly();
-    const { data: clientJobs, error: jobsErr } = await supabase
-      .from('jobs')
-      .select('id, address, created_at')
-      .eq('client_id', wizardState.client.id)
-      .order('created_at', { ascending: false });
-    if (jobsErr) throw new Error(jobsErr.message);
-
-    const propertyJobIds = (clientJobs ?? [])
-      .map((job) => job.id)
-      .filter((id): id is string => typeof id === 'string' && id !== jobId);
-
-    const fieldKeys = [
-      'job_address_name',
-      'job_address_line1',
-      'job_address_line2',
-      'job_address_city',
-      'job_postcode',
-      'job_tel',
-    ];
-
-    const { data: propertyFieldRows, error: propertyFieldsErr } = propertyJobIds.length
-      ? await supabase
-          .from('job_fields')
-          .select('job_id, field_key, value')
-          .in('job_id', propertyJobIds)
-          .in('field_key', fieldKeys)
-      : { data: [], error: null };
-    if (propertyFieldsErr) throw new Error(propertyFieldsErr.message);
-
-    const fieldsByJob = (propertyFieldRows ?? []).reduce<Record<string, Record<string, string>>>((acc, row) => {
-      const propertyJobId = row.job_id ?? '';
-      const fieldKey = row.field_key ?? '';
-      const value = row.value?.trim() ?? '';
-      if (!propertyJobId || !fieldKey || !value) return acc;
-      acc[propertyJobId] = acc[propertyJobId] ?? {};
-      acc[propertyJobId][fieldKey] = value;
-      return acc;
-    }, {});
-
-    const seenPropertyKeys = new Set<string>();
-    savedProperties = (clientJobs ?? []).flatMap((job) => {
-      if (!job?.id || job.id === jobId) return [];
-      const fields = fieldsByJob[job.id] ?? {};
-      const parts = splitAddressParts(job.address);
-      const job_address_name = pickText(fields.job_address_name);
-      const job_address_line1 = pickText(fields.job_address_line1, parts[0]);
-      const job_address_line2 = pickText(fields.job_address_line2, parts.length > 2 ? parts.slice(1, -1).join(', ') : parts[1]);
-      const job_address_city = pickText(fields.job_address_city, parts.length > 2 ? parts.at(-1) ?? '' : '');
-      const job_postcode = pickText(fields.job_postcode);
-      const job_tel = pickText(fields.job_tel);
-      const dedupeKey = [job_address_name, job_address_line1, job_address_line2, job_address_city, job_postcode, job_tel]
-        .join('::')
-        .toLowerCase();
-      if (!job_address_line1 || seenPropertyKeys.has(dedupeKey)) return [];
-      seenPropertyKeys.add(dedupeKey);
-      return [
-        {
-          key: job.id,
-          label: [job_address_name || job_address_line1, [job_address_line1, job_address_city, job_postcode].filter(Boolean).join(', ')]
-            .filter(Boolean)
-            .join(' - '),
-          job_address_name,
-          job_address_line1,
-          job_address_line2,
-          job_address_city,
-          job_postcode,
-          job_tel,
-        },
-      ];
-    });
   }
 
   const job = wizardState.job as Database['public']['Tables']['jobs']['Row'] | null;
@@ -318,6 +224,7 @@ export default async function CertificateWizardPage({
         initialJobContext={initialJobContext}
         initialPhotoPreviews={wizardState.photoPreviews}
         stepOffset={stepOffset}
+        startStep={requestedStartStep}
       />
     );
   }
@@ -343,6 +250,7 @@ export default async function CertificateWizardPage({
         initialAppliances={wizardState?.appliances ?? []}
         certificateType={normalizedType as CertificateType}
         stepOffset={stepOffset}
+        startStep={requestedStartStep}
       />
     );
   }
@@ -377,12 +285,10 @@ export default async function CertificateWizardPage({
       certificateLabel={CERTIFICATE_LABELS[certificateType as CertificateType]}
       initialInfo={initialInfo}
       initialJobContext={initialJobContext}
-      clients={availableClients}
-      savedProperties={savedProperties}
       initialPhotoPreviews={wizardState.photoPreviews}
       initialAppliances={wizardState.appliances}
       stepOffset={stepOffset}
-      startStep={1}
+      startStep={requestedStartStep}
       hideBillingCustomerStep={hideBillingCustomerStep}
       prepareOnly={prepareOnly}
     />

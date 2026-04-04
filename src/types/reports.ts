@@ -17,6 +17,7 @@ const REPORT_KIND_BY_JOB_TYPE: Record<JobType, ReportKind> = {
   service: 'boiler_service',
   breakdown: 'breakdown',
   installation: 'commissioning',
+  warning_notice: 'warning_notice',
   general: 'general_works',
 };
 

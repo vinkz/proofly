@@ -31,6 +31,7 @@ type GasWarningNoticeWizardProps = {
   initialAppliances?: Cp12Appliance[];
   certificateType: CertificateType;
   stepOffset?: number;
+  startStep?: number;
 };
 
 type GasWarningFormState = {
@@ -41,6 +42,13 @@ type GasWarningFormState = {
   appliance_location: string;
   appliance_type: string;
   make_model: string;
+  serial_number: string;
+  gas_escape_issue: boolean;
+  pipework_issue: boolean;
+  ventilation_issue: boolean;
+  meter_issue: boolean;
+  chimney_flue_issue: boolean;
+  other_issue_details: string;
   gas_supply_isolated: boolean;
   appliance_capped_off: boolean;
   customer_refused_isolation: boolean;
@@ -84,10 +92,12 @@ export function GasWarningNoticeWizard({
   initialAppliances = [],
   certificateType,
   stepOffset = 0,
+  startStep = 1,
 }: GasWarningNoticeWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
-  const [step, setStep] = useState(1);
+  const initialStep = Math.min(3, Math.max(1, startStep - stepOffset));
+  const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
@@ -102,6 +112,13 @@ export function GasWarningNoticeWizard({
     appliance_location: resolvedFields.appliance_location ?? '',
     appliance_type: resolvedFields.appliance_type ?? '',
     make_model: resolvedFields.make_model ?? '',
+    serial_number: resolvedFields.serial_number ?? '',
+    gas_escape_issue: parseBool(resolvedFields.gas_escape_issue),
+    pipework_issue: parseBool(resolvedFields.pipework_issue),
+    ventilation_issue: parseBool(resolvedFields.ventilation_issue),
+    meter_issue: parseBool(resolvedFields.meter_issue),
+    chimney_flue_issue: parseBool(resolvedFields.chimney_flue_issue),
+    other_issue_details: resolvedFields.other_issue_details ?? '',
     gas_supply_isolated: parseBool(resolvedFields.gas_supply_isolated),
     appliance_capped_off: parseBool(resolvedFields.appliance_capped_off),
     customer_refused_isolation: parseBool(resolvedFields.customer_refused_isolation),
@@ -118,9 +135,9 @@ export function GasWarningNoticeWizard({
     customer_understands_risks: parseBool(resolvedFields.customer_understands_risks),
     customer_signed_at: resolvedFields.customer_signed_at ? resolvedFields.customer_signed_at.slice(0, 10) : '',
     engineer_name: resolvedFields.engineer_name ?? '',
-    engineer_company: resolvedFields.engineer_company ?? '',
+    engineer_company: resolvedFields.engineer_company ?? resolvedFields.company_name ?? '',
     gas_safe_number: resolvedFields.gas_safe_number ?? '',
-    engineer_id_card_number: resolvedFields.engineer_id_card_number ?? '',
+    engineer_id_card_number: resolvedFields.engineer_id_card_number ?? resolvedFields.engineer_id ?? '',
     issued_at: resolvedFields.issued_at ? resolvedFields.issued_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
   });
 
@@ -188,6 +205,13 @@ export function GasWarningNoticeWizard({
       appliance_location: 'Kitchen cupboard',
       appliance_type: 'Combi boiler',
       make_model: 'Worcester Bosch Greenstar 30i',
+      serial_number: 'WB30I-84736291',
+      gas_escape_issue: false,
+      pipework_issue: false,
+      ventilation_issue: false,
+      meter_issue: false,
+      chimney_flue_issue: true,
+      other_issue_details: '',
       gas_supply_isolated: true,
       appliance_capped_off: false,
       customer_refused_isolation: false,
@@ -284,6 +308,13 @@ export function GasWarningNoticeWizard({
             appliance_location: fields.appliance_location,
             appliance_type: fields.appliance_type,
             make_model: fields.make_model,
+            serial_number: fields.serial_number,
+            gas_escape_issue: fields.gas_escape_issue,
+            pipework_issue: fields.pipework_issue,
+            ventilation_issue: fields.ventilation_issue,
+            meter_issue: fields.meter_issue,
+            chimney_flue_issue: fields.chimney_flue_issue,
+            other_issue_details: fields.other_issue_details,
             gas_supply_isolated: fields.gas_supply_isolated,
             appliance_capped_off: fields.appliance_capped_off,
             customer_refused_isolation: fields.customer_refused_isolation,
@@ -360,6 +391,13 @@ export function GasWarningNoticeWizard({
         appliance_location: fields.appliance_location,
         appliance_type: fields.appliance_type,
         make_model: fields.make_model,
+        serial_number: fields.serial_number,
+        gas_escape_issue: fields.gas_escape_issue,
+        pipework_issue: fields.pipework_issue,
+        ventilation_issue: fields.ventilation_issue,
+        meter_issue: fields.meter_issue,
+        chimney_flue_issue: fields.chimney_flue_issue,
+        other_issue_details: fields.other_issue_details,
         gas_supply_isolated: fields.gas_supply_isolated,
         appliance_capped_off: fields.appliance_capped_off,
         customer_refused_isolation: fields.customer_refused_isolation,
@@ -399,13 +437,13 @@ export function GasWarningNoticeWizard({
         pushToast({
           title: 'Gas Warning Notice generated successfully',
           description: (
-            <Link href={`/jobs/${resultJobId}/pdf`} className="text-[var(--action)] underline">
+            <Link href={`/jobs/${resultJobId}/pdf?certificateType=${certificateType}`} className="text-[var(--action)] underline">
               Open document preview
             </Link>
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}/pdf`);
+        router.push(`/jobs/${resultJobId}/pdf?certificateType=${certificateType}`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -442,7 +480,19 @@ export function GasWarningNoticeWizard({
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job address" status="Gas Warning Notice">
+        <WizardLayout
+          step={offsetStep(1)}
+          total={totalSteps}
+          title="Job address"
+          status="Gas Warning Notice"
+          actions={
+            <div className="flex justify-end">
+              <Button className="rounded-full px-6" onClick={handleJobNext} disabled={isPending}>
+                Next → Appliance
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-3">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -530,7 +580,20 @@ export function GasWarningNoticeWizard({
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance + classification" status="Gas Warning" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(2)}
+          total={totalSteps}
+          title="Appliance + classification"
+          status="Gas Warning"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex justify-end">
+              <Button className="rounded-full px-6" onClick={handleApplianceNext} disabled={isPending}>
+                Next → Sign-off
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -557,6 +620,12 @@ export function GasWarningNoticeWizard({
                 value={fields.make_model}
                 onChange={(e) => setFields((prev) => ({ ...prev, make_model: e.target.value }))}
                 placeholder="Make / model (optional)"
+                className="rounded-2xl sm:col-span-2"
+              />
+              <Input
+                value={fields.serial_number}
+                onChange={(e) => setFields((prev) => ({ ...prev, serial_number: e.target.value }))}
+                placeholder="Serial number (optional)"
                 className="rounded-2xl sm:col-span-2"
               />
               <Select
@@ -626,6 +695,35 @@ export function GasWarningNoticeWizard({
               ))}
             </div>
           </CollapsibleSection>
+          <CollapsibleSection title="Issue categories" subtitle="Match the notice to the identified issue">
+            <div className="space-y-3 rounded-2xl border border-white/40 bg-white/70 p-4">
+              {[
+                ['gas_escape_issue', 'Gas escape'],
+                ['pipework_issue', 'Pipework issue'],
+                ['ventilation_issue', 'Ventilation issue'],
+                ['meter_issue', 'Meter issue'],
+                ['chimney_flue_issue', 'Chimney / flue issue'],
+              ].map(([key, label]) => (
+                <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[var(--accent)]"
+                    checked={fields[key as keyof GasWarningFormState] as boolean}
+                    onChange={(e) =>
+                      setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+              <Input
+                value={fields.other_issue_details}
+                onChange={(e) => setFields((prev) => ({ ...prev, other_issue_details: e.target.value }))}
+                placeholder="Other issue details (optional)"
+                className="rounded-2xl"
+              />
+            </div>
+          </CollapsibleSection>
           </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleApplianceNext} disabled={isPending}>
@@ -636,7 +734,23 @@ export function GasWarningNoticeWizard({
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Acknowledgement + engineer" status="Gas Warning" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(3)}
+          total={totalSteps}
+          title="Acknowledgement + engineer"
+          status="Gas Warning"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
+                Generate PDF
+              </Button>
+              <Button variant="ghost" className="rounded-full px-6" onClick={handleAcknowledgementNext} disabled={isPending}>
+                Save draft
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">

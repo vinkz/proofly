@@ -381,7 +381,15 @@ export default async function JobDetailPage({
                         {formatLabel(certificate.status, 'Ready')}
                       </p>
                       <Button asChild variant="outline" className="rounded-full">
-                        <Link href={`/jobs/${job.id}/pdf`}>Open</Link>
+                        <Link
+                          href={
+                            certificate.cert_type
+                              ? `/jobs/${job.id}/pdf?certificateType=${encodeURIComponent(certificate.cert_type)}`
+                              : `/jobs/${job.id}/pdf`
+                          }
+                        >
+                          Open
+                        </Link>
                       </Button>
                     </div>
                   </div>

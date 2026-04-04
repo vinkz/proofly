@@ -224,13 +224,13 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
         pushToast({
           title: 'General Works generated successfully',
           description: (
-            <Link href={`/jobs/${resultJobId}/pdf`} className="text-[var(--action)] underline">
+            <Link href={`/jobs/${resultJobId}/pdf?certificateType=general_works`} className="text-[var(--action)] underline">
               Open document preview
             </Link>
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}/pdf`);
+        router.push(`/jobs/${resultJobId}/pdf?certificateType=general_works`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -267,7 +267,19 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job address" status="General works">
+        <WizardLayout
+          step={offsetStep(1)}
+          total={totalSteps}
+          title="Job address"
+          status="General works"
+          actions={
+            <div className="flex justify-end">
+              <Button className="rounded-full px-6" onClick={handleJobAddressNext} disabled={isPending}>
+                Next → Evidence
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -343,7 +355,23 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Evidence capture" status="Work detail" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(2)}
+          total={totalSteps}
+          title="Evidence capture"
+          status="Work detail"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
+                ← Back
+              </Button>
+              <Button className="rounded-full px-6" onClick={handleEvidenceNext} disabled={isPending}>
+                Next → Review
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
             {demoEnabled ? (
               <div className="mb-3 flex justify-end">
@@ -424,7 +452,20 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Review & totals" status="Summary" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(3)}
+          total={totalSteps}
+          title="Review & totals"
+          status="Summary"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex justify-end">
+              <Button className="rounded-full px-6" onClick={handleReviewNext} disabled={isPending}>
+                Next → Sign & PDF
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -496,7 +537,20 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
       ) : null}
 
       {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(4)}
+          total={totalSteps}
+          title="Signatures & PDF"
+          status="Finish"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
+                {isPending ? 'Generating…' : 'Generate PDF'}
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">

@@ -15,6 +15,7 @@ type BasicJob = {
   address: string;
   status: string;
   created_at: string;
+  job_type?: string | null;
   title?: string | null;
   scheduled_for?: string | null;
 };
@@ -156,9 +157,11 @@ export default async function DashboardPage() {
                           <p className="mt-1 text-xs text-muted-foreground/70">
                             {formatDateTime(job.scheduled_for ?? '')}
                           </p>
-                          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                            {job.prepComplete ? 'Prepared' : 'Prep needed'}
-                          </p>
+                          {job.job_type === 'safety_check' ? (
+                            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                              {job.prepComplete ? 'Ready to start' : 'Step 1 incomplete'}
+                            </p>
+                          ) : null}
                         </div>
                         <Badge variant="brand" className="uppercase">
                           {job.status ?? 'draft'}
@@ -166,8 +169,8 @@ export default async function DashboardPage() {
                       </div>
                       <div className="mt-3 flex justify-end">
                         <Button asChild variant="secondary" className="rounded-full">
-                          <Link href={job.prepComplete ? `/jobs/${job.id}` : `/wizard/create/cp12?jobId=${job.id}&prepare=1`}>
-                            {getUpcomingJobActionLabel(job.prepComplete)}
+                          <Link href={getUpcomingJobHref(job)}>
+                            {getUpcomingJobActionLabel(job)}
                           </Link>
                         </Button>
                       </div>
@@ -352,8 +355,18 @@ function isLaterThisWeek(dateString: string | null | undefined, reference: Date)
   return targetDay > tomorrow.getTime() && targetDay < weekEnd.getTime();
 }
 
-function getUpcomingJobActionLabel(prepComplete: boolean) {
-  return prepComplete ? 'Start' : 'Prepare';
+function getUpcomingJobHref(job: UpcomingJob) {
+  if (job.job_type === 'safety_check') {
+    return `/wizard/create/cp12?jobId=${job.id}`;
+  }
+  return `/jobs/${job.id}`;
+}
+
+function getUpcomingJobActionLabel(job: UpcomingJob) {
+  if (job.job_type === 'safety_check') {
+    return 'Start';
+  }
+  return 'Open';
 }
 
 function friendlyStage(status: string | null | undefined) {

@@ -21,6 +21,12 @@ export async function GET() {
     jobId,
     data: {
       customer_name: BOILER_SERVICE_DEMO_INFO.customer_name,
+      customer_company: BOILER_SERVICE_DEMO_INFO.customer_company,
+      customer_address_line1: BOILER_SERVICE_DEMO_INFO.customer_address_line1,
+      customer_address_line2: BOILER_SERVICE_DEMO_INFO.customer_address_line2,
+      customer_city: BOILER_SERVICE_DEMO_INFO.customer_city,
+      customer_postcode: BOILER_SERVICE_DEMO_INFO.customer_postcode,
+      customer_phone: BOILER_SERVICE_DEMO_INFO.customer_phone,
       property_address: BOILER_SERVICE_DEMO_INFO.property_address,
       postcode: BOILER_SERVICE_DEMO_INFO.postcode,
       service_date: serviceDate ?? today,

@@ -393,7 +393,19 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
   return (
     <>
       {step === 1 ? (
-        <WizardLayout step={offsetStep(1)} total={totalSteps} title="Job address" status="Breakdown">
+        <WizardLayout
+          step={offsetStep(1)}
+          total={totalSteps}
+          title="Job address"
+          status="Breakdown"
+          actions={
+            <div className="flex justify-end">
+              <Button className="rounded-full" onClick={() => handleNext(Step1Schema)} disabled={isPending}>
+                Next → Appliance
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-3">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -461,7 +473,23 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
       ) : null}
 
       {step === 2 ? (
-        <WizardLayout step={offsetStep(2)} total={totalSteps} title="Appliance details" status="Breakdown" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(2)}
+          total={totalSteps}
+          title="Appliance details"
+          status="Breakdown"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
+                ← Back
+              </Button>
+              <Button className="rounded-full" onClick={() => handleNext(Step2Schema)} disabled={isPending}>
+                Next → Safety
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -550,7 +578,23 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
       ) : null}
 
       {step === 3 ? (
-        <WizardLayout step={offsetStep(3)} total={totalSteps} title="Safety checks" status="Breakdown" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(3)}
+          total={totalSteps}
+          title="Safety checks"
+          status="Breakdown"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
+                ← Back
+              </Button>
+              <Button className="rounded-full" onClick={() => handleNext(Step3Schema)} disabled={isPending}>
+                Next → Advice
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
@@ -663,7 +707,23 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
       ) : null}
 
       {step === 4 ? (
-        <WizardLayout step={offsetStep(4)} total={totalSteps} title="Advice + sign-off" status="Breakdown" onBack={goBackOneStep}>
+        <WizardLayout
+          step={offsetStep(4)}
+          total={totalSteps}
+          title="Advice + sign-off"
+          status="Breakdown"
+          onBack={goBackOneStep}
+          actions={
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" className="rounded-full" onClick={goBackOneStep}>
+                ← Back
+              </Button>
+              <Button className="rounded-full" onClick={handleGenerate} disabled={isPending}>
+                {isPending ? 'Generating...' : 'Generate record'}
+              </Button>
+            </div>
+          }
+        >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">

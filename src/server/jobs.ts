@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
+import { formatAddressLine } from '@/lib/address';
 import { photoPath, reportPath, signaturePath } from '@/lib/storage';
 import type { Database } from '@/lib/database.types';
 import type { TemplateItem, TemplateModel } from '@/types/template';
@@ -21,11 +22,12 @@ import type {
   JobDetailPayload,
 } from '@/types/job-detail';
 import type { JobWizardState, ClientSummary } from '@/types/job-wizard';
-import { DEFAULT_JOB_TYPE, JOB_TYPES, type JobType } from '@/types/job-records';
+import { DEFAULT_JOB_TYPE, JOB_TYPE_LABELS, JOB_TYPES, type JobType } from '@/types/job-records';
 import { REPORT_KINDS, type ReportKind } from '@/types/reports';
 import { generateReport as aiGenerateReport, generatePDF, type PdfAsset } from '@/lib/reporting';
 import { getCustomerById, resolveCustomerFromId, upsertCustomerFromJobFields } from '@/server/customer-service';
 import { upsertJobAddressForJob } from '@/server/address-service';
+import { persistJobFields, type JobFieldEntry } from '@/server/job-fields';
 import { ensureJobRecord, updateJobRecord } from '@/server/jobRecords';
 import { renderGasBreakdownRecord } from '@/server/pdf/renderGasBreakdownRecord';
 import { renderCommissioningChecklist } from '@/server/pdf/renderCommissioningChecklist';
@@ -42,6 +44,146 @@ const JobDetailsSchema = z.object({
   technician_name: z.string().min(2, 'Technician required'),
   notes: z.string().optional(),
 });
+const SoloJobClientModeSchema = z.enum(['existing', 'new']);
+const SoloJobSchema = z
+  .object({
+    clientMode: SoloJobClientModeSchema,
+    clientId: z.string().uuid().optional().or(z.literal('')),
+    clientName: z.string().optional(),
+    clientPhone: z.string().optional(),
+    clientEmail: z.string().optional(),
+    propertyName: z.string().optional(),
+    addressLine1: z.string().optional(),
+    city: z.string().optional(),
+    postcode: z.string().optional(),
+    sitePhone: z.string().optional(),
+    scheduledFor: z.string().min(1, 'Scheduled date/time is required'),
+    jobType: JobTypeSchema,
+    inspectionDate: z.string().optional(),
+    jobAddressName: z.string().optional(),
+    jobAddressLine1: z.string().optional(),
+    jobAddressLine2: z.string().optional(),
+    jobAddressCity: z.string().optional(),
+    jobAddressPostcode: z.string().optional(),
+    jobAddressTel: z.string().optional(),
+    landlordName: z.string().optional(),
+    landlordCompany: z.string().optional(),
+    landlordAddressLine1: z.string().optional(),
+    landlordAddressLine2: z.string().optional(),
+    landlordCity: z.string().optional(),
+    landlordPostcode: z.string().optional(),
+    landlordTel: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const isSafetyCheck = value.jobType === 'safety_check';
+    if (!isSafetyCheck && value.clientMode === 'existing' && !value.clientId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['clientId'],
+        message: 'Select a client',
+      });
+    }
+    if (!isSafetyCheck && value.clientMode === 'new' && (!value.clientName || value.clientName.trim().length < 2)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['clientName'],
+        message: 'Client name is required',
+      });
+    }
+    if (!isSafetyCheck && (!value.addressLine1 || value.addressLine1.trim().length < 1)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['addressLine1'],
+        message: 'Address line 1 is required',
+      });
+    }
+    if (!isSafetyCheck && (!value.city || value.city.trim().length < 1)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['city'],
+        message: 'City / town is required',
+      });
+    }
+    if (!isSafetyCheck && (!value.postcode || value.postcode.trim().length < 1)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['postcode'],
+        message: 'Postcode is required',
+      });
+    }
+    if (value.clientEmail && value.clientEmail.trim().length > 0 && !z.string().email().safeParse(value.clientEmail.trim()).success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['clientEmail'],
+        message: 'Enter a valid email address',
+      });
+    }
+    if (isSafetyCheck) {
+      if (!value.jobAddressName || value.jobAddressName.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['jobAddressName'],
+          message: 'Property name / reference is required',
+        });
+      }
+      if (!value.jobAddressLine1 || value.jobAddressLine1.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['jobAddressLine1'],
+          message: 'Job address line 1 is required',
+        });
+      }
+      if (!value.jobAddressCity || value.jobAddressCity.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['jobAddressCity'],
+          message: 'Job city / town is required',
+        });
+      }
+      if (!value.jobAddressPostcode || value.jobAddressPostcode.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['jobAddressPostcode'],
+          message: 'Job postcode is required',
+        });
+      }
+      if (!value.jobAddressTel || value.jobAddressTel.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['jobAddressTel'],
+          message: 'Site telephone is required',
+        });
+      }
+      if (!value.landlordName || value.landlordName.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['landlordName'],
+          message: 'Landlord / owner name is required',
+        });
+      }
+      if (!value.landlordAddressLine1 || value.landlordAddressLine1.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['landlordAddressLine1'],
+          message: 'Landlord address line 1 is required',
+        });
+      }
+      if (!value.landlordCity || value.landlordCity.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['landlordCity'],
+          message: 'Landlord city / town is required',
+        });
+      }
+      if (!value.landlordPostcode || value.landlordPostcode.trim().length < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['landlordPostcode'],
+          message: 'Landlord postcode is required',
+        });
+      }
+    }
+  });
 const ReportEmailSchema = z.object({
   email: z.string().email(),
   name: z.string().optional(),
@@ -62,6 +204,7 @@ type SignatureRow = Database['public']['Tables']['signatures']['Row'];
 type ReportRow = Database['public']['Tables']['reports']['Row'];
 type TemplateRow = Database['public']['Tables']['templates']['Row'];
 type ReportDeliveryRow = Database['public']['Tables']['report_deliveries']['Row'];
+type ClientRow = Database['public']['Tables']['clients']['Row'];
 
 const jobColumns =
   'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name, job_type';
@@ -79,6 +222,11 @@ const templateFromRow = (row: TemplateRow): TemplateModel => ({
   updated_at: row.updated_at ?? null,
   items: parseTemplateItems(row.items),
 });
+const normalizeOptionalText = (value: string | null | undefined) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
 
 async function requireUser(options: { write?: boolean } = {}) {
   const sb = options.write ? await supabaseServerAction() : await supabaseServerReadOnly();
@@ -281,6 +429,213 @@ export async function createJobDraftFromClient(clientId: string) {
   await ensureJobRecord(job.id as string);
 
   revalidatePath('/jobs');
+  return { jobId: job.id };
+}
+
+export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
+  const input = SoloJobSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const isSafetyCheck = input.jobType === 'safety_check';
+  const inspectionDate =
+    normalizeOptionalText(input.inspectionDate) ?? input.scheduledFor.slice(0, 10);
+  const jobAddressName = normalizeOptionalText(input.jobAddressName);
+  const jobAddressLine1 = normalizeOptionalText(input.jobAddressLine1) ?? input.addressLine1;
+  const jobAddressLine2 = normalizeOptionalText(input.jobAddressLine2);
+  const jobAddressCity = normalizeOptionalText(input.jobAddressCity) ?? input.city;
+  const jobAddressPostcode = normalizeOptionalText(input.jobAddressPostcode) ?? input.postcode;
+  const jobAddressTel = normalizeOptionalText(input.jobAddressTel) ?? normalizeOptionalText(input.sitePhone);
+  const landlordName = normalizeOptionalText(input.landlordName);
+  const landlordCompany = normalizeOptionalText(input.landlordCompany);
+  const landlordAddressLine1 = normalizeOptionalText(input.landlordAddressLine1);
+  const landlordAddressLine2 = normalizeOptionalText(input.landlordAddressLine2);
+  const landlordCity = normalizeOptionalText(input.landlordCity);
+  const landlordPostcode = normalizeOptionalText(input.landlordPostcode);
+  const landlordTel = normalizeOptionalText(input.landlordTel);
+  const propertyAddress = isSafetyCheck
+    ? formatAddressLine({
+        line1: jobAddressLine1,
+        line2: jobAddressLine2,
+        town: jobAddressCity,
+        postcode: jobAddressPostcode,
+      })
+    : formatAddressLine({
+        line1: jobAddressLine1 ?? normalizeOptionalText(input.addressLine1),
+        line2: jobAddressLine2,
+        town: jobAddressCity ?? normalizeOptionalText(input.city),
+        postcode: jobAddressPostcode ?? normalizeOptionalText(input.postcode),
+      });
+  const landlordAddress = isSafetyCheck
+    ? formatAddressLine({
+        line1: landlordAddressLine1,
+        line2: landlordAddressLine2,
+        town: landlordCity,
+        postcode: landlordPostcode,
+      })
+    : null;
+  const clientAddress = formatAddressLine({
+    line1: landlordAddressLine1,
+    line2: landlordAddressLine2,
+    town: landlordCity,
+    postcode: landlordPostcode,
+  });
+  const normalizedJobAddressLine1 = jobAddressLine1 ?? normalizeOptionalText(input.addressLine1);
+  const normalizedJobAddressCity = jobAddressCity ?? normalizeOptionalText(input.city);
+  const normalizedJobAddressPostcode = jobAddressPostcode ?? normalizeOptionalText(input.postcode);
+
+  let client: Pick<ClientRow, 'id' | 'name' | 'phone' | 'email' | 'organization' | 'address' | 'postcode'> | null = null;
+
+  if (input.clientMode === 'existing' && input.clientId) {
+    const { data: clientRow, error: clientErr } = await sb
+      .from('clients')
+      .select('id, name, phone, email, organization, address, postcode, user_id')
+      .eq('id', input.clientId as ClientRow['id'])
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (clientErr) throw new Error(clientErr.message);
+    if (!clientRow) throw new Error('Client not found');
+    client = clientRow;
+  } else if (isSafetyCheck) {
+    const clientName = landlordName ?? normalizeOptionalText(input.clientName);
+    if (clientName) {
+      const { data: clientRow, error: clientErr } = await sb
+        .from('clients')
+        .insert({
+          name: clientName,
+          organization: landlordCompany,
+          phone: landlordTel,
+          email: normalizeOptionalText(input.clientEmail),
+          address: landlordAddress,
+          postcode: landlordPostcode,
+          landlord_name: clientName,
+          landlord_address: landlordAddress,
+          user_id: user.id,
+        })
+        .select('id, name, phone, email, organization, address, postcode')
+        .single();
+      if (clientErr || !clientRow) throw new Error(clientErr?.message ?? 'Unable to create client');
+      client = clientRow;
+    }
+  } else {
+    const { data: clientRow, error: clientErr } = await sb
+      .from('clients')
+      .insert({
+        name: input.clientName!.trim(),
+        phone: normalizeOptionalText(input.clientPhone) ?? landlordTel,
+        email: normalizeOptionalText(input.clientEmail),
+        organization: landlordCompany,
+        address: clientAddress,
+        postcode: landlordPostcode,
+        user_id: user.id,
+      })
+      .select('id, name, phone, email, organization, address, postcode')
+      .single();
+    if (clientErr || !clientRow) throw new Error(clientErr?.message ?? 'Unable to create client');
+    client = clientRow;
+  }
+
+  const jobCode = await getNextJobCode(sb, user.id);
+  const jobTypeLabel = JOB_TYPE_LABELS[input.jobType];
+
+  const insertPayload = {
+    client_id: client?.id ?? null,
+    client_name: client?.name ?? landlordName ?? null,
+    address: propertyAddress,
+    status: 'active',
+    user_id: user.id,
+    title: isSafetyCheck ? `CP12 for ${landlordName ?? 'upcoming job'}` : jobTypeLabel,
+    scheduled_for: input.scheduledFor,
+    job_type: input.jobType,
+    job_code: jobCode,
+    client_ref: buildClientRef(jobCode),
+  } as Database['public']['Tables']['jobs']['Insert'];
+
+  const { data: job, error: jobErr } = await sb
+    .from('jobs')
+    .insert(insertPayload)
+    .select('id')
+    .single();
+  if (jobErr || !job) throw new Error(jobErr?.message ?? 'Failed to create job');
+
+  await upsertJobAddressForJob({
+    jobId: job.id as string,
+    fields: {
+      line1: normalizedJobAddressLine1 ?? undefined,
+      line2: jobAddressLine2 ?? undefined,
+      town: normalizedJobAddressCity ?? undefined,
+      postcode: normalizedJobAddressPostcode ?? undefined,
+    },
+    sb,
+    userId: user.id,
+  });
+
+  const fieldRows = (
+    isSafetyCheck
+      ? [
+        { job_id: job.id as string, field_key: 'inspection_date', value: inspectionDate },
+        { job_id: job.id as string, field_key: 'customer_name', value: landlordName },
+        { job_id: job.id as string, field_key: 'customer_phone', value: landlordTel },
+        { job_id: job.id as string, field_key: 'customer_email', value: null },
+        { job_id: job.id as string, field_key: 'job_address_name', value: jobAddressName },
+        { job_id: job.id as string, field_key: 'job_address_line1', value: jobAddressLine1 },
+        { job_id: job.id as string, field_key: 'job_address_line2', value: jobAddressLine2 },
+        { job_id: job.id as string, field_key: 'job_address_city', value: jobAddressCity },
+        { job_id: job.id as string, field_key: 'job_postcode', value: jobAddressPostcode },
+        { job_id: job.id as string, field_key: 'job_tel', value: jobAddressTel },
+        { job_id: job.id as string, field_key: 'property_name', value: jobAddressName },
+        { job_id: job.id as string, field_key: 'property_address', value: propertyAddress },
+        { job_id: job.id as string, field_key: 'property_address_line1', value: jobAddressLine1 },
+        { job_id: job.id as string, field_key: 'property_address_line2', value: jobAddressLine2 },
+        { job_id: job.id as string, field_key: 'property_town', value: jobAddressCity },
+        { job_id: job.id as string, field_key: 'property_postcode', value: jobAddressPostcode },
+        { job_id: job.id as string, field_key: 'postcode', value: jobAddressPostcode },
+        { job_id: job.id as string, field_key: 'landlord_name', value: landlordName },
+        { job_id: job.id as string, field_key: 'landlord_company', value: landlordCompany },
+        { job_id: job.id as string, field_key: 'landlord_address_line1', value: landlordAddressLine1 },
+        { job_id: job.id as string, field_key: 'landlord_address_line2', value: landlordAddressLine2 },
+        { job_id: job.id as string, field_key: 'landlord_city', value: landlordCity },
+        { job_id: job.id as string, field_key: 'landlord_postcode', value: landlordPostcode },
+        { job_id: job.id as string, field_key: 'landlord_tel', value: landlordTel },
+        { job_id: job.id as string, field_key: 'landlord_address', value: landlordAddress },
+      ]
+      : [
+        { job_id: job.id as string, field_key: 'customer_name', value: client?.name ?? null },
+        { job_id: job.id as string, field_key: 'customer_phone', value: client?.phone ?? null },
+        { job_id: job.id as string, field_key: 'customer_email', value: client?.email ?? null },
+        { job_id: job.id as string, field_key: 'job_address_name', value: jobAddressName ?? normalizeOptionalText(input.propertyName) },
+        { job_id: job.id as string, field_key: 'job_address_line1', value: normalizedJobAddressLine1 },
+        { job_id: job.id as string, field_key: 'job_address_line2', value: jobAddressLine2 },
+        { job_id: job.id as string, field_key: 'job_address_city', value: normalizedJobAddressCity },
+        { job_id: job.id as string, field_key: 'job_postcode', value: normalizedJobAddressPostcode },
+        { job_id: job.id as string, field_key: 'job_tel', value: jobAddressTel },
+        { job_id: job.id as string, field_key: 'property_name', value: jobAddressName ?? normalizeOptionalText(input.propertyName) },
+        { job_id: job.id as string, field_key: 'property_address', value: propertyAddress },
+        { job_id: job.id as string, field_key: 'property_address_line1', value: normalizedJobAddressLine1 },
+        { job_id: job.id as string, field_key: 'property_address_line2', value: jobAddressLine2 },
+        { job_id: job.id as string, field_key: 'property_town', value: normalizedJobAddressCity },
+        { job_id: job.id as string, field_key: 'property_postcode', value: normalizedJobAddressPostcode },
+      ]
+  ).map((entry) => ({
+    ...entry,
+    value: entry.value ?? null,
+  })) satisfies JobFieldEntry[];
+
+  await persistJobFields(
+    sb,
+    job.id as string,
+    fieldRows,
+    'createSoloJob',
+  );
+
+  revalidatePath('/dashboard');
+  revalidatePath('/clients');
+  revalidatePath('/jobs');
+
   return { jobId: job.id };
 }
 

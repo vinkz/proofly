@@ -148,6 +148,12 @@ export function BoilerServiceClientStep({ clients, totalSteps }: BoilerServiceCl
           jobId,
           data: {
             customer_name: boilerInfo.customer_name,
+            customer_company: '',
+            customer_address_line1: '',
+            customer_address_line2: '',
+            customer_city: '',
+            customer_postcode: '',
+            customer_phone: '',
             property_address: boilerInfo.property_address,
             postcode: boilerInfo.postcode,
             service_date: '',

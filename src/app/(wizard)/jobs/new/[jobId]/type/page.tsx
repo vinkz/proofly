@@ -17,6 +17,7 @@ const JOB_TYPE_OPTIONS: Array<{
   { value: 'service', label: 'Service', description: 'Planned service visit or tune-up.' },
   { value: 'breakdown', label: 'Breakdown', description: 'Urgent callout for a fault or issue.' },
   { value: 'installation', label: 'Installation', description: 'New appliance or system install.' },
+  { value: 'warning_notice', label: 'Gas Warning Notice', description: 'Unsafe gas appliance or installation warning visit.' },
   { value: 'general', label: 'General', description: 'General work that does not fit other types.' },
 ];
 

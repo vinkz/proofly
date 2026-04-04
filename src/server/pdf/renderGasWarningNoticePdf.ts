@@ -15,6 +15,13 @@ type SignatureTarget = {
   url?: string;
 };
 
+type SignatureRect = { x: number; y: number; width: number; height: number };
+
+const GAS_WARNING_SIGNATURE_FALLBACKS: Record<'issued' | 'received', SignatureRect> = {
+  issued: { x: 130.327, y: 52.75887, width: 122.122, height: 30.4423 },
+  received: { x: 420.15903, y: 53.544292, width: 122.12197, height: 30.442402 },
+};
+
 async function loadGasWarningTemplateBytes() {
   if (templateCache[GAS_WARNING_TEMPLATE_PATH]) {
     return templateCache[GAS_WARNING_TEMPLATE_PATH];
@@ -29,6 +36,18 @@ async function loadGasWarningTemplateBytes() {
 function toText(value: unknown) {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+}
+
+function splitAddressLines(value: string, maxLines: number) {
+  const parts = value
+    .split(/\r?\n|,/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return [];
+  if (parts.length <= maxLines) return parts;
+  const lines = parts.slice(0, maxLines - 1);
+  lines.push(parts.slice(maxLines - 1).join(', '));
+  return lines;
 }
 
 function isTruthy(value: unknown) {
@@ -47,18 +66,6 @@ function toFieldNameList(fieldName: FormFieldName) {
   return Array.isArray(fieldName) ? fieldName : [fieldName];
 }
 
-function splitTextLines(value: string, maxLines: number) {
-  const parts = value
-    .split(/\r?\n|,/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (!parts.length) return [];
-  if (parts.length <= maxLines) return parts;
-  const lines = parts.slice(0, maxLines - 1);
-  lines.push(parts.slice(maxLines - 1).join(', '));
-  return lines;
-}
-
 function setTextIfExists(params: {
   form: ReturnType<PDFDocument['getForm']>;
   fieldNames: Set<string>;
@@ -70,7 +77,7 @@ function setTextIfExists(params: {
   if (!value) return;
   const entries = toFieldNameList(fieldName);
   if (!entries.length) return;
-  const lines = entries.length > 1 ? splitTextLines(value, entries.length) : [value];
+  const lines = entries.length > 1 ? splitAddressLines(value, entries.length) : [value];
   lines.forEach((line, idx) => {
     const name = entries[idx];
     if (!name || !fieldNames.has(name) || filledFields.has(name)) return;
@@ -120,20 +127,38 @@ function getFieldRect(form: ReturnType<PDFDocument['getForm']>, fieldName: strin
   }
 }
 
+async function fetchAssetBytes(url: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  if (!url) return null;
+  try {
+    if (url.startsWith('data:')) {
+      const match = url.match(/^data:(.+?);base64,(.*)$/);
+      if (!match) return null;
+      const [, mime, data] = match;
+      return { bytes: Uint8Array.from(Buffer.from(data, 'base64')), mime: mime || 'image/png' };
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    const mime = (response.headers.get('content-type') ?? '').toLowerCase() || 'image/png';
+    return { bytes: new Uint8Array(arrayBuffer), mime };
+  } catch {
+    return null;
+  }
+}
+
 async function embedSignatureImage(params: {
   page: PDFPage;
   pdfDoc: PDFDocument;
   url?: string;
-  rect?: { x: number; y: number; width: number; height: number } | null;
+  rect?: SignatureRect | null;
 }) {
   const { page, pdfDoc, url, rect } = params;
   if (!url || !rect) return;
   try {
-    const response = await fetch(url);
-    if (!response.ok) return;
-    const arrayBuffer = await response.arrayBuffer();
-    const mime = (response.headers.get('content-type') ?? '').toLowerCase();
-    const image = mime.includes('png') ? await pdfDoc.embedPng(arrayBuffer) : await pdfDoc.embedJpg(arrayBuffer);
+    const fetched = await fetchAssetBytes(url);
+    if (!fetched) return;
+    const image = fetched.mime.includes('png') ? await pdfDoc.embedPng(fetched.bytes) : await pdfDoc.embedJpg(fetched.bytes);
     const padding = 4;
     const maxWidth = rect.width - padding * 2;
     const maxHeight = rect.height - padding * 2;
@@ -162,37 +187,49 @@ export async function renderGasWarningNoticePdf(opts: {
     issued_at: opts.fields.issued_at ?? opts.issuedAt,
     record_id: opts.fields.record_id ?? opts.recordId,
   };
+  const classification = toText(fields.classification);
+  const classificationMark =
+    classification === 'IMMEDIATELY_DANGEROUS'
+      ? 'ID'
+      : classification === 'AT_RISK'
+        ? 'AR'
+        : toText(fields.classification_code);
+  const issueMark = (value: unknown) => (isTruthy(value) ? 'X' : '');
+  const clientAddress = toText(fields.customer_address || fields.property_address);
+  const clientPostcode = toText(fields.customer_postcode || fields.postcode);
+  const jobAddress = [fields.job_address_line1, fields.job_address_line2, fields.job_address_city].map(toText).filter(Boolean).join('\n');
+  const engineerAddress = toText(fields.company_address);
   const values: Record<GasWarningFieldKey, string | boolean | undefined> = {
     certificateNumber: toText(fields.record_id ?? opts.recordId),
     engineerName: toText(fields.engineer_name),
     engineerCompany: toText(fields.engineer_company),
-    engineerAddress: '',
-    engineerPostcode: '',
-    engineerTel: '',
+    engineerAddress,
+    engineerPostcode: toText(fields.company_postcode),
+    engineerTel: toText(fields.company_phone),
     gasSafeReg: toText(fields.gas_safe_number),
     idCardNumber: toText(fields.engineer_id_card_number),
-    jobName: toText(fields.property_address),
-    jobAddress: toText(fields.property_address),
-    jobPostcode: toText(fields.postcode),
-    jobTel: toText(fields.customer_contact),
+    jobName: toText(fields.job_address_name),
+    jobAddress: jobAddress || toText(fields.property_address),
+    jobPostcode: toText(fields.job_postcode || fields.postcode),
+    jobTel: toText(fields.job_tel || fields.customer_contact),
     clientName: toText(fields.customer_name),
-    clientCompany: '',
-    clientAddress: toText(fields.property_address),
-    clientPostcode: toText(fields.postcode),
+    clientCompany: toText(fields.customer_company),
+    clientAddress,
+    clientPostcode,
     clientTel: toText(fields.customer_contact),
-    clientMobile: '',
+    clientMobile: toText(fields.customer_contact),
     applianceLocation: toText(fields.appliance_location),
     applianceMake: toText(fields.make_model),
     applianceModel: '',
-    applianceSerial: '',
+    applianceSerial: toText(fields.serial_number),
     applianceType: toText(fields.appliance_type),
-    applianceClassification: toText(fields.classification),
-    gasEscape: undefined,
-    pipeworkIssue: undefined,
-    ventilationIssue: undefined,
-    meterIssue: undefined,
-    chimneyFlueIssue: undefined,
-    otherIssue: undefined,
+    applianceClassification: classificationMark,
+    gasEscape: issueMark(fields.gas_escape_issue),
+    pipeworkIssue: issueMark(fields.pipework_issue),
+    ventilationIssue: issueMark(fields.ventilation_issue),
+    meterIssue: issueMark(fields.meter_issue),
+    chimneyFlueIssue: issueMark(fields.chimney_flue_issue),
+    otherIssue: toText(fields.other_issue_details),
     faultDetails: toText(fields.unsafe_situation_description),
     actionsTaken: toText(fields.actions_taken),
     actionsRequired: toText(fields.underlying_cause),
@@ -237,10 +274,13 @@ export async function renderGasWarningNoticePdf(opts: {
       { fieldName: GAS_WARNING_FORM_FIELD_NAMES.receivedBySignature, url: values.receivedBySignature as string },
     ];
 
-    for (const target of signatures) {
+    for (const [index, target] of signatures.entries()) {
       const [name] = toFieldNameList(target.fieldName);
-      if (!name) continue;
-      const rect = getFieldRect(form, name);
+      const rect = name
+        ? getFieldRect(form, name)
+        : index === 0
+          ? GAS_WARNING_SIGNATURE_FALLBACKS.issued
+          : GAS_WARNING_SIGNATURE_FALLBACKS.received;
       await embedSignatureImage({ page, pdfDoc, url: target.url, rect });
     }
 

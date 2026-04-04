@@ -36,15 +36,15 @@ export function mergeJobContextFields(
 
   return {
     ...fields,
-    customer_name: pickText(customer?.name ?? null, fields.customer_name),
-    customer_address: pickText(customer?.address ?? null, fields.customer_address),
-    customer_email: pickText(customer?.email ?? null, fields.customer_email),
-    customer_phone: pickText(customer?.phone ?? null, fields.customer_phone),
-    customer_contact: pickText(customer?.phone ?? null, customer?.email ?? null, fields.customer_contact),
-    property_address: propertySummary,
-    postcode: pickText(customer?.postcode ?? null, propertyAddress?.postcode ?? null, fields.postcode),
-    landlord_name: pickText(customer?.landlord_name ?? null, customer?.name ?? null, fields.landlord_name),
-    landlord_company: pickText(customer?.organization ?? null, fields.landlord_company),
-    landlord_address: pickText(customer?.landlord_address ?? null, customer?.address ?? null, fields.landlord_address),
+    customer_name: pickText(fields.customer_name, customer?.name ?? null),
+    customer_address: pickText(fields.customer_address, customer?.address ?? null),
+    customer_email: pickText(fields.customer_email, customer?.email ?? null),
+    customer_phone: pickText(fields.customer_phone, customer?.phone ?? null),
+    customer_contact: pickText(fields.customer_contact, customer?.phone ?? null, customer?.email ?? null),
+    property_address: pickText(fields.property_address, propertySummary),
+    postcode: pickText(fields.postcode, propertyAddress?.postcode ?? null, customer?.postcode ?? null),
+    landlord_name: pickText(fields.landlord_name, customer?.landlord_name ?? null, customer?.name ?? null),
+    landlord_company: pickText(fields.landlord_company, customer?.organization ?? null),
+    landlord_address: pickText(fields.landlord_address, customer?.landlord_address ?? null, customer?.address ?? null),
   };
 }

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 
 export type ApplianceInput = {
   description: string;
@@ -45,8 +45,47 @@ export type GasServiceFieldMap = {
   clientTown?: string;
   clientPostcode?: string;
   clientPhone?: string;
+  applianceType?: string;
+  applianceMake?: string;
+  applianceModel?: string;
+  applianceLocation?: string;
+  applianceSerial?: string;
+  highCombustionRatio?: string;
+  highCombustionCoPpm?: string;
+  highCombustionCo2?: string;
+  lowCombustionRatio?: string;
+  lowCombustionCoPpm?: string;
+  lowCombustionCo2?: string;
+  applianceOperatingCorrectly?: string;
+  applianceConformsStandards?: string;
+  applianceControlsChecked?: string;
+  operatingPressure?: string;
+  heatInput?: string;
+  boilerWorkingCorrectly?: string;
+  cylinderConditionChecked?: string;
+  programmerControlsWorking?: string;
+  coAlarmFitted?: string;
+  applianceSafe?: string;
+  allFunctionalPartsAvailable?: string;
+  applianceFlueingSafe?: string;
+  applianceVentilationSafe?: string;
+  emissionCombustionTest?: string;
+  burnerPressureCorrect?: string;
+  tightnessTest?: string;
+  warmAirGrillsWorking?: string;
+  pipeworkFreeFromLeaks?: string;
+  magneticFilterFitted?: string;
+  waterQualityAcceptable?: string;
+  warningNoticeExplained?: string;
+  applianceReplacementRecommended?: string;
+  systemImprovementsRecommended?: string;
   nextServiceDate?: string;
   engineerComments?: string;
+  issuedByPrintName?: string;
+  receivedByPrintName?: string;
+  issuedDate?: string;
+  engineerSignatureUrl?: string;
+  customerSignatureUrl?: string;
 };
 
 export type RenderGasServiceInput = {
@@ -107,8 +146,59 @@ const GAS_SERVICE_FORM_FIELD_NAMES: Record<keyof GasServiceFieldMap, FormFieldNa
   clientTown: '25',
   clientPostcode: '26',
   clientPhone: '27',
+  applianceType: '29',
+  applianceMake: '30',
+  applianceModel: '31',
+  applianceLocation: '32',
+  applianceSerial: '33',
+  highCombustionRatio: '34',
+  highCombustionCoPpm: '35',
+  highCombustionCo2: '36',
+  lowCombustionRatio: '37',
+  lowCombustionCoPpm: '38',
+  lowCombustionCo2: '39',
+  applianceOperatingCorrectly: '40',
+  applianceConformsStandards: '41',
+  applianceControlsChecked: '42',
+  operatingPressure: '43',
+  heatInput: '44',
+  boilerWorkingCorrectly: '45',
+  cylinderConditionChecked: '46',
+  programmerControlsWorking: '47',
+  coAlarmFitted: '48',
+  applianceSafe: '49',
+  allFunctionalPartsAvailable: '50',
   nextServiceDate: '51',
+  applianceFlueingSafe: '52',
+  applianceVentilationSafe: '53',
+  emissionCombustionTest: '54',
+  burnerPressureCorrect: '55',
+  tightnessTest: '56',
+  warmAirGrillsWorking: '57',
+  pipeworkFreeFromLeaks: '58',
+  magneticFilterFitted: '59',
+  waterQualityAcceptable: '60',
+  warningNoticeExplained: '61',
+  applianceReplacementRecommended: '62',
+  systemImprovementsRecommended: '63',
   engineerComments: '2',
+  issuedByPrintName: '68',
+  receivedByPrintName: '3',
+  issuedDate: '69',
+  engineerSignatureUrl: null,
+  customerSignatureUrl: null,
+};
+
+type SignaturePlacement = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+const GAS_SERVICE_SIGNATURE_PLACEMENTS: Record<'engineer' | 'customer', SignaturePlacement> = {
+  engineer: { x: 250, y: 47, width: 165, height: 22 },
+  customer: { x: 442, y: 47, width: 165, height: 22 },
 };
 
 type ApplianceTableFieldNames = {
@@ -181,6 +271,26 @@ function normalizeText(value: string | undefined) {
   return String(value).trim();
 }
 
+async function fetchAssetBytes(url: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  if (!url) return null;
+  try {
+    if (url.startsWith('data:')) {
+      const match = url.match(/^data:(.+?);base64,(.*)$/);
+      if (!match) return null;
+      const [, mime, data] = match;
+      return { bytes: Uint8Array.from(Buffer.from(data, 'base64')), mime: mime || 'image/png' };
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    const mime = (response.headers.get('content-type') ?? '').toLowerCase() || 'image/png';
+    return { bytes: new Uint8Array(arrayBuffer), mime };
+  } catch {
+    return null;
+  }
+}
+
 function toFieldNameList(fieldName: FormFieldName) {
   if (!fieldName) return [];
   return Array.isArray(fieldName) ? fieldName : [fieldName];
@@ -212,6 +322,58 @@ function setTextIfExists(params: {
       // Ignore missing fields or non-text fields.
     }
   });
+}
+
+async function drawSignatureIfPresent(params: {
+  page: PDFPage;
+  pdfDoc: PDFDocument;
+  url?: string;
+  placement: SignaturePlacement;
+}) {
+  const { page, pdfDoc, url, placement } = params;
+  const target = normalizeText(url);
+  if (!target) return;
+
+  const fetched = await fetchAssetBytes(target);
+  if (!fetched) return;
+
+  try {
+    if (fetched.mime.includes('svg')) {
+      const svg = Buffer.from(fetched.bytes).toString('utf8');
+      const pathMatch = svg.match(/<path[^>]*d="([^"]+)"/i);
+      const viewBoxMatch = svg.match(/viewBox="([\d.\s-]+)"/i);
+      if (pathMatch?.[1]) {
+        const [, rawViewBox = '0 0 320 90'] = viewBoxMatch ?? [];
+        const [, , viewBoxWidth = '320', viewBoxHeight = '90'] = rawViewBox.trim().split(/\s+/);
+        const sourceWidth = Number(viewBoxWidth) || 320;
+        const sourceHeight = Number(viewBoxHeight) || 90;
+        const padding = 3;
+        const scale = Math.min(
+          (placement.width - padding * 2) / sourceWidth,
+          (placement.height - padding * 2) / sourceHeight,
+        );
+        page.drawSvgPath(pathMatch[1], {
+          x: placement.x + padding,
+          y: placement.y + (placement.height - sourceHeight * scale) / 2,
+          scale,
+          borderColor: rgb(0.1, 0.15, 0.2),
+          borderWidth: 1.1,
+        });
+      }
+      return;
+    }
+
+    const image = fetched.mime.includes('png')
+      ? await pdfDoc.embedPng(fetched.bytes)
+      : await pdfDoc.embedJpg(fetched.bytes);
+    const padding = 3;
+    const dims = image.scaleToFit(placement.width - padding * 2, placement.height - padding * 2);
+    const x = placement.x + (placement.width - dims.width) / 2;
+    const y = placement.y + (placement.height - dims.height) / 2;
+    page.drawImage(image, { x, y, width: dims.width, height: dims.height });
+  } catch {
+    // Ignore signature rendering failures and leave the document otherwise usable.
+  }
 }
 
 async function drawAppliances(
@@ -295,7 +457,7 @@ const GAS_SERVICE_APPLIANCE_TABLE = {
   },
 } as const;
 
-function getGasFieldCoords(height: number): Record<keyof GasServiceFieldMap, FieldConfig> {
+function getGasFieldCoords(height: number): Partial<Record<keyof GasServiceFieldMap, FieldConfig>> {
   const baseX = 100;
   const rowGap = 14;
   const topY = height - 120;
@@ -376,6 +538,19 @@ export async function renderGasServicePdf(input: RenderGasServiceInput): Promise
         filledFields,
       });
     });
+
+    await drawSignatureIfPresent({
+      page,
+      pdfDoc,
+      url: fields.engineerSignatureUrl,
+      placement: GAS_SERVICE_SIGNATURE_PLACEMENTS.engineer,
+    });
+    await drawSignatureIfPresent({
+      page,
+      pdfDoc,
+      url: fields.customerSignatureUrl,
+      placement: GAS_SERVICE_SIGNATURE_PLACEMENTS.customer,
+    });
   } else {
     const fieldCoords = getGasFieldCoords(height);
     (Object.keys(fieldCoords) as (keyof GasServiceFieldMap)[]).forEach((key) => {
@@ -384,6 +559,7 @@ export async function renderGasServicePdf(input: RenderGasServiceInput): Promise
   }
 
   const applianceFieldNames = Object.values(getApplianceFieldNames(0));
+  const hasDetailedTemplateFields = formFieldNames.size > 0 && formFieldNames.has('29');
   const useFormAppliances = formFieldNames.size > 0 && hasAnyFormField(formFieldNames, applianceFieldNames);
 
   if (useFormAppliances) {
@@ -426,7 +602,7 @@ export async function renderGasServicePdf(input: RenderGasServiceInput): Promise
         filledFields,
       });
     });
-  } else {
+  } else if (!hasDetailedTemplateFields) {
     await drawAppliances(pdfDoc, templateDoc, page, fonts, input.appliances ?? []);
   }
 

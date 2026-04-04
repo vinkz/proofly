@@ -30,6 +30,12 @@ export type BoilerServicePhotoCategory = (typeof BOILER_SERVICE_PHOTO_CATEGORIES
 
 export type BoilerServiceJobInfo = {
   customer_name: string;
+  customer_company: string;
+  customer_address_line1: string;
+  customer_address_line2: string;
+  customer_city: string;
+  customer_postcode: string;
+  customer_phone: string;
   property_address: string;
   postcode: string;
   service_date: string;
@@ -63,10 +69,21 @@ export type BoilerServiceChecks = {
   service_leaks_checked: string;
   operating_pressure_mbar: string;
   inlet_pressure_mbar: string;
+  heat_input: string;
   co_ppm: string;
   co2_percent: string;
   flue_gas_temp_c: string;
   system_pressure_bar: string;
+  appliance_conforms_standards: string;
+  cylinder_condition_checked: string;
+  co_alarm_fitted: string;
+  all_functional_parts_available: string;
+  warm_air_grills_working: string;
+  magnetic_filter_fitted: string;
+  water_quality_acceptable: string;
+  warning_notice_explained: string;
+  appliance_replacement_recommended: string;
+  system_improvements_recommended: string;
   service_summary: string;
   recommendations: string;
   defects_found: string;
@@ -138,6 +155,12 @@ export const BOILER_SERVICE_EVIDENCE_CARDS: {
 
 export const BOILER_SERVICE_DEMO_INFO: BoilerServiceJobInfo = {
   customer_name: 'Demo Customer',
+  customer_company: 'Demo Property Ltd',
+  customer_address_line1: '12 Example Road',
+  customer_address_line2: 'Suite 4',
+  customer_city: 'London',
+  customer_postcode: 'SW1A 1AA',
+  customer_phone: '07700 900123',
   property_address: '15 Acacia Avenue, London',
   postcode: 'SW1A 1AA',
   service_date: () => new Date().toISOString().slice(0, 10),
@@ -171,10 +194,21 @@ export const BOILER_SERVICE_DEMO_CHECKS: BoilerServiceChecks = {
   service_leaks_checked: 'yes',
   operating_pressure_mbar: '20',
   inlet_pressure_mbar: '20',
+  heat_input: '24',
   co_ppm: '8',
   co2_percent: '8.5',
   flue_gas_temp_c: '68',
   system_pressure_bar: '1.2',
+  appliance_conforms_standards: 'yes',
+  cylinder_condition_checked: 'yes',
+  co_alarm_fitted: 'yes',
+  all_functional_parts_available: 'yes',
+  warm_air_grills_working: 'yes',
+  magnetic_filter_fitted: 'yes',
+  water_quality_acceptable: 'yes',
+  warning_notice_explained: 'no',
+  appliance_replacement_recommended: 'no',
+  system_improvements_recommended: 'yes',
   service_summary: 'Serviced boiler, cleaned condensate trap, verified safety devices.',
   recommendations: 'Monitor pressure weekly; consider magnetic filter next visit.',
   defects_found: 'no',

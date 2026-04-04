@@ -1,6 +1,7 @@
+'use client';
+
 import Link from 'next/link';
-import type { ReactNode } from 'react';
-import { clsx } from 'clsx';
+import { useEffect, useState, type ReactNode } from 'react';
 
 type WizardLayoutProps = {
   step: number;
@@ -8,11 +9,46 @@ type WizardLayoutProps = {
   title: string;
   status?: string;
   onBack?: () => void;
+  actions?: ReactNode;
+  actionsHideWhenVisibleId?: string;
   children: ReactNode;
 };
 
-export function WizardLayout({ step, total, title, status, onBack, children }: WizardLayoutProps) {
+export function WizardLayout({
+  step,
+  total,
+  title,
+  onBack,
+  actions,
+  actionsHideWhenVisibleId,
+  children,
+}: WizardLayoutProps) {
   const percent = Math.round((step / total) * 100);
+  const [hideActions, setHideActions] = useState(false);
+
+  useEffect(() => {
+    if (!actions || !actionsHideWhenVisibleId || typeof window === 'undefined') {
+      setHideActions(false);
+      return;
+    }
+
+    const target = document.getElementById(actionsHideWhenVisibleId);
+    if (!target) {
+      setHideActions(false);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setHideActions(entry?.isIntersecting ?? false);
+      },
+      { threshold: 0.2 },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [actions, actionsHideWhenVisibleId]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[var(--muted)] via-white to-white">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-white/80 px-4 py-3 backdrop-blur">
@@ -37,11 +73,7 @@ export function WizardLayout({ step, total, title, status, onBack, children }: W
             <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Step {step} of {total}</p>
             <h1 className="text-lg font-semibold text-muted">{title}</h1>
           </div>
-          {status ? (
-            <span className={clsx('ml-auto rounded-full px-3 py-1 text-xs font-semibold', 'bg-[var(--muted)] text-[var(--brand)]')}>
-              {status}
-            </span>
-          ) : null}
+          {actions && !hideActions ? <div className="ml-auto">{actions}</div> : null}
         </div>
         <div className="mx-auto mt-2 h-2 max-w-3xl rounded-full bg-[var(--muted)]">
           <div className="h-2 rounded-full bg-[var(--accent)] transition-all" style={{ width: `${percent}%` }} />

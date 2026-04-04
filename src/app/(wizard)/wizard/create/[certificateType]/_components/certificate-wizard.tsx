@@ -25,11 +25,9 @@ import {
   generateCertificatePdf,
   saveCp12Appliances,
   uploadSignature,
-  assignClientToJob,
 } from '@/server/certificates';
 import { useToast } from '@/components/ui/use-toast';
 import { getLatestApplianceDefaultsForJob } from '@/server/history';
-import { createClient } from '@/server/clients';
 import {
   CP12_FLUE_TYPES,
   CP12_VENTILATION,
@@ -40,19 +38,6 @@ import {
 import { saveJobFields } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
-import type { ClientListItem } from '@/types/client';
-import { Select } from '@/components/ui/select';
-
-export type SavedPropertyOption = {
-  key: string;
-  label: string;
-  job_address_name: string;
-  job_address_line1: string;
-  job_address_line2: string;
-  job_address_city: string;
-  job_postcode: string;
-  job_tel: string;
-};
 
 type WizardProps = {
   jobId: string;
@@ -60,8 +45,6 @@ type WizardProps = {
   certificateLabel: string;
   initialInfo?: Record<string, string | null | undefined>;
   initialJobContext?: InitialJobContext | null;
-  clients?: ClientListItem[];
-  savedProperties?: SavedPropertyOption[];
   initialPhotoPreviews?: Record<string, string>;
   initialAppliances?: Cp12Appliance[];
   stepOffset?: number;
@@ -217,14 +200,23 @@ const BOILER_TYPE_OPTIONS = [
   { label: 'Other', value: 'other' },
 ];
 
+const makeDemoSignatureDataUrl = (label: string, stroke: string) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="320" height="90" viewBox="0 0 320 90">
+      <rect width="320" height="90" fill="white" fill-opacity="0" />
+      <path d="M16 62 C42 24, 78 82, 116 38 S178 78, 214 34 S270 72, 304 30" fill="none" stroke="${stroke}" stroke-width="4" stroke-linecap="round" />
+      <text x="18" y="82" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#334155">${label}</text>
+    </svg>
+  `.trim();
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
+};
+
 export function CertificateWizard({
   jobId,
   certificateType,
   certificateLabel,
   initialInfo = {},
   initialJobContext = null,
-  clients = [],
-  savedProperties = [],
   initialPhotoPreviews = {},
   initialAppliances = [],
   stepOffset = 0,
@@ -250,15 +242,7 @@ export function CertificateWizard({
     resolvedInitialInfo.landlord_address_line1 ?? resolvedInitialInfo.landlord_address ?? '',
   );
   const [landlordAddressSearchError, setLandlordAddressSearchError] = useState<string | null>(null);
-  const [clientOptions, setClientOptions] = useState(clients);
-  const [clientQuery, setClientQuery] = useState('');
-  const [selectedClientId, setSelectedClientId] = useState(initialJobContext?.customer?.id ?? '');
-  const [selectedPropertyKey, setSelectedPropertyKey] = useState('');
-  const [showNewClientForm, setShowNewClientForm] = useState(false);
-  const [newClientName, setNewClientName] = useState('');
-  const [newClientPhone, setNewClientPhone] = useState('');
-  const [newClientEmail, setNewClientEmail] = useState('');
-  const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const demoEnabled = certificateType === 'cp12' || process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const deferredAddressSearchQuery = useDeferredValue(addressSearchQuery.trim());
   const deferredLandlordAddressSearchQuery = useDeferredValue(landlordAddressSearchQuery.trim());
   const initialLandlordAddressParts = splitAddressParts(String(resolvedInitialInfo.landlord_address ?? ''));
@@ -317,41 +301,6 @@ export function CertificateWizard({
       ]),
     ),
   );
-  const filteredClients = useMemo(() => {
-    const term = clientQuery.trim().toLowerCase();
-    if (!term) return clientOptions;
-    return clientOptions.filter((client) =>
-      [client.name, client.organization, client.email, client.phone]
-        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-        .some((value) => value.toLowerCase().includes(term)),
-    );
-  }, [clientOptions, clientQuery]);
-
-  const handleSavedPropertySelect = (propertyKey: string) => {
-    setSelectedPropertyKey(propertyKey);
-    const property = savedProperties.find((item) => item.key === propertyKey);
-    if (!property) return;
-
-    const nextJobAddress = {
-      ...jobAddress,
-      job_address_name: property.job_address_name,
-      job_address_line1: property.job_address_line1,
-      job_address_line2: property.job_address_line2,
-      job_address_city: property.job_address_city,
-      job_postcode: property.job_postcode,
-      job_tel: property.job_tel,
-    };
-
-    setJobAddress(nextJobAddress);
-    setAddressSearchQuery(property.job_address_line1);
-    setAddressSearchError(null);
-    setSelectedPostcodeMatchId(null);
-    setInfo((prev) => ({
-      ...prev,
-      property_address: buildPropertyAddressFromJobAddress(nextJobAddress),
-      postcode: property.job_postcode || prev.postcode,
-    }));
-  };
   const sanitizeAppliance = (appliance: Cp12Appliance): Cp12Appliance => ({
     appliance_type: appliance.appliance_type ?? '',
     location: appliance.location ?? '',
@@ -588,27 +537,43 @@ export function CertificateWizard({
     startTransition(async () => {
       try {
         const today = new Date().toISOString().slice(0, 10);
-        const demoLandlordAddressParts = splitAddressParts(info.landlord_address || CP12_DEMO_INFO.landlord_address);
-        const demoLandlordLine1 = info.landlord_address_line1 || demoLandlordAddressParts[0] || '';
+        const nextInspectionDue = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const demoEngineerSignature = makeDemoSignatureDataUrl('Engineer signature', '#0f172a');
+        const demoCustomerSignature = makeDemoSignatureDataUrl('Customer signature', '#1d4ed8');
+        const demoLandlordAddressParts = splitAddressParts(CP12_DEMO_INFO.landlord_address);
+        const demoLandlordLine1 = info.landlord_address_line1 || CP12_DEMO_INFO.landlord_address_line1 || demoLandlordAddressParts[0] || '';
         const demoLandlordLine2 =
-          info.landlord_address_line2 || (demoLandlordAddressParts.length > 2 ? demoLandlordAddressParts.slice(1, -1).join(', ') : '');
-        const demoLandlordCity = info.landlord_city || (demoLandlordAddressParts.length > 1 ? demoLandlordAddressParts.at(-1) ?? '' : '');
-        const demoLandlordPostcode = info.landlord_postcode || CP12_DEMO_INFO.postcode;
+          info.landlord_address_line2 ||
+          CP12_DEMO_INFO.landlord_address_line2 ||
+          (demoLandlordAddressParts.length > 2 ? demoLandlordAddressParts.slice(1, -1).join(', ') : '');
+        const demoLandlordCity =
+          info.landlord_city ||
+          CP12_DEMO_INFO.landlord_city ||
+          (demoLandlordAddressParts.length > 1 ? demoLandlordAddressParts.at(-1) ?? '' : '');
+        const demoLandlordPostcode = info.landlord_postcode || CP12_DEMO_INFO.landlord_postcode || CP12_DEMO_INFO.postcode;
         const demoLandlordAddress = buildLandlordAddress(demoLandlordLine1, demoLandlordLine2, demoLandlordCity);
         const demoInfo: Cp12InfoState = {
           ...info,
           customer_name: info.customer_name || CP12_DEMO_INFO.customer_name,
           customer_phone: info.customer_phone || CP12_DEMO_INFO.customer_phone || '',
-          property_address: info.property_address || CP12_DEMO_INFO.property_address,
-          postcode: info.postcode || CP12_DEMO_INFO.postcode,
-          inspection_date: info.inspection_date || today,
+          property_address:
+            info.property_address ||
+            buildPropertyAddressFromJobAddress({
+              ...jobAddress,
+              job_address_line1: jobAddress.job_address_line1 || CP12_DEMO_INFO.job_address_line1,
+              job_address_line2: jobAddress.job_address_line2 || CP12_DEMO_INFO.job_address_line2,
+              job_address_city: jobAddress.job_address_city || CP12_DEMO_INFO.job_address_city,
+            }) ||
+            CP12_DEMO_INFO.property_address,
+          postcode: info.postcode || jobAddress.job_postcode || CP12_DEMO_INFO.job_postcode || CP12_DEMO_INFO.postcode,
+          inspection_date: info.inspection_date || (typeof CP12_DEMO_INFO.inspection_date === 'function' ? CP12_DEMO_INFO.inspection_date() : today),
           landlord_name: info.landlord_name || CP12_DEMO_INFO.landlord_name,
-          landlord_company: info.landlord_company || '',
+          landlord_company: info.landlord_company || CP12_DEMO_INFO.landlord_company || '',
           landlord_address_line1: demoLandlordLine1,
           landlord_address_line2: demoLandlordLine2,
           landlord_city: demoLandlordCity,
           landlord_postcode: demoLandlordPostcode,
-          landlord_tel: info.landlord_tel || '',
+          landlord_tel: info.landlord_tel || CP12_DEMO_INFO.landlord_tel || '',
           landlord_address: demoLandlordAddress || CP12_DEMO_INFO.landlord_address,
           reg_26_9_confirmed: true,
           company_address: info.company_address || CP12_DEMO_INFO.company_address || '',
@@ -626,14 +591,21 @@ export function CertificateWizard({
 
         const demoAppliance: Cp12Appliance = { ...emptyAppliance, ...CP12_DEMO_APPLIANCE };
         setInfo(demoInfo);
+        setAddressSearchQuery(jobAddress.job_address_line1 || CP12_DEMO_INFO.job_address_line1 || CP12_DEMO_INFO.property_address || '');
+        setLandlordAddressSearchQuery(demoLandlordLine1);
         setJobAddress((prev) => ({
           ...prev,
-          job_address_name: prev.job_address_name || 'Flat 2 - Tenant entrance',
-          job_address_line1: prev.job_address_line1 || CP12_DEMO_INFO.property_address || '',
-          job_postcode: prev.job_postcode || CP12_DEMO_INFO.postcode || '',
+          job_address_name: prev.job_address_name || CP12_DEMO_INFO.job_address_name || 'Flat 2 - Tenant entrance',
+          job_address_line1: prev.job_address_line1 || CP12_DEMO_INFO.job_address_line1 || CP12_DEMO_INFO.property_address || '',
+          job_address_line2: prev.job_address_line2 || CP12_DEMO_INFO.job_address_line2 || '',
+          job_address_city: prev.job_address_city || CP12_DEMO_INFO.job_address_city || '',
+          job_postcode: prev.job_postcode || CP12_DEMO_INFO.job_postcode || CP12_DEMO_INFO.postcode || '',
           job_tel: prev.job_tel || demoInfo.customer_phone || CP12_DEMO_INFO.job_tel || '',
         }));
         setAppliances([demoAppliance]);
+        setCompletionDate(today);
+        setEngineerSignature(demoEngineerSignature);
+        setCustomerSignature(demoCustomerSignature);
         setDefects({
           defect_description: CP12_DEMO_INFO.defect_description,
           remedial_action: CP12_DEMO_INFO.remedial_action,
@@ -645,6 +617,26 @@ export function CertificateWizard({
             evidenceDemo[k] = v;
           });
         });
+        evidenceDemo.comments = evidenceFields.comments || CP12_DEMO_INFO.comments || '';
+        evidenceDemo.emergency_control_accessible =
+          evidenceFields.emergency_control_accessible || CP12_DEMO_INFO.emergency_control_accessible || 'yes';
+        evidenceDemo.gas_tightness_satisfactory =
+          evidenceFields.gas_tightness_satisfactory || CP12_DEMO_INFO.gas_tightness_satisfactory || 'yes';
+        evidenceDemo.pipework_visual_satisfactory =
+          evidenceFields.pipework_visual_satisfactory || CP12_DEMO_INFO.pipework_visual_satisfactory || 'yes';
+        evidenceDemo.equipotential_bonding_satisfactory =
+          evidenceFields.equipotential_bonding_satisfactory || CP12_DEMO_INFO.equipotential_bonding_satisfactory || 'yes';
+        evidenceDemo.co_alarm_fitted = evidenceFields.co_alarm_fitted || CP12_DEMO_INFO.co_alarm_fitted || 'yes';
+        evidenceDemo.co_alarm_tested = evidenceFields.co_alarm_tested || CP12_DEMO_INFO.co_alarm_tested || 'yes';
+        evidenceDemo.co_alarm_satisfactory =
+          evidenceFields.co_alarm_satisfactory || CP12_DEMO_INFO.co_alarm_satisfactory || 'yes';
+        evidenceDemo.next_inspection_due =
+          evidenceFields.next_inspection_due || CP12_DEMO_INFO.next_inspection_due || nextInspectionDue;
+        evidenceDemo.engineer_id_card_number =
+          evidenceFields.engineer_id_card_number || CP12_DEMO_INFO.engineer_id_card_number || '';
+        evidenceDemo.engineer_signature = demoEngineerSignature;
+        evidenceDemo.customer_signature = demoCustomerSignature;
+        evidenceDemo.completion_date = today;
         setEvidenceFields(evidenceDemo);
 
         await saveCp12JobInfo({ jobId, data: demoJobInfo });
@@ -869,70 +861,6 @@ export function CertificateWizard({
     });
   };
 
-  const handleAssignClient = () => {
-    if (!selectedClientId) return;
-    startTransition(async () => {
-      try {
-        await assignClientToJob({ jobId, clientId: selectedClientId });
-        pushToast({ title: 'Client linked', variant: 'success' });
-        router.refresh();
-      } catch (error) {
-        pushToast({
-          title: 'Could not link client',
-          description: error instanceof Error ? error.message : 'Try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
-
-  const handleCreateAndAssignClient = () => {
-    startTransition(async () => {
-      try {
-        const name = newClientName.trim();
-        if (!name) {
-          throw new Error('Client name required');
-        }
-        const { id } = await createClient({
-          name,
-          phone: newClientPhone.trim() || undefined,
-          email: newClientEmail.trim() || undefined,
-        });
-        await assignClientToJob({ jobId, clientId: id });
-        setClientOptions((prev) => [
-          {
-            id,
-            name,
-            organization: null,
-            email: newClientEmail.trim() || null,
-            phone: newClientPhone.trim() || null,
-            address: null,
-            postcode: null,
-            landlord_name: null,
-            landlord_address: null,
-            user_id: null,
-            created_at: null,
-            updated_at: null,
-          },
-          ...prev,
-        ]);
-        setSelectedClientId(id);
-        setShowNewClientForm(false);
-        setNewClientName('');
-        setNewClientPhone('');
-        setNewClientEmail('');
-        pushToast({ title: 'Client created', variant: 'success' });
-        router.refresh();
-      } catch (error) {
-        pushToast({
-          title: 'Could not create client',
-          description: error instanceof Error ? error.message : 'Try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
-
   const handleChecksNext = () => {
     startTransition(async () => {
       try {
@@ -1044,7 +972,7 @@ export function CertificateWizard({
         pushToast({
           title: `${certificateLabel} generated successfully`,
           description: (
-            <Link href={`/jobs/${resultJobId}/pdf`} className="text-[var(--action)] underline">
+            <Link href={`/jobs/${resultJobId}/pdf?certificateType=${certificateType}`} className="text-[var(--action)] underline">
               Open document preview
             </Link>
           ),
@@ -1057,7 +985,7 @@ export function CertificateWizard({
           variant: 'error',
         });
       } finally {
-        router.push(`/jobs/${targetJobId}/pdf`);
+        router.push(`/jobs/${targetJobId}/pdf?certificateType=${certificateType}`);
       }
     });
   };
@@ -1371,7 +1299,25 @@ export function CertificateWizard({
 
 
   const StepOne = (
-    <WizardLayout step={offsetStep(1)} total={totalSteps} title="People & location" status={certificateLabel}>
+    <WizardLayout
+      step={offsetStep(1)}
+      total={totalSteps}
+      title="People & location"
+      status={certificateLabel}
+      actionsHideWhenVisibleId="cp12-step1-footer-actions"
+      actions={
+        <div className="flex justify-end">
+          <Button
+            onClick={handleInfoNext}
+            disabled={isPending}
+            className="rounded-full px-6"
+            data-testid="cp12-step1-next"
+          >
+            {isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next → Appliances'}
+          </Button>
+        </div>
+      }
+    >
       {isCp12 ? (
         <div className="space-y-3">
           {demoEnabled ? (
@@ -1389,114 +1335,6 @@ export function CertificateWizard({
             </div>
           ) : null}
           <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-muted">Client</p>
-                <p className="mt-1 text-xs text-muted-foreground/70">Select an existing client or create one to prefill Step 1.</p>
-              </div>
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={() => setShowNewClientForm((prev) => !prev)}>
-                {showNewClientForm ? 'Cancel' : 'New client'}
-              </Button>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr),minmax(0,1fr),auto]">
-              <Input
-                value={clientQuery}
-                onChange={(e) => setClientQuery(e.target.value)}
-                placeholder="Search clients by name, phone, or email"
-                className="rounded-2xl"
-              />
-              <Select
-                value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
-                className="rounded-2xl"
-              >
-                <option value="">Select client</option>
-                {filteredClients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                    {client.phone ? ` · ${client.phone}` : client.email ? ` · ${client.email}` : ''}
-                  </option>
-                ))}
-              </Select>
-              <Button
-                type="button"
-                variant="secondary"
-                className="rounded-full"
-                onClick={handleAssignClient}
-                disabled={isPending || !selectedClientId}
-              >
-                Use client
-              </Button>
-            </div>
-            {initialJobContext?.customer ? (
-              <p className="mt-2 text-xs text-muted-foreground/70">
-                Linked client: {initialJobContext.customer.name}
-              </p>
-            ) : null}
-            {!filteredClients.length ? (
-              <p className="mt-2 text-xs text-muted-foreground/70">No matching clients. Create one below.</p>
-            ) : null}
-            {initialJobContext?.customer && savedProperties.length ? (
-              <div className="mt-4 rounded-2xl border border-white/20 bg-white/70 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Saved property</p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-[minmax(0,1fr),auto]">
-                  <Select
-                    value={selectedPropertyKey}
-                    onChange={(e) => handleSavedPropertySelect(e.target.value)}
-                    className="rounded-2xl"
-                  >
-                    <option value="">Enter new property manually</option>
-                    {savedProperties.map((property) => (
-                      <option key={property.key} value={property.key}>
-                        {property.label}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={() => handleSavedPropertySelect(selectedPropertyKey)}
-                    disabled={!selectedPropertyKey}
-                  >
-                    Use property
-                  </Button>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground/70">
-                  Selecting a saved property fills the job location fields only. Landlord details stay separate.
-                </p>
-              </div>
-            ) : null}
-            {showNewClientForm ? (
-              <div className="mt-4 grid gap-3 rounded-2xl border border-white/20 bg-white/70 p-4 sm:grid-cols-2">
-                <Input
-                  value={newClientName}
-                  onChange={(e) => setNewClientName(e.target.value)}
-                  placeholder="Client name"
-                  className="rounded-2xl sm:col-span-2"
-                />
-                <Input
-                  value={newClientPhone}
-                  onChange={(e) => setNewClientPhone(e.target.value)}
-                  placeholder="Phone (optional)"
-                  className="rounded-2xl"
-                />
-                <Input
-                  type="email"
-                  value={newClientEmail}
-                  onChange={(e) => setNewClientEmail(e.target.value)}
-                  placeholder="Email (optional)"
-                  className="rounded-2xl"
-                />
-                <div className="sm:col-span-2 flex justify-end">
-                  <Button type="button" className="rounded-full" onClick={handleCreateAndAssignClient} disabled={isPending}>
-                    {isPending ? 'Saving…' : 'Create and use client'}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
           <div className="grid gap-3 rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
             <p className="text-sm font-semibold text-muted">Job location</p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1721,7 +1559,7 @@ export function CertificateWizard({
       ) : (
         <p className="text-sm text-muted-foreground/70">Non-CP12 certificates currently use the simplified flow.</p>
       )}
-      <div className="mt-6 flex justify-end">
+      <div id="cp12-step1-footer-actions" className="mt-6 flex justify-end">
         <Button
           onClick={handleInfoNext}
           disabled={isPending}
@@ -1741,6 +1579,14 @@ export function CertificateWizard({
       title="Appliance details"
       status="Identity & photos"
       onBack={goBackOneStep}
+      actionsHideWhenVisibleId="cp12-step2-footer-actions"
+      actions={
+        <div className="flex justify-end">
+          <Button onClick={() => setStep(3)} disabled={isPending} className="rounded-full px-6">
+            Next → Checks
+          </Button>
+        </div>
+      }
     >
       {demoEnabled ? (
         <div className="flex justify-end">
@@ -1861,7 +1707,7 @@ export function CertificateWizard({
           />
         ))}
       </div>
-      <div className="mt-6 flex justify-end">
+      <div id="cp12-step2-footer-actions" className="mt-6 flex justify-end">
         <Button onClick={() => setStep(3)} disabled={isPending} className="rounded-full px-6">
           Next → Checks
         </Button>
@@ -1870,7 +1716,21 @@ export function CertificateWizard({
   );
 
   const StepThree = (
-    <WizardLayout step={offsetStep(3)} total={totalSteps} title="Appliance checks" status="On-site checks" onBack={goBackOneStep}>
+    <WizardLayout
+      step={offsetStep(3)}
+      total={totalSteps}
+      title="Appliance checks"
+      status="On-site checks"
+      onBack={goBackOneStep}
+      actionsHideWhenVisibleId="cp12-step3-footer-actions"
+      actions={
+        <div className="mt-6 flex justify-end">
+          <Button onClick={handleChecksNext} disabled={isPending} className="rounded-full px-6">
+            Next → Sign
+          </Button>
+        </div>
+      }
+    >
       <div className="space-y-4">
         {demoEnabled && (
           <div className="flex justify-end">
@@ -2308,7 +2168,7 @@ export function CertificateWizard({
 
         
       </div>
-      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+      <div id="cp12-step3-footer-actions" className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
         <Button variant="outline" className="rounded-full" onClick={goBackOneStep} disabled={isPending}>
           Back
         </Button>
@@ -2320,7 +2180,29 @@ export function CertificateWizard({
   );
 
   const StepFour = (
-    <WizardLayout step={offsetStep(4)} total={totalSteps} title="Signatures & PDF" status="Finish" onBack={goBackOneStep}>
+    <WizardLayout
+      step={offsetStep(4)}
+      total={totalSteps}
+      title="Signatures & PDF"
+      status="Finish"
+      onBack={goBackOneStep}
+      actionsHideWhenVisibleId="cp12-step4-footer-actions"
+      actions={
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" className="rounded-full" onClick={() => router.push(`/jobs/${jobId}`)}>
+            Edit before send
+          </Button>
+          <Button
+            className="rounded-full bg-[var(--action)] px-6 text-white"
+            disabled={isPending || checklist.blockingMissing > 0}
+            onClick={handleGenerate}
+            data-testid="cp12-issue"
+          >
+            {isPending ? 'Issuing…' : 'Issue Certificate'}
+          </Button>
+        </div>
+      }
+    >
       <div className="space-y-3">
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -2420,7 +2302,7 @@ export function CertificateWizard({
           </div>
         </div>
       </div>
-      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+      <div id="cp12-step4-footer-actions" className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
         <Button variant="outline" className="rounded-full" onClick={() => router.push(`/jobs/${jobId}`)}>
           Edit before send
         </Button>

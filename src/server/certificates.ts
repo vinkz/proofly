@@ -35,7 +35,7 @@ import { formatJobAddress } from '@/lib/address';
 import type { JobAddress } from '@/server/address-service';
 import { upsertJobAddressForJob } from '@/server/address-service';
 import { buildCertificatePublicId, buildClientRef, ensureJobCode, getNextJobCode } from '@/server/id-chain';
-import { persistJobFields } from '@/server/job-fields';
+import { persistJobFields, type JobFieldEntry } from '@/server/job-fields';
 
 type JobInsertPayload = {
   certificateType: CertificateType;
@@ -59,6 +59,10 @@ const JOB_FIELDS_TABLE = 'job_fields' as unknown as keyof Database['public']['Ta
 const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['public']['Tables'];
 const JOB_PHOTOS_TABLE = 'job_photos' as unknown as keyof Database['public']['Tables'];
 type JobFieldRow = { field_key: string; value: string | null };
+type CertificateRecord = Pick<
+  Database['public']['Tables']['certificates']['Row'],
+  'id' | 'job_id' | 'cert_type' | 'pdf_path' | 'pdf_url' | 'created_at'
+>;
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
@@ -124,6 +128,207 @@ function extractPropertyAddress(fields: Record<string, unknown>) {
     typeof fields.postcode === 'string' ? fields.postcode : undefined,
   );
   return { line1, line2, town, postcode };
+}
+
+function splitAddressLines(value: unknown) {
+  return String(value ?? '')
+    .split(/[\r\n,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function resolveAddressSlots(
+  value: unknown,
+  options: {
+    fallbackTown?: string | null;
+  } = {},
+) {
+  const parts = splitAddressLines(value);
+  const line1 = parts[0] ?? '';
+  const townFromParts = parts.length >= 2 ? parts.at(-1) ?? '' : '';
+  const line2 = parts.length >= 3 ? parts.slice(1, -1).join(', ') : '';
+  return {
+    line1,
+    line2,
+    town: pickText(townFromParts, options.fallbackTown),
+  };
+}
+
+function composeCommentSection(label: string, value: string) {
+  const text = value.trim();
+  return text ? `${label}: ${text}` : '';
+}
+
+function normalizeDateOnly(value: string | null | undefined) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) return '';
+  const dateOnly = trimmed.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateOnly) ? dateOnly : '';
+}
+
+function addOneYear(dateOnly: string) {
+  const parsed = new Date(`${dateOnly}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return '';
+  parsed.setUTCFullYear(parsed.getUTCFullYear() + 1);
+  return parsed.toISOString().slice(0, 10);
+}
+
+async function ensureCp12FollowUpJob(params: {
+  sb: SupabaseClient<Database>;
+  userId: string;
+  sourceJobId: string;
+  sourceJob: JobContext['job'];
+  customer: ReturnType<typeof resolveJobCustomer>;
+  propertyAddress: ReturnType<typeof resolveJobPropertyAddress>;
+  fields: Record<string, unknown>;
+}) {
+  const { sb, userId, sourceJobId, sourceJob, customer, propertyAddress, fields } = params;
+  const text = (value: unknown) => (value === undefined || value === null ? '' : String(value));
+  const existingFollowUp = await sb
+    .from(JOB_FIELDS_TABLE)
+    .select('job_id')
+    .eq('field_key', 'follow_up_source_job_id')
+    .eq('value', sourceJobId)
+    .limit(1)
+    .maybeSingle();
+  if (existingFollowUp.error) throw new Error(existingFollowUp.error.message);
+  const existingFollowUpRow = existingFollowUp.data as { job_id?: string | null } | null;
+  if (existingFollowUpRow?.job_id) {
+    return { jobId: existingFollowUpRow.job_id, created: false };
+  }
+
+  const explicitDueDate = normalizeDateOnly(text(fields.next_inspection_due));
+  const baseInspectionDate =
+    normalizeDateOnly(pickText(text(fields.inspection_date), text(sourceJob.scheduled_for ?? ''))) ||
+    new Date().toISOString().slice(0, 10);
+  const scheduledDate = explicitDueDate || addOneYear(baseInspectionDate);
+  if (!scheduledDate) {
+    return { jobId: null, created: false };
+  }
+
+  const jobAddressName = pickText(text(fields.job_address_name), text(fields.property_name));
+  const jobAddressLine1 = pickText(text(fields.job_address_line1), propertyAddress.line1, text(fields.property_address_line1));
+  const jobAddressLine2 = pickText(text(fields.job_address_line2), propertyAddress.line2, text(fields.property_address_line2));
+  const jobAddressCity = pickText(text(fields.job_address_city), propertyAddress.town, text(fields.property_town));
+  const jobAddressPostcode = pickText(text(fields.job_postcode), propertyAddress.postcode, text(fields.property_postcode), text(fields.postcode));
+  const jobAddressTel = text(fields.job_tel);
+  const landlordName = pickText(text(fields.landlord_name), customer.name);
+  const landlordCompany = pickText(text(fields.landlord_company), customer.organization);
+  const landlordAddressLine1 = pickText(text(fields.landlord_address_line1));
+  const landlordAddressLine2 = pickText(text(fields.landlord_address_line2));
+  const landlordCity = pickText(text(fields.landlord_city), text(fields.landlord_town));
+  const landlordPostcode = pickText(text(fields.landlord_postcode));
+  const landlordTel = pickText(text(fields.landlord_tel), customer.phone);
+  const landlordAddress = [landlordAddressLine1, landlordAddressLine2, landlordCity].filter(Boolean).join(', ');
+  const propertySummary = [jobAddressLine1, jobAddressLine2, jobAddressCity].filter(Boolean).join(', ');
+  const jobCode = await getNextJobCode(sb, userId);
+  const insertPayload = {
+    client_id: sourceJob.client_id ?? null,
+    client_name: landlordName || sourceJob.client_name || null,
+    address: propertySummary || propertyAddress.summary || null,
+    status: 'active',
+    user_id: userId,
+    title: `CP12 for ${landlordName || 'upcoming job'}`,
+    scheduled_for: `${scheduledDate}T09:00`,
+    job_type: 'safety_check',
+    job_code: jobCode,
+    client_ref: buildClientRef(jobCode),
+  } as Database['public']['Tables']['jobs']['Insert'];
+
+  const { data: followUpJob, error: insertErr } = await sb.from('jobs').insert(insertPayload).select('id').single();
+  if (insertErr || !followUpJob) throw new Error(insertErr?.message ?? 'Failed to create CP12 follow-up job');
+
+  await upsertJobAddressForJob({
+    jobId: followUpJob.id as string,
+    fields: {
+      line1: jobAddressLine1 || undefined,
+      line2: jobAddressLine2 || undefined,
+      town: jobAddressCity || undefined,
+      postcode: jobAddressPostcode || undefined,
+    },
+    sb,
+    userId,
+  });
+
+  const fieldRows: JobFieldEntry[] = [
+    { job_id: followUpJob.id as string, field_key: 'inspection_date', value: scheduledDate },
+    { job_id: followUpJob.id as string, field_key: 'customer_name', value: landlordName || null },
+    { job_id: followUpJob.id as string, field_key: 'customer_phone', value: landlordTel || null },
+    { job_id: followUpJob.id as string, field_key: 'customer_email', value: null },
+    { job_id: followUpJob.id as string, field_key: 'job_address_name', value: jobAddressName || null },
+    { job_id: followUpJob.id as string, field_key: 'job_address_line1', value: jobAddressLine1 || null },
+    { job_id: followUpJob.id as string, field_key: 'job_address_line2', value: jobAddressLine2 || null },
+    { job_id: followUpJob.id as string, field_key: 'job_address_city', value: jobAddressCity || null },
+    { job_id: followUpJob.id as string, field_key: 'job_postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJob.id as string, field_key: 'job_tel', value: jobAddressTel || null },
+    { job_id: followUpJob.id as string, field_key: 'property_name', value: jobAddressName || null },
+    { job_id: followUpJob.id as string, field_key: 'property_address', value: propertySummary || propertyAddress.summary || null },
+    { job_id: followUpJob.id as string, field_key: 'property_address_line1', value: jobAddressLine1 || null },
+    { job_id: followUpJob.id as string, field_key: 'property_address_line2', value: jobAddressLine2 || null },
+    { job_id: followUpJob.id as string, field_key: 'property_town', value: jobAddressCity || null },
+    { job_id: followUpJob.id as string, field_key: 'property_postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJob.id as string, field_key: 'postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJob.id as string, field_key: 'landlord_name', value: landlordName || null },
+    { job_id: followUpJob.id as string, field_key: 'landlord_company', value: landlordCompany || null },
+    { job_id: followUpJob.id as string, field_key: 'landlord_address_line1', value: landlordAddressLine1 || null },
+    { job_id: followUpJob.id as string, field_key: 'landlord_address_line2', value: landlordAddressLine2 || null },
+    { job_id: followUpJob.id as string, field_key: 'landlord_city', value: landlordCity || null },
+    { job_id: followUpJob.id as string, field_key: 'landlord_postcode', value: landlordPostcode || null },
+    { job_id: followUpJob.id as string, field_key: 'landlord_tel', value: landlordTel || null },
+    { job_id: followUpJob.id as string, field_key: 'landlord_address', value: landlordAddress || null },
+    { job_id: followUpJob.id as string, field_key: 'follow_up_source_job_id', value: sourceJobId },
+  ];
+
+  await persistJobFields(sb, followUpJob.id as string, fieldRows, 'ensureCp12FollowUpJob');
+  return { jobId: followUpJob.id as string, created: true };
+}
+
+async function findCertificateRecord(
+  sb: SupabaseClient<Database>,
+  params: {
+    jobId: string;
+    certificateType?: CertificateType;
+    columns?: string;
+  },
+) {
+  const { jobId, certificateType, columns = 'id, job_id, cert_type, pdf_path, pdf_url, created_at' } = params;
+  let query = sb
+    .from('certificates')
+    .select(columns)
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (certificateType) {
+    query = query.eq('cert_type', certificateType);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data ?? null) as CertificateRecord | null;
+}
+
+async function saveCertificateRecord(
+  sb: SupabaseClient<Database>,
+  params: {
+    jobId: string;
+    certificateType: CertificateType;
+    payload: Record<string, unknown>;
+    existingRecord?: CertificateRecord | null;
+  },
+) {
+  const existingRecord =
+    params.existingRecord ??
+    (await findCertificateRecord(sb, {
+      jobId: params.jobId,
+      certificateType: params.certificateType,
+    }));
+
+  if (existingRecord?.id) {
+    return sb.from('certificates').update(params.payload).eq('id', existingRecord.id);
+  }
+
+  return sb.from('certificates').insert(params.payload);
 }
 
 async function getUserWithRetry(
@@ -537,6 +742,12 @@ const BoilerServiceJobInfoSchema = z.object({
   jobId: z.string().uuid(),
   data: z.object({
     customer_name: optionalText,
+    customer_company: optionalText,
+    customer_address_line1: optionalText,
+    customer_address_line2: optionalText,
+    customer_city: optionalText,
+    customer_postcode: optionalText,
+    customer_phone: optionalText,
     property_address: optionalText,
     postcode: optionalText,
     service_date: optionalText,
@@ -576,10 +787,21 @@ const BoilerServiceChecksSchema = z.object({
     service_leaks_checked: optionalText,
     operating_pressure_mbar: optionalText,
     inlet_pressure_mbar: optionalText,
+    heat_input: optionalText,
     co_ppm: optionalText,
     co2_percent: optionalText,
     flue_gas_temp_c: optionalText,
     system_pressure_bar: optionalText,
+    appliance_conforms_standards: optionalText,
+    cylinder_condition_checked: optionalText,
+    co_alarm_fitted: optionalText,
+    all_functional_parts_available: optionalText,
+    warm_air_grills_working: optionalText,
+    magnetic_filter_fitted: optionalText,
+    water_quality_acceptable: optionalText,
+    warning_notice_explained: optionalText,
+    appliance_replacement_recommended: optionalText,
+    system_improvements_recommended: optionalText,
     service_summary: optionalText,
     recommendations: optionalText,
     defects_found: optionalText,
@@ -612,6 +834,13 @@ const GasWarningDetailsSchema = z.object({
     appliance_location: optionalLooseText,
     appliance_type: optionalLooseText,
     make_model: optionalLooseText,
+    serial_number: optionalLooseText,
+    gas_escape_issue: optionalLooseBool,
+    pipework_issue: optionalLooseBool,
+    ventilation_issue: optionalLooseBool,
+    meter_issue: optionalLooseBool,
+    chimney_flue_issue: optionalLooseBool,
+    other_issue_details: optionalLooseText,
     gas_supply_isolated: optionalLooseBool,
     appliance_capped_off: optionalLooseBool,
     customer_refused_isolation: optionalLooseBool,
@@ -664,6 +893,10 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
 
   const { jobId, data } = input;
   const certificateType: CertificateType = 'gas_service';
+  const customerAddress = [data.customer_address_line1, data.customer_address_line2, data.customer_city]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(', ');
   const { error: updateErr } = await sb
     .from('jobs')
     .update({
@@ -675,7 +908,18 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
     .eq('id', jobId)
     .eq('user_id', user.id);
   if (updateErr) throw new Error(updateErr.message);
-  await upsertCustomerFromJobFields({ jobId, fields: data, sb, userId: user.id });
+  await upsertCustomerFromJobFields({
+    jobId,
+    fields: {
+      ...data,
+      customer_address: customerAddress,
+      customer_company: data.customer_company,
+      customer_postcode: data.customer_postcode,
+      customer_phone: data.customer_phone,
+    },
+    sb,
+    userId: user.id,
+  });
   await upsertJobAddressForJob({
     jobId,
     fields: { line1: data.property_address, postcode: data.postcode },
@@ -1486,18 +1730,22 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
     return { pdfUrl: signed.signedUrl, preview: true, jobId: input.jobId };
   }
 
-  const { data: existingCertificate, error: existingCertErr } = await supabase
-    .from('certificates')
-    .select('id, job_id, pdf_path, pdf_url')
-    .eq('job_id', input.jobId)
-    .maybeSingle();
-  if (existingCertErr) throw new Error(existingCertErr.message);
+  const existingCertificate = await findCertificateRecord(supabase, {
+    jobId: input.jobId,
+    certificateType: 'general_works',
+    columns: 'id, job_id, cert_type, pdf_path, pdf_url, created_at',
+  });
 
-  const basePayload: Record<string, unknown> = { job_id: input.jobId, public_id: publicId, user_id: jobOwnerId };
+  const basePayload: Record<string, unknown> = {
+    job_id: input.jobId,
+    cert_type: 'general_works',
+    public_id: publicId,
+    user_id: jobOwnerId,
+  };
   const certificatePayload: Record<string, unknown> = { ...basePayload, pdf_path: path };
   const writeCertificate = (payload: Record<string, unknown>) =>
     existingCertificate
-      ? supabase.from('certificates').update(payload).eq('job_id', input.jobId)
+      ? supabase.from('certificates').update(payload).eq('job_id', input.jobId).eq('cert_type', 'general_works')
       : supabase.from('certificates').insert(payload);
 
   console.log('GW: certificates write start', { jobId: input.jobId, path, previewOnly, payload: certificatePayload });
@@ -1609,6 +1857,35 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
   if (fieldsErr) throw new Error(fieldsErr.message);
   const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
   const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+  const { data: profileRow, error: profileErr } = await sb
+    .from('profiles')
+    .select(
+      'company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, full_name',
+    )
+    .eq('id', user.id)
+    .maybeSingle();
+  if (profileErr && profileErr.code !== '42703') {
+    throw new Error(profileErr.message);
+  }
+
+  const applyDefault = (key: string, value: string | null | undefined) => {
+    if (!value) return;
+    const existing = fieldMap[key];
+    if (typeof existing === 'string' && existing.trim()) return;
+    fieldMap[key] = value;
+  };
+
+  if (profileRow) {
+    const engineerName = profileRow.default_engineer_name ?? profileRow.full_name ?? null;
+    applyDefault('engineer_name', engineerName);
+    applyDefault('company_name', profileRow.company_name ?? null);
+    applyDefault('company_address', profileRow.company_address ?? null);
+    applyDefault('company_postcode', profileRow.company_postcode ?? null);
+    applyDefault('company_phone', profileRow.company_phone ?? null);
+    applyDefault('gas_safe_number', profileRow.gas_safe_number ?? null);
+    applyDefault('engineer_id_card_number', profileRow.default_engineer_id ?? null);
+  }
+
   const customer = resolveJobCustomer(jobContext, {
     name: typeof fieldMap.customer_name === 'string' ? fieldMap.customer_name : undefined,
     address: typeof fieldMap.customer_address === 'string' ? fieldMap.customer_address : undefined,
@@ -1622,7 +1899,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     postcode: typeof fieldMap.postcode === 'string' ? fieldMap.postcode : undefined,
     legacy: typeof fieldMap.address === 'string' ? fieldMap.address : undefined,
   });
-  const mergedFieldMap = {
+  const mergedFieldMap: Record<string, unknown> = {
     ...fieldMap,
     customer_name: customer.name || fieldMap.customer_name,
     property_address: propertyAddress.summary || fieldMap.property_address,
@@ -1639,44 +1916,115 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
   }
 
   const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
-  const getFieldText = (key: string) => toText(fieldMap[key]);
+  const getFieldText = (key: string) => toText(mergedFieldMap[key]);
   const boilerMake = getFieldText('boiler_make');
   const boilerModel = getFieldText('boiler_model');
-  const boilerAddress = pickText(propertyAddress.summary, toText(fieldMap.property_address ?? fieldMap.address ?? ''));
+  const jobAddressName = getFieldText('job_address_name');
+  const propertyAddressSlots = resolveAddressSlots(propertyAddress.summary, { fallbackTown: propertyAddress.town });
+  const jobAddressLine1 = pickText(getFieldText('job_address_line1'), propertyAddress.line1, propertyAddressSlots.line1, propertyAddress.summary);
+  const jobAddressLine2 = pickText(getFieldText('job_address_line2'), propertyAddress.line2, propertyAddressSlots.line2);
+  const jobAddressTown = pickText(getFieldText('job_address_city'), propertyAddress.town, propertyAddressSlots.town);
+  const jobAddressPostcode = pickText(getFieldText('job_postcode'), propertyAddress.postcode, getFieldText('postcode'));
+  const jobAddressPhone = pickText(
+    getFieldText('job_tel'),
+    customer.phone,
+    getFieldText('customer_contact'),
+    getFieldText('customer_phone'),
+  );
+  const companyAddressSlots = resolveAddressSlots(getFieldText('company_address'), {
+    fallbackTown: getFieldText('company_city'),
+  });
+  const clientAddressSlots = resolveAddressSlots(customer.address, {
+    fallbackTown: jobAddressTown,
+  });
+  const companyAddressLine1 = companyAddressSlots.line1;
+  const companyAddressLine2 = companyAddressSlots.line2;
+  const companyAddressLine3 = companyAddressSlots.town;
+  const clientAddressLine1 = pickText(clientAddressSlots.line1, jobAddressLine1);
+  const clientAddressLine2 = clientAddressSlots.line2;
+  const clientAddressLine3 = pickText(clientAddressSlots.town, jobAddressTown);
+  const clientPostcode = pickText(jobContext.customer?.postcode ?? null, getFieldText('postcode'), jobAddressPostcode);
+  const clientPhone = pickText(customer.phone, getFieldText('customer_contact'), getFieldText('customer_phone'));
+  const serviceDate = pickText(getFieldText('service_date'), getFieldText('job_visit_date'));
+  const defectsFound = getFieldText('defects_found').trim().toLowerCase();
+  const applianceSafe = defectsFound === 'yes' ? 'NO' : defectsFound === 'no' ? 'YES' : '';
+  const combustionCaptured =
+    getFieldText('co_ppm').trim().length > 0 ||
+    getFieldText('co2_percent').trim().length > 0 ||
+    getFieldText('flue_gas_temp_c').trim().length > 0;
+  const pressureCaptured =
+    getFieldText('operating_pressure_mbar').trim().length > 0 ||
+    getFieldText('inlet_pressure_mbar').trim().length > 0;
+  const engineerComments = [
+    composeCommentSection('Service summary', getFieldText('service_summary')),
+    composeCommentSection('Recommendations', getFieldText('recommendations')),
+    composeCommentSection('Defects', getFieldText('defects_details')),
+    composeCommentSection('Parts used', getFieldText('parts_used')),
+  ]
+    .filter((value) => value.length > 0)
+    .join('\n\n');
 
   const gasServiceFields: GasServiceFieldMap = {
-    certNumber: toText(fieldMap.record_id ?? fieldMap.certificate_number ?? input.jobId ?? ''),
-    engineerName: toText(fieldMap.engineer_name ?? ''),
-    companyName: toText(fieldMap.company_name ?? ''),
-    companyAddressLine1: toText(fieldMap.company_address ?? ''),
-    companyAddressLine2: '',
-    companyTown: '',
-    companyPostcode: '',
-    companyPhone: toText(fieldMap.company_phone ?? ''),
-    gasSafeNumber: toText(fieldMap.gas_safe_number ?? ''),
-    engineerId: toText(fieldMap.engineer_id ?? ''),
-    jobName: customer.name || toText(fieldMap.customer_name ?? ''),
-    jobAddressLine1: boilerAddress,
-    jobAddressLine2: '',
-    jobTown: '',
-    jobPostcode: pickText(propertyAddress.postcode, toText(fieldMap.postcode ?? '')),
-    jobPhone: customer.phone || '',
-    clientName: customer.name || toText(fieldMap.customer_name ?? ''),
+    certNumber: toText(mergedFieldMap.record_id ?? mergedFieldMap.certificate_number ?? publicId),
+    engineerName: getFieldText('engineer_name'),
+    companyName: getFieldText('company_name'),
+    companyAddressLine1,
+    companyAddressLine2,
+    companyTown: companyAddressLine3,
+    companyPostcode: getFieldText('company_postcode'),
+    companyPhone: getFieldText('company_phone'),
+    gasSafeNumber: getFieldText('gas_safe_number'),
+    engineerId: pickText(getFieldText('engineer_id_card_number'), getFieldText('engineer_id')),
+    jobName: jobAddressName,
+    jobAddressLine1,
+    jobAddressLine2,
+    jobTown: jobAddressTown,
+    jobPostcode: jobAddressPostcode,
+    jobPhone: jobAddressPhone,
+    clientName: customer.name || getFieldText('customer_name'),
     clientCompany: customer.organization || '',
-    clientAddressLine1: boilerAddress,
-    clientAddressLine2: '',
-    clientTown: '',
-    clientPostcode: pickText(propertyAddress.postcode, toText(fieldMap.postcode ?? '')),
-    clientPhone: customer.phone || '',
+    clientAddressLine1,
+    clientAddressLine2,
+    clientTown: clientAddressLine3,
+    clientPostcode,
+    clientPhone,
+    applianceType: getFieldText('boiler_type'),
+    applianceMake: boilerMake,
+    applianceModel: boilerModel,
+    applianceLocation: getFieldText('boiler_location'),
+    applianceSerial: getFieldText('serial_number'),
+    highCombustionCoPpm: getFieldText('co_ppm'),
+    highCombustionCo2: getFieldText('co2_percent'),
+    applianceOperatingCorrectly: getFieldText('service_visual_inspection'),
+    applianceConformsStandards: getFieldText('appliance_conforms_standards'),
+    applianceControlsChecked: getFieldText('service_controls_checked'),
+    operatingPressure: getFieldText('operating_pressure_mbar'),
+    heatInput: getFieldText('heat_input'),
+    boilerWorkingCorrectly: getFieldText('service_visual_inspection'),
+    cylinderConditionChecked: getFieldText('cylinder_condition_checked'),
+    programmerControlsWorking: getFieldText('service_controls_checked'),
+    coAlarmFitted: getFieldText('co_alarm_fitted'),
+    applianceSafe,
+    allFunctionalPartsAvailable: getFieldText('all_functional_parts_available'),
+    applianceFlueingSafe: getFieldText('service_flue_checked'),
+    applianceVentilationSafe: getFieldText('service_ventilation_checked'),
+    emissionCombustionTest: combustionCaptured ? 'YES' : '',
+    burnerPressureCorrect: pressureCaptured ? 'YES' : '',
+    tightnessTest: getFieldText('service_leaks_checked'),
+    warmAirGrillsWorking: getFieldText('warm_air_grills_working'),
+    pipeworkFreeFromLeaks: getFieldText('service_leaks_checked'),
+    magneticFilterFitted: getFieldText('magnetic_filter_fitted'),
+    waterQualityAcceptable: getFieldText('water_quality_acceptable'),
+    warningNoticeExplained: getFieldText('warning_notice_explained'),
+    applianceReplacementRecommended: getFieldText('appliance_replacement_recommended'),
+    systemImprovementsRecommended: getFieldText('system_improvements_recommended'),
     nextServiceDate: getFieldText('next_service_due'),
-    engineerComments: [
-      getFieldText('service_summary'),
-      getFieldText('recommendations'),
-      getFieldText('defects_details'),
-      getFieldText('parts_used'),
-    ]
-      .filter((value) => value.trim().length > 0)
-      .join(' | '),
+    engineerComments,
+    issuedByPrintName: getFieldText('engineer_name'),
+    receivedByPrintName: customer.name || getFieldText('customer_name'),
+    issuedDate: serviceDate || issuedAt.toISOString().slice(0, 10),
+    engineerSignatureUrl: pickText(getFieldText('engineer_signature'), getFieldText('engineer_signature_url')),
+    customerSignatureUrl: pickText(getFieldText('customer_signature'), getFieldText('customer_signature_url')),
   };
 
   const appliances: GasServiceApplianceInput[] = [
@@ -1694,7 +2042,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
       ventilationSatisfactory: getFieldText('service_ventilation_checked'),
       flueTerminationSatisfactory: getFieldText('service_flue_checked'),
       spillageTest: getFieldText('service_visual_inspection'),
-      applianceSafeToUse: getFieldText('service_leaks_checked'),
+      applianceSafeToUse: applianceSafe,
       remedialActionTaken: getFieldText('defects_found'),
     },
   ].filter((row) => Object.values(row).some((val) => typeof val === 'string' && val.trim().length > 0));
@@ -1749,13 +2097,18 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
 
   const baseCertificatePayload: Record<string, unknown> = {
     job_id: input.jobId,
+    cert_type: 'gas_service',
     public_id: publicId,
     user_id: user.id,
   };
   const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
 
   const writeCertificate = (payload: Record<string, unknown>) =>
-    admin.from('certificates').upsert(payload, { onConflict: 'job_id' });
+    saveCertificateRecord(admin, {
+      jobId: input.jobId,
+      certificateType: 'gas_service',
+      payload,
+    });
 
   console.log('GAS SERVICE: certificates write start', { jobId: input.jobId, path, previewOnly, payload: certificatePayload });
   const { error: certErr } = await writeCertificate(certificatePayload);
@@ -1832,6 +2185,7 @@ export async function getCertificateState(c?: CertificatePaths) {
 
 const GetCertificatePdfSignedUrlSchema = z.object({
   jobId: z.string().uuid(),
+  certificateType: z.enum(CERTIFICATE_TYPES).optional(),
 });
 
 export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdfSchema>) {
@@ -1869,8 +2223,11 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   const jobCode = await ensureJobCode(sb, input.jobId, user.id, jobContext.job.job_code ?? null);
   const publicId = buildCertificatePublicId(jobCode, input.certificateType);
 
-  const { data: existingCertificate, error: existingCertErr } = await sb.from('certificates').select('id, job_id').eq('job_id', input.jobId).maybeSingle();
-  if (existingCertErr) throw new Error(existingCertErr.message);
+  const existingCertificate = await findCertificateRecord(sb, {
+    jobId: input.jobId,
+    certificateType: input.certificateType,
+    columns: 'id, job_id, cert_type, created_at',
+  });
   console.log('CERTIFICATE existing row', { jobId: input.jobId, exists: !!existingCertificate, id: existingCertificate?.id });
 
   if (input.certificateType === 'gas_service') {
@@ -1892,37 +2249,101 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     if (fieldsErr) throw new Error(fieldsErr.message);
     const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
     const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+    const { data: profileRow, error: profileErr } = await sb
+      .from('profiles')
+      .select(
+        'company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, full_name',
+      )
+      .eq('id', user.id)
+      .maybeSingle();
+    if (profileErr && profileErr.code !== '42703') {
+      throw new Error(profileErr.message);
+    }
+
+    const applyDefault = (key: string, value: string | null | undefined) => {
+      if (!value) return;
+      const existing = fieldMap[key];
+      if (typeof existing === 'string' && existing.trim()) return;
+      fieldMap[key] = value;
+    };
+
+    if (profileRow) {
+      const engineerName = profileRow.default_engineer_name ?? profileRow.full_name ?? null;
+      applyDefault('engineer_name', engineerName);
+      applyDefault('company_name', profileRow.company_name ?? null);
+      applyDefault('engineer_company', profileRow.company_name ?? null);
+      applyDefault('company_address', profileRow.company_address ?? null);
+      applyDefault('company_postcode', profileRow.company_postcode ?? null);
+      applyDefault('company_phone', profileRow.company_phone ?? null);
+      applyDefault('gas_safe_number', profileRow.gas_safe_number ?? null);
+      applyDefault('engineer_id_card_number', profileRow.default_engineer_id ?? null);
+    }
+
     const mergedFieldMap = {
       ...fieldMap,
       ...(input.fields ?? {}),
     } as Record<string, unknown>;
     const customer = resolveJobCustomer(jobContext, {
       name: typeof mergedFieldMap.customer_name === 'string' ? mergedFieldMap.customer_name : undefined,
+      address: typeof mergedFieldMap.customer_address === 'string' ? mergedFieldMap.customer_address : undefined,
       phone: typeof mergedFieldMap.customer_phone === 'string' ? mergedFieldMap.customer_phone : undefined,
       email: typeof mergedFieldMap.customer_email === 'string' ? mergedFieldMap.customer_email : undefined,
+      organization: typeof mergedFieldMap.customer_company === 'string' ? mergedFieldMap.customer_company : undefined,
     });
     const propertyAddress = resolveJobPropertyAddress(jobContext, {
-      line1: typeof mergedFieldMap.property_address === 'string' ? mergedFieldMap.property_address : undefined,
-      postcode: typeof mergedFieldMap.postcode === 'string' ? mergedFieldMap.postcode : undefined,
+      line1:
+        typeof mergedFieldMap.job_address_line1 === 'string'
+          ? mergedFieldMap.job_address_line1
+          : typeof mergedFieldMap.property_address === 'string'
+            ? mergedFieldMap.property_address
+            : undefined,
+      line2: typeof mergedFieldMap.job_address_line2 === 'string' ? mergedFieldMap.job_address_line2 : undefined,
+      town: typeof mergedFieldMap.job_address_city === 'string' ? mergedFieldMap.job_address_city : undefined,
+      postcode:
+        typeof mergedFieldMap.job_postcode === 'string'
+          ? mergedFieldMap.job_postcode
+          : typeof mergedFieldMap.postcode === 'string'
+            ? mergedFieldMap.postcode
+            : undefined,
       legacy: typeof mergedFieldMap.address === 'string' ? mergedFieldMap.address : undefined,
     });
 
     const issuedAt = new Date();
     const issuedAtIso = issuedAt.toISOString();
     const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
+    const jobAddressName = toText(mergedFieldMap.job_address_name ?? '');
+    const jobAddressLine1 = pickText(toText(mergedFieldMap.job_address_line1 ?? ''), propertyAddress.line1, propertyAddress.summary);
+    const jobAddressLine2 = toText(mergedFieldMap.job_address_line2 ?? '');
+    const jobAddressTown = toText(mergedFieldMap.job_address_city ?? '');
+    const jobAddressPostcode = pickText(toText(mergedFieldMap.job_postcode ?? ''), propertyAddress.postcode, toText(mergedFieldMap.postcode ?? ''));
+    const jobTel = pickText(
+      toText(mergedFieldMap.job_tel ?? ''),
+      customer.phone,
+      customer.email,
+      toText(mergedFieldMap.customer_contact ?? mergedFieldMap.customer_phone ?? mergedFieldMap.customer_email ?? ''),
+    );
     const customerContact = pickText(
       customer.phone,
       customer.email,
       toText(mergedFieldMap.customer_contact ?? mergedFieldMap.customer_phone ?? mergedFieldMap.customer_email ?? ''),
     );
+    const companyAddressParts = splitAddressLines(mergedFieldMap.company_address ?? '');
+    const clientAddressParts = splitAddressLines(customer.address);
     const gasWarningFields: GasWarningNoticeFields = {
-      property_address: pickText(propertyAddress.summary, toText(mergedFieldMap.property_address ?? mergedFieldMap.address ?? '')),
-      postcode: pickText(propertyAddress.postcode, toText(mergedFieldMap.postcode ?? '')),
+      property_address: pickText(jobAddressLine1, propertyAddress.summary, toText(mergedFieldMap.property_address ?? mergedFieldMap.address ?? '')),
+      postcode: jobAddressPostcode,
       customer_name: customer.name || toText(mergedFieldMap.customer_name ?? ''),
       customer_contact: customerContact,
       appliance_location: toText(mergedFieldMap.appliance_location ?? ''),
       appliance_type: toText(mergedFieldMap.appliance_type ?? ''),
       make_model: toText(mergedFieldMap.make_model ?? ''),
+      serial_number: toText(mergedFieldMap.serial_number ?? ''),
+      gas_escape_issue: toText(mergedFieldMap.gas_escape_issue ?? ''),
+      pipework_issue: toText(mergedFieldMap.pipework_issue ?? ''),
+      ventilation_issue: toText(mergedFieldMap.ventilation_issue ?? ''),
+      meter_issue: toText(mergedFieldMap.meter_issue ?? ''),
+      chimney_flue_issue: toText(mergedFieldMap.chimney_flue_issue ?? ''),
+      other_issue_details: toText(mergedFieldMap.other_issue_details ?? ''),
       gas_supply_isolated: toText(mergedFieldMap.gas_supply_isolated ?? ''),
       appliance_capped_off: toText(mergedFieldMap.appliance_capped_off ?? ''),
       customer_refused_isolation: toText(mergedFieldMap.customer_refused_isolation ?? ''),
@@ -1945,7 +2366,19 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       engineer_id_card_number: toText(mergedFieldMap.engineer_id_card_number ?? mergedFieldMap.engineer_id ?? ''),
       engineer_signature_url: toText(mergedFieldMap.engineer_signature ?? mergedFieldMap.engineer_signature_url ?? ''),
       issued_at: toText(mergedFieldMap.issued_at ?? issuedAtIso),
-      record_id: toText(mergedFieldMap.record_id ?? input.jobId),
+      record_id: toText(mergedFieldMap.record_id ?? publicId),
+      company_address: companyAddressParts.join('\n'),
+      company_postcode: toText(mergedFieldMap.company_postcode ?? ''),
+      company_phone: toText(mergedFieldMap.company_phone ?? ''),
+      job_address_name: jobAddressName,
+      job_address_line1: jobAddressLine1,
+      job_address_line2: jobAddressLine2,
+      job_address_city: jobAddressTown,
+      job_postcode: jobAddressPostcode,
+      job_tel: jobTel,
+      customer_address: clientAddressParts.join('\n'),
+      customer_postcode: pickText(jobContext.customer?.postcode ?? null, toText(mergedFieldMap.customer_postcode ?? ''), toText(mergedFieldMap.postcode ?? '')),
+      customer_company: customer.organization || toText(mergedFieldMap.customer_company ?? ''),
     };
 
     const validationErrors = previewOnly ? [] : validateGasWarningNoticeForIssue(gasWarningFields);
@@ -1992,13 +2425,14 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
 
     const baseCertificatePayload: Record<string, unknown> = {
       job_id: input.jobId,
+      cert_type: input.certificateType,
       public_id: publicId,
       user_id: user.id,
     };
     const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
     const writeCertificate = (payload: Record<string, unknown>) =>
       existingCertificate
-        ? admin.from('certificates').update(payload).eq('job_id', input.jobId)
+        ? admin.from('certificates').update(payload).eq('job_id', input.jobId).eq('cert_type', input.certificateType)
         : admin.from('certificates').insert(payload);
     const { error: certErr } = await writeCertificate(certificatePayload);
     if (certErr) {
@@ -2017,9 +2451,14 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       `${CERTIFICATE_LABELS[input.certificateType]} PDF`,
     )}`;
     if (!previewOnly) {
-      const certificatePayload = { job_id: input.jobId, pdf_url: pdfUrl, public_id: publicId };
+      const certificatePayload = {
+        job_id: input.jobId,
+        cert_type: input.certificateType,
+        pdf_url: pdfUrl,
+        public_id: publicId,
+      };
       const writeCertificate = existingCertificate
-        ? sb.from('certificates').update(certificatePayload).eq('job_id', input.jobId)
+        ? sb.from('certificates').update(certificatePayload).eq('job_id', input.jobId).eq('cert_type', input.certificateType)
         : sb.from('certificates').insert(certificatePayload);
       const { error: certificateWriteErr } = await writeCertificate;
       if (certificateWriteErr) {
@@ -2318,13 +2757,19 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
 
   const baseCertificatePayload: Record<string, unknown> = {
     job_id: input.jobId,
+    cert_type: input.certificateType,
     public_id: publicId,
     user_id: user.id,
   };
   const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
 
   const writeCertificate = (payload: Record<string, unknown>) =>
-    admin.from('certificates').upsert(payload, { onConflict: 'job_id' });
+    saveCertificateRecord(admin, {
+      jobId: input.jobId,
+      certificateType: input.certificateType,
+      payload,
+      existingRecord: existingCertificate,
+    });
 
   console.log('CP12: certificates write start', { jobId: input.jobId, path, previewOnly, payload: certificatePayload });
   const { error: certErr } = await writeCertificate(certificatePayload);
@@ -2398,13 +2843,23 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     });
 
   await sb.from('jobs').update({ status: 'completed' }).eq('id', input.jobId);
+  await ensureCp12FollowUpJob({
+    sb: admin,
+    userId: user.id,
+    sourceJobId: input.jobId,
+    sourceJob: jobContext.job,
+    customer,
+    propertyAddress,
+    fields: mergedFieldMap,
+  });
   revalidatePath(`/jobs/${input.jobId}`);
+  revalidatePath('/dashboard');
   return { pdfUrl: finalSignedUrl, jobId: input.jobId };
 }
 
 export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCertificatePdfSignedUrlSchema> | string) {
   const input = typeof payload === 'string' ? { jobId: payload } : payload;
-  const { jobId } = GetCertificatePdfSignedUrlSchema.parse(input);
+  const { jobId, certificateType } = GetCertificatePdfSignedUrlSchema.parse(input);
   const sb = await supabaseServerServiceRole();
   const {
     data: { user },
@@ -2419,14 +2874,13 @@ export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCert
     throw new Error('RLS mismatch: job owner does not match auth user');
   }
 
-  const { data: certificate, error: certificateErr } = await sb
-    .from('certificates')
-    .select('job_id, pdf_path, pdf_url')
-    .eq('job_id', jobId)
-    .maybeSingle();
-  if (certificateErr) throw new Error(certificateErr.message);
+  const certificate = await findCertificateRecord(sb, {
+    jobId,
+    certificateType,
+    columns: 'job_id, cert_type, pdf_path, pdf_url, created_at',
+  });
   if (!certificate) {
-    throw new Error('No PDF found for this job');
+    throw new Error(certificateType ? `No PDF found for this job and certificate type: ${certificateType}` : 'No PDF found for this job');
   }
 
   const pdfPath = certificate.pdf_path ?? certificate.pdf_url;
