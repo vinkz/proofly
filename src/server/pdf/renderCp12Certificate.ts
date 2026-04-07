@@ -170,6 +170,9 @@ const APPLIANCE_TABLE = {
 const FLUE_TYPE_PREFERRED_FONT_SIZE = 6;
 const FLUE_TYPE_MIN_FONT_SIZE = 4;
 const FLUE_TYPE_TEXT_PADDING = 2;
+const CERT_NUMBER_PREFERRED_FONT_SIZE = 7;
+const CERT_NUMBER_MIN_FONT_SIZE = 5;
+const CERT_NUMBER_TEXT_PADDING = 4;
 
 function getApplianceFieldNames(index: number): Record<keyof ApplianceInput, FormFieldName> {
   const i = index + 1;
@@ -605,11 +608,11 @@ type SignaturePlacement = {
 
 const CP12_SIGNATURE_FALLBACK_PLACEMENTS: Record<'engineer_signature' | 'customer_signature', SignaturePlacement> = {
   engineer_signature: {
-    rect: { x: 39, y: 49, width: 205, height: 34 },
+    rect: { x: 39, y: 58, width: 205, height: 24 },
     pageIndex: 0,
   },
   customer_signature: {
-    rect: { x: 294, y: 49, width: 205, height: 34 },
+    rect: { x: 294, y: 58, width: 205, height: 24 },
     pageIndex: 0,
   },
 };
@@ -730,12 +733,46 @@ async function embedSignatureImage(params: {
       return false;
     }
     const { bytes, mime, source } = fetched;
-    const image = mime.includes('png') ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
     const page = chosen.page;
     const rect = chosen.rect;
     const padding = Math.max(1, Math.min(4, Math.min(rect.width, rect.height) * 0.12));
     const maxWidth = rect.width - padding * 2;
     const maxHeight = rect.height - padding * 2;
+    if (mime.includes('svg')) {
+      const svg = Buffer.from(bytes).toString('utf8');
+      const pathMatch = svg.match(/<path[^>]*d="([^"]+)"/i);
+      const viewBoxMatch = svg.match(/viewBox="([\d.\s-]+)"/i);
+      if (!pathMatch?.[1]) {
+        if (debug) console.warn('CP12 signature SVG path missing', { label, url });
+        return false;
+      }
+      const [, rawViewBox = '0 0 320 90'] = viewBoxMatch ?? [];
+      const [, , viewBoxWidth = '320', viewBoxHeight = '90'] = rawViewBox.trim().split(/\s+/);
+      const sourceWidth = Number(viewBoxWidth) || 320;
+      const sourceHeight = Number(viewBoxHeight) || 90;
+      const scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight);
+      const x = rect.x + (rect.width - sourceWidth * scale) / 2;
+      const y = rect.y + (rect.height - sourceHeight * scale) / 2;
+      page.drawSvgPath(pathMatch[1], {
+        x,
+        y,
+        scale,
+        borderColor: rgb(0.1, 0.15, 0.2),
+        borderWidth: 1.1,
+      });
+      if (debug) {
+        console.log('CP12 signature SVG embedded', {
+          label,
+          strategy: chosen.strategy,
+          fieldName: chosen.fieldName,
+          source,
+          chosenRect: rect,
+          finalDrawRect: { x, y, width: sourceWidth * scale, height: sourceHeight * scale },
+        });
+      }
+      return true;
+    }
+    const image = mime.includes('png') ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
     const dims = image.scaleToFit(maxWidth, maxHeight);
     const x = rect.x + (rect.width - dims.width) / 2;
     const y = rect.y + (rect.height - dims.height) / 2;
@@ -912,6 +949,34 @@ function configureFlueTypeFieldAppearance(params: {
     });
 }
 
+function configureCertNumberFieldAppearance(params: {
+  form: ReturnType<PDFDocument['getForm']>;
+  fieldNames: Set<string>;
+  font: PDFFont;
+}) {
+  const { form, fieldNames, font } = params;
+  if (!fieldNames.has('Cert_no')) return;
+  try {
+    const field = form.getTextField('Cert_no');
+    const text = normalizeText(field.getText() ?? '');
+    if (!text) return;
+
+    const widget = field.acroField.getWidgets()[0];
+    const rect = widget?.getRectangle();
+    const maxWidth = rect ? rect.width - CERT_NUMBER_TEXT_PADDING : 0;
+    const fittedSize = getFittedFontSize({
+      text,
+      font,
+      maxWidth,
+      preferredSize: CERT_NUMBER_PREFERRED_FONT_SIZE,
+      minSize: CERT_NUMBER_MIN_FONT_SIZE,
+    });
+    field.setFontSize(fittedSize);
+  } catch {
+    // Ignore font-size override failures for cert number field.
+  }
+}
+
 export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput): Promise<Uint8Array> {
   const templateBytes = await loadCp12TemplateBytes();
 
@@ -1064,6 +1129,11 @@ export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput
   }
 
   configureFlueTypeFieldAppearance({
+    form,
+    fieldNames: formFieldNames,
+    font: regularFont,
+  });
+  configureCertNumberFieldAppearance({
     form,
     fieldNames: formFieldNames,
     font: regularFont,

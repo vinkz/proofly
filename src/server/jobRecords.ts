@@ -98,6 +98,15 @@ export async function updateJobRecord(jobId: string, patch: any): Promise<JobRec
   return data as unknown as JobRecordRow;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- JSONB patches are intentionally loose.
+export async function tryUpdateJobRecord(jobId: string, patch: any): Promise<JobRecordRow | null> {
+  try {
+    return await updateJobRecord(jobId, patch);
+  } catch {
+    return null;
+  }
+}
+
 export async function setInspectionContext(
   jobId: string,
   context: 'landlord' | 'homeowner' | null,

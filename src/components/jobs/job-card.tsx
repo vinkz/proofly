@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { clsx } from 'clsx';
 
 type JobCardProps = {
-  id: string;
+  href: string;
   title: string;
   address?: string | null;
   status?: string | null;
@@ -26,12 +26,12 @@ function formatDate(dateString?: string | null) {
   return parsed.toLocaleDateString();
 }
 
-export function JobCard({ id, title, address, status, hasPdf, scheduledFor, createdAt }: JobCardProps) {
+export function JobCard({ href, title, address, status, hasPdf, scheduledFor, createdAt }: JobCardProps) {
   const color = statusColors[status ?? ''] ?? statusColors.default;
   const displayDate = formatDate(scheduledFor ?? createdAt);
   return (
     <Link
-      href={`/jobs/${id}`}
+      href={href}
       className="group block rounded-md border border-white/30 bg-white/80 p-4 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
     >
       <div className="flex items-start justify-between gap-2">

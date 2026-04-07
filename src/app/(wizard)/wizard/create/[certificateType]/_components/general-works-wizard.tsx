@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -17,7 +17,9 @@ import {
   generateGeneralWorksPdf,
   uploadSignature,
 } from '@/server/certificates';
+import { tryUpdateJobRecord } from '@/server/jobRecords';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
+import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
 type GeneralWorksWizardProps = {
   jobId: string;
@@ -25,17 +27,75 @@ type GeneralWorksWizardProps = {
   initialJobContext?: InitialJobContext | null;
   initialPhotoPreviews?: Record<string, string>;
   stepOffset?: number;
+  startStep?: number;
 };
 
-export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = null, initialPhotoPreviews = {}, stepOffset = 0 }: GeneralWorksWizardProps) {
+type GeneralWorksDraftState = {
+  step: number;
+  info: {
+    property_address: string;
+    postcode: string;
+    work_date: string;
+    customer_name: string;
+    engineer_name: string;
+    company_name: string;
+    customer_email: string;
+    customer_phone: string;
+  };
+  jobAddress: {
+    job_reference: string;
+    job_address_name: string;
+    job_address_line1: string;
+    job_address_line2: string;
+    job_address_city: string;
+    job_postcode: string;
+    job_tel: string;
+  };
+  evidence: {
+    work_summary: string;
+    work_completed: string;
+    parts_used: string;
+    defects_found: string;
+    defects_details: string;
+    recommendations: string;
+  };
+  review: {
+    invoice_amount: string;
+    payment_status: string;
+    follow_up_required: string;
+    follow_up_date: string;
+  };
+  photoPreviews: Record<string, string>;
+  engineerSignature: string;
+  customerSignature: string;
+};
+
+export function GeneralWorksWizard({
+  jobId,
+  initialFields,
+  initialJobContext = null,
+  initialPhotoPreviews = {},
+  stepOffset = 0,
+  startStep = 1,
+}: GeneralWorksWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
-  const [step, setStep] = useState(1);
+  const initialStep = Math.min(4, Math.max(1, startStep - stepOffset));
+  const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
+  const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('general_works', jobId), [jobId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    void tryUpdateJobRecord(jobId, {
+      resume_certificate_type: 'general_works',
+      resume_step: step + stepOffset,
+    });
+  }, [jobId, step, stepOffset]);
 
   const [info, setInfo] = useState({
     property_address: resolvedFields.property_address ?? '',
@@ -77,6 +137,35 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>(initialPhotoPreviews);
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+
+  const generalWorksDraft = useMemo<GeneralWorksDraftState>(
+    () => ({
+      step,
+      info,
+      jobAddress,
+      evidence,
+      review,
+      photoPreviews,
+      engineerSignature,
+      customerSignature,
+    }),
+    [customerSignature, engineerSignature, evidence, info, jobAddress, photoPreviews, review, step],
+  );
+
+  const { clearDraft } = useWizardDraft<GeneralWorksDraftState>({
+    storageKey: draftStorageKey,
+    state: generalWorksDraft,
+    onRestore: (draft) => {
+      setStep(Math.min(4, Math.max(1, draft.step || initialStep)));
+      setInfo((prev) => ({ ...prev, ...(draft.info ?? {}) }));
+      setJobAddress((prev) => ({ ...prev, ...(draft.jobAddress ?? {}) }));
+      setEvidence((prev) => ({ ...prev, ...(draft.evidence ?? {}) }));
+      setReview((prev) => ({ ...prev, ...(draft.review ?? {}) }));
+      setPhotoPreviews((prev) => ({ ...prev, ...(draft.photoPreviews ?? {}) }));
+      setEngineerSignature(draft.engineerSignature ?? '');
+      setCustomerSignature(draft.customerSignature ?? '');
+    },
+  });
 
   const saveFields = (data: Record<string, string | undefined>) =>
     saveGeneralWorksInfo({ jobId, data });
@@ -221,6 +310,7 @@ export function GeneralWorksWizard({ jobId, initialFields, initialJobContext = n
       try {
         await persistThroughStep();
         const { jobId: resultJobId } = await generateGeneralWorksPdf({ jobId, previewOnly: false });
+        clearDraft();
         pushToast({
           title: 'General Works generated successfully',
           description: (

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 
 import type { Database } from '@/lib/database.types';
+import { buildCertificateResumeHref } from '@/lib/certificate-resume';
 import { Button } from '@/components/ui/button';
 import { DeleteJobButton } from '@/components/jobs/delete-job-button';
 
@@ -86,7 +87,7 @@ export default function JobsTable({ jobs }: { jobs: JobRow[] }) {
 
 function resumeHref(job: JobRow) {
   if (job.status === 'completed') return `/jobs/${job.id}/pdf`;
-  return `/jobs/${job.id}`;
+  return buildCertificateResumeHref({ jobId: job.id, jobType: job.job_type });
 }
 
 function StatusBadge({ status }: { status: string }) {

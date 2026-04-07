@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 
@@ -15,15 +15,18 @@ import { ChecksStep } from '@/components/wizard/steps/checks-step';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { createCommissioningChecklistReport } from '@/server/jobs';
 import { uploadJobPhoto } from '@/server/certificates';
+import { tryUpdateJobRecord } from '@/server/jobRecords';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { PhotoCategory } from '@/types/certificates';
 import { FgaAutofillModal } from '@/components/fga/FgaAutofillModal';
+import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
 type CommissioningWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
   initialJobContext?: InitialJobContext | null;
   stepOffset?: number;
+  startStep?: number;
 };
 
 type CommissioningFormState = {
@@ -80,6 +83,11 @@ type CommissioningFormState = {
   print_name_received: string;
   commissioning_date: string;
   next_service_due: string;
+};
+
+type CommissioningDraftState = {
+  step: number;
+  fields: CommissioningFormState;
 };
 
 const FINAL_EVIDENCE_CATEGORIES: Array<{ key: PhotoCategory; label: string }> = [
@@ -139,19 +147,35 @@ const APPLIANCE_TYPE_OPTIONS = [
   { label: 'Other', value: 'other' },
 ];
 
-export function CommissioningWizard({ jobId, initialFields, initialJobContext = null, stepOffset = 0 }: CommissioningWizardProps) {
+export function CommissioningWizard({
+  jobId,
+  initialFields,
+  initialJobContext = null,
+  stepOffset = 0,
+  startStep = 1,
+}: CommissioningWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
-  const [step, setStep] = useState(1);
+  const initialStep = Math.min(4, Math.max(1, startStep - stepOffset));
+  const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const today = new Date().toISOString().slice(0, 10);
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
+  const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('commissioning', jobId), [jobId]);
   const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : '';
   const [isHighFgaOpen, setIsHighFgaOpen] = useState(false);
   const [isLowFgaOpen, setIsLowFgaOpen] = useState(false);
+
+  useEffect(() => {
+    if (!jobId) return;
+    void tryUpdateJobRecord(jobId, {
+      resume_certificate_type: 'commissioning',
+      resume_step: step + stepOffset,
+    });
+  }, [jobId, step, stepOffset]);
 
   const [fields, setFields] = useState<CommissioningFormState>({
     engineer_name: toText(resolvedFields.engineer_name),
@@ -207,6 +231,23 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
     print_name_received: pickText(resolvedFields.print_name_received, resolvedFields.customer_name),
     commissioning_date: pickText(toDateInput(resolvedFields.commissioning_date), toDateInput(resolvedFields.service_date), today),
     next_service_due: toDateInput(resolvedFields.next_service_due),
+  });
+
+  const commissioningDraft = useMemo<CommissioningDraftState>(
+    () => ({
+      step,
+      fields,
+    }),
+    [fields, step],
+  );
+
+  const { clearDraft } = useWizardDraft<CommissioningDraftState>({
+    storageKey: draftStorageKey,
+    state: commissioningDraft,
+    onRestore: (draft) => {
+      setStep(Math.min(4, Math.max(1, draft.step || initialStep)));
+      setFields((prev) => ({ ...prev, ...(draft.fields ?? {}) }));
+    },
   });
 
   const handleDemoFill = () => {
@@ -340,6 +381,7 @@ export function CommissioningWizard({ jobId, initialFields, initialJobContext = 
           jobId,
           fields,
         });
+        clearDraft();
         pushToast({
           title: 'Commissioning checklist generated',
           variant: 'success',

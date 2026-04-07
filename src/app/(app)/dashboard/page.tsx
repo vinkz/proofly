@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import { listJobs } from '@/server/jobs';
-import { listClients } from '@/server/clients';
+import { buildCertificateResumeHref, getResumeStepFromRecord } from '@/lib/certificate-resume';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,15 +21,12 @@ type BasicJob = {
 };
 type UpcomingJob = BasicJob & { prepComplete: boolean };
 
-type BasicClient = {
-  id: string;
-  name: string;
-  phone: string | null;
-  email: string | null;
-  updated_at: string | null;
-  created_at: string | null;
-};
 type UpcomingJobGroup = { label: string; jobs: UpcomingJob[] };
+type JobRecordSummary = {
+  job_id: string;
+  updated_at: string;
+  record: Record<string, unknown> | null;
+};
 
 const DAY_IN_MS = 86_400_000;
 const FOLLOW_UP_THRESHOLD_DAYS = 7;
@@ -52,21 +49,40 @@ export default async function DashboardPage() {
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups, clients] = await Promise.all([getProfile(), listJobs(), listClients()]);
+  const [{ profile }, jobGroups] = await Promise.all([getProfile(), listJobs()]);
   const activeJobs = jobGroups.active as BasicJob[];
-  const recentClients = (clients as BasicClient[]).slice(0, 6);
 
   const now = new Date();
   const awaitingSignatures = activeJobs.filter((job) => job.status === 'awaiting_signatures').length;
   const followUpsDue = activeJobs.filter((job) => ageInDays(job.created_at, now) >= FOLLOW_UP_THRESHOLD_DAYS).length;
 
+  const activeJobIds = activeJobs.map((job) => job.id);
+  let jobRecordRows: JobRecordSummary[] = [];
+  if (activeJobIds.length) {
+    try {
+      const { data, error } = await supabase
+        .from('job_records')
+        .select('job_id, updated_at, record')
+        .in('job_id', activeJobIds);
+      if (error) throw error;
+      jobRecordRows = (data ?? []) as JobRecordSummary[];
+    } catch {
+    }
+  }
+  const jobRecordByJobId = new Map(
+    jobRecordRows.map((row) => [row.job_id, row]),
+  );
+
   const currentJob =
     activeJobs.length > 0
-      ? [...activeJobs].sort((a, b) => {
-          const aDate = a.scheduled_for ? new Date(a.scheduled_for).getTime() : new Date(a.created_at).getTime();
-          const bDate = b.scheduled_for ? new Date(b.scheduled_for).getTime() : new Date(b.created_at).getTime();
-          return aDate - bDate;
-        })[0]
+      ? [...activeJobs]
+          .map((job) => {
+            const jobRecord = jobRecordByJobId.get(job.id) ?? null;
+            const resumeStep = getResumeStepFromRecord(jobRecord?.record ?? null);
+            return { job, jobRecord, resumeStep };
+          })
+          .filter((entry) => entry.resumeStep !== null)
+          .sort((a, b) => new Date(b.jobRecord?.updated_at ?? b.job.created_at).getTime() - new Date(a.jobRecord?.updated_at ?? a.job.created_at).getTime())[0] ?? null
       : null;
 
   const displayName =
@@ -76,8 +92,7 @@ export default async function DashboardPage() {
 
   const upcomingJobsBase = activeJobs
     .filter((job) => job.scheduled_for && isTodayOrFuture(job.scheduled_for, now))
-    .sort((a, b) => new Date(a.scheduled_for ?? '').getTime() - new Date(b.scheduled_for ?? '').getTime())
-    .slice(0, 6);
+    .sort((a, b) => new Date(a.scheduled_for ?? '').getTime() - new Date(b.scheduled_for ?? '').getTime());
   const upcomingJobIds = upcomingJobsBase.map((job) => job.id);
   const { data: prepFieldRows, error: prepFieldErr } = upcomingJobIds.length
     ? await supabase
@@ -109,6 +124,7 @@ export default async function DashboardPage() {
     { label: 'Today', jobs: upcomingJobs.filter((job) => isSameDay(job.scheduled_for ?? '', now)) },
     { label: 'Tomorrow', jobs: upcomingJobs.filter((job) => isTomorrow(job.scheduled_for ?? '', now)) },
     { label: 'This week', jobs: upcomingJobs.filter((job) => isLaterThisWeek(job.scheduled_for ?? '', now)) },
+    { label: 'Later', jobs: upcomingJobs.filter((job) => isAfterThisWeek(job.scheduled_for ?? '', now)) },
   ].filter((group) => group.jobs.length > 0);
 
   return (
@@ -132,7 +148,18 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid gap-4">
-        {currentJob ? <CurrentJobTile job={currentJob} /> : <EmptyCurrentJobTile />}
+        {currentJob ? (
+          <CurrentJobTile
+            job={currentJob.job}
+            href={buildCertificateResumeHref({
+              jobId: currentJob.job.id,
+              jobType: currentJob.job.job_type,
+              startStep: currentJob.resumeStep,
+            })}
+          />
+        ) : (
+          <EmptyCurrentJobTile />
+        )}
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
@@ -186,34 +213,21 @@ export default async function DashboardPage() {
 
         <Card className="border border-white/10">
           <CardHeader>
-            <CardTitle className="text-lg text-muted">Recent clients</CardTitle>
+            <CardTitle className="text-lg text-muted">Find jobs fast</CardTitle>
             <CardDescription className="text-sm text-muted-foreground/70">
-              Recently updated client records.
+              Search upcoming flows and past PDFs from one list.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {recentClients.length ? (
-              recentClients.map((client) => (
-                <div key={client.id} className="rounded-2xl border border-white/10 bg-white/40 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-muted">{client.name}</p>
-                      <p className="text-xs text-muted-foreground/70">
-                        {client.phone ?? client.email ?? 'No contact details'}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground/70">
-                        Last activity {formatDateTime(client.updated_at ?? client.created_at ?? '')}
-                      </p>
-                    </div>
-                    <Button asChild variant="secondary" className="rounded-full">
-                      <Link href={`/clients/${client.id}`}>Open</Link>
-                    </Button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground/70">No clients yet.</p>
-            )}
+          <CardContent className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/40 p-4">
+              <p className="text-sm font-semibold text-muted">Jobs is now the main archive</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">
+                Use the searchable jobs list to find upcoming work, reopen in-progress flows, or open past certificate PDFs.
+              </p>
+            </div>
+            <Button asChild variant="secondary" className="rounded-full">
+              <Link href="/jobs">Open jobs list</Link>
+            </Button>
           </CardContent>
         </Card>
       </section>
@@ -246,7 +260,7 @@ export default async function DashboardPage() {
   );
 }
 
-function CurrentJobTile({ job }: { job: BasicJob }) {
+function CurrentJobTile({ job, href }: { job: BasicJob; href: string }) {
   const schedule = job.scheduled_for
     ? `Scheduled ${formatDateTime(job.scheduled_for)}`
     : `Opened ${formatDate(job.created_at)}`;
@@ -269,7 +283,7 @@ function CurrentJobTile({ job }: { job: BasicJob }) {
       <div className="mt-4 flex items-center justify-between">
         <span className="text-xs font-semibold text-muted-foreground/80">Open to continue certificate</span>
         <Link
-          href={`/jobs/${job.id}`}
+          href={href}
           className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-[var(--brand)] transition hover:bg-white/10"
         >
           Open job
@@ -353,6 +367,15 @@ function isLaterThisWeek(dateString: string | null | undefined, reference: Date)
   const weekEnd = startOfDay(reference);
   weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()));
   return targetDay > tomorrow.getTime() && targetDay < weekEnd.getTime();
+}
+
+function isAfterThisWeek(dateString: string | null | undefined, reference: Date) {
+  if (!dateString) return false;
+  const target = new Date(dateString);
+  if (Number.isNaN(target.getTime())) return false;
+  const weekEnd = startOfDay(reference);
+  weekEnd.setDate(weekEnd.getDate() + (7 - weekEnd.getDay()));
+  return startOfDay(target).getTime() >= weekEnd.getTime();
 }
 
 function getUpcomingJobHref(job: UpcomingJob) {

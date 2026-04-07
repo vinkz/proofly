@@ -19,6 +19,7 @@ export function JobsListSection({
     const created_at = asString(job.created_at);
     const scheduled_for = asString(job.scheduled_for);
     const has_pdf = Boolean(job.report_storage_path);
+    const job_type = asString(job.job_type);
 
     return {
       id,
@@ -28,6 +29,7 @@ export function JobsListSection({
       created_at,
       scheduled_for,
       has_pdf,
+      job_type,
     };
   });
 

@@ -28,6 +28,7 @@ import {
 } from '@/server/certificates';
 import { useToast } from '@/components/ui/use-toast';
 import { getLatestApplianceDefaultsForJob } from '@/server/history';
+import { tryUpdateJobRecord } from '@/server/jobRecords';
 import {
   CP12_FLUE_TYPES,
   CP12_VENTILATION,
@@ -38,6 +39,7 @@ import {
 import { saveJobFields } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
+import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
 type WizardProps = {
   jobId: string;
@@ -127,6 +129,26 @@ type Cp12JobAddressState = {
   job_address_city: string;
   job_postcode: string;
   job_tel: string;
+};
+
+type Cp12DraftState = {
+  step: number;
+  info: Cp12InfoState;
+  jobAddress: Cp12JobAddressState;
+  evidenceFields: Record<string, string>;
+  appliances: Cp12Appliance[];
+  measurementSource: 'manual' | 'tpi';
+  combustionOpen: Record<number, boolean>;
+  defects: {
+    defect_description: string;
+    remedial_action: string;
+    warning_notice_issued: string;
+  };
+  completionDate: string;
+  engineerSignature: string;
+  customerSignature: string;
+  addressSearchQuery: string;
+  landlordAddressSearchQuery: string;
 };
 
 type ChecklistItem = {
@@ -355,6 +377,7 @@ export function CertificateWizard({
   const baseOffset = stepOffset;
   const firstStep = 1;
   const offsetStep = (step: number) => step + baseOffset;
+  const draftStorageKey = useMemo(() => buildWizardDraftStorageKey(certificateType, jobId), [certificateType, jobId]);
 
   useEffect(() => {
     if (!isCp12 || prefillAppliedRef.current) return;
@@ -417,6 +440,69 @@ export function CertificateWizard({
     }
     prevApplianceCountRef.current = appliances.length;
   }, [appliances.length, appliances]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    void tryUpdateJobRecord(jobId, {
+      resume_certificate_type: certificateType,
+      resume_step: step + stepOffset,
+    });
+  }, [certificateType, jobId, step, stepOffset]);
+
+  const cp12Draft = useMemo<Cp12DraftState>(
+    () => ({
+      step,
+      info,
+      jobAddress,
+      evidenceFields,
+      appliances,
+      measurementSource,
+      combustionOpen,
+      defects,
+      completionDate,
+      engineerSignature,
+      customerSignature,
+      addressSearchQuery,
+      landlordAddressSearchQuery,
+    }),
+    [
+      addressSearchQuery,
+      appliances,
+      combustionOpen,
+      completionDate,
+      customerSignature,
+      defects,
+      engineerSignature,
+      evidenceFields,
+      info,
+      jobAddress,
+      landlordAddressSearchQuery,
+      measurementSource,
+      step,
+    ],
+  );
+
+  const { clearDraft } = useWizardDraft<Cp12DraftState>({
+    storageKey: draftStorageKey,
+    state: cp12Draft,
+    onRestore: (draft) => {
+      setStep(Math.min(4, Math.max(1, draft.step || startStep)));
+      setInfo((prev) => ({ ...prev, ...(draft.info ?? {}) }));
+      setJobAddress((prev) => ({ ...prev, ...(draft.jobAddress ?? {}) }));
+      setEvidenceFields((prev) => ({ ...prev, ...(draft.evidenceFields ?? {}) }));
+      if (Array.isArray(draft.appliances) && draft.appliances.length) {
+        setAppliances(draft.appliances.slice(0, MAX_APPLIANCES).map(sanitizeAppliance));
+      }
+      setMeasurementSource(draft.measurementSource === 'tpi' ? 'tpi' : 'manual');
+      setCombustionOpen(draft.combustionOpen ?? {});
+      setDefects((prev) => ({ ...prev, ...(draft.defects ?? {}) }));
+      setCompletionDate(draft.completionDate || completionDate);
+      setEngineerSignature(draft.engineerSignature ?? '');
+      setCustomerSignature(draft.customerSignature ?? '');
+      setAddressSearchQuery(draft.addressSearchQuery ?? '');
+      setLandlordAddressSearchQuery(draft.landlordAddressSearchQuery ?? '');
+    },
+  });
 
   useEffect(() => {
     if (!isCp12) return;
@@ -847,6 +933,7 @@ export function CertificateWizard({
         setJobAddress(nextJobAddress);
         setInfo(data);
         if (prepareOnly) {
+          clearDraft();
           router.push('/dashboard');
           return;
         }
@@ -920,6 +1007,7 @@ export function CertificateWizard({
             gas_tightness_satisfactory: evidenceFields.gas_tightness_satisfactory ?? '',
             pipework_visual_satisfactory: evidenceFields.pipework_visual_satisfactory ?? '',
             equipotential_bonding_satisfactory: evidenceFields.equipotential_bonding_satisfactory ?? '',
+            next_inspection_due: evidenceFields.next_inspection_due ?? '',
           };
           console.log('CP12 issue submit safety payload', {
             jobId,
@@ -966,9 +1054,12 @@ export function CertificateWizard({
           fields: {
             engineer_signature: engineerSignature,
             customer_signature: customerSignature,
+            completion_date: completionDate,
+            next_inspection_due: evidenceFields.next_inspection_due ?? '',
           },
         });
         targetJobId = resultJobId;
+        clearDraft();
         pushToast({
           title: `${certificateLabel} generated successfully`,
           description: (
@@ -2122,25 +2213,9 @@ export function CertificateWizard({
                   />
                 );
               })()}
-              {defects.warning_notice_issued === 'YES' ? (
-                <div className="sm:col-span-2">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    className="rounded-full"
-                    onClick={() => router.push(`/wizard/create/gas_warning_notice?jobId=${jobId}`)}
-                  >
-                    Create Gas Warning Notice
-                  </Button>
-                  <p className="mt-2 text-xs text-muted-foreground/70">
-                    Starts a Gas Warning Notice from this job’s details.
-                  </p>
-                </div>
-              ) : (
-                <p className="sm:col-span-2 text-xs text-muted-foreground/60">
-                  Set &quot;Warning notice issued&quot; to YES to create a Gas Warning Notice from this job.
-                </p>
-              )}
+              <p className="sm:col-span-2 text-xs text-muted-foreground/60">
+                Record whether a warning notice was issued on this CP12. Additional notice flows remain hidden for launch.
+              </p>
             </div>
           ) : (
             <p className="mt-2 text-xs text-muted-foreground/70">
@@ -2187,9 +2262,9 @@ export function CertificateWizard({
       status="Finish"
       onBack={goBackOneStep}
       actionsHideWhenVisibleId="cp12-step4-footer-actions"
-      actions={
+          actions={
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" className="rounded-full" onClick={() => router.push(`/jobs/${jobId}`)}>
+          <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
             Edit before send
           </Button>
           <Button
@@ -2289,6 +2364,15 @@ export function CertificateWizard({
           />
         </div>
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <p className="text-sm font-semibold text-muted">Next inspection due</p>
+          <Input
+            type="date"
+            value={evidenceFields.next_inspection_due ?? ''}
+            onChange={(e) => handleEvidenceFieldsUpdate({ next_inspection_due: e.target.value })}
+            className="mt-2"
+          />
+        </div>
+        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
           <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
           <div className="mt-3">
             <EvidenceCard
@@ -2303,7 +2387,7 @@ export function CertificateWizard({
         </div>
       </div>
       <div id="cp12-step4-footer-actions" className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button variant="outline" className="rounded-full" onClick={() => router.push(`/jobs/${jobId}`)}>
+        <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
           Edit before send
         </Button>
         <Button

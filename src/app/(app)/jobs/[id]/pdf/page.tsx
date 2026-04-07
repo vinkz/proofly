@@ -6,9 +6,15 @@ import { DocumentActions } from './_components/document-actions';
 import { DocumentBackButton } from './_components/back-button';
 import { isUUID } from '@/lib/ids';
 import { getCertificatePdfSignedUrl, getCertificateState } from '@/server/certificates';
-import { listInvoicesForJob } from '@/server/invoices';
 import type { Database } from '@/lib/database.types';
 import { CERTIFICATE_TYPES, type CertificateType } from '@/types/certificates';
+import {
+  buildCertificateEditHref,
+  buildCertificateResumeHref,
+  getDefaultEditStepForJobType,
+  getDefaultEditStepForCertificateType,
+  getResumeStepFromRecord,
+} from '@/lib/certificate-resume';
 
 const parseCertificateType = (value: string | undefined): CertificateType | null => {
   if (!value) return null;
@@ -40,11 +46,18 @@ export default async function JobPdfPage({
   const [
     { data: certificate, error: certificateError },
     { data: job, error: jobError },
+    { data: jobRecord },
+    { data: referenceFields },
     { data: report, error: reportError },
-    invoices,
   ] = await Promise.all([
     certificateQuery.maybeSingle(),
     supabase.from('jobs').select('*').eq('id', id).maybeSingle(),
+    supabase.from('job_records').select('record').eq('job_id', id).maybeSingle(),
+    supabase
+      .from('job_fields')
+      .select('field_key, value')
+      .eq('job_id', id)
+      .in('field_key', ['record_id', 'certificate_number']),
     supabase
       .from('reports')
       .select('id, job_id, storage_path, created_at')
@@ -52,26 +65,13 @@ export default async function JobPdfPage({
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    listInvoicesForJob(id),
   ]);
   if (jobError) throw new Error(jobError.message);
   if (!job) notFound();
   const jobRow = job as Database['public']['Tables']['jobs']['Row'];
-  const clientId = jobRow.client_id;
-  const client =
-    clientId && typeof clientId === 'string'
-      ? (
-          await supabase
-            .from('clients')
-            .select('id, name, email, phone')
-            .eq('id', clientId)
-            .maybeSingle()
-        ).data
-      : null;
 
   let pdfUrl: string | null = null;
   let pdfError: string | null = null;
-  let pdfPath: string | null = null;
 
   if (qs.url) {
     pdfUrl = qs.url;
@@ -87,18 +87,12 @@ export default async function JobPdfPage({
       } catch (error) {
         pdfError = error instanceof Error ? error.message : 'Unable to load PDF.';
       }
-      if (certificate?.pdf_path) {
-        pdfPath = certificate.pdf_path;
-      } else if (certificate?.pdf_url && !certificate.pdf_url.startsWith('http')) {
-        pdfPath = certificate.pdf_url;
-      }
     } else if (report?.storage_path) {
       const { data, error } = await supabase.storage.from('reports').createSignedUrl(report.storage_path, 60 * 10);
       if (error || !data?.signedUrl) {
         pdfError = error?.message ?? 'Unable to load PDF.';
       } else {
         pdfUrl = data.signedUrl;
-        pdfPath = report.storage_path;
       }
     } else {
       pdfError = certificateError?.message ?? reportError?.message ?? 'No PDF found for this job';
@@ -106,29 +100,51 @@ export default async function JobPdfPage({
   }
 
   const title = jobRow.title ?? 'Document';
-  const invoice = invoices[0] ?? null;
-  const hasDocument = Boolean(report?.id);
+  const referenceFieldMap = Object.fromEntries(
+    (referenceFields ?? []).map((row) => [row.field_key ?? '', row.value ?? null]),
+  );
+  const certificateReference =
+    typeof referenceFieldMap.record_id === 'string' && referenceFieldMap.record_id.trim().length
+      ? referenceFieldMap.record_id.trim()
+        : typeof referenceFieldMap.certificate_number === 'string' && referenceFieldMap.certificate_number.trim().length
+          ? referenceFieldMap.certificate_number.trim()
+          : null;
+  const resumeRecord = jobRecord?.record as Record<string, unknown> | null | undefined;
+  const resumeCertificateType =
+    typeof resumeRecord?.resume_certificate_type === 'string' ? resumeRecord.resume_certificate_type : null;
+  const resumeStep = getResumeStepFromRecord(resumeRecord);
+  const editStep =
+    selectedCertificateType && resumeCertificateType === selectedCertificateType
+      ? resumeStep
+      : getDefaultEditStepForCertificateType(selectedCertificateType);
+  const backHref = selectedCertificateType
+    ? buildCertificateEditHref({
+        jobId: id,
+        certificateType: selectedCertificateType,
+        startStep: editStep,
+      })
+    : buildCertificateResumeHref({
+        jobId: id,
+        jobType: jobRow.job_type,
+        startStep: resumeStep ?? getDefaultEditStepForJobType(jobRow.job_type),
+      });
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2">
-        <DocumentBackButton fallbackHref={`/jobs/${id}`} />
-        <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Document Preview</p>
+        <DocumentBackButton href={backHref} />
         <h1 className="text-2xl font-semibold text-muted">{title}</h1>
+        {certificateReference ? (
+          <p className="text-sm font-medium text-muted-foreground/80">Certificate ref: {certificateReference}</p>
+        ) : null}
+        <p className="text-sm text-muted-foreground/70">Saved to Jobs. You can find this again under Past jobs.</p>
         <p className="text-sm text-muted-foreground/70">
           {jobRow.address ?? 'Address pending'}
         </p>
       </div>
 
       <DocumentActions
-        jobId={id}
-        jobTitle={title}
         pdfUrl={pdfUrl}
-        pdfPath={pdfPath}
-        invoiceId={invoice?.id ?? null}
-        hasDocument={hasDocument}
-        clientEmail={(client as { email?: string | null } | null)?.email ?? null}
-        clientPhone={(client as { phone?: string | null } | null)?.phone ?? null}
       />
       <PdfPreview url={pdfUrl} error={pdfError} />
     </div>

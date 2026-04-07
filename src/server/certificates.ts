@@ -193,9 +193,7 @@ async function ensureCp12FollowUpJob(params: {
     .maybeSingle();
   if (existingFollowUp.error) throw new Error(existingFollowUp.error.message);
   const existingFollowUpRow = existingFollowUp.data as { job_id?: string | null } | null;
-  if (existingFollowUpRow?.job_id) {
-    return { jobId: existingFollowUpRow.job_id, created: false };
-  }
+  const existingFollowUpJobId = existingFollowUpRow?.job_id ?? null;
 
   const explicitDueDate = normalizeDateOnly(text(fields.next_inspection_due));
   const baseInspectionDate =
@@ -221,25 +219,53 @@ async function ensureCp12FollowUpJob(params: {
   const landlordTel = pickText(text(fields.landlord_tel), customer.phone);
   const landlordAddress = [landlordAddressLine1, landlordAddressLine2, landlordCity].filter(Boolean).join(', ');
   const propertySummary = [jobAddressLine1, jobAddressLine2, jobAddressCity].filter(Boolean).join(', ');
-  const jobCode = await getNextJobCode(sb, userId);
-  const insertPayload = {
-    client_id: sourceJob.client_id ?? null,
-    client_name: landlordName || sourceJob.client_name || null,
-    address: propertySummary || propertyAddress.summary || null,
-    status: 'active',
-    user_id: userId,
-    title: `CP12 for ${landlordName || 'upcoming job'}`,
-    scheduled_for: `${scheduledDate}T09:00`,
-    job_type: 'safety_check',
-    job_code: jobCode,
-    client_ref: buildClientRef(jobCode),
-  } as Database['public']['Tables']['jobs']['Insert'];
+  let followUpJobId = existingFollowUpJobId;
+  let created = false;
 
-  const { data: followUpJob, error: insertErr } = await sb.from('jobs').insert(insertPayload).select('id').single();
-  if (insertErr || !followUpJob) throw new Error(insertErr?.message ?? 'Failed to create CP12 follow-up job');
+  if (followUpJobId) {
+    const { error: updateErr } = await sb
+      .from('jobs')
+      .update({
+        client_id: sourceJob.client_id ?? null,
+        client_name: landlordName || sourceJob.client_name || null,
+        address: propertySummary || propertyAddress.summary || null,
+        status: 'active',
+        user_id: userId,
+        job_type: 'safety_check',
+        title: `CP12 for ${landlordName || 'upcoming job'}`,
+        scheduled_for: `${scheduledDate}T09:00`,
+      })
+      .eq('id', followUpJobId);
+    if (updateErr) throw new Error(updateErr.message);
+  } else {
+    const insertPayload = {
+      client_id: sourceJob.client_id ?? null,
+      client_name: landlordName || sourceJob.client_name || null,
+      address: propertySummary || propertyAddress.summary || null,
+      status: 'active',
+      user_id: userId,
+      title: `CP12 for ${landlordName || 'upcoming job'}`,
+      scheduled_for: `${scheduledDate}T09:00`,
+      job_type: 'safety_check',
+    } as Database['public']['Tables']['jobs']['Insert'];
+
+    const { data: followUpJob, error: insertErr } = await sb.from('jobs').insert(insertPayload).select('id').single();
+    if (insertErr || !followUpJob) throw new Error(insertErr?.message ?? 'Failed to create CP12 follow-up job');
+    followUpJobId = followUpJob.id as string;
+    created = true;
+
+    try {
+      await ensureJobCode(sb, followUpJobId, userId, null);
+    } catch (error) {
+      console.warn('ensureCp12FollowUpJob: failed to assign job code', {
+        followUpJobId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   await upsertJobAddressForJob({
-    jobId: followUpJob.id as string,
+    jobId: followUpJobId,
     fields: {
       line1: jobAddressLine1 || undefined,
       line2: jobAddressLine2 || undefined,
@@ -251,36 +277,36 @@ async function ensureCp12FollowUpJob(params: {
   });
 
   const fieldRows: JobFieldEntry[] = [
-    { job_id: followUpJob.id as string, field_key: 'inspection_date', value: scheduledDate },
-    { job_id: followUpJob.id as string, field_key: 'customer_name', value: landlordName || null },
-    { job_id: followUpJob.id as string, field_key: 'customer_phone', value: landlordTel || null },
-    { job_id: followUpJob.id as string, field_key: 'customer_email', value: null },
-    { job_id: followUpJob.id as string, field_key: 'job_address_name', value: jobAddressName || null },
-    { job_id: followUpJob.id as string, field_key: 'job_address_line1', value: jobAddressLine1 || null },
-    { job_id: followUpJob.id as string, field_key: 'job_address_line2', value: jobAddressLine2 || null },
-    { job_id: followUpJob.id as string, field_key: 'job_address_city', value: jobAddressCity || null },
-    { job_id: followUpJob.id as string, field_key: 'job_postcode', value: jobAddressPostcode || null },
-    { job_id: followUpJob.id as string, field_key: 'job_tel', value: jobAddressTel || null },
-    { job_id: followUpJob.id as string, field_key: 'property_name', value: jobAddressName || null },
-    { job_id: followUpJob.id as string, field_key: 'property_address', value: propertySummary || propertyAddress.summary || null },
-    { job_id: followUpJob.id as string, field_key: 'property_address_line1', value: jobAddressLine1 || null },
-    { job_id: followUpJob.id as string, field_key: 'property_address_line2', value: jobAddressLine2 || null },
-    { job_id: followUpJob.id as string, field_key: 'property_town', value: jobAddressCity || null },
-    { job_id: followUpJob.id as string, field_key: 'property_postcode', value: jobAddressPostcode || null },
-    { job_id: followUpJob.id as string, field_key: 'postcode', value: jobAddressPostcode || null },
-    { job_id: followUpJob.id as string, field_key: 'landlord_name', value: landlordName || null },
-    { job_id: followUpJob.id as string, field_key: 'landlord_company', value: landlordCompany || null },
-    { job_id: followUpJob.id as string, field_key: 'landlord_address_line1', value: landlordAddressLine1 || null },
-    { job_id: followUpJob.id as string, field_key: 'landlord_address_line2', value: landlordAddressLine2 || null },
-    { job_id: followUpJob.id as string, field_key: 'landlord_city', value: landlordCity || null },
-    { job_id: followUpJob.id as string, field_key: 'landlord_postcode', value: landlordPostcode || null },
-    { job_id: followUpJob.id as string, field_key: 'landlord_tel', value: landlordTel || null },
-    { job_id: followUpJob.id as string, field_key: 'landlord_address', value: landlordAddress || null },
-    { job_id: followUpJob.id as string, field_key: 'follow_up_source_job_id', value: sourceJobId },
+    { job_id: followUpJobId, field_key: 'inspection_date', value: scheduledDate },
+    { job_id: followUpJobId, field_key: 'customer_name', value: landlordName || null },
+    { job_id: followUpJobId, field_key: 'customer_phone', value: landlordTel || null },
+    { job_id: followUpJobId, field_key: 'customer_email', value: null },
+    { job_id: followUpJobId, field_key: 'job_address_name', value: jobAddressName || null },
+    { job_id: followUpJobId, field_key: 'job_address_line1', value: jobAddressLine1 || null },
+    { job_id: followUpJobId, field_key: 'job_address_line2', value: jobAddressLine2 || null },
+    { job_id: followUpJobId, field_key: 'job_address_city', value: jobAddressCity || null },
+    { job_id: followUpJobId, field_key: 'job_postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJobId, field_key: 'job_tel', value: jobAddressTel || null },
+    { job_id: followUpJobId, field_key: 'property_name', value: jobAddressName || null },
+    { job_id: followUpJobId, field_key: 'property_address', value: propertySummary || propertyAddress.summary || null },
+    { job_id: followUpJobId, field_key: 'property_address_line1', value: jobAddressLine1 || null },
+    { job_id: followUpJobId, field_key: 'property_address_line2', value: jobAddressLine2 || null },
+    { job_id: followUpJobId, field_key: 'property_town', value: jobAddressCity || null },
+    { job_id: followUpJobId, field_key: 'property_postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJobId, field_key: 'postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJobId, field_key: 'landlord_name', value: landlordName || null },
+    { job_id: followUpJobId, field_key: 'landlord_company', value: landlordCompany || null },
+    { job_id: followUpJobId, field_key: 'landlord_address_line1', value: landlordAddressLine1 || null },
+    { job_id: followUpJobId, field_key: 'landlord_address_line2', value: landlordAddressLine2 || null },
+    { job_id: followUpJobId, field_key: 'landlord_city', value: landlordCity || null },
+    { job_id: followUpJobId, field_key: 'landlord_postcode', value: landlordPostcode || null },
+    { job_id: followUpJobId, field_key: 'landlord_tel', value: landlordTel || null },
+    { job_id: followUpJobId, field_key: 'landlord_address', value: landlordAddress || null },
+    { job_id: followUpJobId, field_key: 'follow_up_source_job_id', value: sourceJobId },
   ];
 
-  await persistJobFields(sb, followUpJob.id as string, fieldRows, 'ensureCp12FollowUpJob');
-  return { jobId: followUpJob.id as string, created: true };
+  await persistJobFields(sb, followUpJobId, fieldRows, 'ensureCp12FollowUpJob');
+  return { jobId: followUpJobId, created };
 }
 
 async function findCertificateRecord(
@@ -2584,7 +2610,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     cp12SafetyReadback,
   });
   const cp12Fields: Cp12FieldMap = {
-    certNumber: toText(mergedFieldMap.record_id ?? mergedFieldMap.certificate_number ?? ''),
+    certNumber: toText(mergedFieldMap.record_id ?? mergedFieldMap.certificate_number ?? publicId),
     issueDate: toText(mergedFieldMap.inspection_date ?? mergedFieldMap.scheduled_for ?? '') || undefined,
     nextInspectionDue: toText(mergedFieldMap.next_inspection_due ?? mergedFieldMap.completion_date ?? ''),
     landlordName: toText(mergedFieldMap.landlord_name ?? customer.name ?? ''),
@@ -2841,8 +2867,25 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt } as Record<string, unknown>, {
       onConflict: 'job_id,field_key',
     });
+  await sb
+    .from(JOB_FIELDS_TABLE)
+    .upsert(
+      [
+        { job_id: input.jobId, field_key: 'record_id', value: publicId },
+        { job_id: input.jobId, field_key: 'certificate_number', value: publicId },
+      ] as Record<string, unknown>[],
+      {
+        onConflict: 'job_id,field_key',
+      },
+    );
 
-  await sb.from('jobs').update({ status: 'completed' }).eq('id', input.jobId);
+  const { error: completeJobErr } = await admin
+    .from('jobs')
+    .update({ status: 'completed' })
+    .eq('id', input.jobId);
+  if (completeJobErr) {
+    throw new Error(completeJobErr.message);
+  }
   await ensureCp12FollowUpJob({
     sb: admin,
     userId: user.id,
@@ -2853,6 +2896,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     fields: mergedFieldMap,
   });
   revalidatePath(`/jobs/${input.jobId}`);
+  revalidatePath('/jobs');
   revalidatePath('/dashboard');
   return { pdfUrl: finalSignedUrl, jobId: input.jobId };
 }

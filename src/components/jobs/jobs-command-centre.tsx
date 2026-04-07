@@ -3,10 +3,12 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 
+import { buildCertificateResumeHref } from '@/lib/certificate-resume';
 import { JobCard } from './job-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DeleteJobsMenu } from './delete-jobs-menu';
+import type { JobType } from '@/types/job-records';
 
 export type JobSummary = {
   id: string;
@@ -16,34 +18,49 @@ export type JobSummary = {
   created_at?: string | null;
   scheduled_for?: string | null;
   has_pdf?: boolean;
+  job_type?: string | null;
 };
 
-type FilterRange = 'today' | 'week' | 'all';
+type FilterView = 'upcoming' | 'past' | 'all';
+
+const getJobTimestamp = (job: JobSummary) => {
+  const when = job.scheduled_for ?? job.created_at ?? null;
+  if (!when) return null;
+  const parsed = new Date(when);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.getTime();
+};
 
 export function JobsCommandCentre({ jobs, showActions = true }: { jobs: JobSummary[]; showActions?: boolean }) {
   const [query, setQuery] = useState('');
-  const [range, setRange] = useState<FilterRange>('all');
+  const [view, setView] = useState<FilterView>('upcoming');
 
   const filtered = useMemo(() => {
-    const now = new Date();
-    return jobs.filter((job) => {
-      const haystack = `${job.title ?? ''} ${job.address ?? ''}`.toLowerCase();
-      const matchesQuery = haystack.includes(query.toLowerCase());
+    return jobs
+      .filter((job) => {
+        const haystack = `${job.title ?? ''} ${job.address ?? ''}`.toLowerCase();
+        const matchesQuery = haystack.includes(query.toLowerCase());
 
-      let matchesRange = true;
-      const when = job.scheduled_for ?? job.created_at;
-      if (when && range !== 'all') {
-        const date = new Date(when);
-        if (range === 'today') {
-          matchesRange = date.toDateString() === now.toDateString();
-        } else if (range === 'week') {
-          const diff = Math.abs(date.getTime() - now.getTime());
-          matchesRange = diff <= 7 * 24 * 60 * 60 * 1000;
-        }
-      }
-      return matchesQuery && matchesRange;
-    });
-  }, [jobs, query, range]);
+        let matchesView = true;
+        if (view === 'upcoming') matchesView = job.status !== 'completed';
+        if (view === 'past') matchesView = job.status === 'completed';
+        return matchesQuery && matchesView;
+      })
+      .sort((a, b) => {
+        const left = getJobTimestamp(a);
+        const right = getJobTimestamp(b);
+        if (left === null && right === null) return 0;
+        if (left === null) return 1;
+        if (right === null) return -1;
+
+        const leftUpcoming = a.status !== 'completed';
+        const rightUpcoming = b.status !== 'completed';
+        if (view === 'past') return right - left;
+        if (view === 'upcoming') return leftUpcoming && rightUpcoming ? left - right : leftUpcoming ? -1 : 1;
+        if (leftUpcoming !== rightUpcoming) return leftUpcoming ? -1 : 1;
+        return leftUpcoming ? left - right : right - left;
+      });
+  }, [jobs, query, view]);
 
   return (
     <div className="space-y-4">
@@ -56,13 +73,13 @@ export function JobsCommandCentre({ jobs, showActions = true }: { jobs: JobSumma
             className="flex-1 rounded-full"
           />
           <div className="flex items-center gap-2">
-            {(['today', 'week', 'all'] as const).map((value) => (
+            {(['upcoming', 'past', 'all'] as const).map((value) => (
               <button
                 key={value}
                 type="button"
-                onClick={() => setRange(value)}
+                onClick={() => setView(value)}
                 className={`rounded-full px-3 py-2 text-xs font-semibold uppercase ${
-                  range === value ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-gray-700'
+                  view === value ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-gray-700'
                 }`}
               >
                 {value}
@@ -87,7 +104,14 @@ export function JobsCommandCentre({ jobs, showActions = true }: { jobs: JobSumma
         {filtered.map((job) => (
           <JobCard
             key={job.id}
-            id={job.id}
+            href={
+              job.status === 'completed'
+                ? `/jobs/${job.id}/pdf`
+                : buildCertificateResumeHref({
+                    jobId: job.id,
+                    jobType: job.job_type as JobType | null | undefined,
+                  })
+            }
             title={job.title ?? 'Untitled job'}
             address={job.address}
             status={job.status}

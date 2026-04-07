@@ -237,6 +237,7 @@ export default async function CertificateWizardPage({
         initialJobContext={initialJobContext}
         initialPhotoPreviews={wizardState.photoPreviews}
         stepOffset={stepOffset}
+        startStep={requestedStartStep}
       />
     );
   }
@@ -262,6 +263,7 @@ export default async function CertificateWizardPage({
         initialFields={initialInfo}
         initialJobContext={initialJobContext}
         stepOffset={stepOffset}
+        startStep={requestedStartStep}
       />
     );
   }
@@ -273,6 +275,7 @@ export default async function CertificateWizardPage({
         initialFields={initialInfo}
         initialJobContext={initialJobContext}
         stepOffset={stepOffset}
+        startStep={requestedStartStep}
       />
     );
   }

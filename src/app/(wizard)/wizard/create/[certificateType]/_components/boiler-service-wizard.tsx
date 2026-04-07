@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { EvidenceCard } from './evidence-card';
@@ -34,7 +34,9 @@ import {
   uploadSignature,
   saveJobFields,
 } from '@/server/certificates';
+import { tryUpdateJobRecord } from '@/server/jobRecords';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
+import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
 type BoilerServiceWizardProps = {
   jobId: string;
@@ -54,6 +56,17 @@ type BoilerServiceJobAddress = {
   job_address_city: string;
   job_postcode: string;
   job_tel: string;
+};
+
+type BoilerServiceDraftState = {
+  step: number;
+  completionDate: string;
+  jobInfo: BoilerServiceJobInfo;
+  jobAddress: BoilerServiceJobAddress;
+  details: BoilerServiceDetails;
+  checks: BoilerServiceChecks;
+  engineerSignature: string;
+  customerSignature: string;
 };
 
 const BOILER_SERVICE_DEMO_JOB_ADDRESS: BoilerServiceJobAddress = {
@@ -222,6 +235,44 @@ export function BoilerServiceWizard({
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const totalSteps = 4 + stepOffset;
   const offsetStep = (step: number) => step + stepOffset;
+  const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('gas_service', jobId), [jobId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    void tryUpdateJobRecord(jobId, {
+      resume_certificate_type: 'gas_service',
+      resume_step: step + stepOffset,
+    });
+  }, [jobId, step, stepOffset]);
+
+  const boilerServiceDraft = useMemo<BoilerServiceDraftState>(
+    () => ({
+      step,
+      completionDate,
+      jobInfo,
+      jobAddress,
+      details,
+      checks,
+      engineerSignature,
+      customerSignature,
+    }),
+    [checks, completionDate, customerSignature, details, engineerSignature, jobAddress, jobInfo, step],
+  );
+
+  const { clearDraft } = useWizardDraft<BoilerServiceDraftState>({
+    storageKey: draftStorageKey,
+    state: boilerServiceDraft,
+    onRestore: (draft) => {
+      setStep(Math.min(4, Math.max(1, draft.step || initialStep)));
+      setCompletionDate(draft.completionDate || completionDate);
+      setJobInfo((prev) => ({ ...prev, ...(draft.jobInfo ?? {}) }));
+      setJobAddress((prev) => ({ ...prev, ...(draft.jobAddress ?? {}) }));
+      setDetails((prev) => ({ ...prev, ...(draft.details ?? {}) }));
+      setChecks((prev) => ({ ...prev, ...(draft.checks ?? {}) }));
+      setEngineerSignature(draft.engineerSignature ?? '');
+      setCustomerSignature(draft.customerSignature ?? '');
+    },
+  });
   const applianceProfile: ApplianceStepValues = {
     type: details.boiler_type ?? '',
     make: details.boiler_make ?? '',
@@ -448,6 +499,7 @@ export function BoilerServiceWizard({
         const finalInfo = { ...jobInfo, service_date: completionDate || jobInfo.service_date };
         await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
         const { jobId: resultJobId } = await generateGasServicePdf({ jobId, previewOnly: false });
+        clearDraft();
         pushToast({
           title: 'Boiler Service generated successfully',
           description: (

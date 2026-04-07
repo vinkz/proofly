@@ -1,25 +1,14 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-export function DocumentBackButton({ fallbackHref }: { fallbackHref: string }) {
-  const router = useRouter();
-
-  const handleBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      router.back();
-      return;
-    }
-    router.push(fallbackHref);
-  };
-
+export function DocumentBackButton({ href }: { href: string }) {
   return (
-    <button
-      type="button"
-      onClick={handleBack}
+    <Link
+      href={href}
       className="w-fit rounded-full border border-white/50 bg-white/90 px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm"
     >
       ← Back
-    </button>
+    </Link>
   );
 }

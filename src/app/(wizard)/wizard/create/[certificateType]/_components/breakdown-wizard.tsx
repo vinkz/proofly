@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 
@@ -16,14 +16,17 @@ import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { FgaAutofillInline } from '@/components/fga/FgaAutofillInline';
 import { createGasBreakdownReport } from '@/server/jobs';
 import { uploadJobPhoto } from '@/server/certificates';
+import { tryUpdateJobRecord } from '@/server/jobRecords';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { PhotoCategory } from '@/types/certificates';
+import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
 type BreakdownWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
   initialJobContext?: InitialJobContext | null;
   stepOffset?: number;
+  startStep?: number;
 };
 
 type BreakdownFormState = {
@@ -92,6 +95,11 @@ type BreakdownFormState = {
   received_by_name: string;
 };
 
+type BreakdownDraftState = {
+  step: number;
+  fields: BreakdownFormState;
+};
+
 const FINAL_EVIDENCE_DEFAULT: PhotoCategory = 'site';
 
 const toText = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -143,10 +151,17 @@ const APPLIANCE_TYPE_OPTIONS = [
   { label: 'Other', value: 'other' },
 ];
 
-export function BreakdownWizard({ jobId, initialFields, initialJobContext = null, stepOffset = 0 }: BreakdownWizardProps) {
+export function BreakdownWizard({
+  jobId,
+  initialFields,
+  initialJobContext = null,
+  stepOffset = 0,
+  startStep = 1,
+}: BreakdownWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
-  const [step, setStep] = useState(1);
+  const initialStep = Math.min(4, Math.max(1, startStep - stepOffset));
+  const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : null;
@@ -154,6 +169,15 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
+  const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('breakdown', jobId), [jobId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    void tryUpdateJobRecord(jobId, {
+      resume_certificate_type: 'breakdown',
+      resume_step: step + stepOffset,
+    });
+  }, [jobId, step, stepOffset]);
 
   const [fields, setFields] = useState<BreakdownFormState>({
     job_reference: pickText(resolvedFields.job_reference, resolvedFields.cert_no, resolvedFields.record_id),
@@ -219,6 +243,23 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
     engineer_comments: toText(resolvedFields.engineer_comments),
     issued_by_name: pickText(resolvedFields.issued_by_name, resolvedFields.engineer_name),
     received_by_name: pickText(resolvedFields.received_by_name, resolvedFields.customer_name),
+  });
+
+  const breakdownDraft = useMemo<BreakdownDraftState>(
+    () => ({
+      step,
+      fields,
+    }),
+    [fields, step],
+  );
+
+  const { clearDraft } = useWizardDraft<BreakdownDraftState>({
+    storageKey: draftStorageKey,
+    state: breakdownDraft,
+    onRestore: (draft) => {
+      setStep(Math.min(4, Math.max(1, draft.step || initialStep)));
+      setFields((prev) => ({ ...prev, ...(draft.fields ?? {}) }));
+    },
   });
 
   const handleDemoFill = () => {
@@ -341,6 +382,7 @@ export function BreakdownWizard({ jobId, initialFields, initialJobContext = null
           jobId,
           fields,
         });
+        clearDraft();
         pushToast({
           title: 'Breakdown record generated',
           variant: 'success',

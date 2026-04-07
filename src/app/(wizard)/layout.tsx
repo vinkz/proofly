@@ -9,7 +9,6 @@ import { PageFade } from '@/app/(app)/_components/page-fade';
 const links = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/jobs', label: 'Certificates' },
-  { href: '/clients', label: 'Clients' },
   { href: '/documents', label: 'Documents' },
   { href: '/settings', label: 'Settings' },
 ];

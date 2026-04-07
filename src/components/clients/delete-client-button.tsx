@@ -20,7 +20,7 @@ export function DeleteClientButton({ clientId }: { clientId: string }) {
       try {
         await deleteClient(clientId);
         pushToast({ title: 'Client deleted', variant: 'success' });
-        router.replace('/clients');
+        router.replace('/jobs');
         router.refresh();
       } catch (error) {
         pushToast({

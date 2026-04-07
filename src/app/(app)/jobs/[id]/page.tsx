@@ -19,6 +19,7 @@ import type { Database } from '@/lib/database.types';
 import { isUUID } from '@/lib/ids';
 import { reportKindForJobType, type ReportKind } from '@/types/reports';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
+import { buildCertificateResumeHref, getCertificateWizardRouteForJobType, getResumeStepFromRecord } from '@/lib/certificate-resume';
 import { listInvoicesForJob } from '@/server/invoices';
 
 type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
@@ -99,22 +100,38 @@ export default async function JobDetailPage({
   }
 
   const { job, items, photos, signatures, report } = data;
+  const wizardRoute = getCertificateWizardRouteForJobType(job.job_type ?? null);
+  if (job.status !== 'completed' && wizardRoute) {
+    let jobRecordRow: { record: unknown } | null = null;
+    try {
+      const { data: recordData, error: jobRecordErr } = await supabase
+        .from('job_records')
+        .select('record')
+        .eq('job_id', jobId)
+        .maybeSingle();
+      if (jobRecordErr) throw jobRecordErr;
+      jobRecordRow = (recordData as { record: unknown } | null) ?? null;
+    } catch {
+    }
+    redirect(
+      buildCertificateResumeHref({
+        jobId,
+        jobType: job.job_type ?? null,
+        startStep: getResumeStepFromRecord(jobRecordRow?.record ?? null),
+      }),
+    );
+  }
   const clientName = job.client_name ?? 'Client';
   const jobAddress = job.address ?? 'No address provided';
   const jobStatus = job.status ?? 'pending';
   const createdLabel = formatDateTime(job.created_at, 'Unknown');
   const reportKind = reportKindForJobType(job.job_type ?? null);
-  const clientHref = job.client_id ? `/clients/${job.client_id}` : null;
   const propertyHref =
     job.address && job.address.trim().length
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.address)}`
       : null;
   const certificateActions = [
     { type: 'cp12', label: 'Start CP12', variant: 'primary' },
-    { type: 'gas_service', label: 'Start Gas Service', variant: 'secondary' },
-    { type: 'general_works', label: 'Start General Works', variant: 'secondary' },
-    { type: 'breakdown', label: 'Gas Breakdown Record', variant: 'secondary' },
-    { type: 'commissioning', label: 'Installation/Commissioning Checklist', variant: 'secondary' },
   ] satisfies Array<{ type: CertificateType; label: string; variant: 'primary' | 'secondary' }>;
 
   const photosWithUrls = await Promise.all(
@@ -235,11 +252,6 @@ export default async function JobDetailPage({
               <Link href="/jobs" className="text-accent">
                 ← Back to jobs
               </Link>
-              {clientHref ? (
-                <Link href={clientHref} className="text-muted-foreground/60 hover:text-muted">
-                  View client
-                </Link>
-              ) : null}
             </div>
             <p className="mt-2 text-xs uppercase tracking-wide text-accent">Job</p>
             <h1 className="text-2xl font-semibold text-muted">{jobTitle}</h1>
@@ -278,15 +290,9 @@ export default async function JobDetailPage({
             <p className="mt-1 text-xs text-muted-foreground/70">{primaryCertificateLabel}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">Client</p>
-            {clientHref ? (
-              <Link href={clientHref} className="mt-2 block text-sm font-semibold text-muted hover:text-accent">
-                {clientName}
-              </Link>
-            ) : (
-              <p className="mt-2 text-sm font-semibold text-muted">{clientName}</p>
-            )}
-            <p className="mt-1 text-xs text-muted-foreground/70">Related client record</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">Customer</p>
+            <p className="mt-2 text-sm font-semibold text-muted">{clientName}</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">Saved on this job record</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">Property</p>

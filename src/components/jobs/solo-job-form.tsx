@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 
 import { createSoloJob } from '@/server/jobs';
 import type { ClientListItem } from '@/types/client';
-import { JOB_TYPE_LABELS, JOB_TYPES, type JobType } from '@/types/job-records';
+import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
 export type SavedPropertyOption = {
   key: string;
@@ -43,6 +44,36 @@ type AddressLookupApiResponse = {
   error?: string;
 };
 
+type SoloJobDraftState = {
+  clientMode: 'existing' | 'new';
+  selectedClientId: string;
+  clientName: string;
+  clientPhone: string;
+  clientEmail: string;
+  selectedPropertyKey: string;
+  propertyName: string;
+  addressLine1: string;
+  city: string;
+  postcode: string;
+  sitePhone: string;
+  scheduledFor: string;
+  jobType: JobType;
+  inspectionDate: string;
+  jobAddressName: string;
+  jobAddressLine1: string;
+  jobAddressLine2: string;
+  jobAddressCity: string;
+  jobAddressPostcode: string;
+  jobAddressTel: string;
+  landlordName: string;
+  landlordCompany: string;
+  landlordAddressLine1: string;
+  landlordAddressLine2: string;
+  landlordCity: string;
+  landlordPostcode: string;
+  landlordTel: string;
+};
+
 const ADDRESS_SEARCH_MIN_QUERY_LENGTH = 3;
 
 const WIZARD_ROUTE_BY_JOB_TYPE: Record<JobType, string> = {
@@ -53,6 +84,8 @@ const WIZARD_ROUTE_BY_JOB_TYPE: Record<JobType, string> = {
   warning_notice: 'gas_warning_notice',
   general: 'general_works',
 };
+
+const LAUNCH_VISIBLE_JOB_TYPES: readonly JobType[] = ['safety_check'];
 
 const splitAddressParts = (value: string | null | undefined) =>
   String(value ?? '')
@@ -174,6 +207,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
+  const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('jobs_new', 'create'), []);
   const [clientMode, setClientMode] = useState<'existing' | 'new'>('new');
   const [selectedClientId, setSelectedClientId] = useState('');
   const [clientName, setClientName] = useState('');
@@ -237,6 +271,101 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
       setClientMode('new');
     }
   }, [clients.length]);
+
+  const soloJobDraft = useMemo<SoloJobDraftState>(
+    () => ({
+      clientMode,
+      selectedClientId,
+      clientName,
+      clientPhone,
+      clientEmail,
+      selectedPropertyKey,
+      propertyName,
+      addressLine1,
+      city,
+      postcode,
+      sitePhone,
+      scheduledFor,
+      jobType,
+      inspectionDate,
+      jobAddressName,
+      jobAddressLine1,
+      jobAddressLine2,
+      jobAddressCity,
+      jobAddressPostcode,
+      jobAddressTel,
+      landlordName,
+      landlordCompany,
+      landlordAddressLine1,
+      landlordAddressLine2,
+      landlordCity,
+      landlordPostcode,
+      landlordTel,
+    }),
+    [
+      addressLine1,
+      city,
+      clientEmail,
+      clientMode,
+      clientName,
+      clientPhone,
+      inspectionDate,
+      jobAddressCity,
+      jobAddressLine1,
+      jobAddressLine2,
+      jobAddressName,
+      jobAddressPostcode,
+      jobAddressTel,
+      jobType,
+      landlordAddressLine1,
+      landlordAddressLine2,
+      landlordCity,
+      landlordCompany,
+      landlordName,
+      landlordPostcode,
+      landlordTel,
+      postcode,
+      propertyName,
+      scheduledFor,
+      selectedClientId,
+      selectedPropertyKey,
+      sitePhone,
+    ],
+  );
+
+  const { clearDraft } = useWizardDraft<SoloJobDraftState>({
+    storageKey: draftStorageKey,
+    state: soloJobDraft,
+    onRestore: (draft) => {
+      setClientMode(draft.clientMode ?? 'new');
+      setSelectedClientId(draft.selectedClientId ?? '');
+      setClientName(draft.clientName ?? '');
+      setClientPhone(draft.clientPhone ?? '');
+      setClientEmail(draft.clientEmail ?? '');
+      setSelectedPropertyKey(draft.selectedPropertyKey ?? '');
+      setPropertyName(draft.propertyName ?? '');
+      setAddressLine1(draft.addressLine1 ?? '');
+      setCity(draft.city ?? '');
+      setPostcode(draft.postcode ?? '');
+      setSitePhone(draft.sitePhone ?? '');
+      setScheduledFor(draft.scheduledFor ?? '');
+      setJobType(draft.jobType ?? 'safety_check');
+      setInspectionDate(draft.inspectionDate ?? '');
+      setJobAddressName(draft.jobAddressName ?? '');
+      setJobAddressLine1(draft.jobAddressLine1 ?? '');
+      setJobAddressLine2(draft.jobAddressLine2 ?? '');
+      setJobAddressCity(draft.jobAddressCity ?? '');
+      setJobAddressPostcode(draft.jobAddressPostcode ?? '');
+      setJobAddressTel(draft.jobAddressTel ?? '');
+      setLandlordName(draft.landlordName ?? '');
+      setLandlordCompany(draft.landlordCompany ?? '');
+      setLandlordAddressLine1(draft.landlordAddressLine1 ?? '');
+      setLandlordAddressLine2(draft.landlordAddressLine2 ?? '');
+      setLandlordCity(draft.landlordCity ?? '');
+      setLandlordPostcode(draft.landlordPostcode ?? '');
+      setLandlordTel(draft.landlordTel ?? '');
+    },
+  });
 
   useEffect(() => {
     if (!isCp12Upcoming) return;
@@ -603,6 +732,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
           landlordPostcode,
           landlordTel,
         });
+        clearDraft();
         pushToast({
           title: submitMode === 'continue' ? 'Job created, opening next step' : 'Job created',
           variant: 'success',
@@ -666,7 +796,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
             className="mt-1"
             disabled={isPending}
           >
-            {JOB_TYPES.map((type) => (
+            {LAUNCH_VISIBLE_JOB_TYPES.map((type) => (
               <option key={type} value={type}>
                 {JOB_TYPE_LABELS[type]}
               </option>

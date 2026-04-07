@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -21,8 +21,10 @@ import {
   uploadJobPhoto,
   uploadSignature,
 } from '@/server/certificates';
+import { tryUpdateJobRecord } from '@/server/jobRecords';
 import type { CertificateType, Cp12Appliance, PhotoCategory } from '@/types/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
+import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
 type GasWarningNoticeWizardProps = {
   jobId: string;
@@ -71,6 +73,22 @@ type GasWarningFormState = {
   issued_at: string;
 };
 
+type GasWarningDraftState = {
+  step: number;
+  fields: GasWarningFormState;
+  jobAddress: {
+    job_reference: string;
+    job_address_name: string;
+    job_address_line1: string;
+    job_address_line2: string;
+    job_address_city: string;
+    job_postcode: string;
+    job_tel: string;
+  };
+  engineerSignature: string;
+  customerSignature: string;
+};
+
 const FINAL_EVIDENCE_CATEGORIES: Array<{ key: PhotoCategory; label: string }> = [
   { key: 'appliance_photo', label: 'Appliance' },
   { key: 'issue_photo', label: 'Issue/Defect' },
@@ -103,6 +121,15 @@ export function GasWarningNoticeWizard({
   const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
   const totalSteps = 3 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
+  const draftStorageKey = useMemo(() => buildWizardDraftStorageKey(certificateType, jobId), [certificateType, jobId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    void tryUpdateJobRecord(jobId, {
+      resume_certificate_type: certificateType,
+      resume_step: step + stepOffset,
+    });
+  }, [certificateType, jobId, step, stepOffset]);
 
   const [fields, setFields] = useState<GasWarningFormState>({
     property_address: resolvedFields.property_address ?? '',
@@ -154,6 +181,29 @@ export function GasWarningNoticeWizard({
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
   const didPrefillRef = useRef(false);
+
+  const gasWarningDraft = useMemo<GasWarningDraftState>(
+    () => ({
+      step,
+      fields,
+      jobAddress,
+      engineerSignature,
+      customerSignature,
+    }),
+    [customerSignature, engineerSignature, fields, jobAddress, step],
+  );
+
+  const { clearDraft } = useWizardDraft<GasWarningDraftState>({
+    storageKey: draftStorageKey,
+    state: gasWarningDraft,
+    onRestore: (draft) => {
+      setStep(Math.min(3, Math.max(1, draft.step || initialStep)));
+      setFields((prev) => ({ ...prev, ...(draft.fields ?? {}) }));
+      setJobAddress((prev) => ({ ...prev, ...(draft.jobAddress ?? {}) }));
+      setEngineerSignature(draft.engineerSignature ?? '');
+      setCustomerSignature(draft.customerSignature ?? '');
+    },
+  });
 
   useEffect(() => {
     if (didPrefillRef.current) return;
@@ -434,6 +484,7 @@ export function GasWarningNoticeWizard({
           previewOnly: false,
           fields,
         });
+        clearDraft();
         pushToast({
           title: 'Gas Warning Notice generated successfully',
           description: (
