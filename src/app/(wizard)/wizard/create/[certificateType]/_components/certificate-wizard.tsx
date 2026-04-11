@@ -13,11 +13,10 @@ import { SignatureCard } from '@/components/certificates/signature-card';
 import { EvidenceCard } from './evidence-card';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
 import { ChecksStep, type ChecksStepValues } from '@/components/wizard/steps/checks-step';
-import { PrefillBadge } from '@/components/wizard/inputs/prefill-badge';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
-import { type CertificateType, type Cp12Appliance, type PhotoCategory } from '@/types/certificates';
+import { type CertificateType, type Cp12Appliance, type Cp12SafetyClassification, type PhotoCategory } from '@/types/certificates';
 import {
   saveCp12JobInfo,
   uploadJobPhoto,
@@ -40,6 +39,10 @@ import { saveJobFields } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
+import { getMakes } from '@/lib/applianceCatalog/ukBoilers';
+import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
+import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
+import { EnumChips } from '@/components/wizard/inputs/enum-chips';
 
 type WizardProps = {
   jobId: string;
@@ -82,11 +85,20 @@ const emptyAppliance: Cp12Appliance = {
   combustion_notes: '',
   safety_rating: '',
   classification_code: '',
+  safety_classification: '',
+  defect_notes: '',
+  actions_taken: '',
+  actions_required: '',
+  warning_notice_issued: false,
+  appliance_disconnected: false,
+  danger_do_not_use_attached: false,
 };
 
 const MAX_APPLIANCES = 5;
 
-const KNOWN_MAKES = ['Worcester Bosch', 'Vaillant', 'Ideal', 'Baxi'];
+const KNOWN_MAKES = getMakes()
+  .filter((make) => make.toLowerCase() !== 'other')
+  .sort((a, b) => b.length - a.length);
 
 const splitMakeModel = (value: string) => {
   const trimmed = value.trim();
@@ -222,6 +234,35 @@ const BOILER_TYPE_OPTIONS = [
   { label: 'Other', value: 'other' },
 ];
 
+const CP12_SAFETY_CLASSIFICATION_OPTIONS: Array<{ label: string; value: Cp12SafetyClassification }> = [
+  { label: 'Safe', value: 'safe' },
+  { label: 'Not to Current Standards', value: 'ncs' },
+  { label: 'At Risk', value: 'ar' },
+  { label: 'Immediately Dangerous', value: 'id' },
+];
+
+const normalizeSafetyClassification = (value?: string | null): Cp12SafetyClassification | '' => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'safe') return 'safe';
+  if (normalized === 'ncs' || normalized === 'not to current standards') return 'ncs';
+  if (normalized === 'ar' || normalized === 'at risk' || normalized === 'at_risk') return 'ar';
+  if (normalized === 'id' || normalized === 'immediately dangerous' || normalized === 'immediately_dangerous') return 'id';
+  return '';
+};
+
+const getApplianceSafetyClassification = (appliance: Cp12Appliance): Cp12SafetyClassification | '' =>
+  normalizeSafetyClassification(appliance.safety_classification) ||
+  normalizeSafetyClassification(appliance.classification_code) ||
+  normalizeSafetyClassification(appliance.safety_rating);
+
+const legacySafetyFromClassification = (classification: Cp12SafetyClassification | '') => {
+  if (classification === 'safe') return { safety_rating: 'safe', classification_code: '' };
+  if (classification === 'ncs') return { safety_rating: 'ncs', classification_code: 'NCS' };
+  if (classification === 'ar') return { safety_rating: 'at risk', classification_code: 'AR' };
+  if (classification === 'id') return { safety_rating: 'immediately dangerous', classification_code: 'ID' };
+  return { safety_rating: '', classification_code: '' };
+};
+
 const makeDemoSignatureDataUrl = (label: string, stroke: string) => {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="320" height="90" viewBox="0 0 320 90">
@@ -350,6 +391,15 @@ export function CertificateWizard({
     combustion_notes: appliance.combustion_notes ?? '',
     safety_rating: appliance.safety_rating ?? '',
     classification_code: appliance.classification_code ?? '',
+    safety_classification:
+      normalizeSafetyClassification(appliance.safety_classification) ||
+      normalizeSafetyClassification(appliance.classification_code ?? appliance.safety_rating),
+    defect_notes: appliance.defect_notes ?? '',
+    actions_taken: appliance.actions_taken ?? '',
+    actions_required: appliance.actions_required ?? '',
+    warning_notice_issued: appliance.warning_notice_issued ?? false,
+    appliance_disconnected: appliance.appliance_disconnected ?? false,
+    danger_do_not_use_attached: appliance.danger_do_not_use_attached ?? false,
   });
 
   const [appliances, setAppliances] = useState<Cp12Appliance[]>(
@@ -367,7 +417,6 @@ export function CertificateWizard({
   const [completionDate, setCompletionDate] = useState(resolvedInitialInfo.completion_date ?? new Date().toISOString().slice(0, 10));
   const [engineerSignature, setEngineerSignature] = useState(resolvedInitialInfo.engineer_signature ?? '');
   const [customerSignature, setCustomerSignature] = useState(resolvedInitialInfo.customer_signature ?? '');
-  const [prefillBadgeText, setPrefillBadgeText] = useState<string | null>(null);
   const prefillAppliedRef = useRef(false);
   const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prevApplianceCountRef = useRef(appliances.length);
@@ -386,8 +435,6 @@ export function CertificateWizard({
       try {
         const defaults = await getLatestApplianceDefaultsForJob(jobId);
         if (!defaults) return;
-        const dateLabel = defaults.source.date ? new Date(defaults.source.date).toLocaleDateString('en-GB') : null;
-        setPrefillBadgeText(`Filled from previous visit${dateLabel ? ` — ${dateLabel}` : ''}`);
 
         setAppliances((prev) => {
           if (!prev.length) return prev;
@@ -1047,7 +1094,7 @@ export function CertificateWizard({
           }
         }
         await updateField({ jobId, key: 'completion_date', value: completionDate });
-        const { jobId: resultJobId } = await generateCertificatePdf({
+        const result = await generateCertificatePdf({
           jobId,
           certificateType,
           previewOnly: false,
@@ -1058,8 +1105,13 @@ export function CertificateWizard({
             next_inspection_due: evidenceFields.next_inspection_due ?? '',
           },
         });
+        const { jobId: resultJobId } = result;
         targetJobId = resultJobId;
         clearDraft();
+        const gasWarningNoticeJobs =
+          certificateType === 'cp12' && 'gasWarningNoticeJobs' in result && Array.isArray(result.gasWarningNoticeJobs)
+            ? result.gasWarningNoticeJobs
+            : [];
         pushToast({
           title: `${certificateLabel} generated successfully`,
           description: (
@@ -1069,6 +1121,21 @@ export function CertificateWizard({
           ),
           variant: 'success',
         });
+        if (gasWarningNoticeJobs.length) {
+          const firstWarningJob = gasWarningNoticeJobs[0] as { href?: string; jobId?: string };
+          const href = firstWarningJob.href ?? (firstWarningJob.jobId ? `/wizard/create/gas_warning_notice?jobId=${firstWarningJob.jobId}` : null);
+          if (href) {
+            pushToast({
+              title: 'Gas Warning Notice draft created',
+              description: (
+                <Link href={href} className="text-[var(--action)] underline">
+                  Issue Gas Warning Notice
+                </Link>
+              ),
+              variant: 'success',
+            });
+          }
+        }
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -1088,21 +1155,83 @@ export function CertificateWizard({
       const next = [...prev];
       const current = { ...next[index] };
       if (key === 'safety_rating') {
-        current.safety_rating = value;
-        if (value.toLowerCase() === 'safe') {
-          current.classification_code = '';
-        }
+        const classification = normalizeSafetyClassification(value);
+        const legacy = legacySafetyFromClassification(classification);
+        current.safety_rating = legacy.safety_rating || value;
+        current.safety_classification = classification;
+        current.classification_code = legacy.classification_code;
       } else if (key === 'classification_code') {
         if ((current.safety_rating || '').toLowerCase() === 'safe') {
           current.classification_code = '';
         } else {
-          current.classification_code = value;
+          const classification = normalizeSafetyClassification(value);
+          const legacy = legacySafetyFromClassification(classification);
+          current.classification_code = legacy.classification_code || value.toUpperCase();
+          current.safety_classification = classification || normalizeSafetyClassification(current.safety_classification);
         }
       } else {
-        current[key] = value;
+        (current as Record<keyof Cp12Appliance, Cp12Appliance[keyof Cp12Appliance]>)[key] = value;
       }
       next[index] = current;
       return next;
+    });
+  };
+
+  const setApplianceBooleanField = (index: number, key: keyof Cp12Appliance, value: boolean) => {
+    setAppliances((prev) => {
+      const next = [...prev];
+      const current = { ...next[index] };
+      (current as Record<keyof Cp12Appliance, Cp12Appliance[keyof Cp12Appliance]>)[key] = value;
+      next[index] = current;
+      return next;
+    });
+  };
+
+  const setApplianceSafetyClassification = (index: number, classification: Cp12SafetyClassification) => {
+    setAppliances((prev) => {
+      const next = [...prev];
+      const current = { ...next[index] };
+      const legacy = legacySafetyFromClassification(classification);
+      current.safety_classification = classification;
+      current.safety_rating = legacy.safety_rating;
+      current.classification_code = legacy.classification_code;
+      if (classification === 'safe') {
+        current.warning_notice_issued = false;
+        current.appliance_disconnected = false;
+        current.danger_do_not_use_attached = false;
+      }
+      next[index] = current;
+      return next;
+    });
+  };
+
+  const applyVoiceReadings = (index: number, values: Partial<Cp12VoiceReadingsParsed>) => {
+    setAppliances((prev) => {
+      const next = [...prev];
+      const current = { ...(next[index] ?? emptyAppliance) };
+
+      if (values.workingPressure) current.operating_pressure = values.workingPressure;
+      if (values.heatInput) current.heat_input = values.heatInput;
+      if (values.coPpm) current.co_reading_ppm = values.coPpm;
+      if (values.highCoPpm) current.high_co_ppm = values.highCoPpm;
+      if (values.highCo2Percent) current.high_co2 = values.highCo2Percent;
+      if (values.highRatio) current.high_ratio = values.highRatio;
+      if (values.lowCoPpm) current.low_co_ppm = values.lowCoPpm;
+      if (values.lowCo2Percent) current.low_co2 = values.lowCo2Percent;
+      if (values.lowRatio) current.low_ratio = values.lowRatio;
+
+      next[index] = current;
+      return next;
+    });
+
+    if (values.highCoPpm || values.highCo2Percent || values.highRatio || values.lowCoPpm || values.lowCo2Percent || values.lowRatio) {
+      setCombustionOpen((prev) => ({ ...prev, [index]: true }));
+    }
+
+    pushToast({
+      title: 'Voice readings ready',
+      description: 'Review the values in the form before saving.',
+      variant: 'success',
     });
   };
 
@@ -1118,10 +1247,6 @@ export function CertificateWizard({
       }
       return [...prev, { ...emptyAppliance }];
     });
-  const handlePrefillClick = () => {
-    pushToast({ title: 'Prefill applied', description: 'Edit any field to update values.', variant: 'default' });
-  };
-
   const handleEvidenceFieldsUpdate = (updates: Record<string, string>) => {
     setEvidenceFields((prev) => ({ ...prev, ...updates }));
     startTransition(async () => {
@@ -1168,8 +1293,6 @@ export function CertificateWizard({
       }),
     [appliances, evidenceFields.serial_number],
   );
-
-  const evidenceByKey = (key: string) => CP12_EVIDENCE_CONFIG.find((cfg) => cfg.key === key);
 
   const handleApplianceProfilesChange = (nextProfiles: ApplianceStepValues[]) => {
     const normalizedProfiles = nextProfiles.length ? nextProfiles : [{ type: '', make: '', model: '', location: '', serial: '' }];
@@ -1220,15 +1343,6 @@ export function CertificateWizard({
     );
   };
 
-  const hasUnsafeAppliance = appliances.some((appliance) => {
-    const rating = (appliance.safety_rating ?? '').toLowerCase().trim();
-    return rating.length > 0 && rating !== 'safe';
-  });
-  const warningSelection = (defects.warning_notice_issued ?? '').trim().toUpperCase();
-  const hasDefectText = [defects.defect_description, defects.remedial_action].some(
-    (val) => typeof val === 'string' && val.trim().length > 0,
-  );
-  const showDefectFields = hasUnsafeAppliance || hasDefectText || warningSelection === 'YES';
   const VoiceButton = ({ onClick }: { onClick: () => void }) => (
     <button
       type="button"
@@ -1292,8 +1406,7 @@ export function CertificateWizard({
     });
 
     const applianceChecks: ChecklistItem[] = appliances.map((app, index) => {
-      const identityOk =
-        hasValue(app.location) && hasValue(app.appliance_type) && hasValue(app.make_model) && hasValue(app.flue_type);
+      const identityOk = hasValue(app.location) && hasValue(app.appliance_type) && hasValue(app.make_model);
       const readingsOk =
         hasValue(app.operating_pressure) &&
         hasValue(app.heat_input) &&
@@ -1686,11 +1799,6 @@ export function CertificateWizard({
           </Button>
         </div>
       ) : null}
-      {prefillBadgeText ? (
-        <div className="mt-2 flex justify-end">
-          <PrefillBadge text={`${prefillBadgeText} — tap to change`} onClick={handlePrefillClick} />
-        </div>
-      ) : null}
       <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
         <p className="text-sm font-semibold text-muted">Appliance profile</p>
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm space-y-3">
@@ -1702,21 +1810,12 @@ export function CertificateWizard({
             showExtendedFields={false}
             showYear={false}
             applyExtendedDefaults={false}
-            onPrefillClick={handlePrefillClick}
-            prefillText={prefillBadgeText ? `${prefillBadgeText} — tap to change` : null}
             inlineEditor
           />
           <div className="mt-4 space-y-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Flue & ventilation</p>
             {appliances.map((appliance, index) => (
               <div key={`flue-${index}`} className="grid gap-2 sm:grid-cols-2 rounded-2xl border border-white/30 bg-white/70 p-3">
-                <SearchableSelect
-                  label={`Appliance ${index + 1} flue type`}
-                  value={appliance.flue_type ?? ''}
-                  options={[...CP12_FLUE_TYPES]}
-                  placeholder="Select or type"
-                  onChange={(val) => setApplianceField(index, 'flue_type', val)}
-                />
                 <SearchableSelect
                   label={`Appliance ${index + 1} ventilation provision`}
                   value={appliance.ventilation_provision ?? ''}
@@ -1851,13 +1950,6 @@ export function CertificateWizard({
             <p className="text-xs text-muted-foreground/70">Default: enter measurements by hand.</p>
           )}
         </div>
-        <div className="flex items-center justify-between rounded-3xl border border-white/20 bg-white/80 p-3">
-          <p className="text-sm text-muted">Need to edit make/model/type/location? Jump back to identity.</p>
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => setStep(2)}>
-            Edit identity
-          </Button>
-        </div>
-
         <div className="space-y-4">
           {appliances.map((appliance, index) => (
             <div
@@ -1867,8 +1959,24 @@ export function CertificateWizard({
               }}
               className="rounded-3xl border border-white/40 bg-white p-4 shadow-md"
             >
-              <p className="text-sm font-semibold text-muted">Appliance #{index + 1} checks</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-muted">Appliance #{index + 1} checks</p>
+                <Cp12VoiceReadings
+                  jobId={jobId}
+                  disabled={measurementSource === 'tpi'}
+                  onApply={(values) => applyVoiceReadings(index, values)}
+                />
+              </div>
               <div className="mt-4">
+                <div className="mb-4">
+                  <SearchableSelect
+                    label={`Appliance ${index + 1} flue type`}
+                    value={appliance.flue_type ?? ''}
+                    options={[...CP12_FLUE_TYPES]}
+                    placeholder="Select or type"
+                    onChange={(val) => setApplianceField(index, 'flue_type', val)}
+                  />
+                </div>
                 <ChecksStep
                   values={{
                     ventilation_satisfactory: appliance.ventilation_satisfactory ?? '',
@@ -1880,18 +1988,80 @@ export function CertificateWizard({
                     safety_devices_correct: appliance.safety_devices_correct ?? '',
                     flue_performance_test: appliance.flue_performance_test ?? '',
                     appliance_serviced: appliance.appliance_serviced ?? '',
-                    safety_rating: appliance.safety_rating ?? '',
-                    classification_code: appliance.classification_code ?? '',
                   }}
                   onChange={(updates) => handleApplianceChecksChange(index, updates)}
-                  safetyOptions={[
-                    { label: 'Safe', value: 'safe' },
-                    { label: 'At Risk', value: 'at risk' },
-                    { label: 'Immediately Dangerous', value: 'immediately dangerous' },
-                  ]}
                   measurementSource={measurementSource}
                   measurementReadOnly={measurementSource === 'tpi'}
                 />
+                {(() => {
+                  const classification = getApplianceSafetyClassification(appliance);
+                  const showUnsafeFields = classification && classification !== 'safe';
+                  return (
+                    <div className="mt-4 rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 shadow-sm">
+                      <EnumChips
+                        label="Safety classification"
+                        value={classification}
+                        options={CP12_SAFETY_CLASSIFICATION_OPTIONS}
+                        onChange={(val) => setApplianceSafetyClassification(index, val as Cp12SafetyClassification)}
+                      />
+                      {showUnsafeFields ? (
+                        <div className="mt-4 space-y-3">
+                          <Textarea
+                            value={appliance.defect_notes ?? ''}
+                            onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
+                            placeholder="Defect notes"
+                            className="min-h-[80px] bg-white"
+                          />
+                          <Textarea
+                            value={appliance.actions_taken ?? ''}
+                            onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
+                            placeholder="Actions taken"
+                            className="min-h-[80px] bg-white"
+                          />
+                          <Textarea
+                            value={appliance.actions_required ?? ''}
+                            onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
+                            placeholder="Actions required"
+                            className="min-h-[80px] bg-white"
+                          />
+                          <div className="grid gap-2 text-sm text-muted sm:grid-cols-3">
+                            <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                checked={appliance.warning_notice_issued ?? false}
+                                onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
+                              />
+                              <span>Warning notice issued</span>
+                            </label>
+                            <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                checked={appliance.appliance_disconnected ?? false}
+                                onChange={(e) => setApplianceBooleanField(index, 'appliance_disconnected', e.target.checked)}
+                              />
+                              <span>Appliance disconnected</span>
+                            </label>
+                            <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                checked={appliance.danger_do_not_use_attached ?? false}
+                                onChange={(e) => setApplianceBooleanField(index, 'danger_do_not_use_attached', e.target.checked)}
+                              />
+                              <span>Danger Do Not Use attached</span>
+                            </label>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-muted-foreground/70">
+                          Use NCS, AR, or ID to record defect notes and unsafe-state actions for this appliance.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="mt-4 rounded-2xl border border-white/30 bg-white/75 p-3 shadow-sm">
@@ -2028,58 +2198,6 @@ export function CertificateWizard({
           ))}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {['flue_photo', 'meter_reading']
-            .map((key) => evidenceByKey(key))
-            .filter(Boolean)
-            .map((category) => (
-              <div key={category!.key} className="space-y-2">
-                <EvidenceCard
-                  title={category!.title}
-                  fields={category!.fields}
-                  values={evidenceFields}
-                  onChange={(key, value) => {
-                    handleEvidenceFieldsUpdate({ [key]: value });
-                  }}
-                  photoPreview={initialPhotoPreviews[category!.key]}
-                  onPhotoUpload={(file) => {
-                    startTransition(async () => {
-                      const data = new FormData();
-                      data.append('jobId', jobId);
-                      data.append('category', category!.key);
-                      data.append('file', file);
-                      try {
-                        await uploadJobPhoto(data);
-                        pushToast({ title: `${category!.title} photo saved`, variant: 'success' });
-                      } catch (error) {
-                        pushToast({
-                          title: 'Upload failed',
-                          description: error instanceof Error ? error.message : 'Try again.',
-                          variant: 'error',
-                        });
-                      }
-                    });
-                  }}
-                  onVoice={() =>
-                    pushToast({
-                      title: 'Voice capture',
-                      description: 'Whisper capture coming soon. Add a quick text note for now.',
-                      variant: 'default',
-                    })
-                  }
-                  onText={() =>
-                    pushToast({ title: 'Manual entry', description: 'Edit the fields directly above.', variant: 'default' })
-                  }
-                />
-                {category!.key === 'meter_reading' ? (
-                  <p className="px-1 text-xs text-muted-foreground/70">
-                    Optional — stored for job records, not printed on the CP12.
-                  </p>
-                ) : null}
-              </div>
-            ))}
-        </div>
-
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
           <p className="text-sm font-semibold text-muted">Whole-house safety</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -2125,103 +2243,6 @@ export function CertificateWizard({
               onChange={(val) => handleSafetyFieldUpdate('co_alarm_satisfactory', val ?? '')}
             />
           </div>
-        </div>
-
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-muted">Defects & actions</p>
-          {showDefectFields ? (
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                  <span>Defect description</span>
-                  <VoiceButton
-                    onClick={() =>
-                      pushToast({ title: 'Voice capture', description: 'Whisper will fill this soon.', variant: 'default' })
-                    }
-                  />
-                </div>
-                <Textarea
-                  value={defects.defect_description ?? ''}
-                  onChange={(e) => setDefects((prev) => ({ ...prev, defect_description: e.target.value }))}
-                  placeholder="Defect description"
-                  className="min-h-[90px]"
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                  <span>Remedial action</span>
-                  <VoiceButton
-                    onClick={() =>
-                      pushToast({ title: 'Voice capture', description: 'Whisper will fill this soon.', variant: 'default' })
-                    }
-                  />
-                </div>
-                <Textarea
-                  value={defects.remedial_action ?? ''}
-                  onChange={(e) => setDefects((prev) => ({ ...prev, remedial_action: e.target.value }))}
-                  placeholder="Remedial action"
-                  className="min-h-[90px]"
-                />
-              </div>
-              <SelectRow
-                label="Warning notice issued"
-                value={defects.warning_notice_issued ?? 'NO'}
-                options={['YES', 'NO']}
-                onChange={(val) => setDefects((prev) => ({ ...prev, warning_notice_issued: val }))}
-              />
-              {(() => {
-                const category = evidenceByKey('issue_photo');
-                if (!category) return null;
-                return (
-                  <EvidenceCard
-                    key={category.key}
-                    title={category.title}
-                    fields={category.fields}
-                    values={evidenceFields}
-                    onChange={(key, value) => {
-                      handleEvidenceFieldsUpdate({ [key]: value });
-                    }}
-                    photoPreview={initialPhotoPreviews[category.key]}
-                    onPhotoUpload={(file) => {
-                      startTransition(async () => {
-                        const data = new FormData();
-                        data.append('jobId', jobId);
-                        data.append('category', category.key);
-                        data.append('file', file);
-                        try {
-                          await uploadJobPhoto(data);
-                          pushToast({ title: `${category.title} photo saved`, variant: 'success' });
-                        } catch (error) {
-                          pushToast({
-                            title: 'Upload failed',
-                            description: error instanceof Error ? error.message : 'Try again.',
-                            variant: 'error',
-                          });
-                        }
-                      });
-                    }}
-                    onVoice={() =>
-                      pushToast({
-                        title: 'Voice capture',
-                        description: 'Whisper capture coming soon. Add a quick text note for now.',
-                        variant: 'default',
-                      })
-                    }
-                    onText={() =>
-                      pushToast({ title: 'Manual entry', description: 'Edit the fields directly above.', variant: 'default' })
-                    }
-                  />
-                );
-              })()}
-              <p className="sm:col-span-2 text-xs text-muted-foreground/60">
-                Record whether a warning notice was issued on this CP12. Additional notice flows remain hidden for launch.
-              </p>
-            </div>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground/70">
-              Mark an appliance as unsafe/at risk to record the required defect and warning notice details.
-            </p>
-          )}
         </div>
 
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
@@ -2493,67 +2514,17 @@ function validateCp12AgainstSpec(
     if (!hasValue(app.ventilation_satisfactory)) missing.push('ventilation check');
     if (!hasValue(app.flue_performance_test)) missing.push('flue performance test');
     if (!hasValue(app.appliance_serviced)) missing.push('appliance serviced');
-    if (!hasValue(app.safety_rating)) missing.push('safety rating');
+    if (!getApplianceSafetyClassification(app)) missing.push('safety classification');
     if (!hasValue(app.gas_tightness_test)) missing.push('gas tightness');
     if (!hasValue(app.stability_test)) missing.push('stability test');
     if (missing.length) errors.push(`Appliance #${index + 1}: ${missing.join(', ')} required`);
   });
   applianceRows.forEach((app) => {
     if (hasValue(app.classification_code) && (app.safety_rating ?? '').toLowerCase() === 'safe') {
-      errors.push('Classification code should only be set when safety rating is not safe');
+      errors.push('Classification code should only be set when safety classification is not safe');
     }
   });
-  const hasUnsafeAppliance = applianceRows.some((app) => {
-    const rating = (app.safety_rating ?? '').toLowerCase().trim();
-    return rating.length > 0 && rating !== 'safe';
-  });
-  const warningSelection = (defects.warning_notice_issued ?? '').trim().toUpperCase();
-  const hasDefectText = hasValue(defects.defect_description) || hasValue(defects.remedial_action);
-  const requiresDefectDetails = hasUnsafeAppliance || hasDefectText || warningSelection === 'YES';
-  if (requiresDefectDetails) {
-    if (!hasValue(defects.defect_description)) errors.push('Defect description is required when an appliance is unsafe');
-    if (!hasValue(defects.warning_notice_issued)) errors.push('Confirm whether a warning notice was issued');
-  }
-
   if (!hasValue(engineerSignature)) errors.push('Engineer signature is required');
   if (!hasValue(customerSignature)) errors.push('Customer signature is required');
   return errors;
-}
-
-function SelectRow({
-  label,
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="space-y-1">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
-      {disabled ? (
-        <p className="rounded-full bg-white/40 px-3 py-1 text-xs font-semibold text-muted">Not required</p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {options.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => onChange(option)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                value === option ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-muted'
-              }`}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }

@@ -309,6 +309,318 @@ async function ensureCp12FollowUpJob(params: {
   return { jobId: followUpJobId, created };
 }
 
+type GasWarningNoticeFollowUpJob = {
+  jobId: string;
+  created: boolean;
+  sourceJobId: string;
+  sourceApplianceId: string | null;
+  sourceApplianceKey: string;
+  classification: 'ar' | 'id';
+  href: string;
+};
+
+function getGasWarningClassification(appliance: Cp12Appliance): 'ar' | 'id' | null {
+  const normalized = [
+    appliance.safety_classification,
+    appliance.classification_code,
+    appliance.safety_rating,
+  ]
+    .map((value) => String(value ?? '').trim().toLowerCase())
+    .filter(Boolean)
+    .join(' ');
+
+  if (/\bid\b/.test(normalized) || normalized.includes('immediately dangerous')) return 'id';
+  if (/\bar\b/.test(normalized) || normalized.includes('at risk')) return 'ar';
+  return null;
+}
+
+function formatCp12SafetyClassification(value: string | null | undefined) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'safe') return 'Safe';
+  if (normalized === 'ncs' || normalized === 'not to current standards') return 'Not to Current Standards';
+  if (normalized === 'ar' || normalized === 'at risk' || normalized === 'at_risk') return 'At Risk';
+  if (normalized === 'id' || normalized === 'immediately dangerous' || normalized === 'immediately_dangerous') {
+    return 'Immediately Dangerous';
+  }
+  return '';
+}
+
+function buildCp12ApplianceUnsafePdfSummary(appliance: Cp12Appliance) {
+  const classification = formatCp12SafetyClassification(
+    appliance.safety_classification || appliance.classification_code || appliance.safety_rating,
+  );
+  if (!classification || classification === 'Safe') return '';
+
+  const parts = [
+    `Class: ${classification}`,
+    appliance.defect_notes?.trim() ? `Defect: ${appliance.defect_notes.trim()}` : '',
+    `Warning notice: ${appliance.warning_notice_issued ? 'Yes' : 'No'}`,
+    appliance.actions_taken?.trim() ? `Action: ${appliance.actions_taken.trim()}` : '',
+  ].filter(Boolean);
+
+  return parts.join('; ');
+}
+
+async function findGasWarningNoticeFollowUpJob(params: {
+  sb: SupabaseClient<Database>;
+  userId: string;
+  sourceJobId: string;
+  sourceApplianceKey: string;
+}) {
+  const { sb, userId, sourceJobId, sourceApplianceKey } = params;
+  const { data, error } = await sb
+    .from('jobs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('certificate_type', 'gas_warning_notice')
+    .eq('parent_job_id', sourceJobId)
+    .eq('source_appliance_key', sourceApplianceKey)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as { id?: string } | null)?.id ?? null;
+}
+
+async function ensureGasWarningNoticeFollowUpJobs(params: {
+  sb: SupabaseClient<Database>;
+  jobCodeClient: SupabaseClient<Database>;
+  userId: string;
+  sourceJobId: string;
+  sourceJob: JobContext['job'];
+  customer: ReturnType<typeof resolveJobCustomer>;
+  propertyAddress: ReturnType<typeof resolveJobPropertyAddress>;
+  fields: Record<string, unknown>;
+  appliances: Cp12Appliance[];
+}): Promise<GasWarningNoticeFollowUpJob[]> {
+  const { sb, jobCodeClient, userId, sourceJobId, sourceJob, customer, propertyAddress, fields, appliances } = params;
+  const text = (value: unknown) => (value === undefined || value === null ? '' : String(value));
+  const boolText = (value: unknown) => (value === true ? 'true' : 'false');
+  const childJobs: GasWarningNoticeFollowUpJob[] = [];
+  const unsafeAppliances = appliances
+    .map((appliance, index) => ({ appliance, index, classification: getGasWarningClassification(appliance) }))
+    .filter((entry): entry is { appliance: Cp12Appliance; index: number; classification: 'ar' | 'id' } =>
+      Boolean(entry.classification),
+    );
+
+  if (!unsafeAppliances.length) return childJobs;
+
+  const jobAddressName = pickText(text(fields.job_address_name), text(fields.property_name));
+  const jobAddressLine1 = pickText(text(fields.job_address_line1), propertyAddress.line1, text(fields.property_address_line1), propertyAddress.summary);
+  const jobAddressLine2 = pickText(text(fields.job_address_line2), propertyAddress.line2, text(fields.property_address_line2));
+  const jobAddressCity = pickText(text(fields.job_address_city), propertyAddress.town, text(fields.property_town));
+  const jobAddressPostcode = pickText(text(fields.job_postcode), propertyAddress.postcode, text(fields.property_postcode), text(fields.postcode));
+  const jobAddressTel = pickText(text(fields.job_tel), text(fields.customer_phone), customer.phone);
+  const customerName = pickText(text(fields.landlord_name), text(fields.customer_name), customer.name, sourceJob.client_name ?? null);
+  const customerContact = pickText(text(fields.landlord_tel), jobAddressTel, customer.phone, customer.email);
+  const propertySummary = [jobAddressLine1, jobAddressLine2, jobAddressCity].filter(Boolean).join(', ');
+
+  for (const { appliance, classification, index } of unsafeAppliances) {
+    const sourceApplianceId = appliance.id ?? null;
+    const sourceApplianceKey = `appliance_${index + 1}`;
+    const existingJobId = await findGasWarningNoticeFollowUpJob({
+      sb,
+      userId,
+      sourceJobId,
+      sourceApplianceKey,
+    });
+
+    if (existingJobId) {
+      childJobs.push({
+        jobId: existingJobId,
+        created: false,
+        sourceJobId,
+        sourceApplianceId,
+        sourceApplianceKey,
+        classification,
+        href: `/wizard/create/gas_warning_notice?jobId=${existingJobId}`,
+      });
+      continue;
+    }
+
+    const jobCode = await getNextJobCode(jobCodeClient, userId);
+    const childInsert = {
+      certificate_type: 'gas_warning_notice',
+      parent_job_id: sourceJobId,
+      source_appliance_id: sourceApplianceId,
+      source_appliance_key: sourceApplianceKey,
+      client_id: sourceJob.client_id ?? null,
+      client_name: customerName || sourceJob.client_name || null,
+      address: propertySummary || propertyAddress.summary || sourceJob.address || null,
+      status: 'draft',
+      user_id: userId,
+      job_type: DEFAULT_JOB_TYPE,
+      title: `Gas Warning Notice for ${customerName || 'CP12 appliance'}`,
+      scheduled_for: text(fields.inspection_date) || sourceJob.scheduled_for || null,
+      job_code: jobCode,
+      client_ref: buildClientRef(jobCode),
+    } as Record<string, unknown>;
+
+    const { data: childJob, error: insertErr } = await sb
+      .from('jobs')
+      .insert(childInsert as unknown as Database['public']['Tables']['jobs']['Insert'])
+      .select('id')
+      .single();
+    if (insertErr || !childJob) {
+      if (insertErr?.code === '23505') {
+        const duplicateJobId = await findGasWarningNoticeFollowUpJob({ sb, userId, sourceJobId, sourceApplianceKey });
+        if (duplicateJobId) {
+          childJobs.push({
+            jobId: duplicateJobId,
+            created: false,
+            sourceJobId,
+            sourceApplianceId,
+            sourceApplianceKey,
+            classification,
+            href: `/wizard/create/gas_warning_notice?jobId=${duplicateJobId}`,
+          });
+          continue;
+        }
+      }
+      throw new Error(insertErr?.message ?? 'Failed to create Gas Warning Notice follow-up job');
+    }
+
+    const childJobId = (childJob as { id: string }).id;
+    await upsertJobAddressForJob({
+      jobId: childJobId,
+      fields: {
+        line1: jobAddressLine1 || undefined,
+        line2: jobAddressLine2 || undefined,
+        town: jobAddressCity || undefined,
+        postcode: jobAddressPostcode || undefined,
+      },
+      sb,
+      userId,
+    });
+
+    const applianceRecord = appliance as Cp12Appliance & Record<string, unknown>;
+    const warningClassification = classification === 'id' ? 'IMMEDIATELY_DANGEROUS' : 'AT_RISK';
+    const classificationCode = classification === 'id' ? 'ID' : 'AR';
+    const childFieldRows: JobFieldEntry[] = [
+      { job_id: childJobId, field_key: 'source_cp12_job_id', value: sourceJobId },
+      { job_id: childJobId, field_key: 'source_cp12_appliance_id', value: sourceApplianceId },
+      { job_id: childJobId, field_key: 'source_cp12_appliance_key', value: sourceApplianceKey },
+      { job_id: childJobId, field_key: 'source_certificate_type', value: 'cp12' },
+      { job_id: childJobId, field_key: 'property_address', value: jobAddressLine1 || propertyAddress.summary || null },
+      { job_id: childJobId, field_key: 'postcode', value: jobAddressPostcode || null },
+      { job_id: childJobId, field_key: 'customer_name', value: customerName || null },
+      { job_id: childJobId, field_key: 'customer_contact', value: customerContact || null },
+      { job_id: childJobId, field_key: 'job_reference', value: text(fields.job_reference) || text(fields.record_id) || null },
+      { job_id: childJobId, field_key: 'job_address_name', value: jobAddressName || null },
+      { job_id: childJobId, field_key: 'job_address_line1', value: jobAddressLine1 || null },
+      { job_id: childJobId, field_key: 'job_address_line2', value: jobAddressLine2 || null },
+      { job_id: childJobId, field_key: 'job_address_city', value: jobAddressCity || null },
+      { job_id: childJobId, field_key: 'job_postcode', value: jobAddressPostcode || null },
+      { job_id: childJobId, field_key: 'job_tel', value: jobAddressTel || null },
+      { job_id: childJobId, field_key: 'appliance_location', value: appliance.location || null },
+      { job_id: childJobId, field_key: 'appliance_type', value: appliance.appliance_type || null },
+      { job_id: childJobId, field_key: 'make_model', value: pickText(appliance.make_model, text(applianceRecord.appliance_make_model)) || null },
+      { job_id: childJobId, field_key: 'serial_number', value: text(applianceRecord.serial_number) || null },
+      { job_id: childJobId, field_key: 'classification', value: warningClassification },
+      { job_id: childJobId, field_key: 'classification_code', value: classificationCode },
+      { job_id: childJobId, field_key: 'unsafe_situation_description', value: pickText(appliance.defect_notes, text(fields.defect_description)) || null },
+      { job_id: childJobId, field_key: 'underlying_cause', value: appliance.actions_required || null },
+      { job_id: childJobId, field_key: 'actions_taken', value: pickText(appliance.actions_taken, text(fields.remedial_action)) || null },
+      { job_id: childJobId, field_key: 'appliance_capped_off', value: boolText(appliance.appliance_disconnected) },
+      { job_id: childJobId, field_key: 'danger_do_not_use_label_fitted', value: boolText(appliance.danger_do_not_use_attached) },
+      { job_id: childJobId, field_key: 'customer_informed', value: boolText(appliance.warning_notice_issued) },
+      { job_id: childJobId, field_key: 'customer_understands_risks', value: boolText(appliance.warning_notice_issued) },
+      { job_id: childJobId, field_key: 'engineer_name', value: text(fields.engineer_name) || null },
+      { job_id: childJobId, field_key: 'engineer_company', value: pickText(text(fields.company_name), text(fields.engineer_company)) || null },
+      { job_id: childJobId, field_key: 'gas_safe_number', value: text(fields.gas_safe_number) || null },
+      { job_id: childJobId, field_key: 'engineer_id_card_number', value: pickText(text(fields.engineer_id_card_number), text(fields.engineer_id)) || null },
+      { job_id: childJobId, field_key: 'issued_at', value: text(fields.inspection_date) || new Date().toISOString().slice(0, 10) },
+    ];
+
+    await persistJobFields(sb, childJobId, childFieldRows, 'ensureGasWarningNoticeFollowUpJobs');
+    childJobs.push({
+      jobId: childJobId,
+      created: true,
+      sourceJobId,
+      sourceApplianceId,
+      sourceApplianceKey,
+      classification,
+      href: `/wizard/create/gas_warning_notice?jobId=${childJobId}`,
+    });
+  }
+
+  return childJobs;
+}
+
+async function applyCp12SourceDefaultsForGasWarningNotice(params: {
+  sb: SupabaseClient<Database>;
+  job: JobRow;
+  fields: Record<string, string | null>;
+}) {
+  const { sb, job, fields } = params;
+  if (job.certificate_type !== 'gas_warning_notice' || !job.parent_job_id) return;
+
+  const sourceJobId = job.parent_job_id;
+  const sourceApplianceKey = pickText(fields.source_cp12_appliance_key, job.source_appliance_key ?? null);
+  const sourceApplianceIndexMatch = sourceApplianceKey.match(/^appliance_(\d+)$/);
+  const sourceApplianceIndex = sourceApplianceIndexMatch ? Number.parseInt(sourceApplianceIndexMatch[1], 10) - 1 : -1;
+
+  const applyDefault = (key: string, value: string | null | undefined) => {
+    if (!value) return;
+    const existing = fields[key];
+    if (typeof existing === 'string' && existing.trim()) return;
+    fields[key] = value;
+  };
+
+  const [{ data: sourceFields, error: sourceFieldsErr }, { data: sourceAppliances, error: sourceAppliancesErr }] = await Promise.all([
+    sb.from(JOB_FIELDS_TABLE).select('field_key, value').eq('job_id', sourceJobId),
+    sb.from(CP12_APPLIANCES_TABLE).select('*').eq('job_id', sourceJobId).order('created_at', { ascending: true }),
+  ]);
+  if (sourceFieldsErr) throw new Error(sourceFieldsErr.message);
+  if (sourceAppliancesErr && sourceAppliancesErr.code !== '42P01') throw new Error(sourceAppliancesErr.message);
+
+  const sourceFieldMap = Object.fromEntries(
+    ((sourceFields ?? []) as unknown as JobFieldRow[]).map((field) => [field.field_key, field.value ?? null]),
+  );
+  const sourceApplianceRows = (sourceAppliances ?? []) as unknown as Cp12Appliance[];
+  const sourceAppliance =
+    sourceApplianceRows.find((appliance) => appliance.id && appliance.id === job.source_appliance_id) ??
+    (sourceApplianceIndex >= 0 ? sourceApplianceRows[sourceApplianceIndex] : null) ??
+    null;
+
+  applyDefault('source_cp12_job_id', sourceJobId);
+  applyDefault('source_cp12_appliance_id', job.source_appliance_id ?? null);
+  applyDefault('source_cp12_appliance_key', sourceApplianceKey);
+  applyDefault('source_certificate_type', 'cp12');
+  applyDefault('property_address', pickText(sourceFieldMap.job_address_line1, sourceFieldMap.property_address, job.address));
+  applyDefault('postcode', pickText(sourceFieldMap.job_postcode, sourceFieldMap.property_postcode, sourceFieldMap.postcode));
+  applyDefault('customer_name', pickText(sourceFieldMap.landlord_name, sourceFieldMap.customer_name, job.client_name));
+  applyDefault('customer_contact', pickText(sourceFieldMap.landlord_tel, sourceFieldMap.job_tel, sourceFieldMap.customer_phone));
+  applyDefault('job_reference', pickText(sourceFieldMap.job_reference, sourceFieldMap.record_id, sourceFieldMap.certificate_number));
+  applyDefault('job_address_name', pickText(sourceFieldMap.job_address_name, sourceFieldMap.property_name));
+  applyDefault('job_address_line1', pickText(sourceFieldMap.job_address_line1, sourceFieldMap.property_address_line1, sourceFieldMap.property_address));
+  applyDefault('job_address_line2', pickText(sourceFieldMap.job_address_line2, sourceFieldMap.property_address_line2));
+  applyDefault('job_address_city', pickText(sourceFieldMap.job_address_city, sourceFieldMap.property_town));
+  applyDefault('job_postcode', pickText(sourceFieldMap.job_postcode, sourceFieldMap.property_postcode, sourceFieldMap.postcode));
+  applyDefault('job_tel', pickText(sourceFieldMap.job_tel, sourceFieldMap.customer_phone));
+  applyDefault('engineer_name', sourceFieldMap.engineer_name);
+  applyDefault('engineer_company', pickText(sourceFieldMap.company_name, sourceFieldMap.engineer_company));
+  applyDefault('gas_safe_number', sourceFieldMap.gas_safe_number);
+  applyDefault('engineer_id_card_number', pickText(sourceFieldMap.engineer_id_card_number, sourceFieldMap.engineer_id));
+
+  if (!sourceAppliance) return;
+
+  const classification = getGasWarningClassification(sourceAppliance);
+  applyDefault('appliance_location', sourceAppliance.location);
+  applyDefault('appliance_type', sourceAppliance.appliance_type);
+  applyDefault('make_model', sourceAppliance.make_model);
+  if (classification) {
+    applyDefault('classification', classification === 'id' ? 'IMMEDIATELY_DANGEROUS' : 'AT_RISK');
+    applyDefault('classification_code', classification === 'id' ? 'ID' : 'AR');
+  }
+  applyDefault('unsafe_situation_description', pickText(sourceAppliance.defect_notes, sourceFieldMap.defect_description));
+  applyDefault('underlying_cause', sourceAppliance.actions_required);
+  applyDefault('actions_taken', pickText(sourceAppliance.actions_taken, sourceFieldMap.remedial_action));
+  applyDefault('appliance_capped_off', sourceAppliance.appliance_disconnected ? 'true' : undefined);
+  applyDefault('danger_do_not_use_label_fitted', sourceAppliance.danger_do_not_use_attached ? 'true' : undefined);
+  applyDefault('customer_informed', sourceAppliance.warning_notice_issued ? 'true' : undefined);
+  applyDefault('customer_understands_risks', sourceAppliance.warning_notice_issued ? 'true' : undefined);
+}
+
 async function findCertificateRecord(
   sb: SupabaseClient<Database>,
   params: {
@@ -685,6 +997,11 @@ export async function getCertificateWizardState(jobId: string) {
     applyDefault('gas_safe_number', profileRow.gas_safe_number ?? null);
     applyDefault('engineer_id_card_number', profileRow.default_engineer_id ?? null);
   }
+  await applyCp12SourceDefaultsForGasWarningNotice({
+    sb,
+    job: jobRow,
+    fields: fieldRecord,
+  });
   const photoNotes: Record<string, string> = {};
   Object.entries(fieldRecord).forEach(([key, value]) => {
     if (key.startsWith('photo_note_') && typeof value === 'string') {
@@ -763,6 +1080,15 @@ export async function updateField(payload: z.infer<typeof UpdateFieldSchema>) {
 const optionalText = z.string().optional().default('');
 const optionalLooseText = z.string().optional();
 const optionalLooseBool = z.boolean().optional();
+const normalizeCp12SafetyClassification = (value?: string | null) => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'safe') return 'safe';
+  if (normalized === 'ncs' || normalized === 'not to current standards') return 'ncs';
+  if (normalized === 'ar' || normalized === 'at risk' || normalized === 'at_risk') return 'ar';
+  if (normalized === 'id' || normalized === 'immediately dangerous' || normalized === 'immediately_dangerous') return 'id';
+  return '';
+};
+const cp12SafetyClassification = z.string().optional().default('').transform(normalizeCp12SafetyClassification);
 
 const BoilerServiceJobInfoSchema = z.object({
   jobId: z.string().uuid(),
@@ -844,6 +1170,12 @@ const GasWarningJobInfoSchema = z.object({
     postcode: optionalLooseText,
     customer_name: optionalLooseText,
     customer_contact: optionalLooseText,
+    customer_company: optionalLooseText,
+    customer_address_line1: optionalLooseText,
+    customer_address_line2: optionalLooseText,
+    customer_city: optionalLooseText,
+    customer_address: optionalLooseText,
+    customer_postcode: optionalLooseText,
     job_reference: optionalLooseText,
     job_address_name: optionalLooseText,
     job_address_line1: optionalLooseText,
@@ -866,6 +1198,7 @@ const GasWarningDetailsSchema = z.object({
     ventilation_issue: optionalLooseBool,
     meter_issue: optionalLooseBool,
     chimney_flue_issue: optionalLooseBool,
+    other_issue: optionalLooseBool,
     other_issue_details: optionalLooseText,
     gas_supply_isolated: optionalLooseBool,
     appliance_capped_off: optionalLooseBool,
@@ -879,6 +1212,10 @@ const GasWarningDetailsSchema = z.object({
     emergency_reference: optionalLooseText,
     danger_do_not_use_label_fitted: optionalLooseBool,
     meter_or_appliance_tagged: optionalLooseBool,
+    riddor_11_1_reported: optionalLooseBool,
+    riddor_11_2_reported: optionalLooseBool,
+    customer_present: optionalLooseBool,
+    notice_left_on_premises: optionalLooseBool,
     customer_informed: optionalLooseBool,
     customer_understands_risks: optionalLooseBool,
     customer_signed_at: optionalLooseText,
@@ -1014,13 +1351,25 @@ export async function saveGasWarningJobInfo(payload: z.infer<typeof GasWarningJo
 
   const { jobId, data } = input;
   const certificateType: CertificateType = 'gas_warning_notice';
+  const customerAddress = [data.customer_address_line1, data.customer_address_line2, data.customer_city]
+    .map((value) => value?.trim() ?? '')
+    .filter(Boolean)
+    .join('\n');
   const updatePayload = {
     client_name: data.customer_name ?? null,
     address: data.property_address ?? null,
     title: data.customer_name ? `Gas Warning Notice for ${data.customer_name}` : 'Gas Warning Notice draft',
   } as Record<string, unknown>;
   await sb.from('jobs').update(updatePayload).eq('id', jobId).eq('user_id', user.id);
-  await upsertCustomerFromJobFields({ jobId, fields: data, sb, userId: user.id });
+  await upsertCustomerFromJobFields({
+    jobId,
+    fields: {
+      ...data,
+      customer_address: customerAddress || data.customer_address,
+    },
+    sb,
+    userId: user.id,
+  });
   await upsertJobAddressForJob({
     jobId,
     fields: {
@@ -1031,13 +1380,20 @@ export async function saveGasWarningJobInfo(payload: z.infer<typeof GasWarningJo
     userId: user.id,
   });
 
-  const entries = Object.entries(data)
+  const entries: JobFieldEntry[] = Object.entries(data)
     .filter(([, value]) => value !== undefined)
     .map(([key, value]) => ({
       job_id: jobId,
       field_key: key,
       value: typeof value === 'boolean' ? String(value) : value ?? null,
     }));
+  if (customerAddress || data.customer_address !== undefined) {
+    entries.push({
+      job_id: jobId,
+      field_key: 'customer_address',
+      value: customerAddress || data.customer_address || null,
+    });
+  }
   await persistJobFields(sb, jobId, entries, 'saveGasWarningJobInfo');
   revalidatePath(`/wizard/create/${certificateType}?jobId=${jobId}`);
   return { ok: true };
@@ -1280,6 +1636,13 @@ const Cp12ApplianceSchema = z.object({
       combustion_notes: optionalText,
       safety_rating: optionalText,
       classification_code: optionalText,
+      safety_classification: cp12SafetyClassification,
+      defect_notes: optionalText,
+      actions_taken: optionalText,
+      actions_required: optionalText,
+      warning_notice_issued: z.boolean().optional().default(false),
+      appliance_disconnected: z.boolean().optional().default(false),
+      danger_do_not_use_attached: z.boolean().optional().default(false),
     }),
   )
     .min(0),
@@ -1339,6 +1702,22 @@ const CP12_REQUIRED_FIELDS = [
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
 
+function resolveGasWarningCustomerPresent(fields: GasWarningNoticeFields | Record<string, unknown>) {
+  const explicit = fields.customer_present;
+  if (explicit !== undefined && explicit !== null && String(explicit).trim() !== '') {
+    return booleanFromField(explicit);
+  }
+  if (booleanFromField(fields.notice_left_on_premises)) {
+    return false;
+  }
+  return true;
+}
+
+function resolveGasWarningCustomerHandover(fields: GasWarningNoticeFields | Record<string, unknown>) {
+  const customerPresent = resolveGasWarningCustomerPresent(fields);
+  return customerPresent ? booleanFromField(fields.customer_informed) : booleanFromField(fields.notice_left_on_premises ?? fields.customer_informed);
+}
+
 function validateGeneralWorksForIssue(fieldMap: Record<string, unknown>) {
   const errors: string[] = [];
   GENERAL_WORKS_REQUIRED_FIELDS.forEach((key) => {
@@ -1367,10 +1746,13 @@ function validateBoilerServiceForIssue(fieldMap: Record<string, unknown>) {
 
 function validateGasWarningNoticeForIssue(fields: GasWarningNoticeFields) {
   const errors: string[] = [];
+  const customerPresent = resolveGasWarningCustomerPresent(fields);
+  const handoverConfirmed = resolveGasWarningCustomerHandover(fields);
+
   GAS_WARNING_REQUIRED_FOR_ISSUE.forEach((key) => {
     if (key === 'customer_informed') {
-      if (!booleanFromField(fields.customer_informed)) {
-        errors.push('Customer must be informed before issuing');
+      if (!handoverConfirmed) {
+        errors.push(customerPresent ? 'Customer must be informed before issuing' : 'Notice left on premises must be confirmed when customer is not present');
       }
       return;
     }
@@ -1436,16 +1818,21 @@ function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp1
 
   const warningSelection = String(fieldMap.warning_notice_issued ?? '').trim().toUpperCase();
   const hasDefectText = hasValue(fieldMap.defect_description) || hasValue(fieldMap.remedial_action);
-  const hasUnsafeAppliance = applianceRows.some((app) => {
+  const unsafeAppliances = applianceRows.filter((app) => {
     const rating = (app.safety_rating ?? '').toLowerCase().trim();
-    return rating.length > 0 && rating !== 'safe';
+    const classification = (app.safety_classification ?? '').toLowerCase().trim();
+    return (rating.length > 0 && rating !== 'safe') || (classification.length > 0 && classification !== 'safe');
   });
-  const requiresDefectDetails = hasUnsafeAppliance || hasDefectText || warningSelection === 'YES';
+  const hasStructuredDefectText = unsafeAppliances.some(
+    (app) => hasValue(app.defect_notes) || hasValue(app.actions_taken) || hasValue(app.actions_required),
+  );
+  const hasStructuredWarningSelection = unsafeAppliances.some((app) => typeof app.warning_notice_issued === 'boolean');
+  const requiresDefectDetails = unsafeAppliances.length > 0 || hasDefectText || warningSelection === 'YES';
   if (requiresDefectDetails) {
-    if (!hasValue(fieldMap.defect_description)) {
+    if (!hasValue(fieldMap.defect_description) && !hasStructuredDefectText) {
       errors.push('Defect description is required when an appliance is unsafe');
     }
-    if (!warningSelection) {
+    if (!warningSelection && !hasStructuredWarningSelection) {
       errors.push('Confirm whether a warning notice was issued');
     }
   }
@@ -2355,6 +2742,13 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     );
     const companyAddressParts = splitAddressLines(mergedFieldMap.company_address ?? '');
     const clientAddressParts = splitAddressLines(customer.address);
+    const customerPresent = resolveGasWarningCustomerPresent(mergedFieldMap);
+    const noticeLeftOnPremises = customerPresent
+      ? toText(mergedFieldMap.notice_left_on_premises ?? '')
+      : toText(mergedFieldMap.notice_left_on_premises ?? mergedFieldMap.customer_informed ?? '');
+    const customerInformed = customerPresent
+      ? toText(mergedFieldMap.customer_informed ?? '')
+      : noticeLeftOnPremises;
     const gasWarningFields: GasWarningNoticeFields = {
       property_address: pickText(jobAddressLine1, propertyAddress.summary, toText(mergedFieldMap.property_address ?? mergedFieldMap.address ?? '')),
       postcode: jobAddressPostcode,
@@ -2369,6 +2763,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       ventilation_issue: toText(mergedFieldMap.ventilation_issue ?? ''),
       meter_issue: toText(mergedFieldMap.meter_issue ?? ''),
       chimney_flue_issue: toText(mergedFieldMap.chimney_flue_issue ?? ''),
+      other_issue: toText(mergedFieldMap.other_issue ?? ''),
       other_issue_details: toText(mergedFieldMap.other_issue_details ?? ''),
       gas_supply_isolated: toText(mergedFieldMap.gas_supply_isolated ?? ''),
       appliance_capped_off: toText(mergedFieldMap.appliance_capped_off ?? ''),
@@ -2382,10 +2777,14 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       emergency_reference: toText(mergedFieldMap.emergency_reference ?? ''),
       danger_do_not_use_label_fitted: toText(mergedFieldMap.danger_do_not_use_label_fitted ?? ''),
       meter_or_appliance_tagged: toText(mergedFieldMap.meter_or_appliance_tagged ?? ''),
-      customer_informed: toText(mergedFieldMap.customer_informed ?? ''),
-      customer_understands_risks: toText(mergedFieldMap.customer_understands_risks ?? ''),
-      customer_signature_url: toText(mergedFieldMap.customer_signature ?? mergedFieldMap.customer_signature_url ?? ''),
-      customer_signed_at: toText(mergedFieldMap.customer_signed_at ?? ''),
+      riddor_11_1_reported: toText(mergedFieldMap.riddor_11_1_reported ?? ''),
+      riddor_11_2_reported: toText(mergedFieldMap.riddor_11_2_reported ?? ''),
+      customer_present: customerPresent ? 'true' : 'false',
+      notice_left_on_premises: noticeLeftOnPremises,
+      customer_informed: customerInformed,
+      customer_understands_risks: customerPresent ? toText(mergedFieldMap.customer_understands_risks ?? '') : '',
+      customer_signature_url: customerPresent ? toText(mergedFieldMap.customer_signature ?? mergedFieldMap.customer_signature_url ?? '') : '',
+      customer_signed_at: customerPresent ? toText(mergedFieldMap.customer_signed_at ?? '') : '',
       engineer_name: toText(mergedFieldMap.engineer_name ?? ''),
       engineer_company: toText(mergedFieldMap.engineer_company ?? mergedFieldMap.company_name ?? ''),
       gas_safe_number: toText(mergedFieldMap.gas_safe_number ?? ''),
@@ -2684,7 +3083,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
       spillageTest: toText(app.gas_tightness_test ?? ''),
       applianceSafeToUse: toText(app.safety_rating ?? app.classification_code ?? ''),
-      remedialActionTaken: toText(app.classification_code ?? ''),
+      remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),
       combustionHighCoPpm: highCoPpm,
       combustionHighCo2: highCo2,
       combustionHighRatio: highRatio,
@@ -2895,10 +3294,25 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     propertyAddress,
     fields: mergedFieldMap,
   });
+  const gasWarningNoticeJobs = await ensureGasWarningNoticeFollowUpJobs({
+    sb: admin,
+    jobCodeClient: sb,
+    userId: user.id,
+    sourceJobId: input.jobId,
+    sourceJob: jobContext.job,
+    customer,
+    propertyAddress,
+    fields: mergedFieldMap,
+    appliances,
+  });
   revalidatePath(`/jobs/${input.jobId}`);
   revalidatePath('/jobs');
   revalidatePath('/dashboard');
-  return { pdfUrl: finalSignedUrl, jobId: input.jobId };
+  gasWarningNoticeJobs.forEach((job) => {
+    revalidatePath(`/jobs/${job.jobId}`);
+    revalidatePath(`/wizard/create/gas_warning_notice?jobId=${job.jobId}`);
+  });
+  return { pdfUrl: finalSignedUrl, jobId: input.jobId, gasWarningNoticeJobs };
 }
 
 export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCertificatePdfSignedUrlSchema> | string) {

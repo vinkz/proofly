@@ -208,4 +208,11 @@ export const CP12_DEMO_APPLIANCE = {
   combustion_notes: 'Combustion readings within tolerance; analyser calibrated Feb 2026.',
   safety_rating: 'safe',
   classification_code: '',
+  safety_classification: 'safe',
+  defect_notes: '',
+  actions_taken: '',
+  actions_required: '',
+  warning_notice_issued: false,
+  appliance_disconnected: false,
+  danger_do_not_use_attached: false,
 } as const;

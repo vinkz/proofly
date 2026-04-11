@@ -10,20 +10,42 @@ export const useSignaturePad = () => {
     if (!canvas) return;
     const context = canvas.getContext('2d');
     if (!context) return;
-    const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+
+    const configureContext = (dpr: number) => {
+      context.setTransform(1, 0, 0, 1, 0, 0);
       context.scale(dpr, dpr);
       context.lineCap = 'round';
       context.lineJoin = 'round';
       context.lineWidth = 2;
       context.strokeStyle = '#1f2937';
     };
-    resize();
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
+
+    const syncCanvasSize = () => {
+      const rect = canvas.getBoundingClientRect();
+      const cssWidth = Math.round(rect.width);
+      const cssHeight = Math.round(rect.height);
+      if (!cssWidth || !cssHeight) return false;
+
+      const dpr = window.devicePixelRatio || 1;
+      const nextWidth = Math.round(cssWidth * dpr);
+      const nextHeight = Math.round(cssHeight * dpr);
+      if (canvas.width !== nextWidth) canvas.width = nextWidth;
+      if (canvas.height !== nextHeight) canvas.height = nextHeight;
+      configureContext(dpr);
+      return true;
+    };
+
+    syncCanvasSize();
+    const frame = window.requestAnimationFrame(syncCanvasSize);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncCanvasSize);
+    observer?.observe(canvas);
+    window.addEventListener('resize', syncCanvasSize);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('resize', syncCanvasSize);
+    };
   }, []);
 
   const getPoint = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -71,12 +93,16 @@ export const useSignaturePad = () => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (!canvas || !context) return;
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, canvas.width, canvas.height);
+    context.restore();
   };
 
   const hasInk = () => {
     const canvas = canvasRef.current;
     if (!canvas) return false;
+    if (!canvas.width || !canvas.height) return false;
     const context = canvas.getContext('2d');
     if (!context) return false;
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;

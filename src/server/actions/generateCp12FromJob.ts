@@ -34,6 +34,10 @@ type Cp12ApplianceRow = {
   flue_performance_test?: string | null;
   safety_rating?: string | null;
   classification_code?: string | null;
+  safety_classification?: string | null;
+  defect_notes?: string | null;
+  actions_taken?: string | null;
+  warning_notice_issued?: boolean | null;
 };
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'] & {
@@ -63,6 +67,33 @@ const CERTIFICATES_BUCKET = 'certificates';
 const LOGO_BUCKET = 'profile-logos';
 const JOB_FIELDS_TABLE = 'job_fields' as unknown as keyof Database['public']['Tables'];
 const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['public']['Tables'];
+
+function formatCp12SafetyClassification(value: string | null | undefined) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'safe') return 'Safe';
+  if (normalized === 'ncs' || normalized === 'not to current standards') return 'Not to Current Standards';
+  if (normalized === 'ar' || normalized === 'at risk' || normalized === 'at_risk') return 'At Risk';
+  if (normalized === 'id' || normalized === 'immediately dangerous' || normalized === 'immediately_dangerous') {
+    return 'Immediately Dangerous';
+  }
+  return '';
+}
+
+function buildCp12ApplianceUnsafePdfSummary(row: Cp12ApplianceRow) {
+  const classification = formatCp12SafetyClassification(row.safety_classification || row.classification_code || row.safety_rating);
+  if (!classification || classification === 'Safe') return '';
+
+  const defectNotes = String(row.defect_notes ?? '').trim();
+  const actionsTaken = String(row.actions_taken ?? '').trim();
+  return [
+    `Class: ${classification}`,
+    defectNotes ? `Defect: ${defectNotes}` : '',
+    `Warning notice: ${row.warning_notice_issued ? 'Yes' : 'No'}`,
+    actionsTaken ? `Action: ${actionsTaken}` : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+}
 
 export async function generateCp12FromJob(jobId: string, currentUserId: string): Promise<GenerateCp12Result> {
   const supabase = await supabaseServerServiceRole();
@@ -174,7 +205,7 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
       flueTerminationSatisfactory: toText(row.flue_condition ?? ''),
       spillageTest: toText(row.gas_tightness_test ?? ''),
       applianceSafeToUse: toText(row.safety_rating ?? row.classification_code ?? ''),
-      remedialActionTaken: toText(row.classification_code ?? ''),
+      remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(row),
       combustionHighCoPpm: highCoPpm,
       combustionHighCo2: highCo2,
       combustionHighRatio: highRatio,

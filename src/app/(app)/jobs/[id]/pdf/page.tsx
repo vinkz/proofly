@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { PdfPreview } from '@/components/certificates/pdf-preview';
@@ -48,6 +49,7 @@ export default async function JobPdfPage({
     { data: job, error: jobError },
     { data: jobRecord },
     { data: referenceFields },
+    { data: gasWarningNoticeJobs },
     { data: report, error: reportError },
   ] = await Promise.all([
     certificateQuery.maybeSingle(),
@@ -58,6 +60,12 @@ export default async function JobPdfPage({
       .select('field_key, value')
       .eq('job_id', id)
       .in('field_key', ['record_id', 'certificate_number']),
+    supabase
+      .from('jobs')
+      .select('id, status, title, source_appliance_key')
+      .eq('parent_job_id', id)
+      .eq('certificate_type', 'gas_warning_notice')
+      .order('created_at', { ascending: true }),
     supabase
       .from('reports')
       .select('id, job_id, storage_path, created_at')
@@ -109,6 +117,15 @@ export default async function JobPdfPage({
         : typeof referenceFieldMap.certificate_number === 'string' && referenceFieldMap.certificate_number.trim().length
           ? referenceFieldMap.certificate_number.trim()
           : null;
+  const linkedGasWarningNoticeJobs = (gasWarningNoticeJobs ?? []) as Array<{
+    id: string;
+    status: string | null;
+    title: string | null;
+    source_appliance_key: string | null;
+  }>;
+  const showGasWarningNoticeCta =
+    (selectedCertificateType === 'cp12' || certificate?.cert_type === 'cp12') && linkedGasWarningNoticeJobs.length > 0;
+  const firstGasWarningNoticeJob = linkedGasWarningNoticeJobs[0] ?? null;
   const resumeRecord = jobRecord?.record as Record<string, unknown> | null | undefined;
   const resumeCertificateType =
     typeof resumeRecord?.resume_certificate_type === 'string' ? resumeRecord.resume_certificate_type : null;
@@ -142,6 +159,21 @@ export default async function JobPdfPage({
           {jobRow.address ?? 'Address pending'}
         </p>
       </div>
+
+      {showGasWarningNoticeCta && firstGasWarningNoticeJob ? (
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+          <p className="text-sm font-semibold text-amber-950">Unsafe appliance follow-up required</p>
+          <p className="mt-1 text-sm text-amber-900/80">
+            A linked Gas Warning Notice draft is ready for this CP12.
+          </p>
+          <Link
+            href={`/wizard/create/gas_warning_notice?jobId=${firstGasWarningNoticeJob.id}`}
+            className="mt-3 inline-flex rounded-full bg-[var(--action)] px-4 py-2 text-sm font-semibold text-white shadow-sm"
+          >
+            Issue Gas Warning Notice
+          </Link>
+        </div>
+      ) : null}
 
       <DocumentActions
         pdfUrl={pdfUrl}

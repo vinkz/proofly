@@ -996,7 +996,8 @@ export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput
     ...input.fields,
     issueDate: input.fields.issueDate ?? input.issuedAt.toLocaleDateString('en-GB'),
   };
-  const defectAreaText = buildDefectAreaText(fields);
+  const hasApplianceDefectRows = (input.appliances ?? []).some((appliance) => normalizeText(appliance.remedialActionTaken));
+  const defectAreaText = hasApplianceDefectRows ? '' : buildDefectAreaText(fields);
   const firstDefectRowFieldName = getFirstDefectRowFieldName(formFieldNames);
   const canMapDefectToRow = Boolean(defectAreaText && firstDefectRowFieldName);
   const defectRowText = canMapDefectToRow ? defectAreaText.slice(0, DEFECT_ROW_TEXT_LIMIT).trimEnd() : '';

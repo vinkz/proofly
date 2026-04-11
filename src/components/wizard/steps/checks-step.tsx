@@ -96,6 +96,11 @@ export function ChecksStep({
   const safetyValue = values.safety_rating ?? '';
   const isSafe = safetyValue.toLowerCase() === 'safe';
   const measurementNote = measurementSource === 'tpi' ? 'Captured from meter' : undefined;
+  const showSafetyChecks =
+    hasKey(values, 'safety_rating') ||
+    hasKey(values, 'safety_devices_correct') ||
+    hasKey(values, 'flue_performance_test') ||
+    hasKey(values, 'appliance_serviced');
 
   return (
     <div className="space-y-4">
@@ -260,7 +265,7 @@ export function ChecksStep({
         ) : null}
       </div>
 
-      {hasKey(values, 'safety_rating') ? (
+      {showSafetyChecks ? (
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Safety checks</p>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -286,8 +291,10 @@ export function ChecksStep({
               />
             ) : null}
           </div>
-          <EnumChips label="Safety rating" value={safetyValue} options={safetyOptions} onChange={(val) => onChange({ safety_rating: val })} />
-          {!isSafe ? (
+          {hasKey(values, 'safety_rating') ? (
+            <EnumChips label="Safety rating" value={safetyValue} options={safetyOptions} onChange={(val) => onChange({ safety_rating: val })} />
+          ) : null}
+          {hasKey(values, 'safety_rating') && !isSafe ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {hasKey(values, 'classification_code') ? (
                 <Input

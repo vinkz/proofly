@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -41,6 +41,12 @@ type GasWarningFormState = {
   postcode: string;
   customer_name: string;
   customer_contact: string;
+  customer_company: string;
+  customer_address_line1: string;
+  customer_address_line2: string;
+  customer_city: string;
+  customer_address: string;
+  customer_postcode: string;
   appliance_location: string;
   appliance_type: string;
   make_model: string;
@@ -50,12 +56,12 @@ type GasWarningFormState = {
   ventilation_issue: boolean;
   meter_issue: boolean;
   chimney_flue_issue: boolean;
+  other_issue: boolean;
   other_issue_details: string;
   gas_supply_isolated: boolean;
   appliance_capped_off: boolean;
   customer_refused_isolation: boolean;
   classification: GasWarningClassification | '';
-  classification_code: string;
   unsafe_situation_description: string;
   underlying_cause: string;
   actions_taken: string;
@@ -63,6 +69,10 @@ type GasWarningFormState = {
   emergency_reference: string;
   danger_do_not_use_label_fitted: boolean;
   meter_or_appliance_tagged: boolean;
+  riddor_11_1_reported: boolean;
+  riddor_11_2_reported: boolean;
+  customer_present: boolean;
+  notice_left_on_premises: boolean;
   customer_informed: boolean;
   customer_understands_risks: boolean;
   customer_signed_at: string;
@@ -103,6 +113,45 @@ const parseBool = (value: unknown) => {
   return false;
 };
 
+const deriveClassification = (classification: unknown, classificationCode: unknown): GasWarningClassification | '' => {
+  const normalizedClassification = typeof classification === 'string' ? classification.trim() : '';
+  if (normalizedClassification === 'IMMEDIATELY_DANGEROUS' || normalizedClassification === 'AT_RISK') {
+    return normalizedClassification;
+  }
+
+  const normalizedCode = typeof classificationCode === 'string' ? classificationCode.trim().toUpperCase() : '';
+  if (normalizedCode === 'ID') return 'IMMEDIATELY_DANGEROUS';
+  if (normalizedCode === 'AR') return 'AT_RISK';
+  return '';
+};
+
+const getClassificationCode = (classification: GasWarningClassification | '') => {
+  if (classification === 'IMMEDIATELY_DANGEROUS') return 'ID';
+  if (classification === 'AT_RISK') return 'AR';
+  return '';
+};
+
+const splitAddressParts = (value: string | null | undefined) =>
+  String(value ?? '')
+    .split(/[\r\n,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+const buildAddressText = (...parts: Array<string | null | undefined>) =>
+  parts
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join('\n');
+
+function LabeledField({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <label className={`space-y-1 ${className}`}>
+      <span className="block text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground/80">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 export function GasWarningNoticeWizard({
   jobId,
   initialFields,
@@ -131,11 +180,33 @@ export function GasWarningNoticeWizard({
     });
   }, [certificateType, jobId, step, stepOffset]);
 
+  const initialCustomerPresent =
+    resolvedFields.customer_present !== undefined
+      ? parseBool(resolvedFields.customer_present)
+      : resolvedFields.notice_left_on_premises !== undefined
+        ? !parseBool(resolvedFields.notice_left_on_premises)
+        : true;
+  const initialCustomerAddressParts = splitAddressParts(resolvedFields.customer_address);
+  const initialCustomerAddressLine1 = resolvedFields.customer_address_line1 ?? initialCustomerAddressParts[0] ?? '';
+  const initialCustomerAddressLine2 =
+    resolvedFields.customer_address_line2 ?? (initialCustomerAddressParts.length >= 3 ? initialCustomerAddressParts.slice(1, -1).join(', ') : '');
+  const initialCustomerCity =
+    resolvedFields.customer_city ??
+    (initialCustomerAddressParts.length >= 2 ? initialCustomerAddressParts.at(-1) ?? '' : '');
+
   const [fields, setFields] = useState<GasWarningFormState>({
     property_address: resolvedFields.property_address ?? '',
     postcode: resolvedFields.postcode ?? '',
     customer_name: resolvedFields.customer_name ?? '',
     customer_contact: resolvedFields.customer_contact ?? '',
+    customer_company: resolvedFields.customer_company ?? '',
+    customer_address_line1: initialCustomerAddressLine1,
+    customer_address_line2: initialCustomerAddressLine2,
+    customer_city: initialCustomerCity,
+    customer_address:
+      resolvedFields.customer_address ??
+      buildAddressText(initialCustomerAddressLine1, initialCustomerAddressLine2, initialCustomerCity),
+    customer_postcode: resolvedFields.customer_postcode ?? '',
     appliance_location: resolvedFields.appliance_location ?? '',
     appliance_type: resolvedFields.appliance_type ?? '',
     make_model: resolvedFields.make_model ?? '',
@@ -145,12 +216,12 @@ export function GasWarningNoticeWizard({
     ventilation_issue: parseBool(resolvedFields.ventilation_issue),
     meter_issue: parseBool(resolvedFields.meter_issue),
     chimney_flue_issue: parseBool(resolvedFields.chimney_flue_issue),
+    other_issue: parseBool(resolvedFields.other_issue) || Boolean((resolvedFields.other_issue_details ?? '').trim()),
     other_issue_details: resolvedFields.other_issue_details ?? '',
     gas_supply_isolated: parseBool(resolvedFields.gas_supply_isolated),
     appliance_capped_off: parseBool(resolvedFields.appliance_capped_off),
     customer_refused_isolation: parseBool(resolvedFields.customer_refused_isolation),
-    classification: (resolvedFields.classification as GasWarningClassification) ?? '',
-    classification_code: resolvedFields.classification_code ?? '',
+    classification: deriveClassification(resolvedFields.classification, resolvedFields.classification_code),
     unsafe_situation_description: resolvedFields.unsafe_situation_description ?? '',
     underlying_cause: resolvedFields.underlying_cause ?? '',
     actions_taken: resolvedFields.actions_taken ?? '',
@@ -158,8 +229,12 @@ export function GasWarningNoticeWizard({
     emergency_reference: resolvedFields.emergency_reference ?? '',
     danger_do_not_use_label_fitted: parseBool(resolvedFields.danger_do_not_use_label_fitted),
     meter_or_appliance_tagged: parseBool(resolvedFields.meter_or_appliance_tagged),
-    customer_informed: parseBool(resolvedFields.customer_informed),
-    customer_understands_risks: parseBool(resolvedFields.customer_understands_risks),
+    riddor_11_1_reported: parseBool(resolvedFields.riddor_11_1_reported),
+    riddor_11_2_reported: parseBool(resolvedFields.riddor_11_2_reported),
+    customer_present: initialCustomerPresent,
+    notice_left_on_premises: parseBool(resolvedFields.notice_left_on_premises) || (!initialCustomerPresent && parseBool(resolvedFields.customer_informed)),
+    customer_informed: initialCustomerPresent ? parseBool(resolvedFields.customer_informed) : false,
+    customer_understands_risks: initialCustomerPresent ? parseBool(resolvedFields.customer_understands_risks) : false,
     customer_signed_at: resolvedFields.customer_signed_at ? resolvedFields.customer_signed_at.slice(0, 10) : '',
     engineer_name: resolvedFields.engineer_name ?? '',
     engineer_company: resolvedFields.engineer_company ?? resolvedFields.company_name ?? '',
@@ -231,8 +306,8 @@ export function GasWarningNoticeWizard({
         if (cp12SafetyRating === 'at risk') next.classification = 'AT_RISK';
         if (cp12SafetyRating === 'immediately dangerous') next.classification = 'IMMEDIATELY_DANGEROUS';
       }
-      if (!safeText(next.classification_code) && cp12ClassificationCode) {
-        next.classification_code = cp12ClassificationCode;
+      if (!safeText(next.classification) && cp12ClassificationCode) {
+        next.classification = deriveClassification('', cp12ClassificationCode);
       }
       if (!safeText(next.unsafe_situation_description) && cp12DefectDescription) {
         next.unsafe_situation_description = cp12DefectDescription;
@@ -244,6 +319,21 @@ export function GasWarningNoticeWizard({
     });
   }, [initialAppliances, resolvedFields]);
 
+  const previousClassificationRef = useRef<GasWarningClassification | ''>(fields.classification);
+
+  useEffect(() => {
+    if (fields.classification === 'IMMEDIATELY_DANGEROUS' && previousClassificationRef.current !== 'IMMEDIATELY_DANGEROUS') {
+      setFields((prev) => ({
+        ...prev,
+        danger_do_not_use_label_fitted: true,
+        gas_supply_isolated: prev.customer_refused_isolation ? prev.gas_supply_isolated : true,
+        appliance_capped_off: prev.customer_refused_isolation ? prev.appliance_capped_off : true,
+      }));
+    }
+
+    previousClassificationRef.current = fields.classification;
+  }, [fields.classification]);
+
   const handleDemoFill = () => {
     if (!demoEnabled) return;
     const today = new Date().toISOString().slice(0, 10);
@@ -252,6 +342,12 @@ export function GasWarningNoticeWizard({
       postcode: 'E10 6AA',
       customer_name: 'Jamie Collins',
       customer_contact: '07123 456789',
+      customer_company: 'Leyton Lettings Ltd',
+      customer_address_line1: 'Flat 2',
+      customer_address_line2: '12 High Street',
+      customer_city: 'Leyton',
+      customer_address: 'Flat 2\n12 High Street\nLeyton',
+      customer_postcode: 'E10 6AA',
       appliance_location: 'Kitchen cupboard',
       appliance_type: 'Combi boiler',
       make_model: 'Worcester Bosch Greenstar 30i',
@@ -261,12 +357,12 @@ export function GasWarningNoticeWizard({
       ventilation_issue: false,
       meter_issue: false,
       chimney_flue_issue: true,
+      other_issue: false,
       other_issue_details: '',
       gas_supply_isolated: true,
       appliance_capped_off: false,
       customer_refused_isolation: false,
       classification: 'AT_RISK',
-      classification_code: 'AR',
       unsafe_situation_description: 'Flue seal degraded causing minor spillage risk.',
       underlying_cause: 'Flue seal deterioration.',
       actions_taken: 'Isolated appliance and advised replacement seal.',
@@ -274,6 +370,10 @@ export function GasWarningNoticeWizard({
       emergency_reference: '',
       danger_do_not_use_label_fitted: true,
       meter_or_appliance_tagged: true,
+      riddor_11_1_reported: false,
+      riddor_11_2_reported: false,
+      customer_present: true,
+      notice_left_on_premises: false,
       customer_informed: true,
       customer_understands_risks: true,
       customer_signed_at: today,
@@ -295,6 +395,62 @@ export function GasWarningNoticeWizard({
       job_tel: demo.customer_contact,
     }));
     pushToast({ title: 'Gas Warning demo filled', variant: 'success' });
+  };
+
+  const buildDetailsPayload = () => ({
+    appliance_location: fields.appliance_location,
+    appliance_type: fields.appliance_type,
+    make_model: fields.make_model,
+    serial_number: fields.serial_number,
+    gas_escape_issue: fields.gas_escape_issue,
+    pipework_issue: fields.pipework_issue,
+    ventilation_issue: fields.ventilation_issue,
+    meter_issue: fields.meter_issue,
+    chimney_flue_issue: fields.chimney_flue_issue,
+    other_issue: fields.other_issue,
+    other_issue_details: fields.other_issue ? fields.other_issue_details : '',
+    gas_supply_isolated: fields.gas_supply_isolated,
+    appliance_capped_off: fields.appliance_capped_off,
+    customer_refused_isolation: fields.customer_refused_isolation,
+    classification: fields.classification,
+    classification_code: getClassificationCode(fields.classification),
+    unsafe_situation_description: fields.unsafe_situation_description,
+    underlying_cause: fields.underlying_cause,
+    actions_taken: fields.actions_taken,
+    emergency_services_contacted: fields.emergency_services_contacted,
+    emergency_reference: fields.emergency_reference,
+    danger_do_not_use_label_fitted: fields.danger_do_not_use_label_fitted,
+    meter_or_appliance_tagged: fields.meter_or_appliance_tagged,
+    riddor_11_1_reported: fields.riddor_11_1_reported,
+    riddor_11_2_reported: fields.riddor_11_2_reported,
+    customer_present: fields.customer_present,
+    notice_left_on_premises: fields.customer_present ? false : fields.notice_left_on_premises,
+    customer_informed: fields.customer_present ? fields.customer_informed : fields.notice_left_on_premises,
+    customer_understands_risks: fields.customer_present ? fields.customer_understands_risks : false,
+    customer_signed_at: fields.customer_present ? fields.customer_signed_at : '',
+    ...(fields.engineer_name.trim() ? { engineer_name: fields.engineer_name } : {}),
+    ...(fields.engineer_company.trim() ? { engineer_company: fields.engineer_company } : {}),
+    ...(fields.gas_safe_number.trim() ? { gas_safe_number: fields.gas_safe_number } : {}),
+    ...(fields.engineer_id_card_number.trim() ? { engineer_id_card_number: fields.engineer_id_card_number } : {}),
+    issued_at: fields.issued_at,
+  });
+
+  const buildGenerateFields = () => {
+    const {
+      engineer_name: engineerName,
+      engineer_company: engineerCompany,
+      gas_safe_number: gasSafeNumber,
+      engineer_id_card_number: engineerIdCardNumber,
+      ...rest
+    } = fields;
+
+    return {
+      ...rest,
+      ...(engineerName.trim() ? { engineer_name: engineerName } : {}),
+      ...(engineerCompany.trim() ? { engineer_company: engineerCompany } : {}),
+      ...(gasSafeNumber.trim() ? { gas_safe_number: gasSafeNumber } : {}),
+      ...(engineerIdCardNumber.trim() ? { engineer_id_card_number: engineerIdCardNumber } : {}),
+    };
   };
 
   const handleEvidenceUpload =
@@ -328,6 +484,12 @@ export function GasWarningNoticeWizard({
             postcode: fields.postcode,
             customer_name: fields.customer_name,
             customer_contact: fields.customer_contact,
+            customer_company: fields.customer_company,
+            customer_address_line1: fields.customer_address_line1,
+            customer_address_line2: fields.customer_address_line2,
+            customer_city: fields.customer_city,
+            customer_address: buildAddressText(fields.customer_address_line1, fields.customer_address_line2, fields.customer_city),
+            customer_postcode: fields.customer_postcode,
             job_reference: jobAddress.job_reference,
             job_address_name: jobAddress.job_address_name,
             job_address_line1: jobAddress.job_address_line1,
@@ -354,30 +516,7 @@ export function GasWarningNoticeWizard({
       try {
         await saveGasWarningDetails({
           jobId,
-          data: {
-            appliance_location: fields.appliance_location,
-            appliance_type: fields.appliance_type,
-            make_model: fields.make_model,
-            serial_number: fields.serial_number,
-            gas_escape_issue: fields.gas_escape_issue,
-            pipework_issue: fields.pipework_issue,
-            ventilation_issue: fields.ventilation_issue,
-            meter_issue: fields.meter_issue,
-            chimney_flue_issue: fields.chimney_flue_issue,
-            other_issue_details: fields.other_issue_details,
-            gas_supply_isolated: fields.gas_supply_isolated,
-            appliance_capped_off: fields.appliance_capped_off,
-            customer_refused_isolation: fields.customer_refused_isolation,
-            classification: fields.classification,
-            classification_code: fields.classification_code,
-            unsafe_situation_description: fields.unsafe_situation_description,
-            underlying_cause: fields.underlying_cause,
-            actions_taken: fields.actions_taken,
-            emergency_services_contacted: fields.emergency_services_contacted,
-            emergency_reference: fields.emergency_reference,
-            danger_do_not_use_label_fitted: fields.danger_do_not_use_label_fitted,
-            meter_or_appliance_tagged: fields.meter_or_appliance_tagged,
-          },
+          data: buildDetailsPayload(),
         });
         setStep(3);
         pushToast({ title: 'Saved appliance + actions', variant: 'success' });
@@ -396,18 +535,9 @@ export function GasWarningNoticeWizard({
       try {
         await saveGasWarningDetails({
           jobId,
-          data: {
-            customer_informed: fields.customer_informed,
-            customer_understands_risks: fields.customer_understands_risks,
-            customer_signed_at: fields.customer_signed_at,
-            engineer_name: fields.engineer_name,
-            engineer_company: fields.engineer_company,
-            gas_safe_number: fields.gas_safe_number,
-            engineer_id_card_number: fields.engineer_id_card_number,
-            issued_at: fields.issued_at,
-          },
+          data: buildDetailsPayload(),
         });
-        pushToast({ title: 'Saved engineer + acknowledgement', variant: 'success' });
+        pushToast({ title: 'Saved handover details', variant: 'success' });
       } catch (error) {
         pushToast({
           title: 'Could not save acknowledgement',
@@ -426,6 +556,12 @@ export function GasWarningNoticeWizard({
         postcode: fields.postcode,
         customer_name: fields.customer_name,
         customer_contact: fields.customer_contact,
+        customer_company: fields.customer_company,
+        customer_address_line1: fields.customer_address_line1,
+        customer_address_line2: fields.customer_address_line2,
+        customer_city: fields.customer_city,
+        customer_address: buildAddressText(fields.customer_address_line1, fields.customer_address_line2, fields.customer_city),
+        customer_postcode: fields.customer_postcode,
         job_reference: jobAddress.job_reference,
         job_address_name: jobAddress.job_address_name,
         job_address_line1: jobAddress.job_address_line1,
@@ -437,38 +573,7 @@ export function GasWarningNoticeWizard({
     });
     await saveGasWarningDetails({
       jobId,
-      data: {
-        appliance_location: fields.appliance_location,
-        appliance_type: fields.appliance_type,
-        make_model: fields.make_model,
-        serial_number: fields.serial_number,
-        gas_escape_issue: fields.gas_escape_issue,
-        pipework_issue: fields.pipework_issue,
-        ventilation_issue: fields.ventilation_issue,
-        meter_issue: fields.meter_issue,
-        chimney_flue_issue: fields.chimney_flue_issue,
-        other_issue_details: fields.other_issue_details,
-        gas_supply_isolated: fields.gas_supply_isolated,
-        appliance_capped_off: fields.appliance_capped_off,
-        customer_refused_isolation: fields.customer_refused_isolation,
-        classification: fields.classification,
-        classification_code: fields.classification_code,
-        unsafe_situation_description: fields.unsafe_situation_description,
-        underlying_cause: fields.underlying_cause,
-        actions_taken: fields.actions_taken,
-        emergency_services_contacted: fields.emergency_services_contacted,
-        emergency_reference: fields.emergency_reference,
-        danger_do_not_use_label_fitted: fields.danger_do_not_use_label_fitted,
-        meter_or_appliance_tagged: fields.meter_or_appliance_tagged,
-        customer_informed: fields.customer_informed,
-        customer_understands_risks: fields.customer_understands_risks,
-        customer_signed_at: fields.customer_signed_at,
-        engineer_name: fields.engineer_name,
-        engineer_company: fields.engineer_company,
-        gas_safe_number: fields.gas_safe_number,
-        engineer_id_card_number: fields.engineer_id_card_number,
-        issued_at: fields.issued_at,
-      },
+      data: buildDetailsPayload(),
     });
   };
 
@@ -482,7 +587,7 @@ export function GasWarningNoticeWizard({
           jobId,
           certificateType,
           previewOnly: false,
-          fields,
+          fields: buildGenerateFields(),
         });
         clearDraft();
         pushToast({
@@ -528,13 +633,17 @@ export function GasWarningNoticeWizard({
       });
     };
 
+  const showOtherIssueDetails = fields.other_issue;
+  const showCustomerAcknowledgement = fields.customer_present;
+  const showNoticeLeftOnPremises = !fields.customer_present;
+
   return (
     <>
       {step === 1 ? (
         <WizardLayout
           step={offsetStep(1)}
           total={totalSteps}
-          title="Job address"
+          title="People & location"
           status="Gas Warning Notice"
           actions={
             <div className="flex justify-end">
@@ -553,72 +662,159 @@ export function GasWarningNoticeWizard({
             </div>
           ) : null}
           <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-            <p className="text-sm font-semibold text-muted">Job address</p>
-            <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Input
-                value={jobAddress.job_address_name}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                placeholder="Job address name (optional)"
-                className="rounded-2xl sm:col-span-2"
-              />
-              <Input
-                value={jobAddress.job_address_line1}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
-                  setFields((prev) => ({ ...prev, property_address: value }));
-                }}
-                placeholder="Job address line 1"
-                className="rounded-2xl sm:col-span-2"
-              />
-              <Input
-                value={jobAddress.job_address_line2}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
-                placeholder="Job address line 2 (optional)"
-                className="rounded-2xl"
-              />
-              <Input
-                value={jobAddress.job_address_city}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
-                placeholder="Town/City (optional)"
-                className="rounded-2xl"
-              />
-              <Input
-                value={jobAddress.job_postcode}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setJobAddress((prev) => ({ ...prev, job_postcode: value }));
-                  setFields((prev) => ({ ...prev, postcode: value }));
-                }}
-                placeholder="Postcode"
-                className="rounded-2xl"
-              />
-              <Input
-                value={jobAddress.job_tel}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
-                placeholder="Job phone (optional)"
-                className="rounded-2xl"
-              />
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+              <p className="text-sm font-semibold text-muted">Job address</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <LabeledField label="Job reference" className="sm:col-span-2">
+                  <Input
+                    value={jobAddress.job_reference}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_reference: e.target.value }))}
+                    placeholder="Optional internal reference"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Name" className="sm:col-span-2">
+                  <Input
+                    value={jobAddress.job_address_name}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                    placeholder="Property name / reference"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Address line 1" className="sm:col-span-2">
+                  <Input
+                    value={jobAddress.job_address_line1}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                      setFields((prev) => ({ ...prev, property_address: value }));
+                    }}
+                    placeholder="Job address line 1"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Address line 2">
+                  <Input
+                    value={jobAddress.job_address_line2}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                    placeholder="Optional"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Town / city">
+                  <Input
+                    value={jobAddress.job_address_city}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                    placeholder="Optional"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Postcode">
+                  <Input
+                    value={jobAddress.job_postcode}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+                      setFields((prev) => ({ ...prev, postcode: value }));
+                    }}
+                    placeholder="Postcode"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Tel. No">
+                  <Input
+                    value={jobAddress.job_tel}
+                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
+                    placeholder="Site telephone number"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+              </div>
             </div>
-          </div>
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-            <p className="text-sm font-semibold text-muted">Customer contact</p>
-            <p className="mt-1 text-xs text-muted-foreground/70">Confirm the customer name and contact details.</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Input
-                value={fields.customer_name}
-                onChange={(e) => setFields((prev) => ({ ...prev, customer_name: e.target.value }))}
-                placeholder="Customer name"
-                className="rounded-2xl"
-              />
-              <Input
-                value={fields.customer_contact}
-                onChange={(e) => setFields((prev) => ({ ...prev, customer_contact: e.target.value }))}
-                placeholder="Customer contact (phone/email)"
-                className="rounded-2xl"
-              />
+            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+              <p className="text-sm font-semibold text-muted">Client / Landlord</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">Capture the person or organisation receiving the notice.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <LabeledField label="Name">
+                  <Input
+                    value={fields.customer_name}
+                    onChange={(e) => setFields((prev) => ({ ...prev, customer_name: e.target.value }))}
+                    placeholder="Client / landlord name"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Company">
+                  <Input
+                    value={fields.customer_company}
+                    onChange={(e) => setFields((prev) => ({ ...prev, customer_company: e.target.value }))}
+                    placeholder="Optional"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Address line 1" className="sm:col-span-2">
+                  <Input
+                    value={fields.customer_address_line1}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFields((prev) => ({
+                        ...prev,
+                        customer_address_line1: value,
+                        customer_address: buildAddressText(value, prev.customer_address_line2, prev.customer_city),
+                      }));
+                    }}
+                    placeholder="Client / landlord address line 1"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Address line 2">
+                  <Input
+                    value={fields.customer_address_line2}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFields((prev) => ({
+                        ...prev,
+                        customer_address_line2: value,
+                        customer_address: buildAddressText(prev.customer_address_line1, value, prev.customer_city),
+                      }));
+                    }}
+                    placeholder="Optional"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Town / city">
+                  <Input
+                    value={fields.customer_city}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFields((prev) => ({
+                        ...prev,
+                        customer_city: value,
+                        customer_address: buildAddressText(prev.customer_address_line1, prev.customer_address_line2, value),
+                      }));
+                    }}
+                    placeholder="Optional"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Postcode">
+                  <Input
+                    value={fields.customer_postcode}
+                    onChange={(e) => setFields((prev) => ({ ...prev, customer_postcode: e.target.value }))}
+                    placeholder="Postcode"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+                <LabeledField label="Tel. No">
+                  <Input
+                    value={fields.customer_contact}
+                    onChange={(e) => setFields((prev) => ({ ...prev, customer_contact: e.target.value }))}
+                    placeholder="Client / landlord contact number"
+                    className="rounded-2xl"
+                  />
+                </LabeledField>
+              </div>
             </div>
           </div>
           </div>
@@ -676,26 +872,22 @@ export function GasWarningNoticeWizard({
               <Input
                 value={fields.serial_number}
                 onChange={(e) => setFields((prev) => ({ ...prev, serial_number: e.target.value }))}
-                placeholder="Serial number (optional)"
+                placeholder="Serial number"
                 className="rounded-2xl sm:col-span-2"
               />
-              <Select
-                value={fields.classification}
-                onChange={(e) => setFields((prev) => ({ ...prev, classification: e.target.value as GasWarningClassification }))}
-              >
-                <option value="">Classification</option>
-                {GAS_WARNING_CLASSIFICATIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </Select>
-              <Input
-                value={fields.classification_code}
-                onChange={(e) => setFields((prev) => ({ ...prev, classification_code: e.target.value }))}
-                placeholder="Classification code (optional)"
-                className="rounded-2xl"
-              />
+              <LabeledField label="Classification" className="sm:col-span-2">
+                <Select
+                  value={fields.classification}
+                  onChange={(e) => setFields((prev) => ({ ...prev, classification: e.target.value as GasWarningClassification }))}
+                >
+                  <option value="">Select classification</option>
+                  {GAS_WARNING_CLASSIFICATIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+              </LabeledField>
               <Textarea
                 value={fields.unsafe_situation_description}
                 onChange={(e) => setFields((prev) => ({ ...prev, unsafe_situation_description: e.target.value }))}
@@ -746,14 +938,11 @@ export function GasWarningNoticeWizard({
               ))}
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Issue categories" subtitle="Match the notice to the identified issue">
-            <div className="space-y-3 rounded-2xl border border-white/40 bg-white/70 p-4">
+          <CollapsibleSection title="RIDDOR reporting" subtitle="Record whether the incident was reported to HSE">
+            <div className="space-y-2 rounded-2xl border border-white/40 bg-white/70 p-4">
               {[
-                ['gas_escape_issue', 'Gas escape'],
-                ['pipework_issue', 'Pipework issue'],
-                ['ventilation_issue', 'Ventilation issue'],
-                ['meter_issue', 'Meter issue'],
-                ['chimney_flue_issue', 'Chimney / flue issue'],
+                ['riddor_11_1_reported', 'Reported to HSE under RIDDOR 11(1) (Gas Incident)'],
+                ['riddor_11_2_reported', 'Reported to HSE under RIDDOR 11(2) (Dangerous Gas Fitting)'],
               ].map(([key, label]) => (
                 <label key={key} className="flex items-center gap-3 text-sm text-muted">
                   <input
@@ -767,12 +956,44 @@ export function GasWarningNoticeWizard({
                   {label}
                 </label>
               ))}
-              <Input
-                value={fields.other_issue_details}
-                onChange={(e) => setFields((prev) => ({ ...prev, other_issue_details: e.target.value }))}
-                placeholder="Other issue details (optional)"
-                className="rounded-2xl"
-              />
+            </div>
+          </CollapsibleSection>
+          <CollapsibleSection title="Issue categories" subtitle="Match the notice to the identified issue">
+            <div className="space-y-3 rounded-2xl border border-white/40 bg-white/70 p-4">
+              {[
+                ['gas_escape_issue', 'Gas escape'],
+                ['pipework_issue', 'Pipework issue'],
+                ['ventilation_issue', 'Ventilation issue'],
+                ['meter_issue', 'Meter issue'],
+                ['chimney_flue_issue', 'Chimney / flue issue'],
+                ['other_issue', 'Other issue'],
+              ].map(([key, label]) => (
+                <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[var(--accent)]"
+                    checked={fields[key as keyof GasWarningFormState] as boolean}
+                    onChange={(e) =>
+                      setFields((prev) =>
+                        ({
+                          ...prev,
+                          [key]: e.target.checked,
+                          ...(key === 'other_issue' && !e.target.checked ? { other_issue_details: '' } : {}),
+                        }) as GasWarningFormState,
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+              {showOtherIssueDetails ? (
+                <Input
+                  value={fields.other_issue_details}
+                  onChange={(e) => setFields((prev) => ({ ...prev, other_issue_details: e.target.value }))}
+                  placeholder="Other issue details"
+                  className="rounded-2xl"
+                />
+              ) : null}
             </div>
           </CollapsibleSection>
           </div>
@@ -788,7 +1009,7 @@ export function GasWarningNoticeWizard({
         <WizardLayout
           step={offsetStep(3)}
           total={totalSteps}
-          title="Acknowledgement + engineer"
+          title="Handover + signatures"
           status="Gas Warning"
           onBack={goBackOneStep}
           actions={
@@ -824,71 +1045,89 @@ export function GasWarningNoticeWizard({
               ))}
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Engineer details" subtitle="Required to issue notice" defaultOpen>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                value={fields.engineer_name}
-                onChange={(e) => setFields((prev) => ({ ...prev, engineer_name: e.target.value }))}
-                placeholder="Engineer name"
-                className="rounded-2xl"
-              />
-              <Input
-                value={fields.engineer_company}
-                onChange={(e) => setFields((prev) => ({ ...prev, engineer_company: e.target.value }))}
-                placeholder="Engineer company"
-                className="rounded-2xl"
-              />
-              <Input
-                value={fields.gas_safe_number}
-                onChange={(e) => setFields((prev) => ({ ...prev, gas_safe_number: e.target.value }))}
-                placeholder="Gas Safe number"
-                className="rounded-2xl"
-              />
-              <Input
-                value={fields.engineer_id_card_number}
-                onChange={(e) => setFields((prev) => ({ ...prev, engineer_id_card_number: e.target.value }))}
-                placeholder="Engineer ID card number (optional)"
-                className="rounded-2xl"
-              />
-              <Input
-                type="date"
-                value={fields.issued_at}
-                onChange={(e) => setFields((prev) => ({ ...prev, issued_at: e.target.value }))}
-                placeholder="Issued at"
-                className="rounded-2xl"
-              />
-              <Input
-                type="date"
-                value={fields.customer_signed_at}
-                onChange={(e) => setFields((prev) => ({ ...prev, customer_signed_at: e.target.value }))}
-                placeholder="Customer signed at (optional)"
-                className="rounded-2xl"
-              />
-            </div>
-          </CollapsibleSection>
-          <CollapsibleSection title="Customer acknowledgement" subtitle="Confirm customer informed">
-            <div className="space-y-2 rounded-2xl border border-white/40 bg-white/70 p-4">
-              {[
-                ['customer_informed', 'Customer informed (required)'],
-                ['customer_understands_risks', 'Customer understands risks'],
-              ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-3 text-sm text-muted">
+          <CollapsibleSection title="Attendance & handover" subtitle="Record whether the customer was present" defaultOpen>
+            <div className="space-y-3 rounded-2xl border border-white/40 bg-white/70 p-4">
+              <label className="flex items-center gap-3 text-sm text-muted">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--accent)]"
+                  checked={fields.customer_present}
+                  onChange={(e) =>
+                    setFields((prev) => ({
+                      ...prev,
+                      customer_present: e.target.checked,
+                      notice_left_on_premises: e.target.checked ? false : prev.notice_left_on_premises,
+                    }))
+                  }
+                />
+                Customer present at time of warning notice
+              </label>
+
+              {showCustomerAcknowledgement ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2 rounded-2xl border border-white/40 bg-white/80 p-4 sm:col-span-2">
+                    {[
+                      ['customer_informed', 'Customer informed'],
+                      ['customer_understands_risks', 'Customer understands risks'],
+                    ].map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[var(--accent)]"
+                          checked={fields[key as keyof GasWarningFormState] as boolean}
+                          onChange={(e) =>
+                            setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <LabeledField label="Customer signed date" className="sm:col-span-1">
+                    <Input
+                      type="date"
+                      value={fields.customer_signed_at}
+                      onChange={(e) => setFields((prev) => ({ ...prev, customer_signed_at: e.target.value }))}
+                      className="rounded-2xl"
+                    />
+                  </LabeledField>
+                </div>
+              ) : null}
+
+              {showNoticeLeftOnPremises ? (
+                <label className="flex items-center gap-3 text-sm text-muted">
                   <input
                     type="checkbox"
                     className="h-4 w-4 accent-[var(--accent)]"
-                    checked={fields[key as keyof GasWarningFormState] as boolean}
-                    onChange={(e) =>
-                      setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
-                    }
+                    checked={fields.notice_left_on_premises}
+                    onChange={(e) => setFields((prev) => ({ ...prev, notice_left_on_premises: e.target.checked }))}
                   />
-                  {label}
+                  Notice left on premises
                 </label>
-              ))}
+              ) : null}
+            </div>
+          </CollapsibleSection>
+          <CollapsibleSection title="Notice details" subtitle="Engineer details come from account settings">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <LabeledField label="Issue date">
+                <Input
+                  type="date"
+                  value={fields.issued_at}
+                  onChange={(e) => setFields((prev) => ({ ...prev, issued_at: e.target.value }))}
+                  className="rounded-2xl"
+                />
+              </LabeledField>
             </div>
           </CollapsibleSection>
           <CollapsibleSection title="Signatures" subtitle="Customer + engineer">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+            <div className={`grid gap-4 ${showCustomerAcknowledgement ? 'sm:grid-cols-2' : ''}`}>
+              {showCustomerAcknowledgement ? (
+                <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+              ) : (
+                <div className="rounded-2xl border border-dashed border-white/30 bg-white/40 p-4 text-sm text-muted-foreground/80">
+                  Customer signature hidden because the customer was marked as not present.
+                </div>
+              )}
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             </div>
           </CollapsibleSection>

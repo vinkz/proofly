@@ -6,6 +6,9 @@ export type GasWarningNoticeFields = {
   customer_name?: string;
   customer_contact?: string;
   customer_company?: string;
+  customer_address_line1?: string;
+  customer_address_line2?: string;
+  customer_city?: string;
   customer_address?: string;
   customer_postcode?: string;
   company_address?: string;
@@ -26,6 +29,7 @@ export type GasWarningNoticeFields = {
   ventilation_issue?: string | boolean;
   meter_issue?: string | boolean;
   chimney_flue_issue?: string | boolean;
+  other_issue?: string | boolean;
   other_issue_details?: string;
   gas_supply_isolated?: string | boolean;
   appliance_capped_off?: string | boolean;
@@ -39,6 +43,10 @@ export type GasWarningNoticeFields = {
   emergency_reference?: string;
   danger_do_not_use_label_fitted?: string | boolean;
   meter_or_appliance_tagged?: string | boolean;
+  riddor_11_1_reported?: string | boolean;
+  riddor_11_2_reported?: string | boolean;
+  customer_present?: string | boolean;
+  notice_left_on_premises?: string | boolean;
   customer_informed?: string | boolean;
   customer_understands_risks?: string | boolean;
   customer_signature_url?: string;
@@ -57,6 +65,7 @@ export const GAS_WARNING_REQUIRED_FOR_ISSUE = [
   'customer_name',
   'appliance_location',
   'appliance_type',
+  'serial_number',
   'classification',
   'unsafe_situation_description',
   'actions_taken',
@@ -72,6 +81,21 @@ export const GAS_WARNING_CLASSIFICATIONS: Array<{ value: GasWarningClassificatio
   { value: 'AT_RISK', label: 'At Risk' },
 ];
 
+export function getGasWarningClassificationLabel(
+  classification: GasWarningClassification | string | null | undefined,
+  classificationCode?: string | null | undefined,
+) {
+  const normalizedClassification = String(classification ?? '').trim().toUpperCase();
+  if (normalizedClassification === 'IMMEDIATELY_DANGEROUS') return 'Immediately Dangerous';
+  if (normalizedClassification === 'AT_RISK') return 'At Risk';
+
+  const normalizedCode = String(classificationCode ?? '').trim().toUpperCase();
+  if (normalizedCode === 'ID') return 'Immediately Dangerous';
+  if (normalizedCode === 'AR') return 'At Risk';
+
+  return String(classification ?? '').trim();
+}
+
 export const GAS_WARNING_ACTION_FLAGS = [
   { key: 'gas_supply_isolated', label: 'Gas supply isolated' },
   { key: 'appliance_capped_off', label: 'Appliance capped off' },
@@ -82,3 +106,10 @@ export const GAS_WARNING_ACTION_FLAGS = [
   { key: 'customer_informed', label: 'Customer informed' },
   { key: 'customer_understands_risks', label: 'Customer understands risks' },
 ] as const;
+
+export const GAS_WARNING_WORKFLOW_SUMMARY = {
+  customerPresentPath: 'Customer present: show acknowledgement fields, allow customer signature, and require confirmation that the customer was informed.',
+  customerNotPresentPath: 'Customer not present: hide customer acknowledgement/signature fields and use notice-left-on-premises as the handover confirmation.',
+  immediatelyDangerousPath: 'Immediately Dangerous: default label fitted and isolation/capping actions on, unless the engineer explicitly records refusal instead.',
+  atRiskPath: 'At Risk: keep action controls available without forcing the Immediately Dangerous defaults.',
+} as const;

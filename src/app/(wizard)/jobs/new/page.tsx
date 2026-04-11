@@ -100,7 +100,6 @@ export default async function NewJobPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 py-10">
       <div className="space-y-2">
-        <p className="text-xs uppercase tracking-wide text-[var(--accent)]">New job</p>
         <h1 className="text-3xl font-bold text-[var(--brand)]">Create an upcoming job</h1>
         <p className="text-sm text-muted-foreground/80">
           Save the key job details first. CP12 upcoming jobs use the same Job Address and Landlord fields as Step 1.

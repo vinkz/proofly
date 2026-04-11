@@ -93,7 +93,7 @@ export function ApplianceStep({
   applyExtendedDefaults = true,
   inlineEditor = false,
 }: ApplianceStepProps) {
-  const catalogMakes = useMemo(() => getMakes(), []);
+  const catalogMakes = useMemo(() => getMakes().filter((make) => make.toLowerCase() !== 'other'), []);
   const resolvedMakeOptions = useMemo(() => {
     if (makeOptions?.length) return makeOptions;
     return catalogMakes.map((make) => ({
@@ -254,15 +254,12 @@ export function ApplianceStep({
           activeAppliances.map((appliance, index) => {
             const makeValue = appliance?.make ?? '';
             const makeIsKnown = isKnownMake(makeValue);
-            const makeSelectValue = makeIsKnown ? makeValue : makeValue ? 'Other' : '';
-            const showOtherMake = makeSelectValue === 'Other';
             const modelValue = appliance?.model ?? '';
             const modelsForMake = getModelsForMake(makeValue);
             const modelIsKnown = modelsForMake.includes(modelValue);
             const modelSelectValue = modelIsKnown ? modelValue : modelValue ? 'Not listed' : '';
             const showManualModel = modelSelectValue === 'Not listed';
             const manualModelValue = modelValue === 'Not listed' ? '' : modelValue;
-            const manualMakeValue = makeValue === 'Other' ? '' : makeValue;
             const modelOptionsForMake = [...modelsForMake, 'Not listed'].map((model) => ({ label: model, value: model }));
 
             return (
@@ -289,21 +286,11 @@ export function ApplianceStep({
                   />
                   <SearchableSelect
                     label="Make"
-                    value={makeSelectValue}
+                    value={makeValue}
                     options={resolvedMakeOptions}
                     placeholder="Select or type"
-                    onChange={(val) => updateApplianceField(index, 'make', val === 'Other' ? 'Other' : val)}
+                    onChange={(val) => updateApplianceField(index, 'make', val)}
                   />
-                  {showOtherMake ? (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Other make</p>
-                      <Input
-                        value={manualMakeValue}
-                        onChange={(e) => updateApplianceField(index, 'make', e.target.value)}
-                        placeholder="Type boiler make"
-                      />
-                    </div>
-                  ) : null}
                   {makeIsKnown ? (
                     <SearchableSelect
                       label="Model"
@@ -433,15 +420,12 @@ export function ApplianceStep({
             {(() => {
               const makeValue = activeAppliances[editingIndex]?.make ?? '';
               const makeIsKnown = isKnownMake(makeValue);
-              const makeSelectValue = makeIsKnown ? makeValue : makeValue ? 'Other' : '';
-              const showOtherMake = makeSelectValue === 'Other';
               const modelValue = activeAppliances[editingIndex]?.model ?? '';
               const modelsForMake = getModelsForMake(makeValue);
               const modelIsKnown = modelsForMake.includes(modelValue);
               const modelSelectValue = modelIsKnown ? modelValue : modelValue ? 'Not listed' : '';
               const showManualModel = modelSelectValue === 'Not listed';
               const manualModelValue = modelValue === 'Not listed' ? '' : modelValue;
-              const manualMakeValue = makeValue === 'Other' ? '' : makeValue;
 
               return (
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -453,21 +437,11 @@ export function ApplianceStep({
               />
               <SearchableSelect
                 label="Make"
-                value={makeSelectValue}
+                value={makeValue}
                 options={resolvedMakeOptions}
                 placeholder="Select or type"
-                onChange={(val) => updateApplianceField(editingIndex, 'make', val === 'Other' ? 'Other' : val)}
+                onChange={(val) => updateApplianceField(editingIndex, 'make', val)}
               />
-              {showOtherMake ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Other make</p>
-                  <Input
-                    value={manualMakeValue}
-                    onChange={(e) => updateApplianceField(editingIndex, 'make', e.target.value)}
-                    placeholder="Type boiler make"
-                  />
-                </div>
-              ) : null}
               {makeIsKnown ? (
                 <SearchableSelect
                   label="Model"

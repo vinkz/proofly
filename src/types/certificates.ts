@@ -39,6 +39,8 @@ export type PhotoCategory = (typeof PHOTO_CATEGORIES)[number]['key'];
 
 export type JobFieldPayload = Record<string, string | null | undefined>;
 
+export type Cp12SafetyClassification = 'safe' | 'ncs' | 'ar' | 'id';
+
 export type Cp12Appliance = {
   id?: string;
   appliance_type: string;
@@ -67,4 +69,11 @@ export type Cp12Appliance = {
   combustion_notes: string;
   safety_rating: string;
   classification_code: string;
+  safety_classification: Cp12SafetyClassification | '';
+  defect_notes: string;
+  actions_taken: string;
+  actions_required: string;
+  warning_notice_issued: boolean;
+  appliance_disconnected: boolean;
+  danger_do_not_use_attached: boolean;
 };

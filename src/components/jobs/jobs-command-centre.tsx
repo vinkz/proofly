@@ -1,18 +1,16 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 
 import { buildCertificateResumeHref } from '@/lib/certificate-resume';
 import { JobCard } from './job-card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { DeleteJobsMenu } from './delete-jobs-menu';
-import type { JobType } from '@/types/job-records';
+import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 
 export type JobSummary = {
   id: string;
   title: string;
+  client_name?: string | null;
   address?: string | null;
   status?: string | null;
   created_at?: string | null;
@@ -31,15 +29,69 @@ const getJobTimestamp = (job: JobSummary) => {
   return parsed.getTime();
 };
 
-export function JobsCommandCentre({ jobs, showActions = true }: { jobs: JobSummary[]; showActions?: boolean }) {
+const formatSearchDateParts = (value: string | null | undefined) => {
+  if (!value) return [];
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return [value.toLowerCase()];
+  }
+
+  return [
+    value.toLowerCase(),
+    parsed.toISOString().slice(0, 10).toLowerCase(),
+    parsed.toLocaleDateString('en-GB').toLowerCase(),
+    parsed.toLocaleDateString('en-US').toLowerCase(),
+    parsed
+      .toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+      .toLowerCase(),
+    parsed
+      .toLocaleDateString('en-GB', {
+        month: 'long',
+        year: 'numeric',
+      })
+      .toLowerCase(),
+  ];
+};
+
+const buildSearchIndex = (job: JobSummary) => {
+  const jobTypeLabel =
+    job.job_type && job.job_type in JOB_TYPE_LABELS
+      ? JOB_TYPE_LABELS[job.job_type as JobType]
+      : job.job_type ?? '';
+
+  return [
+    job.title,
+    job.client_name ?? '',
+    job.address ?? '',
+    job.status ?? '',
+    job.job_type ?? '',
+    jobTypeLabel,
+    ...formatSearchDateParts(job.scheduled_for),
+    ...formatSearchDateParts(job.created_at),
+  ]
+    .join(' ')
+    .toLowerCase();
+};
+
+export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<FilterView>('upcoming');
 
   const filtered = useMemo(() => {
+    const terms = query
+      .toLowerCase()
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
     return jobs
       .filter((job) => {
-        const haystack = `${job.title ?? ''} ${job.address ?? ''}`.toLowerCase();
-        const matchesQuery = haystack.includes(query.toLowerCase());
+        const haystack = buildSearchIndex(job);
+        const matchesQuery = terms.every((term) => haystack.includes(term));
 
         let matchesView = true;
         if (view === 'upcoming') matchesView = job.status !== 'completed';
@@ -69,7 +121,7 @@ export function JobsCommandCentre({ jobs, showActions = true }: { jobs: JobSumma
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search jobs"
+            placeholder="Search by name, address, type, status, or date"
             className="flex-1 rounded-full"
           />
           <div className="flex items-center gap-2">
@@ -87,17 +139,6 @@ export function JobsCommandCentre({ jobs, showActions = true }: { jobs: JobSumma
             ))}
           </div>
         </div>
-        {showActions ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button asChild variant="primary" className="rounded-full px-4 py-2">
-              <Link href="/jobs/new">+ New Job</Link>
-            </Button>
-            <Button asChild variant="secondary" className="rounded-full px-4 py-2">
-              <Link href="/jobs/scan">Scan Job Sheet</Link>
-            </Button>
-            <DeleteJobsMenu jobs={jobs} />
-          </div>
-        ) : null}
       </div>
 
       <div className="grid gap-3">

@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import { listJobs } from '@/server/jobs';
-import { buildCertificateResumeHref, getResumeStepFromRecord } from '@/lib/certificate-resume';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,11 +21,6 @@ type BasicJob = {
 type UpcomingJob = BasicJob & { prepComplete: boolean };
 
 type UpcomingJobGroup = { label: string; jobs: UpcomingJob[] };
-type JobRecordSummary = {
-  job_id: string;
-  updated_at: string;
-  record: Record<string, unknown> | null;
-};
 
 const DAY_IN_MS = 86_400_000;
 const FOLLOW_UP_THRESHOLD_DAYS = 7;
@@ -51,39 +45,11 @@ export default async function DashboardPage() {
 
   const [{ profile }, jobGroups] = await Promise.all([getProfile(), listJobs()]);
   const activeJobs = jobGroups.active as BasicJob[];
+  const completedJobs = jobGroups.completed as BasicJob[];
 
   const now = new Date();
   const awaitingSignatures = activeJobs.filter((job) => job.status === 'awaiting_signatures').length;
   const followUpsDue = activeJobs.filter((job) => ageInDays(job.created_at, now) >= FOLLOW_UP_THRESHOLD_DAYS).length;
-
-  const activeJobIds = activeJobs.map((job) => job.id);
-  let jobRecordRows: JobRecordSummary[] = [];
-  if (activeJobIds.length) {
-    try {
-      const { data, error } = await supabase
-        .from('job_records')
-        .select('job_id, updated_at, record')
-        .in('job_id', activeJobIds);
-      if (error) throw error;
-      jobRecordRows = (data ?? []) as JobRecordSummary[];
-    } catch {
-    }
-  }
-  const jobRecordByJobId = new Map(
-    jobRecordRows.map((row) => [row.job_id, row]),
-  );
-
-  const currentJob =
-    activeJobs.length > 0
-      ? [...activeJobs]
-          .map((job) => {
-            const jobRecord = jobRecordByJobId.get(job.id) ?? null;
-            const resumeStep = getResumeStepFromRecord(jobRecord?.record ?? null);
-            return { job, jobRecord, resumeStep };
-          })
-          .filter((entry) => entry.resumeStep !== null)
-          .sort((a, b) => new Date(b.jobRecord?.updated_at ?? b.job.created_at).getTime() - new Date(a.jobRecord?.updated_at ?? a.job.created_at).getTime())[0] ?? null
-      : null;
 
   const displayName =
     profile?.full_name && profile.full_name.trim().length
@@ -126,55 +92,45 @@ export default async function DashboardPage() {
     { label: 'This week', jobs: upcomingJobs.filter((job) => isLaterThisWeek(job.scheduled_for ?? '', now)) },
     { label: 'Later', jobs: upcomingJobs.filter((job) => isAfterThisWeek(job.scheduled_for ?? '', now)) },
   ].filter((group) => group.jobs.length > 0);
+  const recentPastJobs = [...completedJobs]
+    .sort((a, b) => {
+      const left = new Date(a.scheduled_for ?? a.created_at ?? '').getTime();
+      const right = new Date(b.scheduled_for ?? b.created_at ?? '').getTime();
+      return right - left;
+    })
+    .slice(0, 1);
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8 px-4 pb-16 pt-6 font-sans text-gray-900 md:pt-10">
       <section className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-wide text-gray-500">Overview</p>
-            <h1 className="mt-2 text-2xl font-semibold text-[var(--brand)]">Welcome back, {displayName}</h1>
+            <h1 className="text-2xl font-semibold text-[var(--brand)]">Welcome back, {displayName}</h1>
             <p className="text-sm text-gray-600">Track field activity, client signatures, and certificates in one place.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" asChild className="rounded-full">
-              <Link href="/invoices/new">Create invoice</Link>
+              <Link href="/jobs/new">+ New Job</Link>
             </Button>
             <Button variant="secondary" asChild className="rounded-full">
-              <Link href="/jobs/new">+ New Job</Link>
+              <Link href="/invoices/new">Create invoice</Link>
             </Button>
           </div>
         </div>
-      </section>
-
-      <section className="grid gap-4">
-        {currentJob ? (
-          <CurrentJobTile
-            job={currentJob.job}
-            href={buildCertificateResumeHref({
-              jobId: currentJob.job.id,
-              jobType: currentJob.job.job_type,
-              startStep: currentJob.resumeStep,
-            })}
-          />
-        ) : (
-          <EmptyCurrentJobTile />
-        )}
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
         <Card className="border border-white/10">
           <CardHeader>
             <CardTitle className="text-lg text-muted">Upcoming jobs</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground/70">
-              Scheduled today or later.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {upcomingJobGroups.length ? (
               upcomingJobGroups.map((group) => (
                 <div key={group.label} className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{group.label}</p>
+                  {group.label === 'Later' ? null : (
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{group.label}</p>
+                  )}
                   {group.jobs.map((job) => (
                     <div key={job.id} className="rounded-2xl border border-white/10 bg-white/40 p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -213,21 +169,42 @@ export default async function DashboardPage() {
 
         <Card className="border border-white/10">
           <CardHeader>
-            <CardTitle className="text-lg text-muted">Find jobs fast</CardTitle>
+            <CardTitle className="text-lg text-muted">Past jobs</CardTitle>
             <CardDescription className="text-sm text-muted-foreground/70">
-              Search upcoming flows and past PDFs from one list.
+              Recently completed work and generated PDFs.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-2xl border border-white/10 bg-white/40 p-4">
-              <p className="text-sm font-semibold text-muted">Jobs is now the main archive</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">
-                Use the searchable jobs list to find upcoming work, reopen in-progress flows, or open past certificate PDFs.
-              </p>
-            </div>
-            <Button asChild variant="secondary" className="rounded-full">
-              <Link href="/jobs">Open jobs list</Link>
-            </Button>
+          <CardContent className="space-y-3">
+            {recentPastJobs.length ? (
+              <>
+                {recentPastJobs.map((job) => (
+                  <div key={job.id} className="rounded-2xl border border-white/10 bg-white/40 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-muted">{job.client_name ?? job.title ?? 'Job'}</p>
+                        <p className="text-xs text-muted-foreground/70">{job.address}</p>
+                        <p className="mt-1 text-xs text-muted-foreground/70">
+                          {formatDateTime(job.scheduled_for ?? job.created_at ?? '')}
+                        </p>
+                      </div>
+                      <Badge variant="brand" className="uppercase">
+                        {job.status ?? 'completed'}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button asChild variant="secondary" className="rounded-full">
+                        <Link href={`/jobs/${job.id}/pdf`}>Open PDF</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <Button asChild variant="secondary" className="rounded-full">
+                  <Link href="/jobs">View all jobs</Link>
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground/70">No completed jobs yet.</p>
+            )}
           </CardContent>
         </Card>
       </section>
@@ -251,7 +228,7 @@ export default async function DashboardPage() {
               title="Follow-up visits"
               value={followUpsDue}
               description="Schedule technicians for unresolved findings."
-              href="/documents"
+              href="/jobs"
             />
           </CardContent>
         </Card>
@@ -260,63 +237,8 @@ export default async function DashboardPage() {
   );
 }
 
-function CurrentJobTile({ job, href }: { job: BasicJob; href: string }) {
-  const schedule = job.scheduled_for
-    ? `Scheduled ${formatDateTime(job.scheduled_for)}`
-    : `Opened ${formatDate(job.created_at)}`;
-  return (
-    <div className="rounded-xl border border-white/10 bg-[var(--surface)]/95 p-5 shadow-md backdrop-blur">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Current job</p>
-          <p className="text-lg font-semibold text-muted">{job.title || job.client_name || 'Active job'}</p>
-          <p className="text-sm text-muted-foreground/80">{job.address}</p>
-          <p className="text-xs text-muted-foreground/70">{schedule}</p>
-          <p className="text-[11px] font-semibold uppercase text-muted-foreground/70">
-            Stage: {friendlyStage(job.status)}
-          </p>
-        </div>
-        <Badge variant="brand" className="uppercase">
-          {job.status}
-        </Badge>
-      </div>
-      <div className="mt-4 flex items-center justify-between">
-        <span className="text-xs font-semibold text-muted-foreground/80">Open to continue certificate</span>
-        <Link
-          href={href}
-          className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-[var(--brand)] transition hover:bg-white/10"
-        >
-          Open job
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function EmptyCurrentJobTile() {
-  return (
-    <div className="flex flex-col justify-between rounded-xl border border-dashed border-white/20 bg-white/40 p-5 text-sm shadow-inner backdrop-blur">
-      <div className="space-y-1">
-        <p className="text-xs uppercase tracking-wide text-gray-500">Current job</p>
-        <p className="text-lg font-semibold text-muted">No active job</p>
-        <p className="text-sm text-muted-foreground/70">Start a job to track live status here.</p>
-      </div>
-      <Button asChild className="mt-4 w-fit rounded-full bg-[var(--accent)] px-4 py-2 text-white">
-        <Link href="/jobs/new/client">Create job</Link>
-      </Button>
-    </div>
-  );
-}
-
 function ageInDays(dateString: string, reference: Date) {
   return Math.floor((reference.getTime() - new Date(dateString).getTime()) / DAY_IN_MS);
-}
-
-function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
 }
 
 function formatDateTime(dateString: string) {
@@ -390,23 +312,6 @@ function getUpcomingJobActionLabel(job: UpcomingJob) {
     return 'Start';
   }
   return 'Open';
-}
-
-function friendlyStage(status: string | null | undefined) {
-  switch (status) {
-    case 'draft':
-      return 'Drafting';
-    case 'active':
-      return 'Inspection in progress';
-    case 'awaiting_signatures':
-      return 'Awaiting signatures';
-    case 'awaiting_report':
-      return 'Generating report';
-    case 'completed':
-      return 'Completed';
-    default:
-      return 'Pending';
-  }
 }
 
 function MilestoneItem({

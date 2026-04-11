@@ -6,13 +6,12 @@ const asString = (value: unknown) => (typeof value === 'string' ? value : null);
 
 export function JobsListSection({
   jobs,
-  showActions = false,
 }: {
   jobs: Array<Record<string, unknown>>;
-  showActions?: boolean;
 }) {
   const mapped: JobSummary[] = jobs.map((job) => {
     const id = typeof job.id === 'string' ? job.id : '';
+    const client_name = asString(job.client_name);
     const title = asString(job.title) ?? asString(job.client_name) ?? 'Untitled job';
     const address = asString(job.address) ?? asString(job.client_address);
     const status = asString(job.status) ?? 'draft';
@@ -24,6 +23,7 @@ export function JobsListSection({
     return {
       id,
       title,
+      client_name,
       address,
       status,
       created_at,
@@ -33,5 +33,5 @@ export function JobsListSection({
     };
   });
 
-  return <JobsCommandCentre jobs={mapped} showActions={showActions} />;
+  return <JobsCommandCentre jobs={mapped} />;
 }

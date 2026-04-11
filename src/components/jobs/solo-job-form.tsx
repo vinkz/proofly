@@ -785,9 +785,6 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
       <Card className="border border-white/10">
-        <CardHeader>
-          <CardTitle className="text-lg text-muted">Job type</CardTitle>
-        </CardHeader>
         <CardContent className="space-y-4">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Job type</label>
           <Select

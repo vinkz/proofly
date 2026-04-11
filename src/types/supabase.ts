@@ -408,7 +408,10 @@ export type Database = {
           engineer_signature_path: string | null
           id: string
           notes: string | null
+          parent_job_id: string | null
           scheduled_for: string | null
+          source_appliance_id: string | null
+          source_appliance_key: string | null
           status: string | null
           technician_name: string | null
           template_id: string | null
@@ -428,7 +431,10 @@ export type Database = {
           engineer_signature_path?: string | null
           id?: string
           notes?: string | null
+          parent_job_id?: string | null
           scheduled_for?: string | null
+          source_appliance_id?: string | null
+          source_appliance_key?: string | null
           status?: string | null
           technician_name?: string | null
           template_id?: string | null
@@ -448,7 +454,10 @@ export type Database = {
           engineer_signature_path?: string | null
           id?: string
           notes?: string | null
+          parent_job_id?: string | null
           scheduled_for?: string | null
+          source_appliance_id?: string | null
+          source_appliance_key?: string | null
           status?: string | null
           technician_name?: string | null
           template_id?: string | null

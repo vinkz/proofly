@@ -146,6 +146,9 @@ export type Database = {
         Row: {
           appliance_type: string | null
           appliance_serviced: string | null
+          appliance_disconnected: boolean | null
+          actions_required: string | null
+          actions_taken: string | null
           classification_code: string | null
           co_reading_high: string | null
           co_reading_low: string | null
@@ -167,16 +170,23 @@ export type Database = {
           low_ratio: string | null
           make_model: string | null
           operating_pressure: string | null
+          danger_do_not_use_attached: boolean | null
+          defect_notes: string | null
+          safety_classification: string | null
           safety_devices_correct: string | null
           safety_rating: string | null
           stability_test: string | null
           user_id: string | null
           ventilation_provision: string | null
           ventilation_satisfactory: string | null
+          warning_notice_issued: boolean | null
         }
         Insert: {
           appliance_type?: string | null
           appliance_serviced?: string | null
+          appliance_disconnected?: boolean | null
+          actions_required?: string | null
+          actions_taken?: string | null
           classification_code?: string | null
           co_reading_high?: string | null
           co_reading_low?: string | null
@@ -198,16 +208,23 @@ export type Database = {
           low_ratio?: string | null
           make_model?: string | null
           operating_pressure?: string | null
+          danger_do_not_use_attached?: boolean | null
+          defect_notes?: string | null
+          safety_classification?: string | null
           safety_devices_correct?: string | null
           safety_rating?: string | null
           stability_test?: string | null
           user_id?: string | null
           ventilation_provision?: string | null
           ventilation_satisfactory?: string | null
+          warning_notice_issued?: boolean | null
         }
         Update: {
           appliance_type?: string | null
           appliance_serviced?: string | null
+          appliance_disconnected?: boolean | null
+          actions_required?: string | null
+          actions_taken?: string | null
           classification_code?: string | null
           co_reading_high?: string | null
           co_reading_low?: string | null
@@ -229,12 +246,16 @@ export type Database = {
           low_ratio?: string | null
           make_model?: string | null
           operating_pressure?: string | null
+          danger_do_not_use_attached?: boolean | null
+          defect_notes?: string | null
+          safety_classification?: string | null
           safety_devices_correct?: string | null
           safety_rating?: string | null
           stability_test?: string | null
           user_id?: string | null
           ventilation_provision?: string | null
           ventilation_satisfactory?: string | null
+          warning_notice_issued?: boolean | null
         }
         Relationships: [
           {
@@ -480,7 +501,10 @@ export type Database = {
           id: string
           job_type: string | null
           notes: string | null
+          parent_job_id: string | null
           scheduled_for: string | null
+          source_appliance_id: string | null
+          source_appliance_key: string | null
           status: string | null
           technician_name: string | null
           template_id: string | null
@@ -501,7 +525,10 @@ export type Database = {
           id?: string
           job_type?: string | null
           notes?: string | null
+          parent_job_id?: string | null
           scheduled_for?: string | null
+          source_appliance_id?: string | null
+          source_appliance_key?: string | null
           status?: string | null
           technician_name?: string | null
           template_id?: string | null
@@ -522,7 +549,10 @@ export type Database = {
           id?: string
           job_type?: string | null
           notes?: string | null
+          parent_job_id?: string | null
           scheduled_for?: string | null
+          source_appliance_id?: string | null
+          source_appliance_key?: string | null
           status?: string | null
           technician_name?: string | null
           template_id?: string | null
