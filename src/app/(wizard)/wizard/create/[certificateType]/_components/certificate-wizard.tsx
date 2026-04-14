@@ -18,6 +18,7 @@ import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { type CertificateType, type Cp12Appliance, type Cp12SafetyClassification, type PhotoCategory } from '@/types/certificates';
 import {
+  createCp12RemoteSignatureRequest,
   saveCp12JobInfo,
   uploadJobPhoto,
   updateField,
@@ -30,7 +31,6 @@ import { getLatestApplianceDefaultsForJob } from '@/server/history';
 import { tryUpdateJobRecord } from '@/server/jobRecords';
 import {
   CP12_FLUE_TYPES,
-  CP12_VENTILATION,
   CP12_DEMO_APPLIANCE,
   CP12_DEMO_INFO,
   CP12_EVIDENCE_CONFIG,
@@ -416,7 +416,13 @@ export function CertificateWizard({
   });
   const [completionDate, setCompletionDate] = useState(resolvedInitialInfo.completion_date ?? new Date().toISOString().slice(0, 10));
   const [engineerSignature, setEngineerSignature] = useState(resolvedInitialInfo.engineer_signature ?? '');
+  const [engineerSignaturePath, setEngineerSignaturePath] = useState(resolvedInitialInfo.engineer_signature_path ?? '');
   const [customerSignature, setCustomerSignature] = useState(resolvedInitialInfo.customer_signature ?? '');
+  const [remoteSignatureLink, setRemoteSignatureLink] = useState(
+    resolvedInitialInfo.cp12_remote_signature_token
+      ? `/sign/cp12/${resolvedInitialInfo.cp12_remote_signature_token}`
+      : '',
+  );
   const prefillAppliedRef = useRef(false);
   const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prevApplianceCountRef = useRef(appliances.length);
@@ -1010,6 +1016,72 @@ export function CertificateWizard({
     });
   };
 
+  const persistCp12IssueState = async () => {
+    if (!isCp12) return;
+
+    const engineerName = resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '';
+    const gasSafeNumber = resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '';
+    const companyName = resolvedInitialInfo.company_name || CP12_DEMO_INFO.company_name || '';
+    const companyAddress = resolvedInitialInfo.company_address || CP12_DEMO_INFO.company_address || '';
+    const companyPostcode = resolvedInitialInfo.company_postcode || CP12_DEMO_INFO.company_postcode || '';
+    const companyPhone = resolvedInitialInfo.company_phone || CP12_DEMO_INFO.company_phone || '';
+
+    const data = {
+      ...info,
+      inspection_date: info.inspection_date || completionDate,
+      landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
+    };
+    const jobPayload = {
+      ...data,
+      engineer_name: engineerName,
+      gas_safe_number: gasSafeNumber,
+      company_name: companyName,
+      company_address: companyAddress,
+      company_postcode: companyPostcode,
+      company_phone: companyPhone,
+      job_tel: jobAddress.job_tel || info.customer_phone || '',
+    };
+    await saveCp12JobInfo({ jobId, data: jobPayload });
+    setInfo(data);
+    await saveCp12Appliances({ jobId, appliances, defects });
+    const cp12SafetyFieldsPayload = {
+      emergency_control_accessible: evidenceFields.emergency_control_accessible ?? '',
+      gas_tightness_satisfactory: evidenceFields.gas_tightness_satisfactory ?? '',
+      pipework_visual_satisfactory: evidenceFields.pipework_visual_satisfactory ?? '',
+      equipotential_bonding_satisfactory: evidenceFields.equipotential_bonding_satisfactory ?? '',
+      next_inspection_due: evidenceFields.next_inspection_due ?? '',
+    };
+    await saveJobFields({ jobId, fields: cp12SafetyFieldsPayload });
+    await updateField({ jobId, key: 'completion_date', value: completionDate });
+  };
+
+  const validateCurrentCp12 = (options: { requireCustomerSignature?: boolean } = {}) => {
+    if (!isCp12) return [];
+    const requireCustomerSignature = options.requireCustomerSignature ?? true;
+    const normalizedInfo = {
+      ...info,
+      inspection_date: info.inspection_date || completionDate,
+      landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
+    };
+    return validateCp12AgainstSpec(
+      normalizedInfo,
+      appliances,
+      defects,
+      engineerSignature,
+      requireCustomerSignature ? customerSignature : '',
+      {
+        engineerName: resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '',
+        gasSafeNumber: resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '',
+        engineerIdCard: resolvedInitialInfo.engineer_id_card_number || '',
+        companyName: resolvedInitialInfo.company_name || CP12_DEMO_INFO.company_name || '',
+        companyAddress: resolvedInitialInfo.company_address || CP12_DEMO_INFO.company_address || '',
+        companyPostcode: resolvedInitialInfo.company_postcode || CP12_DEMO_INFO.company_postcode || '',
+        companyPhone: resolvedInitialInfo.company_phone || CP12_DEMO_INFO.company_phone || '',
+      },
+      { requireCustomerSignature },
+    );
+  };
+
   const handleGenerate = () => {
     startTransition(async () => {
       let targetJobId = jobId;
@@ -1024,66 +1096,10 @@ export function CertificateWizard({
           return;
         }
         if (isCp12) {
-          const engineerName = resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '';
-          const gasSafeNumber = resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '';
-          const companyName = resolvedInitialInfo.company_name || CP12_DEMO_INFO.company_name || '';
-          const companyAddress = resolvedInitialInfo.company_address || CP12_DEMO_INFO.company_address || '';
-          const companyPostcode = resolvedInitialInfo.company_postcode || CP12_DEMO_INFO.company_postcode || '';
-          const companyPhone = resolvedInitialInfo.company_phone || CP12_DEMO_INFO.company_phone || '';
-
-          const data = {
-            ...info,
-            inspection_date: info.inspection_date || completionDate,
-            landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
-          };
-          const jobPayload = {
-            ...data,
-            engineer_name: engineerName,
-            gas_safe_number: gasSafeNumber,
-            company_name: companyName,
-            company_address: companyAddress,
-            company_postcode: companyPostcode,
-            company_phone: companyPhone,
-            job_tel: jobAddress.job_tel || info.customer_phone || '',
-          };
-          await saveCp12JobInfo({ jobId, data: jobPayload });
-          setInfo(data);
-          await saveCp12Appliances({ jobId, appliances, defects });
-          const cp12SafetyFieldsPayload = {
-            emergency_control_accessible: evidenceFields.emergency_control_accessible ?? '',
-            gas_tightness_satisfactory: evidenceFields.gas_tightness_satisfactory ?? '',
-            pipework_visual_satisfactory: evidenceFields.pipework_visual_satisfactory ?? '',
-            equipotential_bonding_satisfactory: evidenceFields.equipotential_bonding_satisfactory ?? '',
-            next_inspection_due: evidenceFields.next_inspection_due ?? '',
-          };
-          console.log('CP12 issue submit safety payload', {
-            jobId,
-            cp12SafetyFieldsPayload,
-          });
-          await saveJobFields({ jobId, fields: cp12SafetyFieldsPayload });
+          await persistCp12IssueState();
         }
         if (isCp12) {
-          const normalizedInfo = {
-            ...info,
-            inspection_date: info.inspection_date || completionDate,
-            landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
-          };
-          const errors = validateCp12AgainstSpec(
-            normalizedInfo,
-            appliances,
-            defects,
-            engineerSignature,
-            customerSignature,
-            {
-              engineerName: resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '',
-              gasSafeNumber: resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '',
-              engineerIdCard: resolvedInitialInfo.engineer_id_card_number || '',
-              companyName: resolvedInitialInfo.company_name || CP12_DEMO_INFO.company_name || '',
-              companyAddress: resolvedInitialInfo.company_address || CP12_DEMO_INFO.company_address || '',
-              companyPostcode: resolvedInitialInfo.company_postcode || CP12_DEMO_INFO.company_postcode || '',
-              companyPhone: resolvedInitialInfo.company_phone || CP12_DEMO_INFO.company_phone || '',
-            },
-          );
+          const errors = validateCurrentCp12();
           if (errors.length) {
             pushToast({
               title: 'CP12 requirements missing',
@@ -1093,13 +1109,13 @@ export function CertificateWizard({
             return;
           }
         }
-        await updateField({ jobId, key: 'completion_date', value: completionDate });
         const result = await generateCertificatePdf({
           jobId,
           certificateType,
           previewOnly: false,
           fields: {
             engineer_signature: engineerSignature,
+            engineer_signature_path: engineerSignaturePath,
             customer_signature: customerSignature,
             completion_date: completionDate,
             next_inspection_due: evidenceFields.next_inspection_due ?? '',
@@ -1144,6 +1160,55 @@ export function CertificateWizard({
         });
       } finally {
         router.push(`/jobs/${targetJobId}/pdf?certificateType=${certificateType}`);
+      }
+    });
+  };
+
+  const handleCreateRemoteSignatureLink = () => {
+    startTransition(async () => {
+      try {
+        if (isCp12) {
+          await persistCp12IssueState();
+          const errors = validateCurrentCp12({ requireCustomerSignature: false });
+          if (errors.length) {
+            pushToast({
+              title: 'CP12 requirements missing',
+              description: errors.join('; '),
+              variant: 'error',
+            });
+            return;
+          }
+        }
+
+        const result = await createCp12RemoteSignatureRequest({
+          jobId,
+          fields: {
+            engineer_signature: engineerSignature,
+            engineer_signature_path: engineerSignaturePath || undefined,
+            completion_date: completionDate,
+            next_inspection_due: evidenceFields.next_inspection_due ?? '',
+          },
+        });
+        const absoluteUrl =
+          result.shareUrl.startsWith('http') || typeof window === 'undefined'
+            ? result.shareUrl
+            : new URL(result.shareUrl, window.location.origin).toString();
+        setRemoteSignatureLink(absoluteUrl);
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(absoluteUrl);
+        }
+        clearDraft();
+        pushToast({
+          title: 'Remote signature link created',
+          description: 'The link has been copied to your clipboard.',
+          variant: 'success',
+        });
+      } catch (error) {
+        pushToast({
+          title: 'Could not create signature link',
+          description: error instanceof Error ? error.message : 'Try again.',
+          variant: 'error',
+        });
       }
     });
   };
@@ -1812,20 +1877,6 @@ export function CertificateWizard({
             applyExtendedDefaults={false}
             inlineEditor
           />
-          <div className="mt-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Flue & ventilation</p>
-            {appliances.map((appliance, index) => (
-              <div key={`flue-${index}`} className="grid gap-2 sm:grid-cols-2 rounded-2xl border border-white/30 bg-white/70 p-3">
-                <SearchableSelect
-                  label={`Appliance ${index + 1} ventilation provision`}
-                  value={appliance.ventilation_provision ?? ''}
-                  options={[...CP12_VENTILATION]}
-                  placeholder="Select or type"
-                  onChange={(val) => setApplianceField(index, 'ventilation_provision', val)}
-                />
-              </div>
-            ))}
-          </div>
           <div className="mt-3 flex flex-col items-end gap-1">
             <Button
               type="button"
@@ -2362,8 +2413,9 @@ export function CertificateWizard({
             data.append('file', file);
             startTransition(async () => {
               try {
-                const { url } = await uploadSignature(data);
+                const { url, path } = await uploadSignature(data);
                 setEngineerSignature(url);
+                setEngineerSignaturePath(path);
                 pushToast({ title: 'Engineer signature saved', variant: 'success' });
               } catch (error) {
                 pushToast({
@@ -2375,6 +2427,39 @@ export function CertificateWizard({
             });
           }}
         />
+        {remoteSignatureLink ? (
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-emerald-900">Remote landlord signature link ready</p>
+            <p className="mt-1 text-xs text-emerald-800/80">
+              Share this link with the landlord or responsible person to review and sign the CP12 remotely.
+            </p>
+            <div className="mt-3 rounded-2xl border border-emerald-200 bg-white/90 px-3 py-2 text-xs text-emerald-950">
+              {remoteSignatureLink}
+            </div>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={async () => {
+                  if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(remoteSignatureLink);
+                    pushToast({ title: 'Signature link copied', variant: 'success' });
+                  }
+                }}
+              >
+                Copy link
+              </Button>
+              <Link
+                href={remoteSignatureLink}
+                target="_blank"
+                className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-medium text-emerald-900 ring-1 ring-emerald-200"
+              >
+                Open signature page
+              </Link>
+            </div>
+          </div>
+        ) : null}
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
           <p className="text-sm font-semibold text-muted">Completion</p>
           <Input
@@ -2410,6 +2495,15 @@ export function CertificateWizard({
       <div id="cp12-step4-footer-actions" className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
         <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
           Edit before send
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          disabled={isPending}
+          onClick={handleCreateRemoteSignatureLink}
+        >
+          {isPending ? 'Preparing link…' : 'Send to landlord for signature'}
         </Button>
         <Button
           className="rounded-full bg-[var(--action)] px-6 text-white"
@@ -2450,7 +2544,9 @@ function validateCp12AgainstSpec(
     companyPostcode?: string;
     companyPhone?: string;
   },
+  options: { requireCustomerSignature?: boolean } = {},
 ) {
+  const requireCustomerSignature = options.requireCustomerSignature ?? true;
   const errors: string[] = [];
   CP12_REQUIRED_FIELDS.forEach((key) => {
     if (!hasValue(info[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
@@ -2525,6 +2621,6 @@ function validateCp12AgainstSpec(
     }
   });
   if (!hasValue(engineerSignature)) errors.push('Engineer signature is required');
-  if (!hasValue(customerSignature)) errors.push('Customer signature is required');
+  if (requireCustomerSignature && !hasValue(customerSignature)) errors.push('Customer signature is required');
   return errors;
 }

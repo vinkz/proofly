@@ -1,7 +1,10 @@
 import { Card } from '@/components/ui/card';
 import { SoloJobForm, type SavedPropertyOption } from '@/components/jobs/solo-job-form';
+import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
+import { getMissingOnboardingFields, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { listClients } from '@/server/clients';
+import { getProfile } from '@/server/profile';
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
@@ -17,6 +20,11 @@ const splitAddressParts = (value: string | null | undefined) =>
     .filter(Boolean);
 
 export default async function NewJobPage() {
+  const { profile } = await getProfile();
+  if (!isOnboardingProfileComplete(profile)) {
+    return <ProfileRequiredCard title="Finish your profile before creating a job" missingFields={getMissingOnboardingFields(profile)} />;
+  }
+
   const clients = await listClients();
   const supabase = await supabaseServerReadOnly();
 

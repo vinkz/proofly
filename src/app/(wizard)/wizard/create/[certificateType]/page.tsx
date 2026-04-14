@@ -3,8 +3,11 @@ import { notFound, redirect } from 'next/navigation';
 
 import { createJob, getCertificateWizardState } from '@/server/certificates';
 import { listClients } from '@/server/clients';
+import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
 import { CERTIFICATE_TYPES, CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import type { Database } from '@/lib/database.types';
+import { getMissingOnboardingFields, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
+import { getProfile } from '@/server/profile';
 import type { InitialJobContext } from './_components/initial-job-context';
 import { CertificateWizard } from './_components/certificate-wizard';
 import { BoilerServiceWizard } from './_components/boiler-service-wizard';
@@ -60,6 +63,16 @@ export default async function CertificateWizardPage({
   const normalizedType = certificateType === 'boiler_service' ? 'gas_service' : certificateType;
   if (!CERTIFICATE_TYPES.includes(normalizedType as CertificateType)) {
     notFound();
+  }
+
+  const { profile } = await getProfile();
+  if (!isOnboardingProfileComplete(profile)) {
+    return (
+      <ProfileRequiredCard
+        title={`Finish your profile before starting ${CERTIFICATE_LABELS[normalizedType as CertificateType] ?? 'this certificate'}`}
+        missingFields={getMissingOnboardingFields(profile)}
+      />
+    );
   }
 
   const clientId =

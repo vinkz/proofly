@@ -107,17 +107,10 @@ type FieldConfig = {
 type FormFieldName = string | string[] | null;
 
 const GAS_SERVICE_TEMPLATE_REL_PATH = 'src/assets/templates/gas-service-template.pdf';
-const CERTNOW_LOGO_REL_PATH = 'src/app/assets/branding/certnow-logo.png';
 
 async function loadGasServiceTemplateBytes(): Promise<Uint8Array> {
   const templatePath = path.join(process.cwd(), GAS_SERVICE_TEMPLATE_REL_PATH);
   const file = await fs.readFile(templatePath);
-  return new Uint8Array(file);
-}
-
-async function loadDefaultLogoBytes(): Promise<Uint8Array> {
-  const logoPath = path.join(process.cwd(), CERTNOW_LOGO_REL_PATH);
-  const file = await fs.readFile(logoPath);
   return new Uint8Array(file);
 }
 
@@ -269,6 +262,27 @@ function getFormFieldNames(form: ReturnType<PDFDocument['getForm']>) {
 function normalizeText(value: string | undefined) {
   if (value === undefined || value === null) return '';
   return String(value).trim();
+}
+
+function drawBrandWordmark(page: PDFPage, fonts: { regular: PDFFont; bold: PDFFont }, pageHeight: number) {
+  const x = 30;
+  const baselineY = pageHeight - 34;
+
+  page.drawText('certnow', {
+    x,
+    y: baselineY,
+    size: 20,
+    font: fonts.bold,
+    color: rgb(0.07, 0.09, 0.13),
+  });
+
+  page.drawText('Field compliance', {
+    x: x + 60,
+    y: baselineY + 4,
+    size: 6.5,
+    font: fonts.regular,
+    color: rgb(0.45, 0.49, 0.56),
+  });
 }
 
 async function fetchAssetBytes(url: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
@@ -492,7 +506,7 @@ function getGasFieldCoords(height: number): Partial<Record<keyof GasServiceField
 }
 
 export async function renderGasServicePdf(input: RenderGasServiceInput): Promise<Uint8Array> {
-  const [templateBytes, defaultLogoBytes] = await Promise.all([loadGasServiceTemplateBytes(), loadDefaultLogoBytes()]);
+  const templateBytes = await loadGasServiceTemplateBytes();
 
   const templateDoc = await PDFDocument.load(templateBytes);
   const pdfDoc = await PDFDocument.load(templateBytes);
@@ -500,28 +514,13 @@ export async function renderGasServicePdf(input: RenderGasServiceInput): Promise
   const formFieldNames = getFormFieldNames(form);
   const filledFields = new Set<string>();
 
-  const logoBytes = input.companyLogoBytes ?? defaultLogoBytes;
-  const logoImage = await pdfDoc.embedPng(logoBytes);
-
   const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fonts = { regular: regularFont, bold: boldFont };
 
   const [page] = pdfDoc.getPages();
   const { height } = page.getSize();
-
-  const desiredLogoWidth = 110;
-  const logoAspect = logoImage.height / logoImage.width;
-  const desiredLogoHeight = desiredLogoWidth * logoAspect;
-  const logoX = 30;
-  const logoY = height - desiredLogoHeight - 20;
-
-  page.drawImage(logoImage, {
-    x: logoX,
-    y: logoY,
-    width: desiredLogoWidth,
-    height: desiredLogoHeight,
-  });
+  drawBrandWordmark(page, fonts, height);
 
   const fields: GasServiceFieldMap = {
     ...input.fields,

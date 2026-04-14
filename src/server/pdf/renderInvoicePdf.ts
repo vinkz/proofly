@@ -3,7 +3,14 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 type InvoiceProfile = {
+  bank_account_name?: string | null;
+  bank_account_number?: string | null;
+  bank_name?: string | null;
+  bank_sort_code?: string | null;
+  full_name?: string | null;
   company_name?: string | null;
+  company_address?: string | null;
+  company_phone?: string | null;
   default_engineer_name?: string | null;
   default_engineer_id?: string | null;
   gas_safe_number?: string | null;
@@ -53,6 +60,31 @@ const formatDate = (value?: string | null) => {
   });
 };
 
+const formatMoney = (value: number, currency: string) => `${currency} ${value.toFixed(2)}`;
+
+const splitAddressParts = (value?: string | null) =>
+  String(value ?? '')
+    .split(/[\r\n,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+const buildPaymentLines = (profile: InvoiceProfile, invoiceNumber: string) => {
+  const payableTo = profile.bank_account_name ?? profile.company_name ?? profile.full_name ?? null;
+  const lines = [
+    payableTo ? `Payable to: ${payableTo}` : null,
+    profile.bank_name ? `Bank: ${profile.bank_name}` : null,
+    profile.bank_sort_code ? `Sort code: ${profile.bank_sort_code}` : null,
+    profile.bank_account_number ? `Account number: ${profile.bank_account_number}` : null,
+    `Reference: ${invoiceNumber}`,
+  ].filter((line): line is string => Boolean(line));
+
+  if (lines.length > 1) {
+    return lines;
+  }
+
+  return ['Bank transfer details can be added in Settings.', `Reference: ${invoiceNumber}`];
+};
+
 export async function renderInvoicePdf(input: InvoiceInput): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -81,9 +113,17 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Uint8Array>
     y -= 18;
   };
 
-  const headerName = input.profile.company_name ?? 'Invoice';
+  const headerName = input.profile.company_name ?? input.profile.full_name ?? 'Invoice';
   text(headerName, margin, y, 18, true);
   y -= 22;
+  splitAddressParts(input.profile.company_address).forEach((line) => {
+    text(line, margin, y, 10);
+    y -= 14;
+  });
+  if (input.profile.company_phone) {
+    text(`Tel: ${input.profile.company_phone}`, margin, y, 10);
+    y -= 14;
+  }
   if (input.profile.default_engineer_name) {
     text(`Engineer: ${input.profile.default_engineer_name}`, margin, y, 10);
     y -= 14;
@@ -111,13 +151,13 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Uint8Array>
   y -= 10;
   const clientBlockY = y - 6;
   text('Bill to', margin, clientBlockY, 10, true);
-  const clientLines = [
-    input.client.name ?? 'Client',
-    input.client.address ?? '',
-    input.job.address ?? '',
-    input.client.email ?? '',
-    input.client.phone ?? '',
-  ].filter((value) => value.trim().length);
+  const clientLines = [input.client.name ?? 'Client'];
+  const clientAddress = splitAddressParts(input.client.address).join(', ');
+  const jobAddress = splitAddressParts(input.job.address).join(', ');
+  if (clientAddress) clientLines.push(clientAddress);
+  if (jobAddress && jobAddress !== clientAddress) clientLines.push(jobAddress);
+  if (input.client.email?.trim()) clientLines.push(input.client.email.trim());
+  if (input.client.phone?.trim()) clientLines.push(input.client.phone.trim());
   let clientY = clientBlockY - 14;
   clientLines.forEach((line) => {
     text(line, margin, clientY, 10);
@@ -139,8 +179,8 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Uint8Array>
     const lineTotal = item.quantity * item.unit_price;
     text(item.description, margin, rowY, 10);
     text(item.quantity.toString(), 340, rowY, 10);
-    text(item.unit_price.toFixed(2), 390, rowY, 10);
-    text(lineTotal.toFixed(2), 460, rowY, 10);
+    text(formatMoney(item.unit_price, input.currency), 390, rowY, 10);
+    text(formatMoney(lineTotal, input.currency), 460, rowY, 10);
   };
 
   const rowHeight = 18;
@@ -164,15 +204,33 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Uint8Array>
   const total = subtotal + vat;
 
   const totalsY = Math.max(tableY - 8, 120);
-  text(`Subtotal: ${subtotal.toFixed(2)} ${input.currency}`, rightX, totalsY, 10);
-  text(`VAT (${(input.vat_rate * 100).toFixed(0)}%): ${vat.toFixed(2)} ${input.currency}`, rightX, totalsY - 14, 10);
-  text(`Total: ${total.toFixed(2)} ${input.currency}`, rightX, totalsY - 30, 12, true);
+  page.drawRectangle({
+    x: rightX - 12,
+    y: totalsY - 42,
+    width: 192,
+    height: 58,
+    borderColor: rgb(0.82, 0.84, 0.87),
+    borderWidth: 1,
+  });
+  text(`Subtotal`, rightX, totalsY, 10);
+  text(formatMoney(subtotal, input.currency), rightX + 92, totalsY, 10, true);
+  text(`VAT (${(input.vat_rate * 100).toFixed(0)}%)`, rightX, totalsY - 16, 10);
+  text(formatMoney(vat, input.currency), rightX + 92, totalsY - 16, 10, true);
+  text(`Total`, rightX, totalsY - 34, 12, true);
+  text(formatMoney(total, input.currency), rightX + 92, totalsY - 34, 12, true);
+
+  const paymentDetailsY = totalsY - 84;
+  text('Payment details', margin, paymentDetailsY, 10, true);
+  const paymentLines = buildPaymentLines(input.profile, input.invoice_number);
+  paymentLines.forEach((line, index) => {
+    text(line, margin, paymentDetailsY - 14 - index * 12, 10);
+  });
 
   if (input.notes && input.notes.trim()) {
-    text('Notes', margin, totalsY - 50, 10, true);
+    text('Notes', margin, paymentDetailsY - 62, 10, true);
     const noteLines = input.notes.split('\n').slice(0, 6);
     noteLines.forEach((line, idx) => {
-      text(line, margin, totalsY - 64 - idx * 12, 10);
+      text(line, margin, paymentDetailsY - 76 - idx * 12, 10);
     });
   }
 

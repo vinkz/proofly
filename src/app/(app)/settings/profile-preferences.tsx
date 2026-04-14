@@ -1,13 +1,20 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
+import { TRADE_TYPES } from '@/lib/profile-options';
 import { updateProfileBasics } from '@/server/profile';
 
 type ProfilePreferencesProps = {
-  initialName?: string;
+  mode?: 'settings' | 'onboarding';
+  initialFullName?: string;
+  initialDateOfBirth?: string;
+  initialProfession?: string;
+  initialEngineerName?: string;
   initialCompanyName?: string;
   initialCompanyAddressLine1?: string;
   initialCompanyAddressLine2?: string;
@@ -16,10 +23,18 @@ type ProfilePreferencesProps = {
   initialCompanyPhone?: string;
   initialEngineerId?: string;
   initialGasSafeNumber?: string;
+  initialBankName?: string;
+  initialBankAccountName?: string;
+  initialBankSortCode?: string;
+  initialBankAccountNumber?: string;
 };
 
 export function ProfilePreferences({
-  initialName = '',
+  mode = 'settings',
+  initialFullName = '',
+  initialDateOfBirth = '',
+  initialProfession = '',
+  initialEngineerName = '',
   initialCompanyName = '',
   initialCompanyAddressLine1 = '',
   initialCompanyAddressLine2 = '',
@@ -28,8 +43,19 @@ export function ProfilePreferences({
   initialCompanyPhone = '',
   initialEngineerId = '',
   initialGasSafeNumber = '',
+  initialBankName = '',
+  initialBankAccountName = '',
+  initialBankSortCode = '',
+  initialBankAccountNumber = '',
 }: ProfilePreferencesProps) {
-  const [name, setName] = useState(initialName);
+  const router = useRouter();
+  const [fullName, setFullName] = useState(initialFullName);
+  const [dateOfBirth, setDateOfBirth] = useState(initialDateOfBirth);
+  const [profession, setProfession] = useState(initialProfession);
+  const [professionChoice, setProfessionChoice] = useState(
+    initialProfession && TRADE_TYPES.includes(initialProfession as (typeof TRADE_TYPES)[number]) ? initialProfession : initialProfession ? 'Other' : '',
+  );
+  const [engineerName, setEngineerName] = useState(initialEngineerName);
   const [companyName, setCompanyName] = useState(initialCompanyName);
   const [companyAddressLine1, setCompanyAddressLine1] = useState(initialCompanyAddressLine1);
   const [companyAddressLine2, setCompanyAddressLine2] = useState(initialCompanyAddressLine2);
@@ -38,12 +64,19 @@ export function ProfilePreferences({
   const [companyPhone, setCompanyPhone] = useState(initialCompanyPhone);
   const [gasSafeNumber, setGasSafeNumber] = useState(initialGasSafeNumber);
   const [engineerId, setEngineerId] = useState(initialEngineerId);
+  const [bankName, setBankName] = useState(initialBankName);
+  const [bankAccountName, setBankAccountName] = useState(initialBankAccountName);
+  const [bankSortCode, setBankSortCode] = useState(initialBankSortCode);
+  const [bankAccountNumber, setBankAccountNumber] = useState(initialBankAccountNumber);
   const [isPending, startTransition] = useTransition();
   const { pushToast } = useToast();
 
   const handleSave = () => {
     const missing = [
-      { key: 'Name', value: name },
+      { key: 'Full name', value: fullName },
+      { key: 'Date of birth', value: dateOfBirth },
+      { key: 'Profession', value: profession },
+      { key: 'Engineer name', value: engineerName },
       { key: 'Company', value: companyName },
       { key: 'Address line 1', value: companyAddressLine1 },
       { key: 'Postcode', value: companyPostcode },
@@ -63,7 +96,10 @@ export function ProfilePreferences({
     startTransition(async () => {
       try {
         await updateProfileBasics({
-          default_engineer_name: name.trim() || undefined,
+          full_name: fullName.trim() || undefined,
+          date_of_birth: dateOfBirth.trim() || undefined,
+          profession: profession.trim() || undefined,
+          default_engineer_name: engineerName.trim() || undefined,
           company_name: companyName.trim() || undefined,
           company_address: companyAddressLine1.trim() || undefined,
           company_address_line2: companyAddressLine2.trim() || undefined,
@@ -72,11 +108,25 @@ export function ProfilePreferences({
           company_phone: companyPhone.trim() || undefined,
           gas_safe_number: gasSafeNumber.trim() || undefined,
           default_engineer_id: engineerId.trim() || undefined,
+          bank_name: bankName.trim() || undefined,
+          bank_account_name: bankAccountName.trim() || undefined,
+          bank_sort_code: bankSortCode.trim() || undefined,
+          bank_account_number: bankAccountNumber.trim() || undefined,
         });
-        pushToast({ title: 'Settings updated', description: 'Company / installer details saved.', variant: 'success' });
+        pushToast({
+          title: mode === 'onboarding' ? 'Profile completed' : 'Settings updated',
+          description:
+            mode === 'onboarding'
+              ? 'Your account is ready to use.'
+              : 'Company, installer, and invoice payment details saved.',
+          variant: 'success',
+        });
+        if (mode === 'onboarding') {
+          router.push('/dashboard');
+        }
       } catch (error) {
         pushToast({
-          title: 'Unable to save settings',
+          title: mode === 'onboarding' ? 'Unable to complete setup' : 'Unable to save settings',
           description: error instanceof Error ? error.message : 'Please try again.',
           variant: 'error',
         });
@@ -85,7 +135,10 @@ export function ProfilePreferences({
   };
 
   const dirty =
-    name !== initialName ||
+    fullName !== initialFullName ||
+    dateOfBirth !== initialDateOfBirth ||
+    profession !== initialProfession ||
+    engineerName !== initialEngineerName ||
     companyName !== initialCompanyName ||
     companyAddressLine1 !== initialCompanyAddressLine1 ||
     companyAddressLine2 !== initialCompanyAddressLine2 ||
@@ -93,29 +146,96 @@ export function ProfilePreferences({
     companyPostcode !== initialCompanyPostcode ||
     companyPhone !== initialCompanyPhone ||
     gasSafeNumber !== initialGasSafeNumber ||
-    engineerId !== initialEngineerId;
+    engineerId !== initialEngineerId ||
+    bankName !== initialBankName ||
+    bankAccountName !== initialBankAccountName ||
+    bankSortCode !== initialBankSortCode ||
+    bankAccountNumber !== initialBankAccountNumber;
 
   return (
     <section className="rounded-3xl border border-white/20 bg-white/80 p-6 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Account details</p>
-          <h2 className="text-lg font-semibold text-muted">Company / installer</h2>
+          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">
+            {mode === 'onboarding' ? 'Complete profile' : 'Account details'}
+          </p>
+          <h2 className="text-lg font-semibold text-muted">
+            {mode === 'onboarding' ? 'Finish your account setup' : 'Company / installer'}
+          </h2>
           <p className="text-sm text-muted-foreground/70">
-            These values prefill PDF company / installer sections.
+            {mode === 'onboarding'
+              ? 'Save your required profile, company, and engineer details before using the app.'
+              : 'These values prefill PDF company / installer sections.'}
           </p>
         </div>
         <Button onClick={handleSave} disabled={isPending || !dirty}>
-          {isPending ? 'Saving…' : 'Save'}
+          {isPending ? 'Saving…' : mode === 'onboarding' ? 'Complete setup' : 'Save'}
         </Button>
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <label className="block text-sm font-semibold text-muted">
-          Name
+          Full name
           <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Date of birth
+          <input
+            type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+            disabled={isPending}
+          />
+        </label>
+        <label className="block text-sm font-semibold text-muted">
+          Profession
+          <Select
+            value={professionChoice}
+            onChange={(event) => {
+              const value = event.target.value;
+              setProfessionChoice(value);
+              if (value && value !== 'Other') {
+                setProfession(value);
+              } else if (value !== 'Other') {
+                setProfession('');
+              }
+            }}
+            className="mt-2"
+            disabled={isPending}
+          >
+            <option value="">Select profession</option>
+            {TRADE_TYPES.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+            <option value="Other">Other</option>
+          </Select>
+        </label>
+        {professionChoice === 'Other' ? (
+          <label className="block text-sm font-semibold text-muted">
+            Profession (manual)
+            <input
+              value={profession}
+              onChange={(e) => setProfession(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              disabled={isPending}
+            />
+          </label>
+        ) : (
+          <div />
+        )}
+        <label className="block text-sm font-semibold text-muted">
+          Engineer name
+          <input
+            value={engineerName}
+            onChange={(e) => setEngineerName(e.target.value)}
             className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
             disabled={isPending}
           />
@@ -192,6 +312,57 @@ export function ProfilePreferences({
             disabled={isPending}
           />
         </label>
+      </div>
+
+      <div className="mt-8 border-t border-slate-200/70 pt-6">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Invoices</p>
+          <h3 className="text-base font-semibold text-muted">Bank transfer details</h3>
+          <p className="text-sm text-muted-foreground/70">
+            These details appear in the payment section on invoice PDFs.
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="block text-sm font-semibold text-muted">
+            Bank name
+            <input
+              value={bankName}
+              onChange={(e) => setBankName(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              disabled={isPending}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-muted">
+            Account name
+            <input
+              value={bankAccountName}
+              onChange={(e) => setBankAccountName(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              disabled={isPending}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-muted">
+            Sort code
+            <input
+              value={bankSortCode}
+              onChange={(e) => setBankSortCode(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              disabled={isPending}
+              placeholder="12-34-56"
+            />
+          </label>
+          <label className="block text-sm font-semibold text-muted">
+            Account number
+            <input
+              value={bankAccountNumber}
+              onChange={(e) => setBankAccountNumber(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+              disabled={isPending}
+              placeholder="12345678"
+            />
+          </label>
+        </div>
       </div>
     </section>
   );

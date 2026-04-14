@@ -4,7 +4,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { Buffer } from 'node:buffer';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { cookies } from 'next/headers';
@@ -58,6 +58,10 @@ type JobContext = {
 const JOB_FIELDS_TABLE = 'job_fields' as unknown as keyof Database['public']['Tables'];
 const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['public']['Tables'];
 const JOB_PHOTOS_TABLE = 'job_photos' as unknown as keyof Database['public']['Tables'];
+const CP12_REMOTE_SIGNATURE_TOKEN_FIELD = 'cp12_remote_signature_token';
+const CP12_REMOTE_SIGNATURE_CREATED_AT_FIELD = 'cp12_remote_signature_created_at';
+const CP12_REMOTE_SIGNATURE_EXPIRES_AT_FIELD = 'cp12_remote_signature_expires_at';
+const CP12_REMOTE_SIGNATURE_COMPLETED_AT_FIELD = 'cp12_remote_signature_completed_at';
 type JobFieldRow = { field_key: string; value: string | null };
 type CertificateRecord = Pick<
   Database['public']['Tables']['certificates']['Row'],
@@ -1702,6 +1706,14 @@ const CP12_REQUIRED_FIELDS = [
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
 
+function hasSignatureValue(fieldMap: Record<string, unknown>, role: 'engineer' | 'customer') {
+  const keys =
+    role === 'engineer'
+      ? ['engineer_signature_path', 'engineer_signature', 'engineer_signature_url']
+      : ['customer_signature_path', 'customer_signature', 'customer_signature_url'];
+  return keys.some((key) => hasValue(fieldMap[key]));
+}
+
 function resolveGasWarningCustomerPresent(fields: GasWarningNoticeFields | Record<string, unknown>) {
   const explicit = fields.customer_present;
   if (explicit !== undefined && explicit !== null && String(explicit).trim() !== '') {
@@ -1774,7 +1786,12 @@ function validateGasWarningNoticeForIssue(fields: GasWarningNoticeFields) {
 }
 
 // CP12 validation per docs/specs/cp12.md
-function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp12Appliance[]) {
+function validateCp12ForIssue(
+  fieldMap: Record<string, unknown>,
+  appliances: Cp12Appliance[],
+  options: { requireCustomerSignature?: boolean } = {},
+) {
+  const requireCustomerSignature = options.requireCustomerSignature ?? true;
   const errors: string[] = [];
   CP12_REQUIRED_FIELDS.forEach((key) => {
     if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
@@ -1837,10 +1854,71 @@ function validateCp12ForIssue(fieldMap: Record<string, unknown>, appliances: Cp1
     }
   }
 
-  if (!hasValue(fieldMap.engineer_signature)) errors.push('Engineer signature is required');
-  if (!hasValue(fieldMap.customer_signature)) errors.push('Customer signature is required');
+  if (!hasSignatureValue(fieldMap, 'engineer')) errors.push('Engineer signature is required');
+  if (requireCustomerSignature && !hasSignatureValue(fieldMap, 'customer')) {
+    errors.push('Customer signature is required');
+  }
 
   return errors;
+}
+
+function buildRemoteCp12SigningPath(token: string) {
+  return `/sign/cp12/${token}`;
+}
+
+function buildAbsoluteAppUrl(path: string) {
+  const base = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!base) return path;
+  return new URL(path, base.endsWith('/') ? base : `${base}/`).toString();
+}
+
+function getCp12RemoteSignatureExpiryDate(days = 30) {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + days);
+  return expiresAt;
+}
+
+async function resolveCp12RemoteSignatureRequestByToken(
+  sb: SupabaseClient<Database>,
+  token: string,
+) {
+  const { data: tokenRow, error: tokenErr } = await sb
+    .from(JOB_FIELDS_TABLE)
+    .select('job_id, value')
+    .eq('field_key', CP12_REMOTE_SIGNATURE_TOKEN_FIELD)
+    .eq('value', token)
+    .maybeSingle();
+  if (tokenErr) throw new Error(tokenErr.message);
+  const jobId = (tokenRow as { job_id?: string | null } | null)?.job_id ?? null;
+  if (!jobId) return null;
+
+  const { data: rows, error: fieldsErr } = await sb
+    .from(JOB_FIELDS_TABLE)
+    .select('field_key, value')
+    .eq('job_id', jobId);
+  if (fieldsErr) throw new Error(fieldsErr.message);
+  const fieldRows = (rows ?? []) as unknown as JobFieldRow[];
+  const fieldMap = Object.fromEntries(fieldRows.map((row) => [row.field_key, row.value ?? null]));
+  const expiresAt = typeof fieldMap[CP12_REMOTE_SIGNATURE_EXPIRES_AT_FIELD] === 'string'
+    ? String(fieldMap[CP12_REMOTE_SIGNATURE_EXPIRES_AT_FIELD])
+    : '';
+  const completedAt = typeof fieldMap[CP12_REMOTE_SIGNATURE_COMPLETED_AT_FIELD] === 'string'
+    ? String(fieldMap[CP12_REMOTE_SIGNATURE_COMPLETED_AT_FIELD])
+    : '';
+
+  if (!token || token !== fieldMap[CP12_REMOTE_SIGNATURE_TOKEN_FIELD]) {
+    return null;
+  }
+  if (completedAt) {
+    return { jobId, fieldMap, status: 'completed' as const };
+  }
+  if (expiresAt) {
+    const expiryDate = new Date(expiresAt);
+    if (!Number.isNaN(expiryDate.getTime()) && expiryDate.getTime() < Date.now()) {
+      return { jobId, fieldMap, status: 'expired' as const };
+    }
+  }
+  return { jobId, fieldMap, status: 'active' as const };
 }
 
 type Cp12RenderInput = {
@@ -2030,11 +2108,14 @@ export async function uploadSignature(formData: FormData) {
   await persistJobFields(
     sb,
     jobId,
-    [{ job_id: jobId, field_key: `${role}_signature`, value: url }],
+    [
+      { job_id: jobId, field_key: `${role}_signature`, value: url },
+      { job_id: jobId, field_key: `${role}_signature_path`, value: path },
+    ],
     'uploadSignature',
   );
   revalidatePath(`/jobs/${jobId}`);
-  return { url };
+  return { url, path };
 }
 
 const GenerateGeneralWorksPdfSchema = z.object({
@@ -2581,6 +2662,321 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
   return { pdfUrl: signed.signedUrl, jobId: input.jobId };
 }
 
+async function generateCp12CertificateForJob(params: {
+  sb: SupabaseClient<Database>;
+  admin: SupabaseClient<Database>;
+  jobId: string;
+  userId: string;
+  previewOnly: boolean;
+  fieldOverrides?: Record<string, unknown>;
+}) {
+  const { sb, admin, jobId, userId, previewOnly, fieldOverrides = {} } = params;
+  const jobContext = await loadJobContext(sb, jobId, 'generateCp12CertificateForJob');
+  if (jobContext.job.user_id && jobContext.job.user_id !== userId) {
+    throw new Error('RLS mismatch: job owner does not match auth user');
+  }
+
+  const jobCode = await ensureJobCode(sb, jobId, userId, jobContext.job.job_code ?? null);
+  const publicId = buildCertificatePublicId(jobCode, 'cp12');
+  const existingCertificate = await findCertificateRecord(sb, {
+    jobId,
+    certificateType: 'cp12',
+    columns: 'id, job_id, cert_type, created_at',
+  });
+
+  const { data: fields, error: fieldsErr } = await sb
+    .from(JOB_FIELDS_TABLE)
+    .select('field_key, value')
+    .eq('job_id', jobId);
+  if (fieldsErr) throw new Error(fieldsErr.message);
+  const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
+  const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+
+  let appliances: Cp12Appliance[] = [];
+  const appResp = await sb.from(CP12_APPLIANCES_TABLE).select('*').eq('job_id', jobId);
+  if (appResp.error) {
+    if (appResp.error.code !== '42P01') throw new Error(appResp.error.message);
+  } else if (appResp.data) {
+    appliances = appResp.data as unknown as Cp12Appliance[];
+  }
+
+  const mergedFieldMap = {
+    ...fieldMap,
+    ...fieldOverrides,
+  } as Record<string, unknown>;
+
+  const issuedAt = new Date();
+  const customer = resolveJobCustomer(jobContext, {
+    name: typeof mergedFieldMap.customer_name === 'string' ? mergedFieldMap.customer_name : undefined,
+  });
+  const propertyAddress = resolveJobPropertyAddress(jobContext, {
+    line1: typeof mergedFieldMap.property_address === 'string' ? mergedFieldMap.property_address : undefined,
+    postcode: typeof mergedFieldMap.postcode === 'string' ? mergedFieldMap.postcode : undefined,
+    legacy: typeof mergedFieldMap.address === 'string' ? mergedFieldMap.address : undefined,
+  });
+  const validationFieldMap = {
+    ...mergedFieldMap,
+    customer_name: customer.name || mergedFieldMap.customer_name,
+    property_address: propertyAddress.summary || mergedFieldMap.property_address,
+    postcode: propertyAddress.postcode || mergedFieldMap.postcode,
+  };
+  const validationErrors = previewOnly ? [] : validateCp12ForIssue(validationFieldMap, appliances);
+  if (validationErrors.length) {
+    throw new Error(`CP12 validation failed: ${validationErrors.join('; ')}`);
+  }
+
+  const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
+  const splitAddressParts = (value: unknown) =>
+    String(value ?? '')
+      .split(/[\r\n,]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  const extractPostcode = (value: unknown) => {
+    const match = String(value ?? '').toUpperCase().match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/);
+    return match ? match[0].replace(/\s+/g, ' ').trim() : '';
+  };
+  const buildCombustionSummary = (coPpm: string, co2: string, ratio: string, legacy?: string) => {
+    const parts = [coPpm && `${coPpm}ppm`, co2 && `${co2}%`, ratio && ratio].filter(Boolean);
+    if (parts.length) return parts.join(' / ');
+    return legacy ?? '';
+  };
+  const fallbackJobAddressParts = splitAddressParts(
+    mergedFieldMap.property_address ?? mergedFieldMap.address ?? propertyAddress.summary ?? '',
+  );
+  const jobAddressLine1 = toText(mergedFieldMap.job_address_line1 ?? fallbackJobAddressParts[0] ?? '');
+  const jobAddressLine2 = toText(mergedFieldMap.job_address_line2 ?? fallbackJobAddressParts[1] ?? '');
+  const jobAddressTown = toText(
+    mergedFieldMap.job_address_city ?? (fallbackJobAddressParts.length > 2 ? fallbackJobAddressParts.slice(2).join('\n') : ''),
+  );
+  const jobAddressPostcode = pickText(
+    toText(mergedFieldMap.job_postcode ?? ''),
+    toText(mergedFieldMap.property_postcode ?? ''),
+    propertyAddress.postcode,
+    toText(mergedFieldMap.postcode ?? ''),
+  );
+  const jobAddressName = toText(mergedFieldMap.job_address_name ?? mergedFieldMap.property_name ?? '');
+  const jobAddressTel = toText(mergedFieldMap.job_tel ?? '');
+  const fallbackLandlordParts = splitAddressParts(mergedFieldMap.landlord_address ?? customer.address ?? '');
+  const landlordLine1 = toText(mergedFieldMap.landlord_address_line1 ?? fallbackLandlordParts[0] ?? '');
+  const landlordLine2 = toText(
+    mergedFieldMap.landlord_address_line2 ??
+      (fallbackLandlordParts.length > 2 ? fallbackLandlordParts.slice(1, -1).join('\n') : ''),
+  );
+  const landlordCity = toText(
+    mergedFieldMap.landlord_city ??
+      mergedFieldMap.landlord_town ??
+      (fallbackLandlordParts.length > 1 ? fallbackLandlordParts.at(-1) ?? '' : ''),
+  );
+  const landlordPostcode = toText(
+    mergedFieldMap.landlord_postcode ?? extractPostcode(mergedFieldMap.landlord_address ?? ''),
+  );
+  const landlordTel = toText(mergedFieldMap.landlord_tel ?? '');
+  const cp12Fields: Cp12FieldMap = {
+    certNumber: toText(mergedFieldMap.record_id ?? mergedFieldMap.certificate_number ?? publicId),
+    issueDate: toText(mergedFieldMap.inspection_date ?? mergedFieldMap.scheduled_for ?? '') || undefined,
+    nextInspectionDue: toText(mergedFieldMap.next_inspection_due ?? mergedFieldMap.completion_date ?? ''),
+    landlordName: toText(mergedFieldMap.landlord_name ?? customer.name ?? ''),
+    landlordCompany: toText(mergedFieldMap.landlord_company ?? customer.organization ?? ''),
+    landlordAddressLine1: landlordLine1,
+    landlordAddressLine2: landlordLine2,
+    landlordTown: landlordCity,
+    landlordPostcode: landlordPostcode,
+    landlordTel: landlordTel,
+    propertyAddressName: jobAddressName,
+    propertyAddressLine1: jobAddressLine1,
+    propertyAddressLine2: jobAddressLine2,
+    propertyTown: jobAddressTown,
+    propertyPostcode: jobAddressPostcode,
+    propertyTel: jobAddressTel,
+    companyName: toText(mergedFieldMap.company_name ?? ''),
+    companyAddressLine1: toText(mergedFieldMap.company_address ?? ''),
+    companyTown: '',
+    companyPostcode: '',
+    companyPhone: toText(mergedFieldMap.company_phone ?? ''),
+    companyEmail: toText(mergedFieldMap.company_email ?? ''),
+    gasSafeRegistrationNumber: toText(mergedFieldMap.gas_safe_number ?? ''),
+    engineerName: toText(mergedFieldMap.engineer_name ?? ''),
+    engineerIdNumber: toText(mergedFieldMap.engineer_id ?? mergedFieldMap.engineer_id_card_number ?? ''),
+    engineerSignatureText: toText(mergedFieldMap.engineer_name ?? ''),
+    engineerSignatureUrl: toText(
+      mergedFieldMap.engineer_signature_path ??
+        mergedFieldMap.engineer_signature ??
+        mergedFieldMap.engineer_signature_url ??
+        '',
+    ),
+    engineerVisitTime: toText(mergedFieldMap.completion_date ?? ''),
+    responsiblePersonName: toText(customer.name ?? ''),
+    responsiblePersonSignatureText: toText(customer.name ?? ''),
+    responsiblePersonSignatureUrl: toText(
+      mergedFieldMap.customer_signature_path ??
+        mergedFieldMap.customer_signature ??
+        mergedFieldMap.customer_signature_url ??
+        '',
+    ),
+    responsiblePersonAcknowledgementDate: toText(mergedFieldMap.completion_date ?? ''),
+    defectsIdentified: toText(mergedFieldMap.defect_description ?? ''),
+    remedialWorksRequired: toText(mergedFieldMap.remedial_action ?? ''),
+    warningNoticeIssued: toText(mergedFieldMap.warning_notice_issued ?? ''),
+    additionalNotes: toText(mergedFieldMap.comments ?? mergedFieldMap.additional_notes ?? ''),
+    coAlarmFitted: toText(mergedFieldMap.co_alarm_fitted ?? ''),
+    coAlarmTested: toText(mergedFieldMap.co_alarm_tested ?? ''),
+    coAlarmSatisfactory: toText(mergedFieldMap.co_alarm_satisfactory ?? ''),
+    emergencyControlAccessible: toText(
+      mergedFieldMap.emergency_control_accessible ?? mergedFieldMap.emergency_control ?? '',
+    ),
+    gasTightnessSatisfactory: toText(mergedFieldMap.gas_tightness_satisfactory ?? ''),
+    pipeworkVisualSatisfactory: toText(mergedFieldMap.pipework_visual_satisfactory ?? ''),
+    equipotentialBondingSatisfactory: toText(mergedFieldMap.equipotential_bonding_satisfactory ?? ''),
+  };
+
+  const applianceInputs: ApplianceInput[] = (appliances ?? []).map((app) => {
+    const appExtras = app as Cp12Appliance & { appliance_make_model?: string };
+    const highCoPpm = toText(app.high_co_ppm ?? app.co_reading_high ?? '');
+    const highCo2 = toText(app.high_co2 ?? '');
+    const highRatio = toText(app.high_ratio ?? '');
+    const lowCoPpm = toText(app.low_co_ppm ?? app.co_reading_low ?? '');
+    const lowCo2 = toText(app.low_co2 ?? '');
+    const lowRatio = toText(app.low_ratio ?? '');
+    return {
+      description: toText(app.make_model ?? appExtras.appliance_make_model ?? app.appliance_type ?? ''),
+      location: toText(app.location ?? ''),
+      type: toText(app.appliance_type ?? ''),
+      flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
+      operatingPressure: toText(app.operating_pressure ?? ''),
+      heatInput: toText(app.heat_input ?? ''),
+      safetyDevice: toText(app.safety_devices_correct ?? app.stability_test ?? ''),
+      ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
+      flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
+      spillageTest: toText(app.gas_tightness_test ?? ''),
+      applianceSafeToUse: toText(app.safety_rating ?? app.classification_code ?? ''),
+      remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),
+      combustionHighCoPpm: highCoPpm,
+      combustionHighCo2: highCo2,
+      combustionHighRatio: highRatio,
+      combustionLowCoPpm: lowCoPpm,
+      combustionLowCo2: lowCo2,
+      combustionLowRatio: lowRatio,
+      combustionHigh: buildCombustionSummary(highCoPpm, highCo2, highRatio, toText(app.co_reading_ppm ?? '')),
+      combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? '')),
+      combustionNotes: toText(app.combustion_notes ?? ''),
+      applianceServiced: toText(app.appliance_serviced ?? ''),
+      applianceInspected: 'Yes',
+      landlordAppliance: 'Yes',
+    };
+  });
+
+  const pdfBytes = await renderCp12CertificatePdf({
+    fields: cp12Fields,
+    appliances: applianceInputs,
+    issuedAt,
+    recordId: jobId,
+  });
+  const cp12PdfHash8 = createHash('sha256').update(pdfBytes).digest('hex').slice(0, 8);
+  const cp12DebugMode = process.env.CP12_PDF_DEBUG === '1';
+  const appendCacheBust = (url: string, token: string) =>
+    `${url}${url.includes('?') ? '&' : '?'}cb=${encodeURIComponent(token)}`;
+  const pathBase = previewOnly ? 'cp12/previews' : 'cp12';
+  const path = cp12DebugMode
+    ? `${pathBase}/${userId}/${jobId}-${publicId}-debug-${Date.now()}.pdf`
+    : `${pathBase}/${userId}/${jobId}-${previewOnly ? `preview-${Date.now()}-${cp12PdfHash8}` : Date.now()}.pdf`;
+  const upload = await admin.storage
+    .from('certificates')
+    .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', upsert: true });
+  if (upload.error || !upload.data?.path) {
+    throw new Error(upload.error?.message ?? 'Certificate PDF upload failed');
+  }
+
+  if (previewOnly) {
+    const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
+    if (signedErr || !signed?.signedUrl) {
+      throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
+    }
+    return { pdfUrl: appendCacheBust(signed.signedUrl, cp12PdfHash8), preview: true as const, jobId };
+  }
+
+  const baseCertificatePayload: Record<string, unknown> = {
+    job_id: jobId,
+    cert_type: 'cp12',
+    public_id: publicId,
+    user_id: userId,
+  };
+  const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
+  const { error: certErr } = await saveCertificateRecord(admin, {
+    jobId,
+    certificateType: 'cp12',
+    payload: certificatePayload,
+    existingRecord: existingCertificate,
+  });
+  if (certErr) {
+    if (certErr.code === '42703') {
+      const fallbackPayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_url: path };
+      const { error: fallbackErr } = await saveCertificateRecord(admin, {
+        jobId,
+        certificateType: 'cp12',
+        payload: fallbackPayload,
+        existingRecord: existingCertificate,
+      });
+      if (fallbackErr) throw new Error(fallbackErr.message);
+    } else {
+      throw new Error(certErr.message);
+    }
+  }
+
+  const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
+  if (signedErr || !signed?.signedUrl) {
+    throw new Error(signedErr?.message ?? 'Unable to create certificate link');
+  }
+  const finalSignedUrl = appendCacheBust(signed.signedUrl, cp12PdfHash8);
+
+  await sb
+    .from(JOB_FIELDS_TABLE)
+    .upsert({ job_id: jobId, field_key: 'issued_at', value: issuedAt } as Record<string, unknown>, {
+      onConflict: 'job_id,field_key',
+    });
+  await sb
+    .from(JOB_FIELDS_TABLE)
+    .upsert(
+      [
+        { job_id: jobId, field_key: 'record_id', value: publicId },
+        { job_id: jobId, field_key: 'certificate_number', value: publicId },
+      ] as Record<string, unknown>[],
+      { onConflict: 'job_id,field_key' },
+    );
+
+  const { error: completeJobErr } = await admin.from('jobs').update({ status: 'completed' }).eq('id', jobId);
+  if (completeJobErr) {
+    throw new Error(completeJobErr.message);
+  }
+  await ensureCp12FollowUpJob({
+    sb: admin,
+    userId,
+    sourceJobId: jobId,
+    sourceJob: jobContext.job,
+    customer,
+    propertyAddress,
+    fields: mergedFieldMap,
+  });
+  const gasWarningNoticeJobs = await ensureGasWarningNoticeFollowUpJobs({
+    sb: admin,
+    jobCodeClient: sb,
+    userId,
+    sourceJobId: jobId,
+    sourceJob: jobContext.job,
+    customer,
+    propertyAddress,
+    fields: mergedFieldMap,
+    appliances,
+  });
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath('/jobs');
+  revalidatePath('/dashboard');
+  gasWarningNoticeJobs.forEach((job) => {
+    revalidatePath(`/jobs/${job.jobId}`);
+    revalidatePath(`/wizard/create/gas_warning_notice?jobId=${job.jobId}`);
+  });
+  return { pdfUrl: finalSignedUrl, jobId, gasWarningNoticeJobs };
+}
+
 const GeneratePdfSchema = z.object({
   jobId: z.string().uuid(),
   certificateType: z.enum(CERTIFICATE_TYPES),
@@ -2900,6 +3296,55 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     }
     return { pdfUrl, jobId: input.jobId };
   }
+  const admin = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    },
+  );
+
+  return generateCp12CertificateForJob({
+    sb,
+    admin,
+    jobId: input.jobId,
+    userId: user.id,
+    previewOnly,
+    fieldOverrides: (input.fields ?? {}) as Record<string, unknown>,
+  });
+}
+
+const CreateCp12RemoteSignatureRequestSchema = z.object({
+  jobId: z.string().uuid(),
+  fields: z
+    .object({
+      engineer_signature: optionalText.optional(),
+      engineer_signature_path: optionalText.optional(),
+      completion_date: optionalText.optional(),
+      next_inspection_due: optionalText.optional(),
+    })
+    .optional()
+    .default({}),
+});
+
+export async function createCp12RemoteSignatureRequest(
+  payload: z.infer<typeof CreateCp12RemoteSignatureRequestSchema>,
+) {
+  const input = CreateCp12RemoteSignatureRequestSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const jobContext = await loadJobContext(sb, input.jobId, 'createCp12RemoteSignatureRequest');
+  if (jobContext.job.user_id && jobContext.job.user_id !== user.id) {
+    throw new Error('RLS mismatch: job owner does not match auth user');
+  }
 
   const { data: fields, error: fieldsErr } = await sb
     .from(JOB_FIELDS_TABLE)
@@ -2907,7 +3352,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     .eq('job_id', input.jobId);
   if (fieldsErr) throw new Error(fieldsErr.message);
   const fieldRows = (fields ?? []) as unknown as JobFieldRow[];
-  const fieldMap = Object.fromEntries(fieldRows.map((f) => [f.field_key, f.value ?? null]));
+  const fieldMap = Object.fromEntries(fieldRows.map((row) => [row.field_key, row.value ?? null]));
 
   let appliances: Cp12Appliance[] = [];
   const appResp = await sb.from(CP12_APPLIANCES_TABLE).select('*').eq('job_id', input.jobId);
@@ -2921,8 +3366,6 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     ...fieldMap,
     ...(input.fields ?? {}),
   } as Record<string, unknown>;
-
-  const issuedAt = new Date();
   const customer = resolveJobCustomer(jobContext, {
     name: typeof mergedFieldMap.customer_name === 'string' ? mergedFieldMap.customer_name : undefined,
   });
@@ -2937,382 +3380,244 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     property_address: propertyAddress.summary || mergedFieldMap.property_address,
     postcode: propertyAddress.postcode || mergedFieldMap.postcode,
   };
-  const validationErrors = previewOnly ? [] : validateCp12ForIssue(validationFieldMap, appliances);
+  const validationErrors = validateCp12ForIssue(validationFieldMap, appliances, {
+    requireCustomerSignature: false,
+  });
   if (validationErrors.length) {
-    throw new Error(`CP12 validation failed: ${validationErrors.join('; ')}`);
+    throw new Error(`CP12 remote signature request failed: ${validationErrors.join('; ')}`);
+  }
+  if (!hasValue(mergedFieldMap.engineer_signature_path)) {
+    throw new Error('Re-save the engineer signature before sending a remote signature link');
   }
 
-  console.log('CP12: service role key present', Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY));
-  const admin = createClient<Database>(
+  const token = randomUUID().replace(/-/g, '');
+  const expiresAt = getCp12RemoteSignatureExpiryDate().toISOString();
+  const persistedFields: JobFieldEntry[] = [
+    { job_id: input.jobId, field_key: CP12_REMOTE_SIGNATURE_TOKEN_FIELD, value: token },
+    { job_id: input.jobId, field_key: CP12_REMOTE_SIGNATURE_CREATED_AT_FIELD, value: new Date().toISOString() },
+    { job_id: input.jobId, field_key: CP12_REMOTE_SIGNATURE_EXPIRES_AT_FIELD, value: expiresAt },
+    { job_id: input.jobId, field_key: CP12_REMOTE_SIGNATURE_COMPLETED_AT_FIELD, value: null },
+  ];
+  if (typeof input.fields.engineer_signature === 'string') {
+    persistedFields.push({ job_id: input.jobId, field_key: 'engineer_signature', value: input.fields.engineer_signature });
+  }
+  if (typeof input.fields.engineer_signature_path === 'string') {
+    persistedFields.push({
+      job_id: input.jobId,
+      field_key: 'engineer_signature_path',
+      value: input.fields.engineer_signature_path,
+    });
+  }
+  if (typeof input.fields.completion_date === 'string') {
+    persistedFields.push({ job_id: input.jobId, field_key: 'completion_date', value: input.fields.completion_date });
+  }
+  if (typeof input.fields.next_inspection_due === 'string') {
+    persistedFields.push({
+      job_id: input.jobId,
+      field_key: 'next_inspection_due',
+      value: input.fields.next_inspection_due,
+    });
+  }
+  await persistJobFields(sb, input.jobId, persistedFields, 'createCp12RemoteSignatureRequest');
+  await sb.from('jobs').update({ status: 'awaiting_signatures' }).eq('id', input.jobId).eq('user_id', user.id);
+
+  const sharePath = buildRemoteCp12SigningPath(token);
+  revalidatePath(`/jobs/${input.jobId}`);
+  revalidatePath('/dashboard');
+  revalidatePath(`/wizard/create/cp12?jobId=${input.jobId}`);
+  return {
+    token,
+    sharePath,
+    shareUrl: buildAbsoluteAppUrl(sharePath),
+    expiresAt,
+  };
+}
+
+export async function getCp12RemoteSignatureRequest(token: string) {
+  const normalizedToken = String(token ?? '').trim();
+  if (!normalizedToken) {
+    return { status: 'invalid' as const };
+  }
+
+  const sb = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    },
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
-
-  const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
-  const splitAddressParts = (value: unknown) =>
-    String(value ?? '')
-      .split(/[\r\n,]+/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-  const extractPostcode = (value: unknown) => {
-    const match = String(value ?? '').toUpperCase().match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/);
-    return match ? match[0].replace(/\s+/g, ' ').trim() : '';
-  };
-  const buildCombustionSummary = (coPpm: string, co2: string, ratio: string, legacy?: string) => {
-    const parts = [coPpm && `${coPpm}ppm`, co2 && `${co2}%`, ratio && ratio].filter(Boolean);
-    if (parts.length) return parts.join(' / ');
-    return legacy ?? '';
-  };
-  const fallbackJobAddressParts = splitAddressParts(
-    mergedFieldMap.property_address ?? mergedFieldMap.address ?? propertyAddress.summary ?? '',
-  );
-  const jobAddressLine1 = toText(mergedFieldMap.job_address_line1 ?? fallbackJobAddressParts[0] ?? '');
-  const jobAddressLine2 = toText(mergedFieldMap.job_address_line2 ?? fallbackJobAddressParts[1] ?? '');
-  const jobAddressTown = toText(
-    mergedFieldMap.job_address_city ?? (fallbackJobAddressParts.length > 2 ? fallbackJobAddressParts.slice(2).join('\n') : ''),
-  );
-  const jobAddressPostcode = pickText(
-    toText(mergedFieldMap.job_postcode ?? ''),
-    toText(mergedFieldMap.property_postcode ?? ''),
-    propertyAddress.postcode,
-    toText(mergedFieldMap.postcode ?? ''),
-  );
-  const jobAddressName = toText(mergedFieldMap.job_address_name ?? mergedFieldMap.property_name ?? '');
-  const jobAddressTel = toText(mergedFieldMap.job_tel ?? '');
-  const fallbackLandlordParts = splitAddressParts(
-    mergedFieldMap.landlord_address ?? customer.address ?? '',
-  );
-  const landlordLine1 = toText(mergedFieldMap.landlord_address_line1 ?? fallbackLandlordParts[0] ?? '');
-  const landlordLine2 = toText(
-    mergedFieldMap.landlord_address_line2 ??
-      (fallbackLandlordParts.length > 2 ? fallbackLandlordParts.slice(1, -1).join('\n') : ''),
-  );
-  const landlordCity = toText(
-    mergedFieldMap.landlord_city ?? mergedFieldMap.landlord_town ?? (fallbackLandlordParts.length > 1 ? fallbackLandlordParts.at(-1) ?? '' : ''),
-  );
-  const landlordPostcode = toText(mergedFieldMap.landlord_postcode ?? extractPostcode(mergedFieldMap.landlord_address ?? ''));
-  const landlordTel = toText(mergedFieldMap.landlord_tel ?? '');
-  const cp12SafetyReadback = {
-    emergency_control_accessible: toText(mergedFieldMap.emergency_control_accessible ?? ''),
-    gas_tightness_satisfactory: toText(mergedFieldMap.gas_tightness_satisfactory ?? ''),
-    pipework_visual_satisfactory: toText(mergedFieldMap.pipework_visual_satisfactory ?? ''),
-    equipotential_bonding_satisfactory: toText(mergedFieldMap.equipotential_bonding_satisfactory ?? ''),
-  };
-  console.log('CP12 issue readback safety fields', {
-    jobId: input.jobId,
-    cp12SafetyReadback,
-  });
-  const cp12Fields: Cp12FieldMap = {
-    certNumber: toText(mergedFieldMap.record_id ?? mergedFieldMap.certificate_number ?? publicId),
-    issueDate: toText(mergedFieldMap.inspection_date ?? mergedFieldMap.scheduled_for ?? '') || undefined,
-    nextInspectionDue: toText(mergedFieldMap.next_inspection_due ?? mergedFieldMap.completion_date ?? ''),
-    landlordName: toText(mergedFieldMap.landlord_name ?? customer.name ?? ''),
-    landlordCompany: toText(mergedFieldMap.landlord_company ?? customer.organization ?? ''),
-    landlordAddressLine1: landlordLine1,
-    landlordAddressLine2: landlordLine2,
-    landlordTown: landlordCity,
-    landlordPostcode: landlordPostcode,
-    landlordTel: landlordTel,
-    propertyAddressName: jobAddressName,
-    propertyAddressLine1: jobAddressLine1,
-    propertyAddressLine2: jobAddressLine2,
-    propertyTown: jobAddressTown,
-    propertyPostcode: jobAddressPostcode,
-    propertyTel: jobAddressTel,
-    companyName: toText(mergedFieldMap.company_name ?? ''),
-    companyAddressLine1: toText(mergedFieldMap.company_address ?? ''),
-    companyTown: '',
-    companyPostcode: '',
-    companyPhone: toText(mergedFieldMap.company_phone ?? ''),
-    companyEmail: toText(mergedFieldMap.company_email ?? ''),
-    gasSafeRegistrationNumber: toText(mergedFieldMap.gas_safe_number ?? ''),
-    engineerName: toText(mergedFieldMap.engineer_name ?? ''),
-    engineerIdNumber: toText(mergedFieldMap.engineer_id ?? ''),
-    engineerSignatureText: toText(mergedFieldMap.engineer_name ?? ''),
-    engineerSignatureUrl: toText(mergedFieldMap.engineer_signature ?? mergedFieldMap.engineer_signature_url ?? ''),
-    engineerVisitTime: toText(mergedFieldMap.completion_date ?? ''),
-    responsiblePersonName: toText(customer.name ?? ''),
-    responsiblePersonSignatureText: toText(customer.name ?? ''),
-    responsiblePersonSignatureUrl: toText(mergedFieldMap.customer_signature ?? mergedFieldMap.customer_signature_url ?? ''),
-    responsiblePersonAcknowledgementDate: toText(mergedFieldMap.completion_date ?? ''),
-    defectsIdentified: toText(mergedFieldMap.defect_description ?? ''),
-    remedialWorksRequired: toText(mergedFieldMap.remedial_action ?? ''),
-    warningNoticeIssued: toText(mergedFieldMap.warning_notice_issued ?? ''),
-    additionalNotes: toText(mergedFieldMap.comments ?? mergedFieldMap.additional_notes ?? ''),
-    coAlarmFitted: toText(mergedFieldMap.co_alarm_fitted ?? ''),
-    coAlarmTested: toText(mergedFieldMap.co_alarm_tested ?? ''),
-    coAlarmSatisfactory: toText(mergedFieldMap.co_alarm_satisfactory ?? ''),
-    emergencyControlAccessible: toText(mergedFieldMap.emergency_control_accessible ?? mergedFieldMap.emergency_control ?? ''),
-    gasTightnessSatisfactory: toText(mergedFieldMap.gas_tightness_satisfactory ?? ''),
-    pipeworkVisualSatisfactory: toText(mergedFieldMap.pipework_visual_satisfactory ?? ''),
-    equipotentialBondingSatisfactory: toText(mergedFieldMap.equipotential_bonding_satisfactory ?? ''),
-  };
-  console.log('CP12 issue mapped safety fields', {
-    jobId: input.jobId,
-    mapped: {
-      emergencyControlAccessible: cp12Fields.emergencyControlAccessible ?? '',
-      gasTightnessSatisfactory: cp12Fields.gasTightnessSatisfactory ?? '',
-      pipeworkVisualSatisfactory: cp12Fields.pipeworkVisualSatisfactory ?? '',
-      equipotentialBondingSatisfactory: cp12Fields.equipotentialBondingSatisfactory ?? '',
-    },
-  });
-
-  const applianceInputs: ApplianceInput[] = (appliances ?? []).map((app) => {
-    const appExtras = app as Cp12Appliance & { appliance_make_model?: string };
-    const highCoPpm = toText(app.high_co_ppm ?? app.co_reading_high ?? '');
-    const highCo2 = toText(app.high_co2 ?? '');
-    const highRatio = toText(app.high_ratio ?? '');
-    const lowCoPpm = toText(app.low_co_ppm ?? app.co_reading_low ?? '');
-    const lowCo2 = toText(app.low_co2 ?? '');
-    const lowRatio = toText(app.low_ratio ?? '');
-    return {
-      description: toText(app.make_model ?? appExtras.appliance_make_model ?? app.appliance_type ?? ''),
-      location: toText(app.location ?? ''),
-      type: toText(app.appliance_type ?? ''),
-      flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
-      operatingPressure: toText(app.operating_pressure ?? ''),
-      heatInput: toText(app.heat_input ?? ''),
-      safetyDevice: toText(app.safety_devices_correct ?? app.stability_test ?? ''),
-      ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
-      flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
-      spillageTest: toText(app.gas_tightness_test ?? ''),
-      applianceSafeToUse: toText(app.safety_rating ?? app.classification_code ?? ''),
-      remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),
-      combustionHighCoPpm: highCoPpm,
-      combustionHighCo2: highCo2,
-      combustionHighRatio: highRatio,
-      combustionLowCoPpm: lowCoPpm,
-      combustionLowCo2: lowCo2,
-      combustionLowRatio: lowRatio,
-      combustionHigh: buildCombustionSummary(highCoPpm, highCo2, highRatio, toText(app.co_reading_ppm ?? '')),
-      combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? '')),
-      combustionNotes: toText(app.combustion_notes ?? ''),
-      applianceServiced: toText(app.appliance_serviced ?? ''),
-      applianceInspected: 'Yes',
-      landlordAppliance: 'Yes',
-    };
-  });
-
-  const pdfBytes = await renderCp12CertificatePdf({
-    fields: cp12Fields,
-    appliances: applianceInputs,
-    issuedAt,
-    recordId: input.jobId,
-  });
-  const cp12PdfByteLength = pdfBytes.byteLength;
-  const cp12PdfHash8 = createHash('sha256').update(pdfBytes).digest('hex').slice(0, 8);
-  const cp12DebugMode = process.env.CP12_PDF_DEBUG === '1';
-  const appendCacheBust = (url: string, token: string) => `${url}${url.includes('?') ? '&' : '?'}cb=${encodeURIComponent(token)}`;
-  const pathBase = previewOnly ? 'cp12/previews' : 'cp12';
-  const path = cp12DebugMode
-    ? `${pathBase}/${user.id}/${input.jobId}-${publicId}-debug-${Date.now()}.pdf`
-    : `${pathBase}/${user.id}/${input.jobId}-${previewOnly ? `preview-${Date.now()}-${cp12PdfHash8}` : Date.now()}.pdf`;
-  const lastSlash = path.lastIndexOf('/');
-  const parentDir = lastSlash > 0 ? path.slice(0, lastSlash) : '';
-  const fileName = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
-  const { data: existingFiles, error: cp12ListErr } = await admin.storage.from('certificates').list(parentDir, {
-    search: fileName,
-  });
-  if (cp12ListErr) {
-    console.warn('CP12: pre-upload list failed', { jobId: input.jobId, path, error: cp12ListErr.message });
-  }
-  const existedBeforeUpload = Boolean(existingFiles?.some((entry) => entry.name === fileName));
-  console.log('CP12: uploading certificate PDF', {
-    path,
-    previewOnly,
-    cp12DebugMode,
-    jobId: input.jobId,
-    certificateId: publicId,
-    existedBeforeUpload,
-    pdfByteLength: cp12PdfByteLength,
-    pdfHash8: cp12PdfHash8,
-  });
-  const upload = await admin.storage
-    .from('certificates')
-    .upload(path, Buffer.from(pdfBytes), { contentType: 'application/pdf', upsert: true });
-  console.log('CP12: upload result', {
-    path,
-    previewOnly,
-    cp12DebugMode,
-    jobId: input.jobId,
-    certificateId: publicId,
-    existedBeforeUpload,
-    upsert: true,
-    uploadedPdfByteLength: cp12PdfByteLength,
-    uploadedPdfHash8: cp12PdfHash8,
-    uploadDataPath: upload.data?.path ?? null,
-    hasUploadError: Boolean(upload.error),
-  });
-  if (upload.error || !upload.data?.path) {
-    console.error('CP12: upload error', {
-      path,
-      error: upload.error
-        ? {
-            message: upload.error.message,
-            name: upload.error.name,
-            statusCode: 'statusCode' in upload.error ? upload.error.statusCode : undefined,
-          }
-        : null,
-    });
-    throw new Error(upload.error?.message ?? 'Certificate PDF upload failed');
+  const resolved = await resolveCp12RemoteSignatureRequestByToken(sb, normalizedToken);
+  if (!resolved) {
+    return { status: 'invalid' as const };
   }
 
-  if (previewOnly) {
-    const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
-    if (signedErr || !signed?.signedUrl) {
-      throw new Error(signedErr?.message ?? 'Unable to create signed URL for certificate');
-    }
-    const finalPreviewUrl = appendCacheBust(signed.signedUrl, cp12PdfHash8);
-    console.log('CERTIFICATE PDF preview generated', {
-      jobId: input.jobId,
-      path,
-      finalUrl: finalPreviewUrl,
-      pdfHash: cp12PdfHash8,
-      returnedPdfByteLength: cp12PdfByteLength,
-      returnedPdfHash8: cp12PdfHash8,
-    });
-    return { pdfUrl: finalPreviewUrl, preview: true, jobId: input.jobId };
-  }
-
-  const baseCertificatePayload: Record<string, unknown> = {
-    job_id: input.jobId,
-    cert_type: input.certificateType,
-    public_id: publicId,
-    user_id: user.id,
-  };
-  const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
-
-  const writeCertificate = (payload: Record<string, unknown>) =>
-    saveCertificateRecord(admin, {
-      jobId: input.jobId,
-      certificateType: input.certificateType,
-      payload,
-      existingRecord: existingCertificate,
-    });
-
-  console.log('CP12: certificates write start', { jobId: input.jobId, path, previewOnly, payload: certificatePayload });
-  const { error: certErr } = await writeCertificate(certificatePayload);
-  console.log('CP12: certificates write result', {
-    jobId: input.jobId,
-    error: certErr
-      ? {
-          code: certErr.code,
-          message: certErr.message,
-          details: certErr.details,
-          hint: certErr.hint,
-        }
-      : null,
+  const { jobId, fieldMap, status } = resolved;
+  const jobContext = await loadJobContext(sb, jobId, 'getCp12RemoteSignatureRequest');
+  const customer = resolveJobCustomer(jobContext, {
+    name: typeof fieldMap.customer_name === 'string' ? fieldMap.customer_name : undefined,
+    address: typeof fieldMap.landlord_address === 'string' ? fieldMap.landlord_address : undefined,
   });
-  if (certErr) {
-    console.error('CERTIFICATE write failed (pdf_path)', {
-      jobId: input.jobId,
-      payload: certificatePayload,
-      code: certErr.code,
-      message: certErr.message,
+  const propertyAddress = resolveJobPropertyAddress(jobContext, {
+    line1: typeof fieldMap.property_address === 'string' ? fieldMap.property_address : undefined,
+    postcode: typeof fieldMap.postcode === 'string' ? fieldMap.postcode : undefined,
+    legacy: typeof fieldMap.address === 'string' ? fieldMap.address : undefined,
+  });
+  const appResp = await sb.from(CP12_APPLIANCES_TABLE).select('appliance_type, location, make_model').eq('job_id', jobId);
+  const appliances =
+    appResp.error || !appResp.data
+      ? []
+      : (appResp.data as Array<{ appliance_type?: string | null; location?: string | null; make_model?: string | null }>)
+          .map((row) => ({
+            applianceType: pickText(row.appliance_type ?? null, row.make_model ?? null),
+            location: pickText(row.location ?? null),
+          }))
+          .filter((row) => row.applianceType || row.location);
+
+  let completedPdfUrl: string | null = null;
+  if (status === 'completed') {
+    const certificate = await findCertificateRecord(sb, {
+      jobId,
+      certificateType: 'cp12',
+      columns: 'job_id, cert_type, pdf_path, pdf_url, created_at',
     });
-    if (certErr.code === '42703') {
-      const fallbackPayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_url: path };
-      const { error: fallbackErr } = await writeCertificate(fallbackPayload);
-      if (fallbackErr) {
-        console.error('CERTIFICATE write failed (pdf_url fallback)', {
-          jobId: input.jobId,
-          payload: fallbackPayload,
-          code: fallbackErr.code,
-          message: fallbackErr.message,
-        });
-        if (fallbackErr.code === '42703') {
-          const { error: finalErr } = await writeCertificate(fallbackPayload);
-          if (finalErr) {
-            console.error('CERTIFICATE write failed (fallback retry)', {
-              jobId: input.jobId,
-              payload: fallbackPayload,
-              code: finalErr.code,
-              message: finalErr.message,
-            });
-            throw new Error(finalErr.message);
-          }
-        } else {
-          throw new Error(fallbackErr.message);
-        }
+    const pdfPath = certificate?.pdf_path ?? certificate?.pdf_url ?? null;
+    if (pdfPath) {
+      if (pdfPath.startsWith('http')) {
+        completedPdfUrl = pdfPath;
+      } else {
+        const { data: signed } = await sb.storage.from('certificates').createSignedUrl(pdfPath, 60 * 10);
+        completedPdfUrl = signed?.signedUrl ?? null;
       }
-    } else {
-      throw new Error(certErr.message);
     }
   }
-  console.log('CERTIFICATE PDF stored', { jobId: input.jobId, path });
 
-  const { data: signed, error: signedErr } = await admin.storage.from('certificates').createSignedUrl(path, 60 * 10);
-  if (signedErr || !signed?.signedUrl) {
-    throw new Error(signedErr?.message ?? 'Unable to create certificate link');
-  }
-  const finalSignedUrl = appendCacheBust(signed.signedUrl, cp12PdfHash8);
-  console.log('CERTIFICATE PDF signed URL generated', {
-    jobId: input.jobId,
-    path,
-    finalUrl: finalSignedUrl,
-    pdfHash: cp12PdfHash8,
-    returnedPdfByteLength: cp12PdfByteLength,
-    returnedPdfHash8: cp12PdfHash8,
-  });
-
-  await sb
-    .from(JOB_FIELDS_TABLE)
-    .upsert({ job_id: input.jobId, field_key: 'issued_at', value: issuedAt } as Record<string, unknown>, {
-      onConflict: 'job_id,field_key',
-    });
-  await sb
-    .from(JOB_FIELDS_TABLE)
-    .upsert(
-      [
-        { job_id: input.jobId, field_key: 'record_id', value: publicId },
-        { job_id: input.jobId, field_key: 'certificate_number', value: publicId },
-      ] as Record<string, unknown>[],
-      {
-        onConflict: 'job_id,field_key',
-      },
-    );
-
-  const { error: completeJobErr } = await admin
-    .from('jobs')
-    .update({ status: 'completed' })
-    .eq('id', input.jobId);
-  if (completeJobErr) {
-    throw new Error(completeJobErr.message);
-  }
-  await ensureCp12FollowUpJob({
-    sb: admin,
-    userId: user.id,
-    sourceJobId: input.jobId,
-    sourceJob: jobContext.job,
-    customer,
-    propertyAddress,
-    fields: mergedFieldMap,
-  });
-  const gasWarningNoticeJobs = await ensureGasWarningNoticeFollowUpJobs({
-    sb: admin,
-    jobCodeClient: sb,
-    userId: user.id,
-    sourceJobId: input.jobId,
-    sourceJob: jobContext.job,
-    customer,
-    propertyAddress,
-    fields: mergedFieldMap,
+  return {
+    status,
+    jobId,
+    completedPdfUrl,
+    sharePath: buildRemoteCp12SigningPath(normalizedToken),
+    previewPath: `${buildRemoteCp12SigningPath(normalizedToken)}/preview`,
+    expiresAt: typeof fieldMap[CP12_REMOTE_SIGNATURE_EXPIRES_AT_FIELD] === 'string'
+      ? String(fieldMap[CP12_REMOTE_SIGNATURE_EXPIRES_AT_FIELD])
+      : '',
+    inspectionDate: pickText(
+      typeof fieldMap.inspection_date === 'string' ? fieldMap.inspection_date : null,
+      typeof jobContext.job.scheduled_for === 'string' ? jobContext.job.scheduled_for.slice(0, 10) : null,
+    ),
+    landlordName: pickText(
+      typeof fieldMap.landlord_name === 'string' ? fieldMap.landlord_name : null,
+      customer.name,
+    ),
+    propertyAddress: pickText(
+      typeof fieldMap.property_address === 'string' ? fieldMap.property_address : null,
+      propertyAddress.summary,
+    ),
+    engineerName: pickText(
+      typeof fieldMap.engineer_name === 'string' ? fieldMap.engineer_name : null,
+    ),
+    companyName: pickText(
+      typeof fieldMap.company_name === 'string' ? fieldMap.company_name : null,
+    ),
     appliances,
+  };
+}
+
+const SubmitCp12RemoteSignatureSchema = z.object({
+  token: z.string().min(12),
+  file: z.instanceof(File),
+});
+
+export async function submitCp12RemoteCustomerSignature(
+  payload: z.infer<typeof SubmitCp12RemoteSignatureSchema>,
+) {
+  const input = SubmitCp12RemoteSignatureSchema.parse(payload);
+  const sb = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const resolved = await resolveCp12RemoteSignatureRequestByToken(sb, input.token);
+  if (!resolved || resolved.status === 'expired' || resolved.status === 'completed') {
+    throw new Error('This signature link is no longer active');
+  }
+
+  const jobContext = await loadJobContext(sb, resolved.jobId, 'submitCp12RemoteCustomerSignature');
+  const userId = jobContext.job.user_id ?? null;
+  if (!userId) throw new Error('Job owner not found');
+
+  const arrayBuffer = await input.file.arrayBuffer();
+  const ext = input.file.name.split('.').pop() ?? 'png';
+  const path = `signatures/${userId}/${resolved.jobId}-customer-remote-${Date.now()}.${ext}`;
+  const upload = await sb.storage.from('signatures').upload(path, arrayBuffer, {
+    contentType: input.file.type || 'image/png',
+    upsert: true,
   });
-  revalidatePath(`/jobs/${input.jobId}`);
-  revalidatePath('/jobs');
-  revalidatePath('/dashboard');
-  gasWarningNoticeJobs.forEach((job) => {
-    revalidatePath(`/jobs/${job.jobId}`);
-    revalidatePath(`/wizard/create/gas_warning_notice?jobId=${job.jobId}`);
+  if (upload.error) throw new Error(upload.error.message);
+  const { data: signed, error: signedErr } = await sb.storage.from('signatures').createSignedUrl(path, 60 * 60);
+  if (signedErr) throw new Error(signedErr.message);
+  const signatureUrl = signed?.signedUrl ?? sb.storage.from('signatures').getPublicUrl(path).data.publicUrl ?? path;
+  const signedAt = new Date().toISOString();
+
+  await persistJobFields(
+    sb,
+    resolved.jobId,
+    [
+      { job_id: resolved.jobId, field_key: 'customer_signature', value: signatureUrl },
+      { job_id: resolved.jobId, field_key: 'customer_signature_path', value: path },
+      { job_id: resolved.jobId, field_key: 'customer_signed_at', value: signedAt },
+    ],
+    'submitCp12RemoteCustomerSignature',
+  );
+
+  const result = await generateCp12CertificateForJob({
+    sb,
+    admin: sb,
+    jobId: resolved.jobId,
+    userId,
+    previewOnly: false,
+    fieldOverrides: {
+      customer_signature: signatureUrl,
+      customer_signature_path: path,
+      customer_signed_at: signedAt,
+    },
   });
-  return { pdfUrl: finalSignedUrl, jobId: input.jobId, gasWarningNoticeJobs };
+
+  await persistJobFields(
+    sb,
+    resolved.jobId,
+    [
+      { job_id: resolved.jobId, field_key: CP12_REMOTE_SIGNATURE_COMPLETED_AT_FIELD, value: signedAt },
+      { job_id: resolved.jobId, field_key: CP12_REMOTE_SIGNATURE_TOKEN_FIELD, value: null },
+    ],
+    'submitCp12RemoteCustomerSignature completion',
+  );
+
+  return result;
+}
+
+export async function getCp12RemoteSignaturePreviewUrl(token: string) {
+  const normalizedToken = String(token ?? '').trim();
+  if (!normalizedToken) throw new Error('Missing signature token');
+
+  const sb = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const resolved = await resolveCp12RemoteSignatureRequestByToken(sb, normalizedToken);
+  if (!resolved || resolved.status !== 'active') {
+    throw new Error('This signature link is no longer active');
+  }
+  const jobContext = await loadJobContext(sb, resolved.jobId, 'getCp12RemoteSignaturePreviewUrl');
+  const userId = jobContext.job.user_id ?? null;
+  if (!userId) throw new Error('Job owner not found');
+
+  const result = await generateCp12CertificateForJob({
+    sb,
+    admin: sb,
+    jobId: resolved.jobId,
+    userId,
+    previewOnly: true,
+  });
+  return result.pdfUrl;
 }
 
 export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCertificatePdfSignedUrlSchema> | string) {

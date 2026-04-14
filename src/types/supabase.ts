@@ -542,6 +542,10 @@ export type Database = {
       }
       profiles: {
         Row: {
+          bank_account_name: string | null
+          bank_account_number: string | null
+          bank_name: string | null
+          bank_sort_code: string | null
           company_address: string | null
           certifications: string[] | null
           company_name: string | null
@@ -562,6 +566,10 @@ export type Database = {
           trade_types: string[] | null
         }
         Insert: {
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          bank_sort_code?: string | null
           company_address?: string | null
           certifications?: string[] | null
           company_name?: string | null
@@ -582,6 +590,10 @@ export type Database = {
           trade_types?: string[] | null
         }
         Update: {
+          bank_account_name?: string | null
+          bank_account_number?: string | null
+          bank_name?: string | null
+          bank_sort_code?: string | null
           company_address?: string | null
           certifications?: string[] | null
           company_name?: string | null

@@ -10,6 +10,7 @@ export type SignupState = {
   email: string;
   password: string;
   full_name: string;
+  auth_provider?: 'password' | 'google';
   date_of_birth: string;
   profession: string;
   business_name?: string;
@@ -30,6 +31,7 @@ const defaultState: SignupState = {
   email: '',
   password: '',
   full_name: '',
+  auth_provider: 'password',
   date_of_birth: '',
   profession: '',
   business_name: '',

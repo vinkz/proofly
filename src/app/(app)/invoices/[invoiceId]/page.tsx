@@ -25,17 +25,34 @@ export default async function InvoiceEditorPage({ params }: { params: Promise<{ 
   const sb = await supabaseServerReadOnly();
   const { data: job, error: jobErr } = await sb
     .from('jobs')
-    .select('id, client_id, client_name, address, title')
+    .select('id, client_id, client_name, address, title, certificate_type')
     .eq('id', invoice.job_id)
     .maybeSingle();
   if (jobErr || !job) {
     notFound();
   }
 
+  const certificateType =
+    typeof job.certificate_type === 'string' && job.certificate_type.trim()
+      ? job.certificate_type
+      : (() => null)();
+
+  let resolvedCertificateType = certificateType;
+  if (!resolvedCertificateType) {
+    const { data: certificate } = await sb
+      .from('certificates')
+      .select('cert_type, created_at')
+      .eq('job_id', invoice.job_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    resolvedCertificateType = typeof certificate?.cert_type === 'string' ? certificate.cert_type : null;
+  }
+
   const { data: client } = job.client_id
     ? await sb
         .from('clients')
-        .select('id, name, address, email, phone')
+        .select('id, name, address, postcode, email, phone')
         .eq('id', job.client_id)
         .maybeSingle()
     : { data: null };
@@ -61,12 +78,14 @@ export default async function InvoiceEditorPage({ params }: { params: Promise<{ 
             ? {
                 name: client.name ?? job.client_name ?? 'Client',
                 address: client.address ?? null,
+                postcode: client.postcode ?? null,
                 email: client.email ?? null,
                 phone: client.phone ?? null,
               }
             : {
                 name: job.client_name ?? 'Client',
                 address: null,
+                postcode: null,
                 email: null,
                 phone: null,
               }
@@ -75,6 +94,7 @@ export default async function InvoiceEditorPage({ params }: { params: Promise<{ 
           address: job.address ?? null,
           title: job.title ?? null,
         }}
+        certificateType={resolvedCertificateType}
       />
     </main>
   );

@@ -10,7 +10,8 @@ const defaultTrades = TRADE_TYPES as unknown as string[];
 
 const SignupWizardSchema = z.object({
   email: z.string().email({ message: 'Valid email required' }),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().optional().default(''),
+  auth_provider: z.enum(['password', 'google']).optional().default('password'),
   full_name: z.string().min(2, 'Full name is required'),
   date_of_birth: z.string().min(4, 'Date of birth required'),
   profession: z.string().min(2, 'Profession required'),
@@ -32,11 +33,40 @@ const SignupWizardSchema = z.object({
 export async function completeSignupWizard(payload: unknown) {
   const body = SignupWizardSchema.parse(payload);
   const sb = await supabaseServerAction();
+  const {
+    data: { user: existingUser },
+  } = await sb.auth.getUser();
 
-  const { data, error } = await sb.auth.signUp({
-    email: body.email,
-    password: body.password,
-    options: {
+  let userId = existingUser?.id ?? null;
+
+  if (!userId) {
+    if (!body.password || body.password.length < 6) {
+      throw new Error('Password must be at least 6 characters');
+    }
+
+    const { data, error } = await sb.auth.signUp({
+      email: body.email,
+      password: body.password,
+      options: {
+        data: {
+          full_name: body.full_name,
+          profession: body.profession,
+          business_name: body.company_name ?? body.business_name ?? null,
+          trade_types: body.trade_types,
+          certifications: body.certifications,
+          company_address: body.company_address ?? null,
+          company_postcode: body.company_postcode ?? null,
+          company_phone: body.company_phone ?? null,
+          gas_safe_number: body.gas_safe_number ?? null,
+          default_engineer_id: body.default_engineer_id ?? null,
+          default_engineer_name: body.default_engineer_name ?? null,
+        },
+      },
+    });
+    if (error) throw new Error(error.message);
+    userId = data.user?.id ?? null;
+  } else {
+    const { error } = await sb.auth.updateUser({
       data: {
         full_name: body.full_name,
         profession: body.profession,
@@ -50,10 +80,10 @@ export async function completeSignupWizard(payload: unknown) {
         default_engineer_id: body.default_engineer_id ?? null,
         default_engineer_name: body.default_engineer_name ?? null,
       },
-    },
-  });
-  if (error) throw new Error(error.message);
-  const userId = data.user?.id;
+    });
+    if (error) throw new Error(error.message);
+  }
+
   if (!userId) throw new Error('Unable to create user');
 
   const profile: TablesInsert<'profiles'> = {

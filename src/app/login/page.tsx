@@ -8,6 +8,7 @@ import { signInWithPassword, signInWithMagicLink } from '@/server/auth';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -60,7 +61,7 @@ export default function LoginPage() {
           </div>
           <h1 className="text-3xl font-bold text-[var(--brand)] sm:text-4xl">Log in</h1>
           <p className="text-sm text-muted-foreground/80">
-            Use your password or get a magic link to continue. Need an account?{' '}
+            Continue with Google, your password, or a magic link. Need an account?{' '}
             <Link href="/signup/step1" className="font-semibold text-[var(--accent)] underline underline-offset-4">
               Start signup
             </Link>
@@ -69,6 +70,14 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-md space-y-4 rounded-2xl border border-white/60 bg-white/90 p-6 shadow-xl backdrop-blur">
+          <GoogleAuthButton />
+
+          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <span className="h-px flex-1 bg-slate-200" />
+            <span>Or continue with email</span>
+            <span className="h-px flex-1 bg-slate-200" />
+          </div>
+
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-gray-500">Auth method</p>

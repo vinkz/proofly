@@ -1,14 +1,5 @@
-'use client';
-
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
 export default function SignupStep3Page() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace('/signup/step2');
-  }, [router]);
-
-  return null;
+  redirect('/onboarding');
 }

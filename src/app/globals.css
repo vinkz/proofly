@@ -35,3 +35,38 @@
     @apply rounded-xl border border-white/20 bg-[var(--surface)]/90 p-5 shadow-md text-[var(--text)];
   }
 }
+
+@layer utilities {
+  @keyframes landing-phone-float {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) rotate(var(--landing-rotate, 0deg));
+    }
+    50% {
+      transform: translate3d(0, -10px, 0) rotate(var(--landing-rotate, 0deg));
+    }
+  }
+
+  .landing-phone-float {
+    --landing-rotate: -8deg;
+    animation: landing-phone-float 6s ease-in-out infinite;
+  }
+
+  .landing-phone-float-delay {
+    --landing-rotate: 8deg;
+    animation: landing-phone-float 7.2s ease-in-out 400ms infinite;
+  }
+
+  .landing-phone-float-slow {
+    --landing-rotate: 0deg;
+    animation: landing-phone-float 8.4s ease-in-out 200ms infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-phone-float,
+  .landing-phone-float-delay,
+  .landing-phone-float-slow {
+    animation: none !important;
+  }
+}
