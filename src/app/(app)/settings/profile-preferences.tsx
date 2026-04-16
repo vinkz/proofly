@@ -95,7 +95,7 @@ export function ProfilePreferences({
 
     startTransition(async () => {
       try {
-        await updateProfileBasics({
+        const result = await updateProfileBasics({
           full_name: fullName.trim() || undefined,
           date_of_birth: dateOfBirth.trim() || undefined,
           profession: profession.trim() || undefined,
@@ -113,6 +113,17 @@ export function ProfilePreferences({
           bank_sort_code: bankSortCode.trim() || undefined,
           bank_account_number: bankAccountNumber.trim() || undefined,
         });
+
+        if (!result.profileComplete) {
+          pushToast({
+            title: 'Profile still incomplete',
+            description: `Missing after save: ${result.missingFields.join(', ')}`,
+            variant: 'error',
+          });
+          router.refresh();
+          return;
+        }
+
         pushToast({
           title: mode === 'onboarding' ? 'Profile completed' : 'Settings updated',
           description:
@@ -121,8 +132,9 @@ export function ProfilePreferences({
               : 'Company, installer, and invoice payment details saved.',
           variant: 'success',
         });
-        if (mode === 'onboarding') {
+        if (mode === 'onboarding' || mode === 'settings') {
           router.push('/dashboard');
+          router.refresh();
         }
       } catch (error) {
         pushToast({
@@ -152,6 +164,14 @@ export function ProfilePreferences({
     bankSortCode !== initialBankSortCode ||
     bankAccountNumber !== initialBankAccountNumber;
 
+  const saveLabel = isPending
+    ? 'Saving…'
+    : mode === 'onboarding'
+      ? 'Complete setup'
+      : dirty
+        ? 'Save changes'
+        : 'Saved';
+
   return (
     <section className="rounded-3xl border border-white/20 bg-white/80 p-6 shadow-sm">
       <div className="flex items-center justify-between">
@@ -168,9 +188,11 @@ export function ProfilePreferences({
               : 'These values prefill PDF company / installer sections.'}
           </p>
         </div>
-        <Button onClick={handleSave} disabled={isPending || !dirty}>
-          {isPending ? 'Saving…' : mode === 'onboarding' ? 'Complete setup' : 'Save'}
-        </Button>
+        {mode === 'onboarding' ? (
+          <Button onClick={handleSave} disabled={isPending || !dirty}>
+            {saveLabel}
+          </Button>
+        ) : null}
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -364,6 +386,26 @@ export function ProfilePreferences({
           </label>
         </div>
       </div>
+
+      {mode === 'settings' ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+          <div className="pointer-events-auto mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-2xl border border-white/30 bg-white/95 p-3 shadow-2xl backdrop-blur">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-muted">
+                {dirty ? 'Unsaved settings' : 'Settings saved'}
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                {dirty
+                  ? 'Company, installer, and invoice details have changes.'
+                  : 'Make a change to enable saving.'}
+              </p>
+            </div>
+            <Button onClick={handleSave} disabled={isPending || !dirty} className="shrink-0 rounded-full">
+              {saveLabel}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

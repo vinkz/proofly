@@ -1,12 +1,18 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { unstable_noStore as noStore } from 'next/cache';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
-import { supabaseServerAction, supabaseServerReadOnly } from '@/lib/supabaseServer';
-import { isOnboardingProfileComplete, type OnboardingProfileShape } from '@/lib/onboarding-profile';
+import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import {
+  getMissingOnboardingFields,
+  isOnboardingProfileComplete,
+  type OnboardingProfileShape,
+} from '@/lib/onboarding-profile';
 import { CERTIFICATIONS, TRADE_TYPES } from '@/lib/profile-options';
-import type { Tables } from '@/lib/database.types';
+import type { Database, Tables } from '@/lib/database.types';
 
 const TradeSchema = z.array(z.enum(TRADE_TYPES)).min(1, 'Select at least one trade');
 const CertSchema = z.array(z.enum(CERTIFICATIONS)).min(1, 'Select at least one certification');
@@ -25,7 +31,7 @@ async function requireUser(options: { write?: boolean } = {}) {
 }
 
 async function upsertProfile(
-  sb: Awaited<ReturnType<typeof supabaseServerAction>>,
+  sb: SupabaseClient<Database>,
   userId: string,
   patch: Partial<Tables<'profiles'>> & { id?: string },
 ) {
@@ -61,6 +67,7 @@ async function upsertProfile(
 }
 
 export async function getProfile() {
+  noStore();
   const { sb, user } = await requireUser();
   const selectVariants = [
     'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number',
@@ -150,7 +157,7 @@ export async function updateProfileBasics(payload: {
   bank_account_name?: string;
   bank_sort_code?: string;
   bank_account_number?: string;
-}) {
+}): Promise<{ profileComplete: boolean; missingFields: string[] }> {
   const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(payload, key);
   const schema = z
     .object({
@@ -190,9 +197,10 @@ export async function updateProfileBasics(payload: {
       bank_account_number: data.bank_account_number?.trim(),
     }));
   const parsed = schema.parse(payload);
-  const { sb, user } = await requireUser({ write: true });
+  const { user } = await requireUser({ write: true });
+  const profileSb = await supabaseServerServiceRole();
 
-  const { data: currentProfile, error: currentProfileError } = await sb
+  const { data: currentProfile, error: currentProfileError } = await profileSb
     .from('profiles')
     .select(
       'full_name, date_of_birth, profession, company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number',
@@ -241,8 +249,36 @@ export async function updateProfileBasics(payload: {
     ...(hasOwn('gas_safe_number') ? { gas_safe_number: profilePatch.gas_safe_number ?? null } : {}),
   };
   extendedPatch.onboarding_complete = isOnboardingProfileComplete(mergedForCompleteness);
-  await upsertProfile(sb, user.id, extendedPatch as Partial<Tables<'profiles'>> & { id?: string });
+  await upsertProfile(profileSb, user.id, extendedPatch as Partial<Tables<'profiles'>> & { id?: string });
+
+  const { data: savedProfile, error: savedProfileError } = await profileSb
+    .from('profiles')
+    .select(
+      'full_name, date_of_birth, profession, company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number',
+    )
+    .eq('id', user.id)
+    .maybeSingle();
+  if (savedProfileError && savedProfileError.code !== 'PGRST116') {
+    throw new Error(savedProfileError.message);
+  }
+
+  const profileComplete = isOnboardingProfileComplete(savedProfile as Partial<OnboardingProfileShape> | null);
+  const missingFields = getMissingOnboardingFields(savedProfile as Partial<OnboardingProfileShape> | null);
+
+  if (profileComplete !== extendedPatch.onboarding_complete) {
+    await upsertProfile(profileSb, user.id, { onboarding_complete: profileComplete });
+  }
+
   revalidatePath('/dashboard');
   revalidatePath('/settings');
   revalidatePath('/onboarding');
+  revalidatePath('/jobs/new');
+  revalidatePath('/wizard/create/cp12');
+  revalidatePath('/wizard/create/gas_service');
+  revalidatePath('/wizard/create/general_works');
+  revalidatePath('/wizard/create/gas_warning_notice');
+  revalidatePath('/wizard/create/breakdown');
+  revalidatePath('/wizard/create/commissioning');
+
+  return { profileComplete, missingFields };
 }

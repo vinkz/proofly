@@ -27,7 +27,7 @@ export default async function SettingsPage() {
   const { hasPassword } = await userHasPassword();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28">
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold text-muted">Settings</h1>
         <p className="text-sm text-muted-foreground/70">
