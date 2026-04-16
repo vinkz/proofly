@@ -51,6 +51,8 @@ export async function GET(request: Request) {
     appliances: [
       {
         appliance_type: 'Boiler',
+        landlords_appliance: 'Yes',
+        appliance_inspected: 'Yes',
         location: 'Kitchen',
         make_model: 'Vaillant EcoTec',
         operating_pressure: '20 mbar',
@@ -126,6 +128,8 @@ export async function GET(request: Request) {
     const appliances: ApplianceInput[] = [
       {
         description: 'Vaillant EcoTec',
+        landlordAppliance: 'Yes',
+        applianceInspected: 'Yes',
         location: 'Kitchen',
         type: 'Boiler',
         flueType: 'Balanced',
@@ -135,7 +139,7 @@ export async function GET(request: Request) {
         ventilationSatisfactory: 'PASS',
         flueTerminationSatisfactory: 'PASS',
         spillageTest: 'PASS',
-        applianceSafeToUse: 'Safe',
+        applianceSafeToUse: 'Yes',
         remedialActionTaken: 'NCS',
         combustionHighCoPpm: '9',
         combustionHighCo2: '9.3',
@@ -146,7 +150,7 @@ export async function GET(request: Request) {
         combustionHigh: '3 ppm',
         combustionLow: '2 ppm',
         combustionNotes: 'Test route combustion values seeded for PDF.',
-        applianceServiced: 'YES',
+        applianceServiced: 'Yes',
       },
     ];
     const directBytes = await renderCp12CertificatePdf({

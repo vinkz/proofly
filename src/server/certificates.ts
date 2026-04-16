@@ -349,6 +349,27 @@ function formatCp12SafetyClassification(value: string | null | undefined) {
   return '';
 }
 
+function formatCp12ApplianceSafeToUse(appliance: Pick<Cp12Appliance, 'safety_classification' | 'classification_code' | 'safety_rating'>) {
+  const normalized = String(
+    appliance.safety_classification || appliance.classification_code || appliance.safety_rating || '',
+  )
+    .trim()
+    .toLowerCase();
+  if (!normalized) return '';
+  if (normalized === 'safe' || normalized === 'ncs' || normalized === 'not to current standards') return 'Yes';
+  if (
+    normalized === 'ar' ||
+    normalized === 'at risk' ||
+    normalized === 'at_risk' ||
+    normalized === 'id' ||
+    normalized === 'immediately dangerous' ||
+    normalized === 'immediately_dangerous'
+  ) {
+    return 'No';
+  }
+  return '';
+}
+
 function buildCp12ApplianceUnsafePdfSummary(appliance: Cp12Appliance) {
   const classification = formatCp12SafetyClassification(
     appliance.safety_classification || appliance.classification_code || appliance.safety_rating,
@@ -1615,6 +1636,8 @@ const Cp12ApplianceSchema = z.object({
     z.object({
       id: z.string().uuid().optional(),
       appliance_type: optionalText,
+      landlords_appliance: optionalText,
+      appliance_inspected: optionalText,
       location: optionalText,
       make_model: optionalText,
       operating_pressure: optionalText,
@@ -2837,8 +2860,11 @@ async function generateCp12CertificateForJob(params: {
     const lowCoPpm = toText(app.low_co_ppm ?? app.co_reading_low ?? '');
     const lowCo2 = toText(app.low_co2 ?? '');
     const lowRatio = toText(app.low_ratio ?? '');
+    const applianceSafe = formatCp12ApplianceSafeToUse(app);
     return {
       description: toText(app.make_model ?? appExtras.appliance_make_model ?? app.appliance_type ?? ''),
+      landlordAppliance: toText(app.landlords_appliance ?? ''),
+      applianceInspected: toText(app.appliance_inspected ?? ''),
       location: toText(app.location ?? ''),
       type: toText(app.appliance_type ?? ''),
       flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
@@ -2848,7 +2874,7 @@ async function generateCp12CertificateForJob(params: {
       ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
       flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
       spillageTest: toText(app.gas_tightness_test ?? ''),
-      applianceSafeToUse: toText(app.safety_rating ?? app.classification_code ?? ''),
+      applianceSafeToUse: applianceSafe,
       remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),
       combustionHighCoPpm: highCoPpm,
       combustionHighCo2: highCo2,
@@ -2860,8 +2886,6 @@ async function generateCp12CertificateForJob(params: {
       combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? '')),
       combustionNotes: toText(app.combustion_notes ?? ''),
       applianceServiced: toText(app.appliance_serviced ?? ''),
-      applianceInspected: 'Yes',
-      landlordAppliance: 'Yes',
     };
   });
 

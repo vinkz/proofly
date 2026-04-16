@@ -183,6 +183,8 @@ export const CP12_DEMO_INFO = {
 
 export const CP12_DEMO_APPLIANCE = {
   appliance_type: 'combi boiler',
+  landlords_appliance: 'Yes',
+  appliance_inspected: 'Yes',
   location: 'kitchen cupboard',
   make_model: 'Worcester Bosch Greenstar 30i',
   operating_pressure: '20 mbar',

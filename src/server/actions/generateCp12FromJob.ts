@@ -9,6 +9,8 @@ import { getCustomerById } from '@/server/customer-service';
 type JobRow = Database['public']['Tables']['jobs']['Row'];
 type Cp12ApplianceRow = {
   appliance_type?: string | null;
+  landlords_appliance?: string | null;
+  appliance_inspected?: string | null;
   location?: string | null;
   make_model?: string | null;
   operating_pressure?: string | null;
@@ -93,6 +95,25 @@ function buildCp12ApplianceUnsafePdfSummary(row: Cp12ApplianceRow) {
   ]
     .filter(Boolean)
     .join('; ');
+}
+
+function formatCp12ApplianceSafeToUse(row: Pick<Cp12ApplianceRow, 'safety_classification' | 'classification_code' | 'safety_rating'>) {
+  const normalized = String(row.safety_classification || row.classification_code || row.safety_rating || '')
+    .trim()
+    .toLowerCase();
+  if (!normalized) return '';
+  if (normalized === 'safe' || normalized === 'ncs' || normalized === 'not to current standards') return 'Yes';
+  if (
+    normalized === 'ar' ||
+    normalized === 'at risk' ||
+    normalized === 'at_risk' ||
+    normalized === 'id' ||
+    normalized === 'immediately dangerous' ||
+    normalized === 'immediately_dangerous'
+  ) {
+    return 'No';
+  }
+  return '';
 }
 
 export async function generateCp12FromJob(jobId: string, currentUserId: string): Promise<GenerateCp12Result> {
@@ -193,8 +214,11 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
     const lowCoPpm = toText(row.low_co_ppm ?? row.co_reading_low ?? '');
     const lowCo2 = toText(row.low_co2 ?? '');
     const lowRatio = toText(row.low_ratio ?? '');
+    const applianceSafe = formatCp12ApplianceSafeToUse(row);
     return {
       description: toText(row.make_model ?? row.appliance_type ?? ''),
+      landlordAppliance: toText(row.landlords_appliance ?? ''),
+      applianceInspected: toText(row.appliance_inspected ?? ''),
       location: toText(row.location ?? ''),
       type: toText(row.appliance_type ?? ''),
       flueType: toText(row.flue_type ?? row.ventilation_provision ?? ''),
@@ -204,7 +228,7 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
       ventilationSatisfactory: toText(row.ventilation_satisfactory ?? row.ventilation_provision ?? ''),
       flueTerminationSatisfactory: toText(row.flue_condition ?? ''),
       spillageTest: toText(row.gas_tightness_test ?? ''),
-      applianceSafeToUse: toText(row.safety_rating ?? row.classification_code ?? ''),
+      applianceSafeToUse: applianceSafe,
       remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(row),
       combustionHighCoPpm: highCoPpm,
       combustionHighCo2: highCo2,
@@ -216,8 +240,6 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
       combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(row.co_reading_low ?? '')),
       combustionNotes: toText(row.combustion_notes ?? ''),
       applianceServiced: toText((row as Record<string, unknown>).appliance_serviced ?? ''),
-      applianceInspected: 'Yes',
-      landlordAppliance: 'Yes',
     };
   });
 

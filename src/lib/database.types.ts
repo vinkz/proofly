@@ -145,6 +145,7 @@ export type Database = {
       cp12_appliances: {
         Row: {
           appliance_type: string | null
+          appliance_inspected: string | null
           appliance_serviced: string | null
           appliance_disconnected: boolean | null
           actions_required: string | null
@@ -168,6 +169,7 @@ export type Database = {
           low_co2: string | null
           low_co_ppm: string | null
           low_ratio: string | null
+          landlords_appliance: string | null
           make_model: string | null
           operating_pressure: string | null
           danger_do_not_use_attached: boolean | null
@@ -183,6 +185,7 @@ export type Database = {
         }
         Insert: {
           appliance_type?: string | null
+          appliance_inspected?: string | null
           appliance_serviced?: string | null
           appliance_disconnected?: boolean | null
           actions_required?: string | null
@@ -206,6 +209,7 @@ export type Database = {
           low_co2?: string | null
           low_co_ppm?: string | null
           low_ratio?: string | null
+          landlords_appliance?: string | null
           make_model?: string | null
           operating_pressure?: string | null
           danger_do_not_use_attached?: boolean | null
@@ -221,6 +225,7 @@ export type Database = {
         }
         Update: {
           appliance_type?: string | null
+          appliance_inspected?: string | null
           appliance_serviced?: string | null
           appliance_disconnected?: boolean | null
           actions_required?: string | null
@@ -244,6 +249,7 @@ export type Database = {
           low_co2?: string | null
           low_co_ppm?: string | null
           low_ratio?: string | null
+          landlords_appliance?: string | null
           make_model?: string | null
           operating_pressure?: string | null
           danger_do_not_use_attached?: boolean | null

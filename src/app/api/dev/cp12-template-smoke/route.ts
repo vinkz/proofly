@@ -101,6 +101,8 @@ export async function GET(request: Request) {
     const appliances: ApplianceInput[] = [
       {
         description: CP12_DEMO_APPLIANCE.make_model,
+        landlordAppliance: CP12_DEMO_APPLIANCE.landlords_appliance,
+        applianceInspected: CP12_DEMO_APPLIANCE.appliance_inspected,
         location: CP12_DEMO_APPLIANCE.location,
         type: CP12_DEMO_APPLIANCE.appliance_type,
         flueType: CP12_DEMO_APPLIANCE.flue_type,
@@ -110,7 +112,7 @@ export async function GET(request: Request) {
         ventilationSatisfactory: CP12_DEMO_APPLIANCE.ventilation_satisfactory,
         flueTerminationSatisfactory: CP12_DEMO_APPLIANCE.flue_condition,
         spillageTest: CP12_DEMO_APPLIANCE.gas_tightness_test,
-        applianceSafeToUse: CP12_DEMO_APPLIANCE.safety_rating,
+        applianceSafeToUse: 'Yes',
         remedialActionTaken: CP12_DEMO_APPLIANCE.classification_code,
         combustionHighCoPpm: CP12_DEMO_APPLIANCE.high_co_ppm,
         combustionHighCo2: CP12_DEMO_APPLIANCE.high_co2,

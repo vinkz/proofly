@@ -136,6 +136,7 @@ export type Database = {
       cp12_appliances: {
         Row: {
           appliance_type: string | null
+          appliance_inspected: string | null
           classification_code: string | null
           co_reading_ppm: string | null
           created_at: string | null
@@ -145,6 +146,7 @@ export type Database = {
           heat_input: string | null
           id: string
           job_id: string | null
+          landlords_appliance: string | null
           location: string | null
           make_model: string | null
           operating_pressure: string | null
@@ -156,6 +158,7 @@ export type Database = {
         }
         Insert: {
           appliance_type?: string | null
+          appliance_inspected?: string | null
           classification_code?: string | null
           co_reading_ppm?: string | null
           created_at?: string | null
@@ -165,6 +168,7 @@ export type Database = {
           heat_input?: string | null
           id?: string
           job_id?: string | null
+          landlords_appliance?: string | null
           location?: string | null
           make_model?: string | null
           operating_pressure?: string | null
@@ -176,6 +180,7 @@ export type Database = {
         }
         Update: {
           appliance_type?: string | null
+          appliance_inspected?: string | null
           classification_code?: string | null
           co_reading_ppm?: string | null
           created_at?: string | null
@@ -185,6 +190,7 @@ export type Database = {
           heat_input?: string | null
           id?: string
           job_id?: string | null
+          landlords_appliance?: string | null
           location?: string | null
           make_model?: string | null
           operating_pressure?: string | null

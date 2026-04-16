@@ -44,6 +44,8 @@ export type Cp12SafetyClassification = 'safe' | 'ncs' | 'ar' | 'id';
 export type Cp12Appliance = {
   id?: string;
   appliance_type: string;
+  landlords_appliance: string;
+  appliance_inspected: string;
   location: string;
   make_model: string;
   operating_pressure: string;

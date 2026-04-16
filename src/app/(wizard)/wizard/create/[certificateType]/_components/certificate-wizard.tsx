@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { SignatureCard } from '@/components/certificates/signature-card';
 import { EvidenceCard } from './evidence-card';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
-import { ChecksStep, type ChecksStepValues } from '@/components/wizard/steps/checks-step';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
@@ -60,6 +59,8 @@ type WizardProps = {
 
 const emptyAppliance: Cp12Appliance = {
   appliance_type: '',
+  landlords_appliance: 'Yes',
+  appliance_inspected: 'Yes',
   location: '',
   make_model: '',
   operating_pressure: '',
@@ -150,7 +151,6 @@ type Cp12DraftState = {
   evidenceFields: Record<string, string>;
   appliances: Cp12Appliance[];
   measurementSource: 'manual' | 'tpi';
-  combustionOpen: Record<number, boolean>;
   defects: {
     defect_description: string;
     remedial_action: string;
@@ -241,6 +241,13 @@ const CP12_SAFETY_CLASSIFICATION_OPTIONS: Array<{ label: string; value: Cp12Safe
   { label: 'Immediately Dangerous', value: 'id' },
 ];
 
+type YesNoValue = 'yes' | 'no' | '';
+
+const CP12_YES_NO_OPTIONS: Array<{ label: string; value: Exclude<YesNoValue, ''> }> = [
+  { label: 'Yes', value: 'yes' },
+  { label: 'No', value: 'no' },
+];
+
 const normalizeSafetyClassification = (value?: string | null): Cp12SafetyClassification | '' => {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (normalized === 'safe') return 'safe';
@@ -254,6 +261,36 @@ const getApplianceSafetyClassification = (appliance: Cp12Appliance): Cp12SafetyC
   normalizeSafetyClassification(appliance.safety_classification) ||
   normalizeSafetyClassification(appliance.classification_code) ||
   normalizeSafetyClassification(appliance.safety_rating);
+
+const normalizeYesNoValue = (value?: string | null): YesNoValue => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'yes' || normalized === 'y' || normalized === 'true') return 'yes';
+  if (normalized === 'no' || normalized === 'n' || normalized === 'false') return 'no';
+  return '';
+};
+
+const yesNoLabel = (value: YesNoValue) => {
+  if (value === 'yes') return 'Yes';
+  if (value === 'no') return 'No';
+  return '';
+};
+
+const getApplianceSafeToUse = (appliance: Cp12Appliance): YesNoValue => {
+  const classification = getApplianceSafetyClassification(appliance);
+  if (classification === 'safe' || classification === 'ncs') return 'yes';
+  if (classification === 'ar' || classification === 'id') return 'no';
+  return '';
+};
+
+const getCp12ClassificationOptions = (safeToUse: YesNoValue) => {
+  if (safeToUse === 'yes') {
+    return CP12_SAFETY_CLASSIFICATION_OPTIONS.filter((option) => option.value === 'safe' || option.value === 'ncs');
+  }
+  if (safeToUse === 'no') {
+    return CP12_SAFETY_CLASSIFICATION_OPTIONS.filter((option) => option.value === 'ar' || option.value === 'id');
+  }
+  return CP12_SAFETY_CLASSIFICATION_OPTIONS;
+};
 
 const legacySafetyFromClassification = (classification: Cp12SafetyClassification | '') => {
   if (classification === 'safe') return { safety_rating: 'safe', classification_code: '' };
@@ -366,6 +403,8 @@ export function CertificateWizard({
   );
   const sanitizeAppliance = (appliance: Cp12Appliance): Cp12Appliance => ({
     appliance_type: appliance.appliance_type ?? '',
+    landlords_appliance: appliance.landlords_appliance ?? 'Yes',
+    appliance_inspected: appliance.appliance_inspected ?? 'Yes',
     location: appliance.location ?? '',
     make_model: appliance.make_model ?? '',
     operating_pressure: appliance.operating_pressure ?? '',
@@ -408,7 +447,6 @@ export function CertificateWizard({
       : [emptyAppliance],
   );
   const [measurementSource, setMeasurementSource] = useState<'manual' | 'tpi'>('manual');
-  const [combustionOpen, setCombustionOpen] = useState<Record<number, boolean>>({});
   const [defects, setDefects] = useState({
     defect_description: resolvedInitialInfo.defect_description ?? '',
     remedial_action: resolvedInitialInfo.remedial_action ?? '',
@@ -510,7 +548,6 @@ export function CertificateWizard({
       evidenceFields,
       appliances,
       measurementSource,
-      combustionOpen,
       defects,
       completionDate,
       engineerSignature,
@@ -521,7 +558,6 @@ export function CertificateWizard({
     [
       addressSearchQuery,
       appliances,
-      combustionOpen,
       completionDate,
       customerSignature,
       defects,
@@ -547,7 +583,6 @@ export function CertificateWizard({
         setAppliances(draft.appliances.slice(0, MAX_APPLIANCES).map(sanitizeAppliance));
       }
       setMeasurementSource(draft.measurementSource === 'tpi' ? 'tpi' : 'manual');
-      setCombustionOpen(draft.combustionOpen ?? {});
       setDefects((prev) => ({ ...prev, ...(draft.defects ?? {}) }));
       setCompletionDate(draft.completionDate || completionDate);
       setEngineerSignature(draft.engineerSignature ?? '');
@@ -1260,11 +1295,46 @@ export function CertificateWizard({
       current.safety_classification = classification;
       current.safety_rating = legacy.safety_rating;
       current.classification_code = legacy.classification_code;
-      if (classification === 'safe') {
+      if (classification === 'safe' || classification === 'ncs') {
         current.warning_notice_issued = false;
         current.appliance_disconnected = false;
         current.danger_do_not_use_attached = false;
       }
+      next[index] = current;
+      return next;
+    });
+  };
+
+  const setApplianceSafeToUse = (index: number, value: YesNoValue) => {
+    setAppliances((prev) => {
+      const next = [...prev];
+      const current = { ...next[index] };
+      const currentClassification = getApplianceSafetyClassification(current);
+
+      if (!value) {
+        current.safety_classification = '';
+        current.safety_rating = '';
+        current.classification_code = '';
+      } else {
+        const targetClassification =
+          value === 'yes'
+            ? currentClassification === 'ncs'
+              ? 'ncs'
+              : 'safe'
+            : currentClassification === 'id'
+              ? 'id'
+              : 'ar';
+        const legacy = legacySafetyFromClassification(targetClassification);
+        current.safety_classification = targetClassification;
+        current.safety_rating = legacy.safety_rating;
+        current.classification_code = legacy.classification_code;
+        if (value === 'yes') {
+          current.warning_notice_issued = false;
+          current.appliance_disconnected = false;
+          current.danger_do_not_use_attached = false;
+        }
+      }
+
       next[index] = current;
       return next;
     });
@@ -1288,10 +1358,6 @@ export function CertificateWizard({
       next[index] = current;
       return next;
     });
-
-    if (values.highCoPpm || values.highCo2Percent || values.highRatio || values.lowCoPpm || values.lowCo2Percent || values.lowRatio) {
-      setCombustionOpen((prev) => ({ ...prev, [index]: true }));
-    }
 
     pushToast({
       title: 'Voice readings ready',
@@ -1378,34 +1444,6 @@ export function CertificateWizard({
         serial_number: normalizedProfiles[0].serial ?? prev.serial_number ?? '',
       }));
     }
-  };
-
-  const handleApplianceChecksChange = (index: number, updates: Partial<ChecksStepValues>) => {
-    const mapField = (key: keyof ChecksStepValues, value: string | undefined) => {
-      if (typeof value !== 'string') return;
-      if (key === 'ventilation_satisfactory') setApplianceField(index, 'ventilation_satisfactory', value);
-      if (key === 'flue_condition') setApplianceField(index, 'flue_condition', value);
-      if (key === 'stability_test') setApplianceField(index, 'stability_test', value);
-      if (key === 'gas_tightness_test') setApplianceField(index, 'gas_tightness_test', value);
-      if (key === 'operating_pressure') setApplianceField(index, 'operating_pressure', value);
-      if (key === 'heat_input') setApplianceField(index, 'heat_input', value);
-      if (key === 'co_reading_high') setApplianceField(index, 'co_reading_high', value);
-      if (key === 'co_reading_low') setApplianceField(index, 'co_reading_low', value);
-      if (key === 'co_reading_ppm') setApplianceField(index, 'co_reading_ppm', value);
-      if (key === 'safety_rating') setApplianceField(index, 'safety_rating', value);
-      if (key === 'classification_code') setApplianceField(index, 'classification_code', value);
-      if (key === 'safety_devices_correct') setApplianceField(index, 'safety_devices_correct', value);
-      if (key === 'flue_performance_test') {
-        setApplianceField(index, 'flue_performance_test', value);
-        // Keep legacy field populated without exposing a separate flue-condition input.
-        setApplianceField(index, 'flue_condition', value);
-      }
-      if (key === 'appliance_serviced') setApplianceField(index, 'appliance_serviced', value);
-    };
-
-    (Object.entries(updates) as Array<[keyof ChecksStepValues, string | undefined]>).forEach(([key, value]) =>
-      mapField(key, value),
-    );
   };
 
   const VoiceButton = ({ onClick }: { onClick: () => void }) => (
@@ -2028,222 +2066,284 @@ export function CertificateWizard({
                     onChange={(val) => setApplianceField(index, 'flue_type', val)}
                   />
                 </div>
-                <ChecksStep
-                  values={{
-                    ventilation_satisfactory: appliance.ventilation_satisfactory ?? '',
-                    stability_test: appliance.stability_test ?? '',
-                    gas_tightness_test: appliance.gas_tightness_test ?? '',
-                    operating_pressure: appliance.operating_pressure ?? '',
-                    heat_input: appliance.heat_input ?? '',
-                    co_reading_ppm: appliance.co_reading_ppm ?? '',
-                    safety_devices_correct: appliance.safety_devices_correct ?? '',
-                    flue_performance_test: appliance.flue_performance_test ?? '',
-                    appliance_serviced: appliance.appliance_serviced ?? '',
-                  }}
-                  onChange={(updates) => handleApplianceChecksChange(index, updates)}
-                  measurementSource={measurementSource}
-                  measurementReadOnly={measurementSource === 'tpi'}
-                />
                 {(() => {
                   const classification = getApplianceSafetyClassification(appliance);
-                  const showUnsafeFields = classification && classification !== 'safe';
+                  const safeToUse = getApplianceSafeToUse(appliance);
+                  const showUnsafeFields = classification === 'ar' || classification === 'id';
                   return (
-                    <div className="mt-4 rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 shadow-sm">
-                      <EnumChips
-                        label="Safety classification"
-                        value={classification}
-                        options={CP12_SAFETY_CLASSIFICATION_OPTIONS}
-                        onChange={(val) => setApplianceSafetyClassification(index, val as Cp12SafetyClassification)}
-                      />
-                      {showUnsafeFields ? (
-                        <div className="mt-4 space-y-3">
-                          <Textarea
-                            value={appliance.defect_notes ?? ''}
-                            onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
-                            placeholder="Defect notes"
-                            className="min-h-[80px] bg-white"
+                    <div className="space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                          <EnumChips
+                            label="Landlord's appliance"
+                            value={normalizeYesNoValue(appliance.landlords_appliance)}
+                            options={CP12_YES_NO_OPTIONS}
+                            onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
                           />
-                          <Textarea
-                            value={appliance.actions_taken ?? ''}
-                            onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
-                            placeholder="Actions taken"
-                            className="min-h-[80px] bg-white"
+                        </div>
+                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                          <EnumChips
+                            label="Appliance inspected"
+                            value={normalizeYesNoValue(appliance.appliance_inspected)}
+                            options={CP12_YES_NO_OPTIONS}
+                            onChange={(val) => setApplianceField(index, 'appliance_inspected', yesNoLabel(val as YesNoValue))}
                           />
-                          <Textarea
-                            value={appliance.actions_required ?? ''}
-                            onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
-                            placeholder="Actions required"
-                            className="min-h-[80px] bg-white"
+                        </div>
+                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                          <UnitNumberInput
+                            label="Operating pressure"
+                            unit="mbar"
+                            value={appliance.operating_pressure ?? ''}
+                            onChange={(val) => setApplianceField(index, 'operating_pressure', val)}
+                            disabled={measurementSource === 'tpi'}
+                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
                           />
-                          <div className="grid gap-2 text-sm text-muted sm:grid-cols-3">
-                            <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
-                              <input
-                                type="checkbox"
-                                className="mt-1 h-4 w-4 accent-[var(--accent)]"
-                                checked={appliance.warning_notice_issued ?? false}
-                                onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
+                        </div>
+                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                          <UnitNumberInput
+                            label="Heat input"
+                            unit="kW"
+                            value={appliance.heat_input ?? ''}
+                            onChange={(val) => setApplianceField(index, 'heat_input', val)}
+                            disabled={measurementSource === 'tpi'}
+                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/30 bg-white/75 p-3 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Combustion readings</p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-white/25 bg-white/80 p-3 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">High combustion reading</p>
+                            <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                              <UnitNumberInput
+                                label="CO ppm"
+                                unit="ppm"
+                                value={appliance.high_co_ppm ?? ''}
+                                onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
+                                disabled={measurementSource === 'tpi'}
+                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
                               />
-                              <span>Warning notice issued</span>
-                            </label>
-                            <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
-                              <input
-                                type="checkbox"
-                                className="mt-1 h-4 w-4 accent-[var(--accent)]"
-                                checked={appliance.appliance_disconnected ?? false}
-                                onChange={(e) => setApplianceBooleanField(index, 'appliance_disconnected', e.target.checked)}
+                              <UnitNumberInput
+                                label="CO2 %"
+                                unit="%"
+                                value={appliance.high_co2 ?? ''}
+                                onChange={(val) => setApplianceField(index, 'high_co2', val)}
+                                disabled={measurementSource === 'tpi'}
+                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
                               />
-                              <span>Appliance disconnected</span>
-                            </label>
-                            <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
-                              <input
-                                type="checkbox"
-                                className="mt-1 h-4 w-4 accent-[var(--accent)]"
-                                checked={appliance.danger_do_not_use_attached ?? false}
-                                onChange={(e) => setApplianceBooleanField(index, 'danger_do_not_use_attached', e.target.checked)}
+                              <UnitNumberInput
+                                label="Ratio"
+                                unit="ratio"
+                                value={appliance.high_ratio ?? ''}
+                                onChange={(val) => setApplianceField(index, 'high_ratio', val)}
+                                disabled={measurementSource === 'tpi'}
+                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
                               />
-                              <span>Danger Do Not Use attached</span>
-                            </label>
+                            </div>
+                          </div>
+                          <div className="rounded-2xl border border-white/25 bg-white/80 p-3 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Low combustion reading</p>
+                            <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                              <UnitNumberInput
+                                label="CO ppm"
+                                unit="ppm"
+                                value={appliance.low_co_ppm ?? ''}
+                                onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
+                                disabled={measurementSource === 'tpi'}
+                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                              />
+                              <UnitNumberInput
+                                label="CO2 %"
+                                unit="%"
+                                value={appliance.low_co2 ?? ''}
+                                onChange={(val) => setApplianceField(index, 'low_co2', val)}
+                                disabled={measurementSource === 'tpi'}
+                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                              />
+                              <UnitNumberInput
+                                label="Ratio"
+                                unit="ratio"
+                                value={appliance.low_ratio ?? ''}
+                                onChange={(val) => setApplianceField(index, 'low_ratio', val)}
+                                disabled={measurementSource === 'tpi'}
+                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                              />
+                            </div>
                           </div>
                         </div>
-                      ) : (
-                        <p className="mt-2 text-xs text-muted-foreground/70">
-                          Use NCS, AR, or ID to record defect notes and unsafe-state actions for this appliance.
-                        </p>
-                      )}
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                            <span>Combustion notes (optional)</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
+                                onClick={() =>
+                                  pushToast({
+                                    title: 'Photo',
+                                    description: 'Attach FGA screenshots via Photos on the next step.',
+                                    variant: 'default',
+                                  })
+                                }
+                              >
+                                📷 Photo
+                              </button>
+                              <VoiceButton
+                                onClick={() =>
+                                  pushToast({
+                                    title: 'Voice capture',
+                                    description: 'Whisper capture will drop notes here soon.',
+                                    variant: 'default',
+                                  })
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
+                                onClick={() =>
+                                  pushToast({
+                                    title: 'Text',
+                                    description: 'Add any notes below.',
+                                    variant: 'default',
+                                  })
+                                }
+                              >
+                                ⌨️ Text
+                              </button>
+                            </div>
+                          </div>
+                          <Textarea
+                            value={appliance.combustion_notes ?? ''}
+                            onChange={(e) => setApplianceField(index, 'combustion_notes', e.target.value)}
+                            placeholder="Any combustion notes or analyser references"
+                            className="min-h-[90px]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <PassFailToggle
+                          label="Safety device(s) correct operation"
+                          value={(appliance.safety_devices_correct ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.safety_devices_correct ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                          onChange={(val) => setApplianceField(index, 'safety_devices_correct', val ?? '')}
+                        />
+                        <PassFailToggle
+                          label="Ventilation provision satisfactory"
+                          value={(appliance.ventilation_satisfactory ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.ventilation_satisfactory ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                          onChange={(val) => setApplianceField(index, 'ventilation_satisfactory', val ?? '')}
+                        />
+                        <PassFailToggle
+                          label="Visual condition of flue and termination satisfactory"
+                          value={(appliance.flue_condition ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_condition ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                          onChange={(val) => setApplianceField(index, 'flue_condition', val ?? '')}
+                        />
+                        <PassFailToggle
+                          label="Flue performance test"
+                          value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                          onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
+                        />
+                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                          <EnumChips
+                            label="Appliance serviced"
+                            value={normalizeYesNoValue(appliance.appliance_serviced)}
+                            options={CP12_YES_NO_OPTIONS}
+                            onChange={(val) => setApplianceField(index, 'appliance_serviced', yesNoLabel(val as YesNoValue))}
+                          />
+                        </div>
+                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                          <EnumChips
+                            label="Appliance safe to use"
+                            value={safeToUse}
+                            options={CP12_YES_NO_OPTIONS}
+                            onChange={(val) => setApplianceSafeToUse(index, (val as YesNoValue) ?? '')}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 shadow-sm">
+                        <EnumChips
+                          label="Condition classification"
+                          value={classification}
+                          options={getCp12ClassificationOptions(safeToUse)}
+                          onChange={(val) => setApplianceSafetyClassification(index, val as Cp12SafetyClassification)}
+                        />
+                        {showUnsafeFields ? (
+                          <div className="mt-4 space-y-3">
+                            <Textarea
+                              value={appliance.defect_notes ?? ''}
+                              onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
+                              placeholder="Defect notes"
+                              className="min-h-[80px] bg-white"
+                            />
+                            <Textarea
+                              value={appliance.actions_taken ?? ''}
+                              onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
+                              placeholder="Actions taken"
+                              className="min-h-[80px] bg-white"
+                            />
+                            <Textarea
+                              value={appliance.actions_required ?? ''}
+                              onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
+                              placeholder="Actions required"
+                              className="min-h-[80px] bg-white"
+                            />
+                            <div className="grid gap-2 text-sm text-muted sm:grid-cols-3">
+                              <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                  checked={appliance.warning_notice_issued ?? false}
+                                  onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
+                                />
+                                <span>Warning notice issued</span>
+                              </label>
+                              <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                  checked={appliance.appliance_disconnected ?? false}
+                                  onChange={(e) => setApplianceBooleanField(index, 'appliance_disconnected', e.target.checked)}
+                                />
+                                <span>Appliance disconnected</span>
+                              </label>
+                              <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                  checked={appliance.danger_do_not_use_attached ?? false}
+                                  onChange={(e) => setApplianceBooleanField(index, 'danger_do_not_use_attached', e.target.checked)}
+                                />
+                                <span>Danger Do Not Use attached</span>
+                              </label>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-muted-foreground/70">
+                            Use Safe or NCS when the appliance remains safe to use. Switch Appliance safe to use to No for AR or ID.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="rounded-2xl border border-white/30 bg-white/75 p-3 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Additional checks</p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <PassFailToggle
+                            label="Stability test"
+                            value={(appliance.stability_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.stability_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                            onChange={(val) => setApplianceField(index, 'stability_test', val ?? '')}
+                          />
+                          <PassFailToggle
+                            label="Gas tightness test"
+                            value={(appliance.gas_tightness_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.gas_tightness_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                            onChange={(val) => setApplianceField(index, 'gas_tightness_test', val ?? '')}
+                          />
+                        </div>
+                      </div>
                     </div>
                   );
                 })()}
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-white/30 bg-white/75 p-3 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Combustion readings</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-full px-3 py-1 text-xs"
-                    onClick={() =>
-                      setCombustionOpen((prev) => ({
-                        ...prev,
-                        [index]: !(prev[index] ?? false),
-                      }))
-                    }
-                  >
-                    {combustionOpen[index] ? 'Hide' : 'Show'}
-                  </Button>
-                </div>
-                {combustionOpen[index] ? (
-                  <div className="mt-3 space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-white/25 bg-white/80 p-3 shadow-sm">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">High combustion reading</p>
-                        <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                          <UnitNumberInput
-                            label="CO ppm"
-                            unit="ppm"
-                            value={appliance.high_co_ppm ?? ''}
-                            onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
-                            disabled={measurementSource === 'tpi'}
-                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
-                          />
-                          <UnitNumberInput
-                            label="CO2 %"
-                            unit="%"
-                            value={appliance.high_co2 ?? ''}
-                            onChange={(val) => setApplianceField(index, 'high_co2', val)}
-                            disabled={measurementSource === 'tpi'}
-                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
-                          />
-                          <UnitNumberInput
-                            label="Ratio"
-                            unit="ratio"
-                            value={appliance.high_ratio ?? ''}
-                            onChange={(val) => setApplianceField(index, 'high_ratio', val)}
-                            disabled={measurementSource === 'tpi'}
-                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
-                          />
-                        </div>
-                      </div>
-                      <div className="rounded-2xl border border-white/25 bg-white/80 p-3 shadow-sm">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Low combustion reading</p>
-                        <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                          <UnitNumberInput
-                            label="CO ppm"
-                            unit="ppm"
-                            value={appliance.low_co_ppm ?? ''}
-                            onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
-                            disabled={measurementSource === 'tpi'}
-                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
-                          />
-                          <UnitNumberInput
-                            label="CO2 %"
-                            unit="%"
-                            value={appliance.low_co2 ?? ''}
-                            onChange={(val) => setApplianceField(index, 'low_co2', val)}
-                            disabled={measurementSource === 'tpi'}
-                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
-                          />
-                          <UnitNumberInput
-                            label="Ratio"
-                            unit="ratio"
-                            value={appliance.low_ratio ?? ''}
-                            onChange={(val) => setApplianceField(index, 'low_ratio', val)}
-                            disabled={measurementSource === 'tpi'}
-                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                        <span>Combustion notes (optional)</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
-                            onClick={() =>
-                              pushToast({
-                                title: 'Photo',
-                                description: 'Attach FGA screenshots via Photos on the next step.',
-                                variant: 'default',
-                              })
-                            }
-                          >
-                            📷 Photo
-                          </button>
-                          <VoiceButton
-                            onClick={() =>
-                              pushToast({
-                                title: 'Voice capture',
-                                description: 'Whisper capture will drop notes here soon.',
-                                variant: 'default',
-                              })
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
-                            onClick={() =>
-                              pushToast({
-                                title: 'Text',
-                                description: 'Add any notes below.',
-                                variant: 'default',
-                              })
-                            }
-                          >
-                            ⌨️ Text
-                          </button>
-                        </div>
-                      </div>
-                      <Textarea
-                        value={appliance.combustion_notes ?? ''}
-                        onChange={(e) => setApplianceField(index, 'combustion_notes', e.target.value)}
-                        placeholder="Any combustion notes or analyser references"
-                        className="min-h-[90px]"
-                      />
-                    </div>
-                  </div>
-                ) : null}
               </div>
             </div>
           ))}
@@ -2604,13 +2704,16 @@ function validateCp12AgainstSpec(
   }
   applianceRows.forEach((app, index) => {
     const missing: string[] = [];
+    if (!hasValue(app.landlords_appliance)) missing.push("landlord's appliance");
+    if (!hasValue(app.appliance_inspected)) missing.push('appliance inspected');
     if (!hasValue(app.operating_pressure)) missing.push('operating pressure');
     if (!hasValue(app.heat_input)) missing.push('heat input');
     if (!hasValue(app.safety_devices_correct)) missing.push('safety devices check');
     if (!hasValue(app.ventilation_satisfactory)) missing.push('ventilation check');
+    if (!hasValue(app.flue_condition)) missing.push('visual flue condition');
     if (!hasValue(app.flue_performance_test)) missing.push('flue performance test');
     if (!hasValue(app.appliance_serviced)) missing.push('appliance serviced');
-    if (!getApplianceSafetyClassification(app)) missing.push('safety classification');
+    if (!getApplianceSafetyClassification(app)) missing.push('appliance safe to use');
     if (!hasValue(app.gas_tightness_test)) missing.push('gas tightness');
     if (!hasValue(app.stability_test)) missing.push('stability test');
     if (missing.length) errors.push(`Appliance #${index + 1}: ${missing.join(', ')} required`);
