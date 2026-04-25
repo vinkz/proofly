@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
-import { Mic } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -96,6 +95,7 @@ const emptyAppliance: Cp12Appliance = {
 };
 
 const MAX_APPLIANCES = 5;
+const DEMO_FILL_VISIBLE = false;
 
 const KNOWN_MAKES = getMakes()
   .filter((make) => make.toLowerCase() !== 'other')
@@ -112,6 +112,14 @@ const splitMakeModel = (value: string) => {
 };
 
 const combineMakeModel = (make: string, model: string) => [make.trim(), model.trim()].filter(Boolean).join(' ').trim();
+
+const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && ['Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)) {
+    return null;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
 
 type Cp12InfoState = {
   customer_name: string;
@@ -150,7 +158,6 @@ type Cp12DraftState = {
   jobAddress: Cp12JobAddressState;
   evidenceFields: Record<string, string>;
   appliances: Cp12Appliance[];
-  measurementSource: 'manual' | 'tpi';
   defects: {
     defect_description: string;
     remedial_action: string;
@@ -342,7 +349,7 @@ export function CertificateWizard({
     resolvedInitialInfo.landlord_address_line1 ?? resolvedInitialInfo.landlord_address ?? '',
   );
   const [landlordAddressSearchError, setLandlordAddressSearchError] = useState<string | null>(null);
-  const demoEnabled = certificateType === 'cp12' || process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const demoEnabled = DEMO_FILL_VISIBLE;
   const deferredAddressSearchQuery = useDeferredValue(addressSearchQuery.trim());
   const deferredLandlordAddressSearchQuery = useDeferredValue(landlordAddressSearchQuery.trim());
   const initialLandlordAddressParts = splitAddressParts(String(resolvedInitialInfo.landlord_address ?? ''));
@@ -446,7 +453,6 @@ export function CertificateWizard({
       ? initialAppliances.slice(0, MAX_APPLIANCES).map(sanitizeAppliance)
       : [emptyAppliance],
   );
-  const [measurementSource, setMeasurementSource] = useState<'manual' | 'tpi'>('manual');
   const [defects, setDefects] = useState({
     defect_description: resolvedInitialInfo.defect_description ?? '',
     remedial_action: resolvedInitialInfo.remedial_action ?? '',
@@ -547,7 +553,6 @@ export function CertificateWizard({
       jobAddress,
       evidenceFields,
       appliances,
-      measurementSource,
       defects,
       completionDate,
       engineerSignature,
@@ -566,7 +571,6 @@ export function CertificateWizard({
       info,
       jobAddress,
       landlordAddressSearchQuery,
-      measurementSource,
       step,
     ],
   );
@@ -582,7 +586,6 @@ export function CertificateWizard({
       if (Array.isArray(draft.appliances) && draft.appliances.length) {
         setAppliances(draft.appliances.slice(0, MAX_APPLIANCES).map(sanitizeAppliance));
       }
-      setMeasurementSource(draft.measurementSource === 'tpi' ? 'tpi' : 'manual');
       setDefects((prev) => ({ ...prev, ...(draft.defects ?? {}) }));
       setCompletionDate(draft.completionDate || completionDate);
       setEngineerSignature(draft.engineerSignature ?? '');
@@ -635,7 +638,7 @@ export function CertificateWizard({
         if (controller.signal.aborted) return;
         setPostcodeSuggestions([]);
         setSelectedPostcodeMatchId(null);
-        setAddressSearchError(error instanceof Error ? error.message : 'Try another search.');
+        setAddressSearchError(getAddressLookupErrorMessage(error, 'Try another search.'));
       } finally {
         if (!controller.signal.aborted) {
           setIsPostcodeLookupPending(false);
@@ -692,7 +695,7 @@ export function CertificateWizard({
         if (controller.signal.aborted) return;
         setLandlordAddressSuggestions([]);
         setSelectedLandlordMatchId(null);
-        setLandlordAddressSearchError(error instanceof Error ? error.message : 'Try another search.');
+        setLandlordAddressSearchError(getAddressLookupErrorMessage(error, 'Try another search.'));
       } finally {
         if (!controller.signal.aborted) {
           setIsLandlordLookupPending(false);
@@ -1446,15 +1449,13 @@ export function CertificateWizard({
     }
   };
 
-  const VoiceButton = ({ onClick }: { onClick: () => void }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/40 bg-white/60 text-muted hover:bg-white"
-      aria-label="Voice capture"
-    >
-      <Mic className="h-3.5 w-3.5" />
-    </button>
+  const renderReadingsVoiceButton = (index: number) => (
+    <Cp12VoiceReadings
+      jobId={jobId}
+      buttonLabel="Speak"
+      buttonClassName="h-7 rounded-full px-2.5 py-1 text-[11px]"
+      onApply={(values) => applyVoiceReadings(index, values)}
+    />
   );
 
   const checklist = useMemo(() => {
@@ -1902,36 +1903,36 @@ export function CertificateWizard({
           </Button>
         </div>
       ) : null}
-      <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-        <p className="text-sm font-semibold text-muted">Appliance profile</p>
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm space-y-3">
-          <ApplianceStep
-            appliances={applianceProfiles}
-            onAppliancesChange={handleApplianceProfilesChange}
-            typeOptions={BOILER_TYPE_OPTIONS}
-            allowMultiple
-            showExtendedFields={false}
-            showYear={false}
-            applyExtendedDefaults={false}
-            inlineEditor
-          />
-          <div className="mt-3 flex flex-col items-end gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={addAppliance}
-              disabled={appliances.length >= MAX_APPLIANCES}
-            >
-              + Add another appliance
-            </Button>
-            {appliances.length >= MAX_APPLIANCES ? (
-              <p className="text-xs text-muted-foreground/70">
-                CP12 PDF fits up to five appliances. Start another certificate for more.
-              </p>
-            ) : null}
-          </div>
-        </div>
+      <div className="space-y-2">
+        <ApplianceStep
+          appliances={applianceProfiles}
+          onAppliancesChange={handleApplianceProfilesChange}
+          typeOptions={BOILER_TYPE_OPTIONS}
+          allowMultiple
+          showExtendedFields={false}
+          showYear={false}
+          applyExtendedDefaults={false}
+          inlineEditor
+          showTopAddButton={false}
+          renderInlineHeaderAction={(index) =>
+            index === 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 rounded-full px-3 text-xs"
+                onClick={addAppliance}
+                disabled={appliances.length >= MAX_APPLIANCES}
+              >
+                + Appliance
+              </Button>
+            ) : null
+          }
+        />
+        {appliances.length >= MAX_APPLIANCES ? (
+          <p className="text-right text-xs text-muted-foreground/70">
+            CP12 PDF fits up to five appliances. Start another certificate for more.
+          </p>
+        ) : null}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {CP12_EVIDENCE_CONFIG.filter(
@@ -2013,32 +2014,17 @@ export function CertificateWizard({
       <div className="space-y-4">
         {demoEnabled && (
           <div className="flex justify-end">
-            <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full text-xs"
+              onClick={handleDemoFill}
+              disabled={isPending}
+            >
               Fill demo CP12
             </Button>
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-2 rounded-3xl border border-white/20 bg-white/80 p-3">
-          <p className="text-sm font-semibold text-muted">Measurement source</p>
-          <div className="flex gap-2">
-            {(['manual', 'tpi'] as const).map((source) => (
-              <Button
-                key={source}
-                type="button"
-                variant={measurementSource === source ? 'primary' : 'outline'}
-                className="rounded-full text-xs"
-                onClick={() => setMeasurementSource(source)}
-              >
-                {source === 'manual' ? 'Manual entry' : 'TPI connected'}
-              </Button>
-            ))}
-          </div>
-          {measurementSource === 'tpi' ? (
-            <p className="text-xs text-muted-foreground/70">Readings are locked and treated as captured from the meter.</p>
-          ) : (
-            <p className="text-xs text-muted-foreground/70">Default: enter measurements by hand.</p>
-          )}
-        </div>
         <div className="space-y-4">
           {appliances.map((appliance, index) => (
             <div
@@ -2050,11 +2036,6 @@ export function CertificateWizard({
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-muted">Appliance #{index + 1} checks</p>
-                <Cp12VoiceReadings
-                  jobId={jobId}
-                  disabled={measurementSource === 'tpi'}
-                  onApply={(values) => applyVoiceReadings(index, values)}
-                />
               </div>
               <div className="mt-4">
                 <div className="mb-4">
@@ -2095,8 +2076,7 @@ export function CertificateWizard({
                             unit="mbar"
                             value={appliance.operating_pressure ?? ''}
                             onChange={(val) => setApplianceField(index, 'operating_pressure', val)}
-                            disabled={measurementSource === 'tpi'}
-                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                            labelAction={renderReadingsVoiceButton(index)}
                           />
                         </div>
                         <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
@@ -2105,8 +2085,7 @@ export function CertificateWizard({
                             unit="kW"
                             value={appliance.heat_input ?? ''}
                             onChange={(val) => setApplianceField(index, 'heat_input', val)}
-                            disabled={measurementSource === 'tpi'}
-                            note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                            labelAction={renderReadingsVoiceButton(index)}
                           />
                         </div>
                       </div>
@@ -2122,24 +2101,21 @@ export function CertificateWizard({
                                 unit="ppm"
                                 value={appliance.high_co_ppm ?? ''}
                                 onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
-                                disabled={measurementSource === 'tpi'}
-                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                                labelAction={renderReadingsVoiceButton(index)}
                               />
                               <UnitNumberInput
                                 label="CO2 %"
                                 unit="%"
                                 value={appliance.high_co2 ?? ''}
                                 onChange={(val) => setApplianceField(index, 'high_co2', val)}
-                                disabled={measurementSource === 'tpi'}
-                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                                labelAction={renderReadingsVoiceButton(index)}
                               />
                               <UnitNumberInput
                                 label="Ratio"
                                 unit="ratio"
                                 value={appliance.high_ratio ?? ''}
                                 onChange={(val) => setApplianceField(index, 'high_ratio', val)}
-                                disabled={measurementSource === 'tpi'}
-                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                                labelAction={renderReadingsVoiceButton(index)}
                               />
                             </div>
                           </div>
@@ -2151,24 +2127,21 @@ export function CertificateWizard({
                                 unit="ppm"
                                 value={appliance.low_co_ppm ?? ''}
                                 onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
-                                disabled={measurementSource === 'tpi'}
-                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                                labelAction={renderReadingsVoiceButton(index)}
                               />
                               <UnitNumberInput
                                 label="CO2 %"
                                 unit="%"
                                 value={appliance.low_co2 ?? ''}
                                 onChange={(val) => setApplianceField(index, 'low_co2', val)}
-                                disabled={measurementSource === 'tpi'}
-                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                                labelAction={renderReadingsVoiceButton(index)}
                               />
                               <UnitNumberInput
                                 label="Ratio"
                                 unit="ratio"
                                 value={appliance.low_ratio ?? ''}
                                 onChange={(val) => setApplianceField(index, 'low_ratio', val)}
-                                disabled={measurementSource === 'tpi'}
-                                note={measurementSource === 'tpi' ? 'Captured from meter' : undefined}
+                                labelAction={renderReadingsVoiceButton(index)}
                               />
                             </div>
                           </div>
@@ -2190,15 +2163,6 @@ export function CertificateWizard({
                               >
                                 📷 Photo
                               </button>
-                              <VoiceButton
-                                onClick={() =>
-                                  pushToast({
-                                    title: 'Voice capture',
-                                    description: 'Whisper capture will drop notes here soon.',
-                                    variant: 'default',
-                                  })
-                                }
-                              />
                               <button
                                 type="button"
                                 className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
@@ -2397,14 +2361,7 @@ export function CertificateWizard({
         </div>
 
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-          <div className="flex items-center justify-between text-sm font-semibold text-muted">
-            <span>Comments (optional)</span>
-            <VoiceButton
-              onClick={() =>
-                pushToast({ title: 'Voice capture', description: 'Whisper will fill this soon.', variant: 'default' })
-              }
-            />
-          </div>
+          <p className="text-sm font-semibold text-muted">Comments (optional)</p>
           <Textarea
             className="mt-3 min-h-[90px]"
             value={evidenceFields.comments ?? ''}

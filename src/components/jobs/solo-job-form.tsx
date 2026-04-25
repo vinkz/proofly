@@ -75,6 +75,7 @@ type SoloJobDraftState = {
 };
 
 const ADDRESS_SEARCH_MIN_QUERY_LENGTH = 3;
+const DEMO_AUTOFILL_VISIBLE = false;
 
 const WIZARD_ROUTE_BY_JOB_TYPE: Record<JobType, string> = {
   safety_check: 'cp12',
@@ -92,6 +93,14 @@ const splitAddressParts = (value: string | null | undefined) =>
     .split(/[\r\n,]+/)
     .map((part) => part.trim())
     .filter(Boolean);
+
+const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && ['Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)) {
+    return null;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
 
 const JOB_DEMO_VALUES: Record<
   JobType,
@@ -245,7 +254,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
   const [selectedPartyAddressMatchId, setSelectedPartyAddressMatchId] = useState<string | null>(null);
   const [partyAddressSearchError, setPartyAddressSearchError] = useState<string | null>(null);
   const isCp12Upcoming = jobType === 'safety_check';
-  const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const scheduleFieldLabel = isCp12Upcoming ? 'Inspection date' : 'Scheduled date and time';
   const partyCardTitle = isCp12Upcoming ? 'Landlord / Property owner' : 'Client';
   const partyNameValue = isCp12Upcoming ? landlordName : clientName;
@@ -480,7 +489,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
         if (controller.signal.aborted) return;
         setJobAddressSuggestions([]);
         setSelectedJobAddressMatchId(null);
-        setJobAddressSearchError(error instanceof Error ? error.message : 'Try another search.');
+        setJobAddressSearchError(getAddressLookupErrorMessage(error, 'Try another search.'));
       } finally {
         if (!controller.signal.aborted) {
           setIsJobAddressLookupPending(false);
@@ -535,7 +544,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
         if (controller.signal.aborted) return;
         setPartyAddressSuggestions([]);
         setSelectedPartyAddressMatchId(null);
-        setPartyAddressSearchError(error instanceof Error ? error.message : 'Try another search.');
+        setPartyAddressSearchError(getAddressLookupErrorMessage(error, 'Try another search.'));
       } finally {
         if (!controller.signal.aborted) {
           setIsPartyAddressLookupPending(false);
@@ -783,7 +792,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
   );
 
   return (
-    <form className="space-y-6" onSubmit={handleSubmit}>
+    <form className="space-y-3" onSubmit={handleSubmit}>
       <Card className="border border-white/10">
         <CardContent className="space-y-4">
           <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Job type</label>
@@ -810,10 +819,10 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
       </Card>
 
       <Card className="border border-white/10">
-        <CardHeader>
+        <CardHeader className="pb-1 pt-4">
           <CardTitle className="text-lg text-muted">Job Address</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+        <CardContent className="grid gap-4 pt-1 md:grid-cols-2">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
               {scheduleFieldLabel}

@@ -167,7 +167,7 @@ export function GasWarningNoticeWizard({
   const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
-  const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const demoEnabled = false;
   const totalSteps = 3 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey(certificateType, jobId), [certificateType, jobId]);

@@ -166,7 +166,7 @@ export function BreakdownWizard({
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : null;
   const today = new Date().toISOString().slice(0, 10);
-  const demoEnabled = process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const demoEnabled = false;
   const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('breakdown', jobId), [jobId]);

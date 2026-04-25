@@ -6,30 +6,24 @@ import { redirect } from 'next/navigation';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 export const metadata: Metadata = {
-  title: 'certnow | CP12s in minutes',
+  title: 'certnow | complete CP12s on site',
   description:
-    'Mobile-first CP12 software for UK gas engineers. Build, sign, and send gas safety certificates from site in minutes.',
+    'Digital CP12 workflow for UK gas engineers. Complete the record on site, keep follow-up under control, and leave with a finished PDF ready to send.',
 };
 
 const featureList = [
   {
-    title: 'Auto-schedule the next CP12',
-    body: 'Next year’s follow-up can be carried forward from the same certificate flow so repeat work does not disappear after the PDF is sent.',
+    title: 'Finish the record before you leave',
+    body: "Don't rely on notes or memory. Complete the record as you go, on site.",
   },
   {
-    title: 'Linked Gas Warning Notice drafts',
-    body: 'Unsafe appliance follow-up stays tied to the same job, with the warning notice draft ready from the CP12 record.',
+    title: 'Auto-filled follow ups',
+    body: 'Warning notices and repeat visits are created from the job automatically, so nothing gets missed.',
   },
   {
-    title: 'Speak readings instead of typing',
-    body: 'Use the built-in voice readings flow to capture combustion values and push them back into the wizard.',
+    title: 'Fill in without slowing down',
+    body: 'Use structured dropdowns and voice input to capture readings and details quickly, even mid-job.',
   },
-];
-
-const proofPoints = [
-  'Built for UK gas engineers',
-  'Mobile-first CP12 workflow',
-  'PDF output ready before you leave site',
 ];
 
 const heroPhones = [
@@ -107,7 +101,7 @@ export default async function RootPage() {
           <header className="flex w-full max-w-5xl items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[var(--surface)]/90 px-4 py-3 shadow-sm backdrop-blur">
             <Link href="/" className="flex items-center gap-2">
               <span className="text-xl font-extrabold text-[var(--brand)] tracking-tight">certnow</span>
-              <span className="hidden text-xs font-medium text-gray-500 sm:inline">Field compliance</span>
+              <span className="hidden text-xs font-medium text-gray-500 sm:inline">CP12 workflow</span>
             </Link>
             <Link
               href="/login"
@@ -119,37 +113,23 @@ export default async function RootPage() {
 
           <div className="mt-10 flex w-full max-w-4xl flex-col items-center">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
-              Mobile-first field compliance
+              For UK gas engineers
             </p>
             <h1 className="mt-4 max-w-3xl text-4xl font-bold tracking-tight text-[var(--brand)] sm:text-5xl">
-              CP12s in minutes, from the same phone flow you already use on site.
+              Field compliance done better.
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-gray-600">
-              certnow is built for UK gas engineers who want to finish the certificate before leaving the property, not later that night at a desk.
+              CertNow helps UK gas engineers complete CP12s with minimal input, finishing documentation before you leave site.
             </p>
 
-            <div className="mt-8 flex w-full max-w-md flex-col gap-3 sm:flex-row sm:justify-center">
-              <Link
-                href="/signup/step1"
-                className="inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--action)] px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand)]"
-              >
-                Start signup
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/20 bg-white px-6 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
-              >
-                Existing users log in
-              </Link>
-            </div>
+            <Link
+              href="/signup/step1"
+              className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--action)] px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand)]"
+            >
+              Try now
+            </Link>
 
-            <div className="mt-6 flex max-w-3xl flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              {proofPoints.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-
-            <div className="relative mt-12 h-[25rem] w-full max-w-[24rem] sm:h-[30rem] sm:max-w-[32rem] lg:h-[32rem] lg:max-w-[48rem]">
+            <div className="relative mt-10 h-[25rem] w-full max-w-[24rem] sm:h-[30rem] sm:max-w-[32rem] lg:h-[32rem] lg:max-w-[48rem]">
               {heroPhones.map((phone) => (
                 <PhoneFrame key={phone.title} {...phone} />
               ))}
@@ -158,14 +138,11 @@ export default async function RootPage() {
         </div>
       </section>
 
-      <section className="px-4 py-12 md:px-6 md:py-16">
+      <section className="px-4 pb-12 pt-20 md:px-6 md:pb-16 md:pt-24">
         <div className="mx-auto flex w-full max-w-5xl flex-col items-center text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Why engineers use it</p>
-          <h2 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight text-[var(--brand)] sm:text-4xl">
-            Same language as the app. Less admin after the visit.
-          </h2>
 
-          <div className="mt-10 grid w-full gap-4 md:grid-cols-3">
+          <div className="mt-6 grid w-full gap-4 md:grid-cols-3">
             {featureList.map((item) => (
               <div
                 key={item.title}
@@ -184,10 +161,10 @@ export default async function RootPage() {
           <div className="text-center md:text-left">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">What the customer gets</p>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-[var(--brand)]">
-              A real completed CP12, not just a form flow.
+              A finished CP12 securley stored and easily shared
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-6 text-gray-600">
-              The wizard ends in a proper certificate output you can preview, save, and send. That finished document is part of the product, not a separate admin job afterwards.
+              The visit ends with a proper certificate PDF, not a job that still needs typing up later. That gives the customer a faster handover and gives the engineer a dependable record from the same visit.
             </p>
           </div>
 
@@ -207,12 +184,12 @@ export default async function RootPage() {
 
       <section className="px-4 pb-16 pt-4 md:px-6 md:pb-20">
         <div className="mx-auto flex w-full max-w-4xl flex-col items-center rounded-[2rem] border border-white/10 bg-white px-6 py-10 text-center shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Ready to try it</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">Professional standard</p>
           <h2 className="mt-4 max-w-2xl text-3xl font-bold tracking-tight text-[var(--brand)] sm:text-4xl">
-            Start the next CP12 on your phone and leave with the PDF done.
+            Start your next job now
           </h2>
           <p className="mt-4 max-w-xl text-sm leading-6 text-gray-600">
-            Use the same mobile flow for the certificate, the follow-up, and the final document preview.
+            Prefill job and address details before arriving on-site
           </p>
 
           <div className="mt-8 flex w-full max-w-md flex-col gap-3 sm:flex-row sm:justify-center">

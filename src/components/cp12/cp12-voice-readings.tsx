@@ -13,6 +13,8 @@ import {
 type Props = {
   jobId: string;
   disabled?: boolean;
+  buttonLabel?: string;
+  buttonClassName?: string;
   onApply: (values: Partial<Cp12VoiceReadingsParsed>) => void;
 };
 
@@ -58,7 +60,13 @@ function buildApplyPayload(values: Record<keyof Cp12VoiceReadingsParsed, string>
   }, {});
 }
 
-export function Cp12VoiceReadings({ jobId, disabled = false, onApply }: Props) {
+export function Cp12VoiceReadings({
+  jobId,
+  disabled = false,
+  buttonLabel = 'Speak readings',
+  buttonClassName = 'rounded-full text-xs',
+  onApply,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<RecorderState>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -242,8 +250,8 @@ export function Cp12VoiceReadings({ jobId, disabled = false, onApply }: Props) {
 
   return (
     <>
-      <Button type="button" variant="outline" className="rounded-full text-xs" onClick={startRecording} disabled={disabled}>
-        Speak readings
+      <Button type="button" variant="outline" className={buttonClassName} onClick={startRecording} disabled={disabled}>
+        {buttonLabel}
       </Button>
 
       <Modal open={open} onClose={closeModal} title="Speak readings">

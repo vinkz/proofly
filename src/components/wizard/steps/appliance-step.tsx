@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,6 +44,8 @@ type ApplianceStepProps = {
   yearStart?: number;
   applyExtendedDefaults?: boolean;
   inlineEditor?: boolean;
+  showTopAddButton?: boolean;
+  renderInlineHeaderAction?: (index: number) => ReactNode;
 };
 
 const emptyAppliance: ApplianceStepValues = {
@@ -92,6 +94,8 @@ export function ApplianceStep({
   yearStart = YEAR_MIN,
   applyExtendedDefaults = true,
   inlineEditor = false,
+  showTopAddButton = true,
+  renderInlineHeaderAction,
 }: ApplianceStepProps) {
   const catalogMakes = useMemo(() => getMakes().filter((make) => make.toLowerCase() !== 'other'), []);
   const resolvedMakeOptions = useMemo(() => {
@@ -237,17 +241,20 @@ export function ApplianceStep({
     const models = getModelsForMake(make);
     return [...models, 'Not listed'].map((model) => ({ label: model, value: model }));
   }, [activeAppliances, editingIndex]);
+  const showTopActions = Boolean(prefillText) || (allowMultiple && showTopAddButton);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {prefillText ? <PrefillBadge text={prefillText} onClick={onPrefillClick} /> : <span />}
-        {allowMultiple ? (
-          <Button type="button" variant="outline" className="rounded-full" onClick={addAppliance}>
-            + Add appliance
-          </Button>
-        ) : null}
-      </div>
+      {showTopActions ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {prefillText ? <PrefillBadge text={prefillText} onClick={onPrefillClick} /> : <span />}
+          {allowMultiple && showTopAddButton ? (
+            <Button type="button" variant="outline" className="rounded-full" onClick={addAppliance}>
+              + Add appliance
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         {inlineEditor ? (
@@ -264,18 +271,21 @@ export function ApplianceStep({
 
             return (
               <div key={`appliance-inline-${index}`} className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-muted">Appliance #{index + 1} identity</p>
-                  {allowMultiple && activeAppliances.length > 1 ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-8 rounded-full px-3 text-xs"
-                      onClick={() => removeAppliance(index)}
-                    >
-                      Remove
-                    </Button>
-                  ) : null}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-muted">Appliance {index + 1} identity</p>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {renderInlineHeaderAction?.(index)}
+                    {allowMultiple && activeAppliances.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-8 rounded-full px-3 text-xs"
+                        onClick={() => removeAppliance(index)}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <EnumChips

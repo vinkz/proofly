@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { Input } from '@/components/ui/input';
 
 type UnitNumberInputProps = {
@@ -10,12 +12,16 @@ type UnitNumberInputProps = {
   placeholder?: string;
   disabled?: boolean;
   note?: string;
+  labelAction?: ReactNode;
 };
 
-export function UnitNumberInput({ label, value, unit, onChange, placeholder, disabled = false, note }: UnitNumberInputProps) {
+export function UnitNumberInput({ label, value, unit, onChange, placeholder, disabled = false, note, labelAction }: UnitNumberInputProps) {
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
+        {labelAction}
+      </div>
       <div className="relative">
         <Input
           type="text"
