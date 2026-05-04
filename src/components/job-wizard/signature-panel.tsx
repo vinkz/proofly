@@ -85,7 +85,8 @@ function SignatureCard({ title, pad, onSave, disabled, existing }: SignatureCard
       <div className="mt-3 space-y-2">
         <canvas
           ref={pad.canvasRef}
-          className="h-40 w-full rounded-xl border border-dashed border-white/40 bg-white"
+          className="h-40 w-full touch-none rounded-xl border border-dashed border-white/40 bg-white"
+          style={{ touchAction: 'none' }}
           {...pad.handlers}
         />
         <div className="flex items-center justify-between text-xs text-muted-foreground/70">

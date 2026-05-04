@@ -37,6 +37,7 @@ import { saveJobFields } from '@/server/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
+import { useWizardStepHistory } from '@/hooks/use-wizard-step-history';
 import { getMakes } from '@/lib/applianceCatalog/ukBoilers';
 import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
@@ -477,6 +478,14 @@ export function CertificateWizard({
   const firstStep = 1;
   const offsetStep = (step: number) => step + baseOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey(certificateType, jobId), [certificateType, jobId]);
+  useWizardStepHistory({
+    enabled: isCp12,
+    key: `${certificateType}:${jobId}`,
+    maxStep: 4,
+    minStep: firstStep,
+    setStep,
+    step,
+  });
 
   useEffect(() => {
     if (!isCp12 || prefillAppliedRef.current) return;

@@ -1,3 +1,5 @@
+import 'server-only';
+
 import type { JobChecklistItem } from '@/types/job-detail';
 import { getOpenAIClient } from '@/lib/openai';
 

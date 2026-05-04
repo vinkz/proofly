@@ -13,6 +13,7 @@ The current product direction is now **client-first operationally**:
 - the dashboard is for **upcoming/prep work**
 - clients are the home for **history and completed work**
 - jobs remain the execution record that connects clients to certificates and invoices
+- the public site is now intended to live on the custom domain **certnow.uk**, with Vercel preview URLs used for testing/staging
 
 ---
 
@@ -105,6 +106,14 @@ Instant generation of branded, industry-standard PDFs that are:
 - Appliance identity captures **Location, Appliance Type, Make, Model, Flue type** (up to **5 appliances** to match the PDF table capacity).
 - Appliance checks capture the inspection table values: **Operating Pressure, Heat Input, combustion readings (hi/lo), Safety device operation, Ventilation, Flue visual/performance, Appliance serviced, Appliance safe to use**, plus defect + warning notice logic.
 - Upcoming jobs can now enter a **prepare-only** CP12 Step 1 flow from the dashboard. Saving Step 1 persists People & Location details and returns the engineer to the dashboard without forcing the full wizard.
+- Recent mobile refinements:
+  - demo-fill buttons are hidden from screenshot/user-facing flows
+  - address lookup disabled/configuration errors are suppressed in visible wizard UI
+  - Step 2 removes excess wrapper/header space and places `+ Appliance` inline with **Appliance 1 identity**
+  - Step 3 removes the global **Measurement source** selector
+  - voice capture appears only beside numerical readings, not notes/comments
+  - signature canvases are touch-safe so drawing does not scroll the page
+  - browser/phone back gestures in the CP12 wizard step back through wizard steps before leaving the route
 
 - **Logic-Gate Wizard**
   - Mandatory Gas Safe compliance fields
@@ -181,24 +190,118 @@ Instant generation of branded, industry-standard PDFs that are:
 The dashboard is intentionally **not** a completed-jobs homepage anymore.
 
 It focuses on:
-- **Current job**
-- **Upcoming jobs** grouped into:
-  - Today
-  - Tomorrow
-  - This week
-- **Recent clients**
+- **Upcoming jobs**
+- **Past/recent jobs**
+- **Awaiting signatures**
+- **Operational milestones**
 - **Prep state** for upcoming jobs so engineers know whether a visit is ready to start
+- **Job type visibility** so cards show labels such as CP12 or Gas Warning Notice, not only name/address
 
-Completed work is primarily surfaced from the relevant **client page**, not from the homepage.
+Dashboard actions currently separate intent:
+- `+ New Job` and `Create invoice` live in the welcome/header actions
+- `View all jobs` sits with the upcoming/past jobs area
+
+Completed work is still best explored from **Jobs** and the relevant **client page**, not from a heavy dashboard archive.
+
+---
+
+## Auth, Domains, And Deployment
+
+Auth is Supabase-backed and supports:
+- Google OAuth
+- password login
+- magic link
+- password reset/change
+- signup/onboarding
+
+Google OAuth redirects through `/auth/callback`. The app uses `NEXT_PUBLIC_SITE_URL` as the canonical callback origin when configured, falling back to the current browser origin in local/dev cases.
+
+Production domain setup:
+- Primary public domain: `https://certnow.uk`
+- `www.certnow.uk` should redirect or resolve consistently through Vercel
+- Vercel preview URLs are for test deployments
+
+Required Supabase redirect URLs should include:
+- `https://certnow.uk/auth/callback`
+- `https://www.certnow.uk/auth/callback`
+- any stable Vercel/staging callback URL used for testing
+
+When `NEXT_PUBLIC_SITE_URL` changes, redeploy/restart because it is included in the client bundle.
+
+---
+
+## Security Posture
+
+The app handles legally significant certificates, client details, addresses, signatures, and invoices. Treat security boundaries as part of the product, not a later cleanup item.
+
+Current sensitive server areas:
+- OpenAI report/voice helpers use `OPENAI_API_KEY`
+- Supabase service-role helpers use `SUPABASE_SERVICE_ROLE_KEY`
+- PDF generation can read private storage assets such as signatures and photos
+- Certificate/invoice generation writes legally meaningful records
+
+Guardrails now expected in the codebase:
+- Secret-bearing utility modules include `import 'server-only';`
+- Top-level server action files keep `'use server'` first and perform auth/ownership checks before service-role writes
+- Client components should call server actions, not private utility clients
+- Private env vars must never be logged, returned to the browser, or copied into `NEXT_PUBLIC_*`
+
+Before real users, run a deliberate RLS/storage audit across:
+- `profiles`
+- `clients`
+- `jobs`
+- `job_fields`
+- `certificates`
+- `invoices`
+- `documents` / `reports`
+- Supabase storage buckets for certificates, reports, signatures, and job photos
+
+---
+
+## Major Moving Parts
+
+### Frontend Routes
+- Landing page: `/`
+- Auth: `/login`, `/signup/step1`, `/signup/step2`, reset/password routes, `/auth/callback`
+- Operational home: `/dashboard`
+- Job creation: `/jobs/new`
+- Certificate wizard: `/wizard/create/[certificateType]`
+- Job record/detail: `/jobs/[id]`
+- Canonical document preview: `/jobs/[id]/pdf`
+- Clients: `/clients`, `/clients/[id]`
+- Documents: `/documents`
+- Invoices: `/invoices`, `/invoices/new`, `/invoices/[invoiceId]`
+- Job sheet scan: `/jobs/scan`
+
+### Server/Data Layer
+- Supabase auth/session helpers live in `src/lib/supabaseServer.ts` and `src/lib/supabaseClient.ts`
+- Profile/onboarding defaults live around `src/server/profile.ts`
+- Job creation/list/detail/report logic is in `src/server/jobs.ts`
+- Certificate persistence/PDF orchestration is in `src/server/certificates.ts`
+- Client/customer resolution is in `src/server/clients.ts` and `src/server/customer-service.ts`
+- Job address persistence is in `src/server/address-service.ts`
+- Job sheets live in `src/server/job-sheets.ts`
+
+### PDF/Document Layer
+- CP12 AcroForm renderer: `src/server/pdf/renderCp12Certificate.ts`
+- Gas Warning Notice renderer: `src/server/pdf/renderGasWarningNoticePdf.ts`
+- Boiler service/general works/job sheet renderers live under `src/lib/pdf` and `src/server/pdf`
+- Generated certificates/documents upload to Supabase storage and are returned via signed URLs
+
+### Key UX State
+- CP12 is the most developed certificate flow and drives the app direction
+- Dashboard is for operation/prep, not a CRM dashboard
+- Clients and jobs are the long-term history surfaces
+- Landing screenshots under `public/landing` are marketing assets and should stay filled/clean
 
 ---
 
 ## Visual & Technical Direction
 
 - **UI**
-  - High-contrast *Notion-Dark*
-  - Deep greys and whites
-  - Safety colours used sparingly
+  - Mobile-first, high-contrast, low-friction workflow screens
+  - Deep greys/whites with restrained action colours
+  - Large touch targets and reduced visual noise on wizard steps
 
 - **Data Structure**
   - Relational model:

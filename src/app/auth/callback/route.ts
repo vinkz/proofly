@@ -11,7 +11,12 @@ export async function GET(request: Request) {
   const supabase = await supabaseServerAction();
 
   if (code) {
-    await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      const loginUrl = new URL('/login', url.origin);
+      loginUrl.searchParams.set('error', 'oauth_callback_failed');
+      return NextResponse.redirect(loginUrl);
+    }
   }
 
   const {

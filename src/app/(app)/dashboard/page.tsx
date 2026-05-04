@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AwaitingSignaturesCard, type AwaitingSignatureJobCard } from './_components/awaiting-signatures-card';
+import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 
 type BasicJob = {
   id: string;
@@ -32,6 +33,14 @@ const PREP_REQUIRED_FIELD_KEYS = [
   'landlord_city',
   'landlord_postcode',
 ] as const;
+
+const DASHBOARD_JOB_TYPE_LABELS: Partial<Record<JobType, string>> = {
+  safety_check: 'CP12',
+  service: 'Boiler Service',
+  installation: 'Commissioning',
+  warning_notice: 'Gas Warning Notice',
+  general: 'General Works',
+};
 
 export default async function DashboardPage() {
   const supabase = await supabaseServerReadOnly();
@@ -151,7 +160,12 @@ export default async function DashboardPage() {
       <section className="grid gap-4 md:grid-cols-2">
         <Card className="border border-white/10">
           <CardHeader>
-            <CardTitle className="text-lg text-muted">Upcoming jobs</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-lg text-muted">Upcoming jobs</CardTitle>
+              <Button variant="secondary" asChild className="rounded-full text-xs">
+                <Link href="/jobs">View all jobs</Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {nextUpcomingJob ? (
@@ -159,6 +173,9 @@ export default async function DashboardPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-muted">{nextUpcomingJob.client_name ?? nextUpcomingJob.title ?? 'Job'}</p>
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                      {getDashboardJobTypeLabel(nextUpcomingJob.job_type)}
+                    </p>
                     <p className="text-xs text-muted-foreground/70">{nextUpcomingJob.address}</p>
                     <p className="mt-1 text-xs text-muted-foreground/70">
                       {formatDateTime(nextUpcomingJob.scheduled_for ?? '')}
@@ -202,6 +219,9 @@ export default async function DashboardPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-muted">{job.client_name ?? job.title ?? 'Job'}</p>
+                        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          {getDashboardJobTypeLabel(job.job_type)}
+                        </p>
                         <p className="text-xs text-muted-foreground/70">{job.address}</p>
                         <p className="mt-1 text-xs text-muted-foreground/70">
                           {formatDateTime(job.scheduled_for ?? job.created_at ?? '')}
@@ -295,6 +315,21 @@ function getUpcomingJobActionLabel(job: UpcomingJob) {
     return 'Start';
   }
   return 'Open';
+}
+
+function getDashboardJobTypeLabel(jobType: string | null | undefined) {
+  if (!jobType) return 'Job';
+  if (jobType in DASHBOARD_JOB_TYPE_LABELS) {
+    return DASHBOARD_JOB_TYPE_LABELS[jobType as JobType] ?? jobType;
+  }
+  if (jobType in JOB_TYPE_LABELS) {
+    return JOB_TYPE_LABELS[jobType as JobType];
+  }
+  return jobType
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function MilestoneItem({

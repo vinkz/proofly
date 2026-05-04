@@ -21,6 +21,7 @@
 - Data flows through server actions in `src/app` and shared helpers in `src/server`; keep Supabase clients server-side except for SSR helpers in `src/lib`.
 - Client UI pulls typed data via props; shared types in `src/types` keep server/client contracts aligned.
 - Styling uses Tailwind (`tailwind.config.ts`); components favor utility-first classes over bespoke CSS.
+- Production is intended to run on Vercel behind the custom domain `certnow.uk`; Vercel preview URLs remain useful for test deployments. Keep `NEXT_PUBLIC_SITE_URL` aligned with the exact public origin used for OAuth callbacks.
 - App navigation is now explicitly client-first: `/dashboard` is the operational home, `/clients` is a first-class destination, and `/jobs/[id]` is treated as a job record with related client/property context.
 - Document preview is canonical at `/jobs/[id]/pdf` (legacy report/pdf routes should redirect here); saved documents live under `/documents` and use Supabase signed URLs.
 - External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, maps via `@googlemaps/google-maps-services-js`; isolate integration code under `src/server`.
@@ -32,6 +33,14 @@
 - Job sheet PDF API: `src/app/api/jobs/[jobId]/job-sheet/route.ts` serves the generated job sheet PDF.
 - Job detail actions: job pages include a "Generate Job Sheet" button wired to the job sheet PDF API.
 - Cross-certificate links: CP12 can deep-link to Gas Warning Notice using the same jobId; Gas Warning Notice may prefill from CP12 job fields and appliances when available.
+
+## Security Boundaries
+- Any module that reads private environment variables (`OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) must stay server-only and include `import 'server-only';` unless it is a top-level Next server action file with `'use server'`.
+- Current guarded secret-bearing utilities: `src/lib/env.ts`, `src/lib/openai.ts`, `src/lib/reporting.ts`, `src/lib/supabaseServer.ts`, `src/server/pdf/renderCp12Certificate.ts`, and `src/server/pdf/renderJobSheetPdf.ts`.
+- Do not import private server utilities directly into client components. Client components may import server actions from `'use server'` modules, but those actions must validate the authenticated user and resource ownership before using service-role clients.
+- `supabaseServerServiceRole()` bypasses RLS. Use it only in server actions, route handlers, or server-only helpers after confirming the current Supabase user is allowed to access the job/client/certificate being read or mutated.
+- Never expose, serialize, log, or return private keys or key-presence checks. `NEXT_PUBLIC_*` values are public and must not contain secrets.
+- Before real customer rollout, audit RLS policies and storage bucket rules for at least `profiles`, `clients`, `jobs`, `job_fields`, `certificates`, `invoices`, `documents`, `reports`, and certificate storage buckets.
 
 ## PDF Generation
 - Field reports: `src/lib/reporting.ts` builds PDFs with `pdf-lib`; `src/server/jobs.ts` loads photos/signatures, optionally AI-summarizes via OpenAI (`getOpenAIClient` and `OPENAI_API_KEY`), then uploads to the Supabase `reports` bucket and stores `reports` rows.
@@ -54,17 +63,20 @@
 - `pnpm start`: Run the compiled build locally.
 - `pnpm lint`: ESLint over the repo; fixes style and catches dead imports.
 - `pnpm test`: Vitest test suite; add `--runInBand` when debugging server actions.
+- Dependency integrity matters: this is a Next 15 app (`next` must remain `15.5.7` unless intentionally upgraded). If Turbopack reports `Next.js package not found` or `next.config.ts is not supported`, check for an accidental old Next install or `package.json` drift before changing app code.
 
 ## Coding Style & Naming Conventions
 - TypeScript + React 19 + Next.js app router; prefer functional components.
 - Components, hooks, and types use `PascalCase`; files are `kebab-case.tsx|ts`.
-- Keep server-only modules in `src/server` and avoid importing them into client components.
+- Keep server-only modules in `src/server` and avoid importing them into client components. Secret-bearing helpers must also use `import 'server-only';`.
 - Follow ESLint (Next + TypeScript) defaults; use 2-space indentation and trailing commas per lint rules.
 - Co-locate schemas (zod) and validation with their feature; reuse from `src/lib` for cross-cutting concerns.
 - Primary CTAs use the `--action` green; secondary actions use brand/neutral blues. Favor rounded-xl, subtle shadows, and mobile-first spacing.
 
 ## Auth & Onboarding
-- Auth supports magic-link (`signInWithOtp`) and password login, plus password change and reset flows; environment requires Supabase keys and `NEXT_PUBLIC_SITE_URL` for reset redirects.
+- Auth supports Google OAuth, magic-link (`signInWithOtp`), password login, password change, and reset flows; environment requires Supabase keys and `NEXT_PUBLIC_SITE_URL` for OAuth/reset redirects.
+- Google OAuth uses `src/components/auth/google-auth-button.tsx` and redirects through `/auth/callback`. The callback exchanges the Supabase code, checks onboarding/profile completeness, and sends complete users to `/dashboard`.
+- For custom domains and mobile testing, Supabase Auth redirect URLs must include the exact callback origins in use, e.g. `https://certnow.uk/auth/callback`, `https://www.certnow.uk/auth/callback`, and any stable Vercel/staging callback URL. After changing `NEXT_PUBLIC_SITE_URL`, redeploy/restart because it is bundled into client code.
 - Unified signup + onboarding is handled by the wizard at `/signup/step1-3`; incomplete profiles redirect there. Auth helpers include `userHasPassword`, `completeSignupWizard`, `changePassword`, `requestPasswordReset`, and `applyPasswordReset`.
 - Onboarding currently completes on `/signup/step2` and `/signup/step3` redirects back to step 2 (certifications removed for now).
 - Step 2 onboarding collects profession (dropdown + manual fallback), company name, engineer name, engineer ID card number, and Gas Safe registration; these are persisted to `profiles` for certificate defaults.
@@ -85,6 +97,10 @@
   - Step 1 Landlord / Property owner uses structured fields: `landlord_name`, `landlord_company` (optional), `landlord_address_line1`, `landlord_address_line2` (optional), `landlord_city`, `landlord_postcode`, `landlord_tel` (optional). For backward compatibility, `landlord_address` is still persisted and used as a fallback.
   - CP12 Step 1 also supports a **prepare-only** entry path from dashboard upcoming jobs via `?prepare=1`; saving People & Location persists Step 1 data and returns to `/dashboard` without forcing the rest of the wizard.
   - Appliances capped at 5 rows to match the PDF table capacity.
+  - Mobile UX is intentionally tight: demo-fill buttons are hidden, address lookup disabled/configuration errors are suppressed in the UI, Step 2 has no extra "Appliance profile" wrapper, and `+ Appliance` is inline with "Appliance 1 identity".
+  - Step 3 no longer exposes a global "Measurement source" switch. Voice capture is only shown inline on numerical reading inputs (`Operating pressure`, `Heat input`, high/low CO/CO2/ratio).
+  - Signature canvases use `touch-action: none` through `useSignaturePad` and signature components so drawing on mobile does not scroll the whole page.
+  - CP12 browser history is step-aware via `useWizardStepHistory`; phone/browser back gestures should move to the previous wizard step before leaving the route.
 - CP12 includes a CTA on Step 3 when "Warning notice issued" is YES that deep-links to Gas Warning Notice using the same jobId.
 - CP12 guardrails (docs/specs/cp12.md): property + landlord addresses required and must differ, landlord name required, Reg 26(9) confirmation required, at least one appliance with location & description, engineer + customer signatures required to issue, and if any appliance is unsafe/defective you must capture defect_description, remedial_action, and a warning_notice_issued choice.
 - Public ID chain: jobs get an 8-digit `job_code` and a job-scoped `client_ref` (`{job_code}-01`); certificates get `public_id` (`{job_code}-{CERT_TYPE}-01`). UUIDs remain primary keys for all joins.
@@ -92,8 +108,14 @@
 ## Dashboard & Client-First UX
 - `/dashboard` is now an operational board, not a completed-jobs archive. It emphasizes the current job, grouped upcoming jobs (`Today`, `Tomorrow`, `This week`), and recent clients.
 - Upcoming jobs compute a prep state from saved Step 1 fields. Unprepared jobs show `Prepare`; prepared jobs show `Start`.
+- The current dashboard cards show job type labels (e.g. `CP12`, `Gas Warning Notice`) alongside client/name/address. `Create invoice` lives in the header actions; `View all jobs` lives with the Upcoming jobs card.
 - `/clients` is the main browse surface for customer history and `/clients/[id]` groups that client’s work into current jobs, completed jobs, reports, and calendar context.
 - `/jobs/[id]` now presents job identity first: job title/type/status at the top, with linked client/property context and related certificates/invoices below.
+
+## Landing Page & Assets
+- The public landing page lives at `src/app/page.tsx` and uses static product screenshots from `public/landing`.
+- Current phone screenshots are filled demo-style CP12 wizard states: `cp12-wizard-step-1.png`, `cp12-wizard-step-2.png`, and `cp12-wizard-step-3.png` at `393x852`.
+- Keep screenshots free of demo/debug buttons, address lookup disabled text, and empty fields because they are used as marketing assets.
 
 ## Testing Guidelines
 - Framework: Vitest; place specs in `tests/` with `*.test.ts`.

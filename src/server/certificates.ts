@@ -2154,7 +2154,6 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   const input = GenerateGeneralWorksPdfSchema.parse(payload);
   const previewOnly = input.previewOnly ?? false;
   console.log('GW: starting PDF generation', { jobId: input.jobId });
-  console.log('GW: service role key present', Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY));
   const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -2571,7 +2570,6 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     recordId: input.jobId,
   });
 
-  console.log('GAS SERVICE: service role key present', Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY));
   const admin = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

@@ -1,3 +1,5 @@
+import 'server-only';
+
 const optionalRequired = (key: string) => {
   const value = process.env[key];
   if (!value) {

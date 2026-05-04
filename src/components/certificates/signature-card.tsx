@@ -56,7 +56,8 @@ export function SignatureCard({ label, existingUrl, onUpload }: SignatureCardPro
         <div className="mt-2 h-28 w-full rounded-2xl border border-white/30 bg-white/80">
           <canvas
             ref={pad.canvasRef}
-            className="h-full w-full rounded-2xl"
+            className="h-full w-full touch-none rounded-2xl"
+            style={{ touchAction: 'none' }}
             {...pad.handlers}
           />
         </div>

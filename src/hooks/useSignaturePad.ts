@@ -59,6 +59,7 @@ export const useSignaturePad = () => {
   };
 
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     const point = getPoint(event);
@@ -71,6 +72,7 @@ export const useSignaturePad = () => {
 
   const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawingRef.current) return;
+    event.preventDefault();
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     const point = getPoint(event);
@@ -81,6 +83,7 @@ export const useSignaturePad = () => {
 
   const finish = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawingRef.current) return;
+    event.preventDefault();
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (!context) return;

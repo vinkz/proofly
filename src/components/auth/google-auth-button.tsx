@@ -7,8 +7,18 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabaseBrowser } from '@/lib/supabaseClient';
 
 function getAuthRedirectUrl() {
-  if (typeof window === 'undefined') return undefined;
-  return `${window.location.origin}/auth/callback`;
+  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const origin = configuredSiteUrl || (typeof window === 'undefined' ? '' : window.location.origin);
+  if (!origin) return undefined;
+  return `${origin.replace(/\/$/, '')}/auth/callback`;
+}
+
+function getAuthRedirectUrlWithNext(nextPath?: string) {
+  const callbackUrl = getAuthRedirectUrl();
+  if (!callbackUrl || !nextPath) return callbackUrl;
+  const url = new URL(callbackUrl);
+  url.searchParams.set('next', nextPath);
+  return url.toString();
 }
 
 export function GoogleAuthButton({
@@ -29,9 +39,7 @@ export function GoogleAuthButton({
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: nextPath
-            ? `${getAuthRedirectUrl()}?next=${encodeURIComponent(nextPath)}`
-            : getAuthRedirectUrl(),
+          redirectTo: getAuthRedirectUrlWithNext(nextPath),
           queryParams: {
             prompt: 'select_account',
           },
