@@ -166,7 +166,9 @@ type Cp12DraftState = {
   };
   completionDate: string;
   engineerSignature: string;
+  engineerSignaturePath: string;
   customerSignature: string;
+  customerSignaturePath: string;
   addressSearchQuery: string;
   landlordAddressSearchQuery: string;
 };
@@ -463,6 +465,7 @@ export function CertificateWizard({
   const [engineerSignature, setEngineerSignature] = useState(resolvedInitialInfo.engineer_signature ?? '');
   const [engineerSignaturePath, setEngineerSignaturePath] = useState(resolvedInitialInfo.engineer_signature_path ?? '');
   const [customerSignature, setCustomerSignature] = useState(resolvedInitialInfo.customer_signature ?? '');
+  const [customerSignaturePath, setCustomerSignaturePath] = useState(resolvedInitialInfo.customer_signature_path ?? '');
   const [remoteSignatureLink, setRemoteSignatureLink] = useState(
     resolvedInitialInfo.cp12_remote_signature_token
       ? `/sign/cp12/${resolvedInitialInfo.cp12_remote_signature_token}`
@@ -565,7 +568,9 @@ export function CertificateWizard({
       defects,
       completionDate,
       engineerSignature,
+      engineerSignaturePath,
       customerSignature,
+      customerSignaturePath,
       addressSearchQuery,
       landlordAddressSearchQuery,
     }),
@@ -574,8 +579,10 @@ export function CertificateWizard({
       appliances,
       completionDate,
       customerSignature,
+      customerSignaturePath,
       defects,
       engineerSignature,
+      engineerSignaturePath,
       evidenceFields,
       info,
       jobAddress,
@@ -598,7 +605,9 @@ export function CertificateWizard({
       setDefects((prev) => ({ ...prev, ...(draft.defects ?? {}) }));
       setCompletionDate(draft.completionDate || completionDate);
       setEngineerSignature(draft.engineerSignature ?? '');
+      setEngineerSignaturePath(draft.engineerSignaturePath ?? '');
       setCustomerSignature(draft.customerSignature ?? '');
+      setCustomerSignaturePath(draft.customerSignaturePath ?? '');
       setAddressSearchQuery(draft.addressSearchQuery ?? '');
       setLandlordAddressSearchQuery(draft.landlordAddressSearchQuery ?? '');
     },
@@ -1164,6 +1173,7 @@ export function CertificateWizard({
             engineer_signature: engineerSignature,
             engineer_signature_path: engineerSignaturePath,
             customer_signature: customerSignature,
+            customer_signature_path: customerSignaturePath,
             completion_date: completionDate,
             next_inspection_due: evidenceFields.next_inspection_due ?? '',
           },
@@ -2456,8 +2466,9 @@ export function CertificateWizard({
             data.append('file', file);
             startTransition(async () => {
               try {
-                const { url } = await uploadSignature(data);
+                const { url, path } = await uploadSignature(data);
                 setCustomerSignature(url);
+                setCustomerSignaturePath(path);
                 pushToast({ title: 'Customer signature saved', variant: 'success' });
               } catch (error) {
                 pushToast({

@@ -639,6 +639,18 @@ function collectSignatureRelatedFieldMetadata(form: ReturnType<PDFDocument['getF
     });
 }
 
+function extractSignatureObjectPath(url: string) {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    const bucketIndex = parts.findIndex((part, index) => part === 'signatures' && parts[index - 1] !== 'bucket');
+    if (bucketIndex === -1 || bucketIndex >= parts.length - 1) return null;
+    return decodeURIComponent(parts.slice(bucketIndex + 1).join('/'));
+  } catch {
+    return null;
+  }
+}
+
 async function fetchSignatureBytes(url: string): Promise<{ bytes: Uint8Array; mime: string; source: string } | null> {
   if (!url) return null;
   try {
@@ -651,7 +663,10 @@ async function fetchSignatureBytes(url: string): Promise<{ bytes: Uint8Array; mi
 
     if (/^https?:\/\//i.test(url)) {
       const response = await fetch(url);
-      if (!response.ok) return null;
+      if (!response.ok) {
+        const objectPath = extractSignatureObjectPath(url);
+        return objectPath ? fetchSignatureBytes(objectPath) : null;
+      }
       const arrayBuffer = await response.arrayBuffer();
       const mime = (response.headers.get('content-type') ?? '').toLowerCase() || 'image/png';
       return { bytes: new Uint8Array(arrayBuffer), mime, source: 'http' };
