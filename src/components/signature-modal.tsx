@@ -96,17 +96,27 @@ export function SignatureModal({ jobId, signatures }: SignatureModalProps) {
             <div className="mt-4 grid gap-6 md:grid-cols-2">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Draw Signature</p>
-                <div className="mt-2 rounded border bg-gray-50 p-2">
+                <div className="mt-2 touch-none overscroll-contain rounded border bg-gray-50 p-2">
                   <canvas
                     ref={plumberPad.canvasRef}
                     className={`h-40 w-full touch-none bg-white ${activeSigner === 'plumber' ? '' : 'hidden'}`}
-                    style={{ pointerEvents: activeSigner === 'plumber' ? 'auto' : 'none' }}
+                    style={{
+                      pointerEvents: activeSigner === 'plumber' ? 'auto' : 'none',
+                      touchAction: 'none',
+                      overscrollBehavior: 'contain',
+                      userSelect: 'none',
+                    }}
                     {...(activeSigner === 'plumber' ? plumberPad.handlers : {})}
                   />
                   <canvas
                     ref={clientPad.canvasRef}
                     className={`h-40 w-full touch-none bg-white ${activeSigner === 'client' ? '' : 'hidden'}`}
-                    style={{ pointerEvents: activeSigner === 'client' ? 'auto' : 'none' }}
+                    style={{
+                      pointerEvents: activeSigner === 'client' ? 'auto' : 'none',
+                      touchAction: 'none',
+                      overscrollBehavior: 'contain',
+                      userSelect: 'none',
+                    }}
                     {...(activeSigner === 'client' ? clientPad.handlers : {})}
                   />
                 </div>

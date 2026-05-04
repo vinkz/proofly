@@ -51,13 +51,13 @@ export function SignatureCard({ label, existingUrl, onUpload }: SignatureCardPro
         </span>
       </div>
       <p className="mt-1 text-xs text-muted-foreground/60">Draw a signature below.</p>
-      <div className="mt-3 rounded-2xl border border-dashed border-white/40 bg-[var(--muted)]/60 p-3">
+      <div className="mt-3 touch-none rounded-2xl border border-dashed border-white/40 bg-[var(--muted)]/60 p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Draw signature</p>
-        <div className="mt-2 h-28 w-full rounded-2xl border border-white/30 bg-white/80">
+        <div className="mt-2 h-28 w-full touch-none overscroll-contain rounded-2xl border border-white/30 bg-white/80">
           <canvas
             ref={pad.canvasRef}
             className="h-full w-full touch-none rounded-2xl"
-            style={{ touchAction: 'none' }}
+            style={{ touchAction: 'none', overscrollBehavior: 'contain', userSelect: 'none' }}
             {...pad.handlers}
           />
         </div>

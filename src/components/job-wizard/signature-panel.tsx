@@ -82,11 +82,11 @@ function SignatureCard({ title, pad, onSave, disabled, existing }: SignatureCard
   return (
     <div className="rounded-2xl border border-white/10 bg-white/70 p-4 shadow-sm">
       <p className="text-sm font-semibold text-muted">{title}</p>
-      <div className="mt-3 space-y-2">
+      <div className="mt-3 touch-none space-y-2">
         <canvas
           ref={pad.canvasRef}
           className="h-40 w-full touch-none rounded-xl border border-dashed border-white/40 bg-white"
-          style={{ touchAction: 'none' }}
+          style={{ touchAction: 'none', overscrollBehavior: 'contain', userSelect: 'none' }}
           {...pad.handlers}
         />
         <div className="flex items-center justify-between text-xs text-muted-foreground/70">
