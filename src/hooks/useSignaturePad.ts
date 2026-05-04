@@ -13,7 +13,7 @@ export const useSignaturePad = () => {
     canvas.style.touchAction = 'none';
     canvas.style.userSelect = 'none';
     canvas.style.webkitUserSelect = 'none';
-    canvas.style.webkitTouchCallout = 'none';
+    canvas.style.setProperty('-webkit-touch-callout', 'none');
 
     const configureContext = (dpr: number) => {
       context.setTransform(1, 0, 0, 1, 0, 0);
