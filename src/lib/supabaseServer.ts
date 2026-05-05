@@ -2,9 +2,36 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
 
 import type { Database } from '@/lib/database.types';
 import { env, assertSupabaseEnv } from '@/lib/env';
+
+export function isInvalidRefreshTokenError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /invalid refresh token|refresh token not found/i.test(message);
+}
+
+export async function getSupabaseUser(
+  supabase: Pick<SupabaseClient<Database>, 'auth'>,
+): Promise<User | null> {
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      if (isInvalidRefreshTokenError(error)) return null;
+      throw error;
+    }
+
+    return user ?? null;
+  } catch (error) {
+    if (isInvalidRefreshTokenError(error)) return null;
+    throw error;
+  }
+}
 
 export async function supabaseServerReadOnly() {
   assertSupabaseEnv();

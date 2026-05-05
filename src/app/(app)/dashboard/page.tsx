@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import { listJobs } from '@/server/jobs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,9 +44,7 @@ const DASHBOARD_JOB_TYPE_LABELS: Partial<Record<JobType, string>> = {
 
 export default async function DashboardPage() {
   const supabase = await supabaseServerReadOnly();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSupabaseUser(supabase);
 
   if (!user) redirect('/login');
 

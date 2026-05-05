@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import NavLink from '@/components/nav-link';
 import { PageFade } from '@/app/(app)/_components/page-fade';
 
@@ -14,9 +14,7 @@ const links = [
 
 export default async function WizardLayout({ children }: { children: ReactNode }) {
   const supabase = await supabaseServerReadOnly();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSupabaseUser(supabase);
 
   if (!user) {
     redirect('/login');

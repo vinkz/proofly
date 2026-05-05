@@ -471,11 +471,13 @@ export function CertificateWizard({
       ? `/sign/cp12/${resolvedInitialInfo.cp12_remote_signature_token}`
       : '',
   );
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const prefillAppliedRef = useRef(false);
   const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prevApplianceCountRef = useRef(appliances.length);
 
   const isCp12 = useMemo(() => certificateType === 'cp12', [certificateType]);
+  const isBusy = isPending || isGeneratingPdf;
   const totalSteps = (isCp12 ? 4 : 4) + stepOffset;
   const baseOffset = stepOffset;
   const firstStep = 1;
@@ -1139,8 +1141,9 @@ export function CertificateWizard({
   };
 
   const handleGenerate = () => {
-    startTransition(async () => {
-      let targetJobId = jobId;
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    void (async () => {
       try {
         const { blockingMissing } = checklist;
         if (blockingMissing > 0) {
@@ -1179,7 +1182,6 @@ export function CertificateWizard({
           },
         });
         const { jobId: resultJobId } = result;
-        targetJobId = resultJobId;
         clearDraft();
         const gasWarningNoticeJobs =
           certificateType === 'cp12' && 'gasWarningNoticeJobs' in result && Array.isArray(result.gasWarningNoticeJobs)
@@ -1209,6 +1211,7 @@ export function CertificateWizard({
             });
           }
         }
+        router.push(`/jobs/${resultJobId}/pdf?certificateType=${certificateType}`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -1216,9 +1219,9 @@ export function CertificateWizard({
           variant: 'error',
         });
       } finally {
-        router.push(`/jobs/${targetJobId}/pdf?certificateType=${certificateType}`);
+        setIsGeneratingPdf(false);
       }
-    });
+    })();
   };
 
   const handleCreateRemoteSignatureLink = () => {
@@ -2417,11 +2420,11 @@ export function CertificateWizard({
           </Button>
           <Button
             className="rounded-full bg-[var(--action)] px-6 text-white"
-            disabled={isPending || checklist.blockingMissing > 0}
+            disabled={isBusy || checklist.blockingMissing > 0}
             onClick={handleGenerate}
             data-testid="cp12-issue"
           >
-            {isPending ? 'Issuing…' : 'Issue Certificate'}
+            {isGeneratingPdf ? 'Issuing…' : 'Issue Certificate'}
           </Button>
         </div>
       }
@@ -2577,18 +2580,18 @@ export function CertificateWizard({
           type="button"
           variant="outline"
           className="rounded-full"
-          disabled={isPending}
+          disabled={isBusy}
           onClick={handleCreateRemoteSignatureLink}
         >
           {isPending ? 'Preparing link…' : 'Send to landlord for signature'}
         </Button>
         <Button
           className="rounded-full bg-[var(--action)] px-6 text-white"
-          disabled={isPending || checklist.blockingMissing > 0}
+          disabled={isBusy || checklist.blockingMissing > 0}
           onClick={handleGenerate}
           data-testid="cp12-issue"
         >
-          {isPending ? 'Issuing…' : 'Issue Certificate'}
+          {isGeneratingPdf ? 'Issuing…' : 'Issue Certificate'}
         </Button>
       </div>
     </WizardLayout>

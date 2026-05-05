@@ -3,7 +3,7 @@ import Image from 'next/image';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import { supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 export const metadata: Metadata = {
   title: 'certnow | complete CP12s on site',
@@ -86,9 +86,7 @@ function PhoneFrame({
 
 export default async function RootPage() {
   const supabase = await supabaseServerReadOnly();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSupabaseUser(supabase);
 
   if (user) {
     redirect('/dashboard');
