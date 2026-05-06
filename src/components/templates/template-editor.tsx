@@ -2,9 +2,6 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { z } from 'zod';
 import { v4 as uuid } from 'uuid';
 
@@ -30,7 +27,6 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
   const [trade, setTrade] = useState(template.trade_type);
   const [items, setItems] = useState<TemplateItem[]>(template.items ?? []);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [isSavingMeta, startSavingMeta] = useTransition();
   const [isSavingItems, startSavingItems] = useTransition();
   const [isDuplicating, startDuplicating] = useTransition();
@@ -54,13 +50,17 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
     setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleMoveItem = (id: string, direction: -1 | 1) => {
     if (!canEdit) return;
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = items.findIndex((item) => item.id === active.id);
-    const newIndex = items.findIndex((item) => item.id === over.id);
-    setItems((prev) => arrayMove(prev, oldIndex, newIndex));
+    setItems((prev) => {
+      const currentIndex = prev.findIndex((item) => item.id === id);
+      const nextIndex = currentIndex + direction;
+      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(currentIndex, 1);
+      next.splice(nextIndex, 0, moved);
+      return next;
+    });
   };
 
   const handleSaveMeta = () => {
@@ -129,7 +129,7 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
     });
   };
 
-  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const itemPositions = useMemo(() => new Map(items.map((item, index) => [item.id, index])), [items]);
 
   return (
     <div className="space-y-6">
@@ -196,21 +196,23 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
         {items.length === 0 ? (
           <p className="rounded border border-dashed p-4 text-sm text-gray-500">No items yet.</p>
         ) : canEdit ? (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-              <div className="grid gap-2">
-                {items.map((item) => (
-                  <SortableItem
-                    key={item.id}
-                    item={item}
-                    onChange={handleUpdateItem}
-                    onRemove={handleRemoveItem}
-                    disabled={!canEdit}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+          <div className="grid gap-2">
+            {items.map((item) => {
+              const index = itemPositions.get(item.id) ?? 0;
+              return (
+                <EditableItem
+                  key={item.id}
+                  item={item}
+                  onChange={handleUpdateItem}
+                  onRemove={handleRemoveItem}
+                  onMove={handleMoveItem}
+                  disabled={!canEdit}
+                  canMoveUp={index > 0}
+                  canMoveDown={index < items.length - 1}
+                />
+              );
+            })}
+          </div>
         ) : (
           <div className="grid gap-2">
               {items.map((item, index) => (
@@ -231,38 +233,47 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
   );
 }
 
-function SortableItem({
+function EditableItem({
   item,
   onChange,
   onRemove,
+  onMove,
   disabled,
+  canMoveUp,
+  canMoveDown,
 }: {
   item: TemplateItem;
   onChange: (id: string, patch: Partial<TemplateItem>) => void;
   onRemove: (id: string) => void;
+  onMove: (id: string, direction: -1 | 1) => void;
   disabled: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
   return (
-    <div ref={setNodeRef} style={style} className="rounded border p-3">
+    <div className="rounded border p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            {...attributes}
-            {...listeners}
-            aria-label="Drag handle"
-            className="cursor-grab rounded border px-2 py-1 text-xs"
-            disabled={disabled}
-          >
-            ↕
-          </button>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              aria-label="Move item up"
+              className="rounded border px-2 py-1 text-xs disabled:opacity-40"
+              disabled={disabled || !canMoveUp}
+              onClick={() => onMove(item.id, -1)}
+            >
+              Up
+            </button>
+            <button
+              type="button"
+              aria-label="Move item down"
+              className="rounded border px-2 py-1 text-xs disabled:opacity-40"
+              disabled={disabled || !canMoveDown}
+              onClick={() => onMove(item.id, 1)}
+            >
+              Down
+            </button>
+          </div>
           <Input
             value={item.label}
             onChange={(event) => onChange(item.id, { label: event.target.value })}

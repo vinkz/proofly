@@ -4,7 +4,6 @@ const { spawn, execSync } = require('node:child_process');
 const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
-const { renderQr } = require('./utils/qrcode');
 
 const DEV_PORT = process.env.PORT || '3000';
 const DEV_HOST = '0.0.0.0';
@@ -151,8 +150,6 @@ async function main() {
 
   console.log(`[mobile] Tunnel ready: ${url}`);
   console.log('[mobile] Add this URL to Supabase -> Authentication -> Redirect URLs');
-  console.log('[mobile] QR code:');
-  renderQr(url);
 
   writeUrlFile(url);
   console.log(`[mobile] Saved to ${DOCS_PATH}`);

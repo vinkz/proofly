@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { EvidenceCard } from './evidence-card';
@@ -14,7 +14,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { CollapsibleSection } from '@/components/wizard/layout/collapsible-section';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
+import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { FgaAutofillInline } from '@/components/fga/FgaAutofillInline';
+import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import {
   BOILER_SERVICE_DEMO_INFO,
   BOILER_SERVICE_DEMO_DETAILS,
@@ -37,6 +39,9 @@ import {
 import { tryUpdateJobRecord } from '@/server/jobRecords';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
+import { useWizardStepHistory } from '@/hooks/use-wizard-step-history';
+import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
+import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 
 type BoilerServiceWizardProps = {
   jobId: string;
@@ -67,6 +72,8 @@ type BoilerServiceDraftState = {
   checks: BoilerServiceChecks;
   engineerSignature: string;
   customerSignature: string;
+  addressSearchQuery: string;
+  customerAddressSearchQuery: string;
 };
 
 const BOILER_SERVICE_DEMO_JOB_ADDRESS: BoilerServiceJobAddress = {
@@ -96,6 +103,12 @@ const EMPTY_CHECKS: BoilerServiceChecks = {
   heat_input: '',
   co_ppm: '',
   co2_percent: '',
+  high_combustion_co_ppm: '',
+  high_combustion_co2: '',
+  high_combustion_ratio: '',
+  low_combustion_co_ppm: '',
+  low_combustion_co2: '',
+  low_combustion_ratio: '',
   flue_gas_temp_c: '',
   system_pressure_bar: '',
   appliance_conforms_standards: '',
@@ -154,6 +167,36 @@ const composeAddress = (...parts: Array<string | null | undefined>) =>
     .filter(Boolean)
     .join(', ');
 
+const normalizeDateOnly = (value: string | null | undefined) => {
+  const dateOnly = String(value ?? '').trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateOnly) ? dateOnly : '';
+};
+
+const addOneYear = (dateOnly: string) => {
+  const normalized = normalizeDateOnly(dateOnly);
+  if (!normalized) return '';
+  const parsed = new Date(`${normalized}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return '';
+  parsed.setUTCFullYear(parsed.getUTCFullYear() + 1);
+  return parsed.toISOString().slice(0, 10);
+};
+
+type AddressLookupApiResponse = {
+  suggestions?: AddressLookupSuggestion[];
+  address?: AddressLookupResult;
+  error?: string;
+};
+
+const ADDRESS_SEARCH_MIN_QUERY_LENGTH = 3;
+
+const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && ['Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)) {
+    return null;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
+
 export function BoilerServiceWizard({
   jobId,
   initialFields,
@@ -167,6 +210,22 @@ export function BoilerServiceWizard({
   const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
+  const [isAddressLookupPending, setIsAddressLookupPending] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
+  const [selectedAddressMatchId, setSelectedAddressMatchId] = useState<string | null>(null);
+  const [addressSearchQuery, setAddressSearchQuery] = useState(
+    resolvedFields.job_address_line1 ?? resolvedFields.property_address ?? '',
+  );
+  const [addressSearchError, setAddressSearchError] = useState<string | null>(null);
+  const [isCustomerAddressLookupPending, setIsCustomerAddressLookupPending] = useState(false);
+  const [customerAddressSuggestions, setCustomerAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
+  const [selectedCustomerAddressMatchId, setSelectedCustomerAddressMatchId] = useState<string | null>(null);
+  const [customerAddressSearchQuery, setCustomerAddressSearchQuery] = useState(
+    resolvedFields.customer_address_line1 ?? resolvedFields.customer_address ?? initialJobContext?.customer?.address ?? '',
+  );
+  const [customerAddressSearchError, setCustomerAddressSearchError] = useState<string | null>(null);
+  const deferredAddressSearchQuery = useDeferredValue(addressSearchQuery.trim());
+  const deferredCustomerAddressSearchQuery = useDeferredValue(customerAddressSearchQuery.trim());
   const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : null;
   const customerAddressParts = splitAddressParts(
     resolvedFields.customer_address ?? initialJobContext?.customer?.address ?? '',
@@ -181,6 +240,10 @@ export function BoilerServiceWizard({
   const [completionDate, setCompletionDate] = useState(
     resolvedFields.completion_date ? resolvedFields.completion_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
   );
+  const initialServiceDate = normalizeDateOnly(
+    resolvedFields.service_date ?? resolvedFields.job_visit_date ?? resolvedFields.completion_date,
+  );
+  const initialNextServiceDue = normalizeDateOnly(resolvedFields.next_service_due) || addOneYear(initialServiceDate);
 
   const [jobInfo, setJobInfo] = useState<BoilerServiceJobInfo>({
     customer_name: resolvedFields.customer_name ?? '',
@@ -228,6 +291,7 @@ export function BoilerServiceWizard({
       acc[key] = typeof existing === 'boolean' ? String(existing) : (existing as string) ?? '';
       return acc;
     }, {}),
+    next_service_due: initialNextServiceDue,
   });
 
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
@@ -236,6 +300,13 @@ export function BoilerServiceWizard({
   const totalSteps = 4 + stepOffset;
   const offsetStep = (step: number) => step + stepOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('gas_service', jobId), [jobId]);
+  useWizardStepHistory({
+    enabled: true,
+    key: `gas_service:${jobId}`,
+    maxStep: 4,
+    setStep,
+    step,
+  });
 
   useEffect(() => {
     if (!jobId) return;
@@ -255,8 +326,21 @@ export function BoilerServiceWizard({
       checks,
       engineerSignature,
       customerSignature,
+      addressSearchQuery,
+      customerAddressSearchQuery,
     }),
-    [checks, completionDate, customerSignature, details, engineerSignature, jobAddress, jobInfo, step],
+    [
+      addressSearchQuery,
+      checks,
+      completionDate,
+      customerAddressSearchQuery,
+      customerSignature,
+      details,
+      engineerSignature,
+      jobAddress,
+      jobInfo,
+      step,
+    ],
   );
 
   const { clearDraft } = useWizardDraft<BoilerServiceDraftState>({
@@ -271,8 +355,119 @@ export function BoilerServiceWizard({
       setChecks((prev) => ({ ...prev, ...(draft.checks ?? {}) }));
       setEngineerSignature(draft.engineerSignature ?? '');
       setCustomerSignature(draft.customerSignature ?? '');
+      setAddressSearchQuery(draft.addressSearchQuery ?? '');
+      setCustomerAddressSearchQuery(draft.customerAddressSearchQuery ?? '');
     },
   });
+
+  useEffect(() => {
+    if (!deferredAddressSearchQuery) {
+      setAddressSuggestions([]);
+      setSelectedAddressMatchId(null);
+      setAddressSearchError(null);
+      setIsAddressLookupPending(false);
+      return;
+    }
+
+    if (deferredAddressSearchQuery.length < ADDRESS_SEARCH_MIN_QUERY_LENGTH) {
+      setAddressSuggestions([]);
+      setSelectedAddressMatchId(null);
+      setAddressSearchError(`Type at least ${ADDRESS_SEARCH_MIN_QUERY_LENGTH} characters to search.`);
+      setIsAddressLookupPending(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsAddressLookupPending(true);
+      setAddressSearchError(null);
+
+      try {
+        const response = await fetch(`/api/address-search?q=${encodeURIComponent(deferredAddressSearchQuery)}`, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as AddressLookupApiResponse;
+        if (!response.ok) {
+          throw new Error(payload.error || 'Lookup failed');
+        }
+
+        const suggestions = payload.suggestions ?? [];
+        setAddressSuggestions(suggestions);
+        setSelectedAddressMatchId(null);
+        setAddressSearchError(suggestions.length ? null : 'No addresses found. Try a postcode or add more detail.');
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setAddressSuggestions([]);
+        setSelectedAddressMatchId(null);
+        setAddressSearchError(getAddressLookupErrorMessage(error, 'Try another search.'));
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsAddressLookupPending(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [deferredAddressSearchQuery]);
+
+  useEffect(() => {
+    if (!deferredCustomerAddressSearchQuery) {
+      setCustomerAddressSuggestions([]);
+      setSelectedCustomerAddressMatchId(null);
+      setCustomerAddressSearchError(null);
+      setIsCustomerAddressLookupPending(false);
+      return;
+    }
+
+    if (deferredCustomerAddressSearchQuery.length < ADDRESS_SEARCH_MIN_QUERY_LENGTH) {
+      setCustomerAddressSuggestions([]);
+      setSelectedCustomerAddressMatchId(null);
+      setCustomerAddressSearchError(`Type at least ${ADDRESS_SEARCH_MIN_QUERY_LENGTH} characters to search.`);
+      setIsCustomerAddressLookupPending(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsCustomerAddressLookupPending(true);
+      setCustomerAddressSearchError(null);
+
+      try {
+        const response = await fetch(`/api/address-search?q=${encodeURIComponent(deferredCustomerAddressSearchQuery)}`, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as AddressLookupApiResponse;
+        if (!response.ok) {
+          throw new Error(payload.error || 'Lookup failed');
+        }
+
+        const suggestions = payload.suggestions ?? [];
+        setCustomerAddressSuggestions(suggestions);
+        setSelectedCustomerAddressMatchId(null);
+        setCustomerAddressSearchError(suggestions.length ? null : 'No addresses found. Try a postcode or add more detail.');
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setCustomerAddressSuggestions([]);
+        setSelectedCustomerAddressMatchId(null);
+        setCustomerAddressSearchError(getAddressLookupErrorMessage(error, 'Try another search.'));
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsCustomerAddressLookupPending(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [deferredCustomerAddressSearchQuery]);
+
   const applianceProfile: ApplianceStepValues = {
     type: details.boiler_type ?? '',
     make: details.boiler_make ?? '',
@@ -300,7 +495,7 @@ export function BoilerServiceWizard({
     startTransition(async () => {
       try {
         const today = new Date().toISOString().slice(0, 10);
-        const nextServiceDue = checks.next_service_due || `${new Date().getFullYear() + 1}-01-15`;
+        const nextServiceDue = checks.next_service_due || addOneYear(today);
         const demoInfo: typeof jobInfo = {
           ...jobInfo,
           ...BOILER_SERVICE_DEMO_INFO,
@@ -383,6 +578,84 @@ export function BoilerServiceWizard({
         }
       });
     };
+
+  const handleAddressMatchSelect = async (suggestion: AddressLookupSuggestion) => {
+    setIsAddressLookupPending(true);
+    setSelectedAddressMatchId(suggestion.id);
+    setAddressSearchError(null);
+    try {
+      const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const payload = (await response.json()) as AddressLookupApiResponse;
+      if (!response.ok || !payload.address) {
+        throw new Error(payload.error || 'Lookup failed');
+      }
+      const address = payload.address;
+      setJobAddress((prev) => ({
+        ...prev,
+        job_address_name: prev.job_address_name.trim() || address.name,
+        job_address_line1: address.line1,
+        job_address_line2: address.line2,
+        job_address_city: address.city,
+        job_postcode: address.postcode || prev.job_postcode,
+      }));
+      setJobInfo((prev) => ({
+        ...prev,
+        property_address: address.summary || prev.property_address,
+        postcode: address.postcode || prev.postcode,
+      }));
+      setAddressSearchQuery(address.line1 || suggestion.label);
+      setAddressSuggestions([]);
+      pushToast({ title: 'Address selected', variant: 'success' });
+    } catch (error) {
+      setSelectedAddressMatchId(null);
+      setAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      pushToast({
+        title: 'Address not found',
+        description: error instanceof Error ? error.message : 'Try again.',
+        variant: 'error',
+      });
+    } finally {
+      setIsAddressLookupPending(false);
+    }
+  };
+
+  const handleCustomerAddressMatchSelect = async (suggestion: AddressLookupSuggestion) => {
+    setIsCustomerAddressLookupPending(true);
+    setSelectedCustomerAddressMatchId(suggestion.id);
+    setCustomerAddressSearchError(null);
+    try {
+      const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const payload = (await response.json()) as AddressLookupApiResponse;
+      if (!response.ok || !payload.address) {
+        throw new Error(payload.error || 'Lookup failed');
+      }
+      const address = payload.address;
+      setJobInfo((prev) => ({
+        ...prev,
+        customer_address_line1: address.line1,
+        customer_address_line2: address.line2,
+        customer_city: address.city,
+        customer_postcode: address.postcode || prev.customer_postcode,
+      }));
+      setCustomerAddressSearchQuery(address.line1 || suggestion.label);
+      setCustomerAddressSuggestions([]);
+      pushToast({ title: 'Client address selected', variant: 'success' });
+    } catch (error) {
+      setSelectedCustomerAddressMatchId(null);
+      setCustomerAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      pushToast({
+        title: 'Address not found',
+        description: error instanceof Error ? error.message : 'Try again.',
+        variant: 'error',
+      });
+    } finally {
+      setIsCustomerAddressLookupPending(false);
+    }
+  };
 
   const handleJobInfoNext = () => {
     startTransition(async () => {
@@ -524,6 +797,30 @@ export function BoilerServiceWizard({
     setChecks((prev) => ({ ...prev, [key]: value }));
   };
 
+  const applyServiceDate = (value: string) => {
+    const nextDue = addOneYear(value);
+    setJobAddress((prev) => ({ ...prev, job_visit_date: value }));
+    setJobInfo((prev) => ({ ...prev, service_date: value }));
+    setCompletionDate(value);
+    if (nextDue) {
+      setChecks((prev) => ({ ...prev, next_service_due: nextDue }));
+    }
+  };
+
+  const applyVoiceReadings = (values: Partial<Cp12VoiceReadingsParsed>) => {
+    setChecks((prev) => ({
+      ...prev,
+      operating_pressure_mbar: values.workingPressure ?? prev.operating_pressure_mbar,
+      heat_input: values.heatInput ?? prev.heat_input,
+      high_combustion_co_ppm: values.highCoPpm ?? values.coPpm ?? prev.high_combustion_co_ppm,
+      high_combustion_co2: values.highCo2Percent ?? prev.high_combustion_co2,
+      high_combustion_ratio: values.highRatio ?? prev.high_combustion_ratio,
+      low_combustion_co_ppm: values.lowCoPpm ?? prev.low_combustion_co_ppm,
+      low_combustion_co2: values.lowCo2Percent ?? prev.low_combustion_co2,
+      low_combustion_ratio: values.lowRatio ?? prev.low_combustion_ratio,
+    }));
+  };
+
   const signatureUpload =
     (role: 'engineer' | 'customer') =>
     (file: File) => {
@@ -549,11 +846,6 @@ export function BoilerServiceWizard({
 
   const checkItems: Array<{ key: keyof BoilerServiceChecks; label: string }> = [
     { key: 'service_visual_inspection', label: 'Visual inspection' },
-    { key: 'service_burner_cleaned', label: 'Burner cleaned' },
-    { key: 'service_heat_exchanger_cleaned', label: 'Heat exchanger cleaned' },
-    { key: 'service_condensate_trap_checked', label: 'Condensate trap checked' },
-    { key: 'service_seals_checked', label: 'Seals checked' },
-    { key: 'service_filters_cleaned', label: 'Filters cleaned' },
     { key: 'service_flue_checked', label: 'Flue checked' },
     { key: 'service_ventilation_checked', label: 'Ventilation checked' },
     { key: 'service_controls_checked', label: 'Controls checked' },
@@ -574,12 +866,13 @@ export function BoilerServiceWizard({
   const hasValue = (value: string) => value.trim().length > 0;
   const readingsFields: Array<keyof BoilerServiceChecks> = [
     'operating_pressure_mbar',
-    'inlet_pressure_mbar',
     'heat_input',
-    'co_ppm',
-    'co2_percent',
-    'flue_gas_temp_c',
-    'system_pressure_bar',
+    'high_combustion_co_ppm',
+    'high_combustion_co2',
+    'high_combustion_ratio',
+    'low_combustion_co_ppm',
+    'low_combustion_co2',
+    'low_combustion_ratio',
   ];
   const checksCompleted = checkItems.filter((item) => hasValue(checks[item.key] ?? '')).length;
   const templateChecksCompleted = additionalTemplateChecks.filter((item) => hasValue(checks[item.key] ?? '')).length;
@@ -634,11 +927,7 @@ export function BoilerServiceWizard({
                   <Input
                     type="date"
                     value={jobAddress.job_visit_date || jobInfo.service_date}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setJobAddress((prev) => ({ ...prev, job_visit_date: value }));
-                      setJobInfo((prev) => ({ ...prev, service_date: value }));
-                    }}
+                    onChange={(e) => applyServiceDate(e.target.value)}
                     className="mt-1"
                   />
                 </div>
@@ -653,16 +942,55 @@ export function BoilerServiceWizard({
                     className="mt-1"
                   />
                 </div>
-                <div className="md:col-span-2">
+                <div className="relative md:col-span-2">
                   <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                    Address line 1
+                    Address lookup / line 1
                   </label>
                   <Input
-                    value={jobAddress.job_address_line1}
-                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line1: e.target.value }))}
-                    placeholder="123 High Street"
+                    value={addressSearchQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAddressSearchQuery(value);
+                      setAddressSearchError(null);
+                      setSelectedAddressMatchId(null);
+                      setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                      setJobInfo((prev) => ({
+                        ...prev,
+                        property_address: composeAddress(value, jobAddress.job_address_line2, jobAddress.job_address_city),
+                      }));
+                    }}
+                    placeholder="Start typing address or postcode"
                     className="mt-1"
                   />
+                  {isAddressLookupPending && !addressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                      Searching addresses…
+                    </div>
+                  ) : null}
+                  {addressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
+                      <div className="max-h-72 overflow-y-auto p-2">
+                        {addressSuggestions.map((suggestion) => {
+                          const isSelected = selectedAddressMatchId === suggestion.id;
+                          return (
+                            <button
+                              key={suggestion.id}
+                              type="button"
+                              onClick={() => void handleAddressMatchSelect(suggestion)}
+                              className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                                isSelected
+                                  ? 'bg-[color:var(--action-soft)] text-muted'
+                                  : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                              }`}
+                            >
+                              <div className="text-sm font-medium">{suggestion.label}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  {addressSearchError ? <p className="mt-2 text-xs text-red-600">{addressSearchError}</p> : null}
                 </div>
                 <div className="md:col-span-2">
                   <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
@@ -670,7 +998,14 @@ export function BoilerServiceWizard({
                   </label>
                   <Input
                     value={jobAddress.job_address_line2}
-                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setJobAddress((prev) => ({ ...prev, job_address_line2: value }));
+                      setJobInfo((prev) => ({
+                        ...prev,
+                        property_address: composeAddress(jobAddress.job_address_line1, value, jobAddress.job_address_city),
+                      }));
+                    }}
                     placeholder="Optional"
                     className="mt-1"
                   />
@@ -679,7 +1014,14 @@ export function BoilerServiceWizard({
                   <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">City / town</label>
                   <Input
                     value={jobAddress.job_address_city}
-                    onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setJobAddress((prev) => ({ ...prev, job_address_city: value }));
+                      setJobInfo((prev) => ({
+                        ...prev,
+                        property_address: composeAddress(jobAddress.job_address_line1, jobAddress.job_address_line2, value),
+                      }));
+                    }}
                     placeholder="London"
                     className="mt-1"
                   />
@@ -710,7 +1052,7 @@ export function BoilerServiceWizard({
             </Card>
             <Card className="border border-white/10">
               <CardHeader>
-                <CardTitle className="text-lg text-muted">Client</CardTitle>
+                <CardTitle className="text-lg text-muted">Client / Landlord</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div>
@@ -731,16 +1073,51 @@ export function BoilerServiceWizard({
                     className="mt-1"
                   />
                 </div>
-                <div className="md:col-span-2">
+                <div className="relative md:col-span-2">
                   <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-                    Address line 1
+                    Address lookup / line 1
                   </label>
                   <Input
-                    value={jobInfo.customer_address_line1}
-                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_address_line1: e.target.value }))}
-                    placeholder="Address line 1"
+                    value={customerAddressSearchQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCustomerAddressSearchQuery(value);
+                      setCustomerAddressSearchError(null);
+                      setSelectedCustomerAddressMatchId(null);
+                      setJobInfo((prev) => ({ ...prev, customer_address_line1: value }));
+                    }}
+                    placeholder="Start typing address or postcode"
                     className="mt-1"
                   />
+                  {isCustomerAddressLookupPending && !customerAddressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                      Searching addresses…
+                    </div>
+                  ) : null}
+                  {customerAddressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
+                      <div className="max-h-72 overflow-y-auto p-2">
+                        {customerAddressSuggestions.map((suggestion) => {
+                          const isSelected = selectedCustomerAddressMatchId === suggestion.id;
+                          return (
+                            <button
+                              key={suggestion.id}
+                              type="button"
+                              onClick={() => void handleCustomerAddressMatchSelect(suggestion)}
+                              className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                                isSelected
+                                  ? 'bg-[color:var(--action-soft)] text-muted'
+                                  : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                              }`}
+                            >
+                              <div className="text-sm font-medium">{suggestion.label}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  {customerAddressSearchError ? <p className="mt-2 text-xs text-red-600">{customerAddressSearchError}</p> : null}
                 </div>
                 <div className="md:col-span-2">
                   <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
@@ -814,21 +1191,16 @@ export function BoilerServiceWizard({
                 </Button>
               </div>
             ) : null}
-            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-              <p className="text-sm font-semibold text-muted">Appliance profile</p>
-              <div className="mt-3">
-                <ApplianceStep
-                  appliance={applianceProfile}
-                  onApplianceChange={handleApplianceProfileChange}
-                  typeOptions={[...BOILER_SERVICE_TYPES]}
-                  allowMultiple={false}
-                  showExtendedFields={false}
-                  showYear={false}
-                  applyExtendedDefaults={false}
-                  inlineEditor
-                />
-              </div>
-            </div>
+            <ApplianceStep
+              appliance={applianceProfile}
+              onApplianceChange={handleApplianceProfileChange}
+              typeOptions={[...BOILER_SERVICE_TYPES]}
+              allowMultiple={false}
+              showExtendedFields={false}
+              showYear={false}
+              applyExtendedDefaults={false}
+              inlineEditor
+            />
           </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleDetailsNext} disabled={isPending}>
@@ -932,45 +1304,85 @@ export function BoilerServiceWizard({
             subtitle={`${readingsCompleted}/${readingsFields.length} captured`}
             defaultOpen={firstIncompleteKey === 'readings'}
           >
-            <div className="mb-3">
+            <div className="mb-3 grid gap-2 sm:grid-cols-2">
               <FgaAutofillInline
                 jobId={jobId}
                 applianceId={fgaApplianceId}
                 readingSet="high"
+                label="High combustion"
                 onApply={(values) => {
-                  if (values.co_ppm !== undefined) setCheckValue('co_ppm', String(values.co_ppm));
-                  if (values.co2_pct !== undefined) setCheckValue('co2_percent', String(values.co2_pct));
-                  if (values.flue_temp_c !== undefined) setCheckValue('flue_gas_temp_c', String(values.flue_temp_c));
+                  if (values.co_ppm !== undefined) setCheckValue('high_combustion_co_ppm', String(values.co_ppm));
+                  if (values.co2_pct !== undefined) setCheckValue('high_combustion_co2', String(values.co2_pct));
+                  if (values.ratio !== undefined) setCheckValue('high_combustion_ratio', String(values.ratio));
+                }}
+              />
+              <FgaAutofillInline
+                jobId={jobId}
+                applianceId={fgaApplianceId}
+                readingSet="low"
+                label="Low combustion"
+                onApply={(values) => {
+                  if (values.co_ppm !== undefined) setCheckValue('low_combustion_co_ppm', String(values.co_ppm));
+                  if (values.co2_pct !== undefined) setCheckValue('low_combustion_co2', String(values.co2_pct));
+                  if (values.ratio !== undefined) setCheckValue('low_combustion_ratio', String(values.ratio));
                 }}
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <Input
+              <UnitNumberInput
+                label="Operating pressure"
                 value={checks.operating_pressure_mbar}
-                onChange={(e) => setCheckValue('operating_pressure_mbar', e.target.value)}
-                placeholder="Operating pressure (mbar)"
+                onChange={(value) => setCheckValue('operating_pressure_mbar', value)}
+                unit="mbar"
+                labelAction={
+                  <Cp12VoiceReadings
+                    jobId={jobId}
+                    buttonClassName="h-7 rounded-full px-3 text-[11px]"
+                    onApply={applyVoiceReadings}
+                  />
+                }
               />
-              <Input
-                value={checks.inlet_pressure_mbar}
-                onChange={(e) => setCheckValue('inlet_pressure_mbar', e.target.value)}
-                placeholder="Inlet pressure (mbar)"
-              />
-              <Input
+              <UnitNumberInput
+                label="Heat input"
                 value={checks.heat_input}
-                onChange={(e) => setCheckValue('heat_input', e.target.value)}
-                placeholder="Heat input (kW)"
+                onChange={(value) => setCheckValue('heat_input', value)}
+                unit="kW"
               />
-              <Input
-                value={checks.flue_gas_temp_c}
-                onChange={(e) => setCheckValue('flue_gas_temp_c', e.target.value)}
-                placeholder="Flue gas temp (°C)"
+              <UnitNumberInput
+                label="High CO"
+                value={checks.high_combustion_co_ppm}
+                onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
+                unit="ppm"
               />
-              <Input value={checks.co_ppm} onChange={(e) => setCheckValue('co_ppm', e.target.value)} placeholder="CO (ppm)" />
-              <Input value={checks.co2_percent} onChange={(e) => setCheckValue('co2_percent', e.target.value)} placeholder="CO₂ (%)" />
-              <Input
-                value={checks.system_pressure_bar}
-                onChange={(e) => setCheckValue('system_pressure_bar', e.target.value)}
-                placeholder="System pressure (bar)"
+              <UnitNumberInput
+                label="High CO2"
+                value={checks.high_combustion_co2}
+                onChange={(value) => setCheckValue('high_combustion_co2', value)}
+                unit="%"
+              />
+              <UnitNumberInput
+                label="High ratio"
+                value={checks.high_combustion_ratio}
+                onChange={(value) => setCheckValue('high_combustion_ratio', value)}
+                unit="ratio"
+              />
+              <UnitNumberInput
+                label="Low CO"
+                value={checks.low_combustion_co_ppm}
+                onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
+                unit="ppm"
+              />
+              <UnitNumberInput
+                label="Low CO2"
+                value={checks.low_combustion_co2}
+                onChange={(value) => setCheckValue('low_combustion_co2', value)}
+                unit="%"
+              />
+              <UnitNumberInput
+                label="Low ratio"
+                value={checks.low_combustion_ratio}
+                onChange={(value) => setCheckValue('low_combustion_ratio', value)}
+                unit="ratio"
               />
             </div>
           </CollapsibleSection>
@@ -1077,9 +1489,10 @@ export function BoilerServiceWizard({
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input
+                  type="date"
                   value={checks.next_service_due}
                   onChange={(e) => setCheckValue('next_service_due', e.target.value)}
-                  placeholder="Next service due (date or note)"
+                  min={jobInfo.service_date || jobAddress.job_visit_date || completionDate || undefined}
                 />
               </div>
             </CollapsibleSection>
@@ -1092,10 +1505,7 @@ export function BoilerServiceWizard({
               <Input
                 type="date"
                 value={completionDate}
-                onChange={(e) => {
-                  setCompletionDate(e.target.value);
-                  setJobInfo((prev) => ({ ...prev, service_date: prev.service_date || e.target.value }));
-                }}
+                onChange={(e) => applyServiceDate(e.target.value)}
                 className="mt-2"
               />
             </div>

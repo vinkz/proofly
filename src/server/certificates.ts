@@ -14,7 +14,7 @@ import type { Database } from '@/lib/database.types';
 import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { CertificateType, PhotoCategory, Cp12Appliance } from '@/types/certificates';
 import { CERTIFICATE_TYPES, PHOTO_CATEGORIES, CERTIFICATE_LABELS } from '@/types/certificates';
-import { DEFAULT_JOB_TYPE } from '@/types/job-records';
+import { DEFAULT_JOB_TYPE, type JobType } from '@/types/job-records';
 import type { BoilerServicePhotoCategory } from '@/types/boiler-service';
 import { BOILER_SERVICE_PHOTO_CATEGORIES, BOILER_SERVICE_REQUIRED_FOR_ISSUE } from '@/types/boiler-service';
 import type { GasWarningNoticeFields } from '@/types/gas-warning-notice';
@@ -48,7 +48,7 @@ type JobInsertPayload = {
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
 type JobContext = {
-  job: Pick<JobRow, 'id' | 'user_id' | 'client_id' | 'client_name' | 'address' | 'scheduled_for' | 'title'> & {
+  job: Pick<JobRow, 'id' | 'user_id' | 'client_id' | 'client_name' | 'address' | 'scheduled_for' | 'title' | 'job_type'> & {
     job_code?: string | null;
   };
   customer: Customer | null;
@@ -82,7 +82,7 @@ async function loadJobContext(
 ): Promise<JobContext> {
   const { data: job, error: jobErr } = await sb
     .from('jobs')
-    .select('id, user_id, client_id, client_name, address, scheduled_for, title, job_code')
+    .select('id, user_id, client_id, client_name, address, scheduled_for, title, job_type, job_code')
     .eq('id', jobId as JobRow['id'])
     .maybeSingle();
   if (jobErr || !job) throw new Error(jobErr?.message ?? `${label}: job not found`);
@@ -175,6 +175,15 @@ function addOneYear(dateOnly: string) {
   if (Number.isNaN(parsed.getTime())) return '';
   parsed.setUTCFullYear(parsed.getUTCFullYear() + 1);
   return parsed.toISOString().slice(0, 10);
+}
+
+function getJobTypeForCertificate(certificateType: CertificateType): JobType {
+  if (certificateType === 'cp12') return 'safety_check';
+  if (certificateType === 'gas_service') return 'service';
+  if (certificateType === 'gas_warning_notice') return 'warning_notice';
+  if (certificateType === 'breakdown') return 'breakdown';
+  if (certificateType === 'commissioning') return 'installation';
+  return DEFAULT_JOB_TYPE;
 }
 
 async function ensureCp12FollowUpJob(params: {
@@ -671,6 +680,147 @@ async function findCertificateRecord(
   return (data ?? null) as CertificateRecord | null;
 }
 
+async function ensureBoilerServiceFollowUpJob(params: {
+  sb: SupabaseClient<Database>;
+  userId: string;
+  sourceJobId: string;
+  sourceJob: JobContext['job'];
+  customer: ReturnType<typeof resolveJobCustomer>;
+  propertyAddress: ReturnType<typeof resolveJobPropertyAddress>;
+  fields: Record<string, unknown>;
+}) {
+  const { sb, userId, sourceJobId, sourceJob, customer, propertyAddress, fields } = params;
+  const cp12Certificate = await findCertificateRecord(sb, {
+    jobId: sourceJobId,
+    certificateType: 'cp12',
+    columns: 'id, job_id, cert_type, created_at',
+  });
+  const cp12OnSameJob = sourceJob.job_type === 'safety_check' || Boolean(cp12Certificate);
+  if (cp12OnSameJob) {
+    return { jobId: null, created: false, skipped: 'cp12_linked' as const };
+  }
+
+  const text = (value: unknown) => (value === undefined || value === null ? '' : String(value));
+  const existingFollowUp = await sb
+    .from(JOB_FIELDS_TABLE)
+    .select('job_id')
+    .eq('field_key', 'boiler_service_follow_up_source_job_id')
+    .eq('value', sourceJobId)
+    .limit(1)
+    .maybeSingle();
+  if (existingFollowUp.error) throw new Error(existingFollowUp.error.message);
+  const existingFollowUpRow = existingFollowUp.data as { job_id?: string | null } | null;
+  const existingFollowUpJobId = existingFollowUpRow?.job_id ?? null;
+
+  const explicitDueDate = normalizeDateOnly(text(fields.next_service_due));
+  const baseServiceDate =
+    normalizeDateOnly(pickText(text(fields.service_date), text(fields.job_visit_date), text(sourceJob.scheduled_for ?? ''))) ||
+    new Date().toISOString().slice(0, 10);
+  const scheduledDate = explicitDueDate || addOneYear(baseServiceDate);
+  if (!scheduledDate) {
+    return { jobId: null, created: false, skipped: 'missing_due_date' as const };
+  }
+
+  const jobAddressName = pickText(text(fields.job_address_name), text(fields.property_name));
+  const jobAddressLine1 = pickText(text(fields.job_address_line1), propertyAddress.line1, text(fields.property_address_line1));
+  const jobAddressLine2 = pickText(text(fields.job_address_line2), propertyAddress.line2, text(fields.property_address_line2));
+  const jobAddressCity = pickText(text(fields.job_address_city), propertyAddress.town, text(fields.property_town));
+  const jobAddressPostcode = pickText(text(fields.job_postcode), propertyAddress.postcode, text(fields.property_postcode), text(fields.postcode));
+  const jobAddressTel = pickText(text(fields.job_tel), customer.phone, text(fields.customer_phone));
+  const customerName = pickText(customer.name, text(fields.customer_name), sourceJob.client_name ?? null);
+  const customerCompany = pickText(customer.organization, text(fields.customer_company));
+  const customerAddressLine1 = pickText(text(fields.customer_address_line1));
+  const customerAddressLine2 = pickText(text(fields.customer_address_line2));
+  const customerCity = pickText(text(fields.customer_city));
+  const customerPostcode = pickText(text(fields.customer_postcode));
+  const customerPhone = pickText(customer.phone, text(fields.customer_phone));
+  const propertySummary = [jobAddressLine1, jobAddressLine2, jobAddressCity].filter(Boolean).join(', ');
+  const note = 'Standalone service - confirm whether CP12 also required';
+  let followUpJobId = existingFollowUpJobId;
+  let created = false;
+
+  if (followUpJobId) {
+    const { error: updateErr } = await sb
+      .from('jobs')
+      .update({
+        client_id: sourceJob.client_id ?? null,
+        client_name: customerName || sourceJob.client_name || null,
+        address: propertySummary || propertyAddress.summary || null,
+        status: 'active',
+        user_id: userId,
+        job_type: 'service',
+        title: `Boiler service for ${customerName || 'upcoming job'}`,
+        scheduled_for: `${scheduledDate}T09:00`,
+      })
+      .eq('id', followUpJobId);
+    if (updateErr) throw new Error(updateErr.message);
+  } else {
+    const insertPayload = {
+      client_id: sourceJob.client_id ?? null,
+      client_name: customerName || sourceJob.client_name || null,
+      address: propertySummary || propertyAddress.summary || null,
+      status: 'active',
+      user_id: userId,
+      title: `Boiler service for ${customerName || 'upcoming job'}`,
+      scheduled_for: `${scheduledDate}T09:00`,
+      job_type: 'service',
+    } as Database['public']['Tables']['jobs']['Insert'];
+
+    const { data: followUpJob, error: insertErr } = await sb.from('jobs').insert(insertPayload).select('id').single();
+    if (insertErr || !followUpJob) throw new Error(insertErr?.message ?? 'Failed to create Boiler Service follow-up job');
+    followUpJobId = followUpJob.id as string;
+    created = true;
+
+    try {
+      await ensureJobCode(sb, followUpJobId, userId, null);
+    } catch (error) {
+      console.warn('ensureBoilerServiceFollowUpJob: failed to assign job code', {
+        followUpJobId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  await upsertJobAddressForJob({
+    jobId: followUpJobId,
+    fields: {
+      line1: jobAddressLine1 || undefined,
+      line2: jobAddressLine2 || undefined,
+      town: jobAddressCity || undefined,
+      postcode: jobAddressPostcode || undefined,
+    },
+    sb,
+    userId,
+  });
+
+  const fieldRows: JobFieldEntry[] = [
+    { job_id: followUpJobId, field_key: 'service_date', value: scheduledDate },
+    { job_id: followUpJobId, field_key: 'job_visit_date', value: scheduledDate },
+    { job_id: followUpJobId, field_key: 'customer_name', value: customerName || null },
+    { job_id: followUpJobId, field_key: 'customer_company', value: customerCompany || null },
+    { job_id: followUpJobId, field_key: 'customer_address_line1', value: customerAddressLine1 || null },
+    { job_id: followUpJobId, field_key: 'customer_address_line2', value: customerAddressLine2 || null },
+    { job_id: followUpJobId, field_key: 'customer_city', value: customerCity || null },
+    { job_id: followUpJobId, field_key: 'customer_postcode', value: customerPostcode || null },
+    { job_id: followUpJobId, field_key: 'customer_phone', value: customerPhone || null },
+    { job_id: followUpJobId, field_key: 'job_address_name', value: jobAddressName || null },
+    { job_id: followUpJobId, field_key: 'job_address_line1', value: jobAddressLine1 || null },
+    { job_id: followUpJobId, field_key: 'job_address_line2', value: jobAddressLine2 || null },
+    { job_id: followUpJobId, field_key: 'job_address_city', value: jobAddressCity || null },
+    { job_id: followUpJobId, field_key: 'job_postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJobId, field_key: 'job_tel', value: jobAddressTel || null },
+    { job_id: followUpJobId, field_key: 'property_address', value: propertySummary || propertyAddress.summary || null },
+    { job_id: followUpJobId, field_key: 'postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJobId, field_key: 'next_service_due', value: addOneYear(scheduledDate) || null },
+    { job_id: followUpJobId, field_key: 'boiler_service_follow_up_source_job_id', value: sourceJobId },
+    { job_id: followUpJobId, field_key: 'follow_up_source_certificate_type', value: 'gas_service' },
+    { job_id: followUpJobId, field_key: 'internal_note', value: note },
+  ];
+
+  await persistJobFields(sb, followUpJobId, fieldRows, 'ensureBoilerServiceFollowUpJob');
+  return { jobId: followUpJobId, created, skipped: null };
+}
+
 async function saveCertificateRecord(
   sb: SupabaseClient<Database>,
   params: {
@@ -752,7 +902,7 @@ export async function createJob(payload: JobInsertPayload) {
     address: resolvedAddress,
     scheduled_for: input.scheduledFor ?? null,
     user_id: user.id,
-    job_type: DEFAULT_JOB_TYPE,
+    job_type: getJobTypeForCertificate(input.certificateType),
     job_code: jobCode,
     client_ref: buildClientRef(jobCode),
   } as Record<string, unknown>;
@@ -1167,6 +1317,12 @@ const BoilerServiceChecksSchema = z.object({
     heat_input: optionalText,
     co_ppm: optionalText,
     co2_percent: optionalText,
+    high_combustion_co_ppm: optionalText,
+    high_combustion_co2: optionalText,
+    high_combustion_ratio: optionalText,
+    low_combustion_co_ppm: optionalText,
+    low_combustion_co2: optionalText,
+    low_combustion_ratio: optionalText,
     flue_gas_temp_c: optionalText,
     system_pressure_bar: optionalText,
     appliance_conforms_standards: optionalText,
@@ -2459,7 +2615,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
   const clientAddressLine1 = pickText(clientAddressSlots.line1, jobAddressLine1);
   const clientAddressLine2 = clientAddressSlots.line2;
   const clientAddressLine3 = pickText(clientAddressSlots.town, jobAddressTown);
-  const clientPostcode = pickText(jobContext.customer?.postcode ?? null, getFieldText('postcode'), jobAddressPostcode);
+  const clientPostcode = pickText(jobContext.customer?.postcode ?? null, getFieldText('customer_postcode'), getFieldText('postcode'), jobAddressPostcode);
   const clientPhone = pickText(customer.phone, getFieldText('customer_contact'), getFieldText('customer_phone'));
   const serviceDate = pickText(getFieldText('service_date'), getFieldText('job_visit_date'));
   const defectsFound = getFieldText('defects_found').trim().toLowerCase();
@@ -2467,10 +2623,12 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
   const combustionCaptured =
     getFieldText('co_ppm').trim().length > 0 ||
     getFieldText('co2_percent').trim().length > 0 ||
-    getFieldText('flue_gas_temp_c').trim().length > 0;
+    getFieldText('high_combustion_co_ppm').trim().length > 0 ||
+    getFieldText('high_combustion_co2').trim().length > 0 ||
+    getFieldText('low_combustion_co_ppm').trim().length > 0 ||
+    getFieldText('low_combustion_co2').trim().length > 0;
   const pressureCaptured =
-    getFieldText('operating_pressure_mbar').trim().length > 0 ||
-    getFieldText('inlet_pressure_mbar').trim().length > 0;
+    getFieldText('operating_pressure_mbar').trim().length > 0;
   const engineerComments = [
     composeCommentSection('Service summary', getFieldText('service_summary')),
     composeCommentSection('Recommendations', getFieldText('recommendations')),
@@ -2509,8 +2667,12 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     applianceModel: boilerModel,
     applianceLocation: getFieldText('boiler_location'),
     applianceSerial: getFieldText('serial_number'),
-    highCombustionCoPpm: getFieldText('co_ppm'),
-    highCombustionCo2: getFieldText('co2_percent'),
+    highCombustionRatio: getFieldText('high_combustion_ratio'),
+    highCombustionCoPpm: pickText(getFieldText('high_combustion_co_ppm'), getFieldText('co_ppm')),
+    highCombustionCo2: pickText(getFieldText('high_combustion_co2'), getFieldText('co2_percent')),
+    lowCombustionRatio: getFieldText('low_combustion_ratio'),
+    lowCombustionCoPpm: getFieldText('low_combustion_co_ppm'),
+    lowCombustionCo2: getFieldText('low_combustion_co2'),
     applianceOperatingCorrectly: getFieldText('service_visual_inspection'),
     applianceConformsStandards: getFieldText('appliance_conforms_standards'),
     applianceControlsChecked: getFieldText('service_controls_checked'),
@@ -2679,7 +2841,18 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     .from('jobs')
     .update({ status: 'completed' } as Record<string, unknown>)
     .eq('id', input.jobId);
+  await ensureBoilerServiceFollowUpJob({
+    sb: admin,
+    userId: user.id,
+    sourceJobId: input.jobId,
+    sourceJob: jobContext.job,
+    customer,
+    propertyAddress,
+    fields: mergedFieldMap,
+  });
   revalidatePath(`/jobs/${input.jobId}`);
+  revalidatePath('/jobs');
+  revalidatePath('/dashboard');
   return { pdfUrl: signed.signedUrl, jobId: input.jobId };
 }
 

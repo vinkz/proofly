@@ -86,7 +86,7 @@ const WIZARD_ROUTE_BY_JOB_TYPE: Record<JobType, string> = {
   general: 'general_works',
 };
 
-const LAUNCH_VISIBLE_JOB_TYPES: readonly JobType[] = ['safety_check'];
+const LAUNCH_VISIBLE_JOB_TYPES: readonly JobType[] = ['safety_check', 'service'];
 
 const splitAddressParts = (value: string | null | undefined) =>
   String(value ?? '')
@@ -749,7 +749,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
         if (submitMode === 'continue') {
           const wizardRoute = WIZARD_ROUTE_BY_JOB_TYPE[jobType];
           const shouldSkipFirstWizardStep =
-            isCp12Upcoming || jobType === 'service' || jobType === 'warning_notice';
+            isCp12Upcoming || jobType === 'warning_notice';
           const href = shouldSkipFirstWizardStep
             ? `/wizard/create/${wizardRoute}?jobId=${jobId}&startStep=2`
             : `/wizard/create/${wizardRoute}?jobId=${jobId}`;

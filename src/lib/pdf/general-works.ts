@@ -121,11 +121,8 @@ export async function renderGeneralWorksPdf({ fieldMap, photos, issuedAt, previe
   };
 
   drawHeading('General Works Report', 18);
-  const logoSize = 16;
-  // Slightly larger brand block so we can drop in custom logos later.
-  page.drawText('certnow', { x: margin, y, size: logoSize, font: bold });
   page.drawText(`Issued: ${new Date(issuedAt).toLocaleString()}`, { x: pageWidth - margin - 200, y, size: 10, font });
-  y -= logoSize + 8;
+  y -= 24;
 
   drawHeading('Property / Customer');
   drawField('Property address', getVal('property_address', 'Not provided'), pageWidth - margin * 2);

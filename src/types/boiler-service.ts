@@ -72,6 +72,12 @@ export type BoilerServiceChecks = {
   heat_input: string;
   co_ppm: string;
   co2_percent: string;
+  high_combustion_co_ppm: string;
+  high_combustion_co2: string;
+  high_combustion_ratio: string;
+  low_combustion_co_ppm: string;
+  low_combustion_co2: string;
+  low_combustion_ratio: string;
   flue_gas_temp_c: string;
   system_pressure_bar: string;
   appliance_conforms_standards: string;
@@ -197,6 +203,12 @@ export const BOILER_SERVICE_DEMO_CHECKS: BoilerServiceChecks = {
   heat_input: '24',
   co_ppm: '8',
   co2_percent: '8.5',
+  high_combustion_co_ppm: '8',
+  high_combustion_co2: '8.5',
+  high_combustion_ratio: '0.0009',
+  low_combustion_co_ppm: '6',
+  low_combustion_co2: '8.1',
+  low_combustion_ratio: '0.0007',
   flue_gas_temp_c: '68',
   system_pressure_bar: '1.2',
   appliance_conforms_standards: 'yes',

@@ -1,9 +1,0 @@
-{
-  "integrations": {
-    "discord": {
-      "enabled": true,
-      "token": "env:DISCORD_BOT_TOKEN",
-      "mode": "mention"
-    }
-  }
-}

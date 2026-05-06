@@ -185,7 +185,45 @@ export const useSignaturePad = () => {
     return pixels.some((value) => value !== 0);
   };
 
-  const toDataUrl = () => canvasRef.current?.toDataURL('image/png') ?? '';
+  const toDataUrl = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !canvas.width || !canvas.height) return '';
+    const context = canvas.getContext('2d');
+    if (!context) return canvas.toDataURL('image/png');
+
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const { data, width, height } = image;
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const alpha = data[(y * width + x) * 4 + 3];
+        if (alpha === 0) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+
+    if (minX > maxX || minY > maxY) return canvas.toDataURL('image/png');
+
+    const padding = Math.round((window.devicePixelRatio || 1) * 10);
+    const cropX = Math.max(0, minX - padding);
+    const cropY = Math.max(0, minY - padding);
+    const cropWidth = Math.min(width - cropX, maxX - minX + 1 + padding * 2);
+    const cropHeight = Math.min(height - cropY, maxY - minY + 1 + padding * 2);
+    const cropped = document.createElement('canvas');
+    cropped.width = cropWidth;
+    cropped.height = cropHeight;
+    const croppedContext = cropped.getContext('2d');
+    if (!croppedContext) return canvas.toDataURL('image/png');
+    croppedContext.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+    return cropped.toDataURL('image/png');
+  };
 
   return {
     canvasRef,

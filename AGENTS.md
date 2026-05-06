@@ -15,6 +15,10 @@
 - SignupAgent: Owns multi-step signup under `src/app/(auth)/signup` (steps: account details, personal/professional details, trade/cert selection) using shadcn UI and zod validation; finalizes via `completeSignupWizard` (auth signUp + profile upsert, onboarding_complete=true) then redirects to `/dashboard`.
 - TemplateAgent: Filters templates by `profiles.trade_types` or `is_general`, keeps template metadata (`is_general`, `trade_type`) in sync, and wires template pickers/lists to those rules.
 - ProfileAgent: Maintains `profiles` table fields (`trade_types`, `certifications`, `onboarding_complete`, personal basics) via `src/server/profile.ts`, enforces guards in `RequireAuth` (redirects incomplete users to `/signup/step1`).
+- JobRequestAgent: Owns landlord-submitted work requests from public property links (`/p/[public_token]`). It validates the landlord form (`tenant_name`, `tenant_phone`, `access_notes`, `preferred_dates`), classifies requests as `request_type = 'new_job'` or `request_type = 'renewal'`, creates `job_requests` rows, triggers engineer notification, and keeps request status moving through `pending -> scheduled -> completed -> dismissed`.
+- JobContextAgent: Produces the clean prefill payload for `/jobs/new` and downstream certificate wizards by merging context from the job request, property record, previous jobs/certificates, landlord/client record, and engineer profile. It must preserve manual `/jobs/new` behavior when no request exists.
+- AutofillAgent: Reduces repeated data entry across jobs, certificates, and invoices. It autofills engineer company details, Gas Safe number, saved engineer signature where available, property address, landlord/client details, tenant/access notes from job requests, and eventually previous appliance data.
+- CertificateAgent: Focuses on certificate validation, PDF generation, certificate storage, signed URLs, and certificate lifecycle side effects. It should not be responsible for gathering landlord/request data; it consumes normalized context prepared by JobContextAgent/AutofillAgent.
 
 ## Architecture Overview
 - Next.js App Router with mixed server/client components; pages and layouts live in `src/app`.
@@ -22,25 +26,65 @@
 - Client UI pulls typed data via props; shared types in `src/types` keep server/client contracts aligned.
 - Styling uses Tailwind (`tailwind.config.ts`); components favor utility-first classes over bespoke CSS.
 - Production is intended to run on Vercel behind the custom domain `certnow.uk`; Vercel preview URLs remain useful for test deployments. Keep `NEXT_PUBLIC_SITE_URL` aligned with the exact public origin used for OAuth callbacks.
-- App navigation is now explicitly client-first: `/dashboard` is the operational home, `/clients` is a first-class destination, and `/jobs/[id]` is treated as a job record with related client/property context.
+- Product direction is property-first and link-based: properties hold long-term compliance history, jobs are execution events at a property, and landlords can request work from public property links while engineers can still create jobs manually.
+- Core model: Property = long-term compliance anchor; Job = one execution event at a property; Job Request = landlord-submitted request for work; Engineer Profile = reusable engineer/company identity for autofill.
+- App navigation remains engineer-first operationally: `/dashboard` is the operational home, `/jobs/new` must always support manual engineer-created jobs, `/clients` remains useful for customer history, and `/jobs/[id]` is treated as an execution record with related client/property/certificate/invoice context.
 - Document preview is canonical at `/jobs/[id]/pdf` (legacy report/pdf routes should redirect here); saved documents live under `/documents` and use Supabase signed URLs.
-- External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, maps via `@googlemaps/google-maps-services-js`; isolate integration code under `src/server`.
-- Job sheets: `src/server/job-sheets.ts` manages `public.job_sheets` codes (CN-XXXXXX) for the job sheet scan flow.
-- Job sheet lookup API: `src/app/api/job-sheets/lookup/route.ts` resolves CN codes to jobs for the scan flow.
-- Job sheet scan UI: `src/app/(app)/jobs/scan` provides the QR scan entry point that redirects to the linked job.
-- Job sheet scan client: `scan-job-sheet-client.tsx` uses QR scanning + lookup with inline errors and auto-redirect on success.
-- Job sheet PDF: `src/lib/pdf/job-sheet-template.ts` renders a QR-enabled job sheet PDF for scan flows.
-- Job sheet PDF API: `src/app/api/jobs/[jobId]/job-sheet/route.ts` serves the generated job sheet PDF.
-- Job detail actions: job pages include a "Generate Job Sheet" button wired to the job sheet PDF API.
+- External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, address lookup via Ideal Postcodes, and planned engineer notifications via Resend; isolate integration code under server/API routes.
+- Job sheet scan/QR flows have been removed from the active product. Do not reintroduce QR scanning or drag-and-drop interactions without a clear mobile-field use case.
 - Cross-certificate links: CP12 can deep-link to Gas Warning Notice using the same jobId; Gas Warning Notice may prefill from CP12 job fields and appliances when available.
+
+## Property-First Job Model
+- Property is the long-term compliance anchor. It should own the public landlord link, compliance history, reminder eligibility, job request history, and future certificate history. Current job address/client structures must remain compatible while the property model is introduced.
+- Job is one execution event at a property. Examples include CP12, boiler service, gas warning notice, general works, and commissioning. Jobs should be linkable to `property_id` and optionally to `job_requests.id` when created from a landlord request.
+- Job Request is a landlord-triggered request to create work. It is not itself a job or certificate; it becomes scheduled work only when the engineer accepts/schedules it into `/jobs/new`.
+- Engineer Profile is the persistent identity used to avoid repeated entry: company details, engineer name, Gas Safe number, ID card number, phone, default signature, and invoice/company defaults.
+- Landlord/client records remain important for contact, billing, and portfolio context, but compliance status should be anchored to the property rather than duplicated across individual jobs.
+
+## Job Creation Entry Points
+- Engineers must retain manual job creation via `/jobs/new` at all times. This flow is used for work received by phone, WhatsApp, email, repeat clients, urgent visits, or any situation where no landlord request exists. The job request system must not replace or block this flow.
+- Landlord new job request is used when a landlord requests work for a property with no existing CertNow CP12/certificate history. It should create `job_requests.request_type = 'new_job'` and flow into `/jobs/new` with medium prefill.
+- Landlord renewal request is used when a landlord requests work for an existing property with previous CP12/certificate history, especially where a certificate is due soon, within 60 days of expiry, or expired. It should create `job_requests.request_type = 'renewal'` and flow into `/jobs/new` with high prefill.
+- All three entry points converge into `/jobs/new`: manual engineer-created job = low/no prefill; new job request = medium prefill; renewal request = high prefill. Prefill should never remove the engineer’s ability to edit before creating the job.
+
+## Public Property Links
+- Each property should have a public route `/p/[public_token]`. This route must never require login.
+- The page should show property address, current compliance/certificate status, latest certificate expiry date if available, engineer name and Gas Safe number, and a certificate download button if a certificate is available for public sharing.
+- CTA logic: if there is no previous CP12/certificate history, show `Request Gas Safety Check`; if there is previous CP12/certificate history and the certificate is due or expired, show `Request Renewal`.
+- Both CTAs use the same small landlord form. The form must have four fields maximum: `tenant_name`, `tenant_phone`, `access_notes`, and `preferred_dates`.
+- Do not ask landlords to re-enter property address, landlord name, landlord contact, or engineer details on the public form. Those should come from property/client/engineer records where possible.
+- Public tokens must be random, unguessable, and scoped to the property. Public routes should expose only landlord-safe property/certificate data and must not expose internal UUIDs, private notes, service-role URLs, or unrelated client history.
+
+## Job Request Schema Direction
+- Use one broad table called `job_requests`, not a `renewal_requests`-only table.
+- Suggested schema:
+```sql
+CREATE TABLE job_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  property_id UUID REFERENCES properties,
+  user_id UUID REFERENCES auth.users,
+  request_type TEXT NOT NULL, -- 'new_job' or 'renewal'
+  job_type TEXT NOT NULL DEFAULT 'cp12',
+  tenant_name TEXT,
+  tenant_phone TEXT,
+  access_notes TEXT,
+  preferred_dates TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+- Status lifecycle: `pending -> scheduled -> completed -> dismissed`.
+- When a landlord submits the form, create a `job_requests` row, classify it as `new_job` or `renewal`, notify the engineer via Resend, and show it on the engineer dashboard.
+- When an engineer creates a job from a request, link the job to `job_requests.id` and update the request status to `scheduled`.
 
 ## Security Boundaries
 - Any module that reads private environment variables (`OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) must stay server-only and include `import 'server-only';` unless it is a top-level Next server action file with `'use server'`.
-- Current guarded secret-bearing utilities: `src/lib/env.ts`, `src/lib/openai.ts`, `src/lib/reporting.ts`, `src/lib/supabaseServer.ts`, `src/server/pdf/renderCp12Certificate.ts`, and `src/server/pdf/renderJobSheetPdf.ts`.
+- Current guarded secret-bearing utilities: `src/lib/env.ts`, `src/lib/openai.ts`, `src/lib/reporting.ts`, `src/lib/supabaseServer.ts`, and `src/server/pdf/renderCp12Certificate.ts`.
 - Do not import private server utilities directly into client components. Client components may import server actions from `'use server'` modules, but those actions must validate the authenticated user and resource ownership before using service-role clients.
 - `supabaseServerServiceRole()` bypasses RLS. Use it only in server actions, route handlers, or server-only helpers after confirming the current Supabase user is allowed to access the job/client/certificate being read or mutated.
 - Never expose, serialize, log, or return private keys or key-presence checks. `NEXT_PUBLIC_*` values are public and must not contain secrets.
-- Before real customer rollout, audit RLS policies and storage bucket rules for at least `profiles`, `clients`, `jobs`, `job_fields`, `certificates`, `invoices`, `documents`, `reports`, and certificate storage buckets.
+- Before real customer rollout, audit RLS policies and storage bucket rules for at least `profiles`, `properties`, `job_requests`, `clients`, `jobs`, `job_fields`, `certificates`, `invoices`, `documents`, `reports`, and certificate storage buckets.
+- Public property routes (`/p/[public_token]`) must be deliberately unauthenticated but data-minimized. Use the token to resolve only landlord-safe fields, never service-role URLs or unrelated customer/job history.
 
 ## PDF Generation
 - Field reports: `src/lib/reporting.ts` builds PDFs with `pdf-lib`; `src/server/jobs.ts` loads photos/signatures, optionally AI-summarizes via OpenAI (`getOpenAIClient` and `OPENAI_API_KEY`), then uploads to the Supabase `reports` bucket and stores `reports` rows.
@@ -55,7 +99,6 @@
 - Gas Warning Notice: `src/server/pdf/renderGasWarningNoticePdf.ts` loads `src/assets/templates/gas-warning-notice.pdf`, fills AcroForm fields when present, and falls back to XY text drawing if the template is not form-enabled. Signature URLs are drawn into the signature boxes when available.
 - Boiler Service Record: `renderGasServiceRecordTemplatePdf` in `src/lib/pdf/gas-service-template.ts` draws its own layout; wrappers `renderBoilerServicePdf`/`generateBoilerServiceRecordPdf` map certificate fields then call the renderer.
 - General Works: `renderGeneralWorksPdf` in `src/lib/pdf/general-works.ts` handles the general_works branch with targeted logging around Supabase certificate/job/job_fields writes to surface RLS failures.
-- Job sheets: `renderJobSheetPdf` in `src/lib/pdf/job-sheet-template.ts` builds QR-enabled PDFs; `generateJobSheetPdf` in `src/server/pdf/renderJobSheetPdf.ts` loads job context and sheet codes.
 
 ## Build, Test, and Development Commands
 - `pnpm dev`: Run dev server (Turbopack); access via LAN/DNS from phones on the same network.
@@ -84,8 +127,12 @@
 
 ## Wizard Flow Notes
 - Job address steps follow the shared card layout: job reference, address name/lines/city/postcode, and site telephone; job line1/postcode sync into property address fields.
+- `/jobs/new` is the convergence point for manual engineer-created jobs, landlord new-job requests, and landlord renewal requests. It should accept optional context from `job_requests.id`, property, client/landlord, prior certificates, and engineer profile without breaking the existing manual creation path.
+- Job context prefill priority should be: explicit job request values, property record, previous jobs/certificates, landlord/client record, engineer profile defaults. Engineer-entered values in the current form should not be silently overwritten.
 - General Works wizard step order: Job address → Evidence → Review → Signatures (client step still precedes wizard).
 - Gas Warning Notice job step includes job address fields plus customer contact card; the job address fields are stored in job_fields and used to update the job address via `saveGasWarningJobInfo`.
+- Boiler Service is a public/selectable engineer flow again. It should start directly in `/wizard/create/gas_service`/`/wizard/create/boiler_service` like CP12, not behind the old client-only pre-step. Step 1 mirrors CP12 where relevant: service date, structured job address, address API lookup, site telephone, and structured client/landlord correspondence details.
+- Boiler Service visible fields should track the PDF template, not generic service notes. The UI must collect every gas-service PDF field that is not already autofilled from profile/job context: job/client address blocks, boiler identity, high/low combustion readings, operating pressure, heat input, PDF safety/template yes-no checks, summary/recommendations/comments, next service date, and engineer/customer signatures. Avoid adding visible fields that are stored but never render to the Boiler Service PDF unless there is a clear operational reason.
 - CP12 (2026-02 refresh):
   - Section order mirrors the PDF: Installer (read-only from account) → Job address → Customer/Landlord → Appliance identity → Appliance checks → Signatures.
   - **Billable customer is removed** from CP12; only job address + landlord/customer are collected.
@@ -105,12 +152,34 @@
 - CP12 guardrails (docs/specs/cp12.md): property + landlord addresses required and must differ, landlord name required, Reg 26(9) confirmation required, at least one appliance with location & description, engineer + customer signatures required to issue, and if any appliance is unsafe/defective you must capture defect_description, remedial_action, and a warning_notice_issued choice.
 - Public ID chain: jobs get an 8-digit `job_code` and a job-scoped `client_ref` (`{job_code}-01`); certificates get `public_id` (`{job_code}-{CERT_TYPE}-01`). UUIDs remain primary keys for all joins.
 
-## Dashboard & Client-First UX
+## Dashboard & Property-First UX
 - `/dashboard` is now an operational board, not a completed-jobs archive. It emphasizes the current job, grouped upcoming jobs (`Today`, `Tomorrow`, `This week`), and recent clients.
+- Add a job requests section above upcoming jobs. It should show landlord-submitted `pending` requests before scheduled work so engineers can quickly schedule or dismiss inbound demand.
+- Request cards should be labelled by `request_type`: `New Job Request` for `new_job`, and `Renewal Request` for `renewal`.
+- Request cards should show property address, landlord name and phone, certificate expiry status when it is a renewal, tenant name and phone, access notes, and preferred dates.
+- Request actions are `Schedule Job` and `Dismiss`. `Schedule Job` opens `/jobs/new` pre-populated with property address, landlord/client details, job type, tenant details, access notes, and request id. Scheduling should link the new job to `job_requests.id` and update the request to `scheduled`.
 - Upcoming jobs compute a prep state from saved Step 1 fields. Unprepared jobs show `Prepare`; prepared jobs show `Start`.
 - The current dashboard cards show job type labels (e.g. `CP12`, `Gas Warning Notice`) alongside client/name/address. `Create invoice` lives in the header actions; `View all jobs` lives with the Upcoming jobs card.
 - `/clients` is the main browse surface for customer history and `/clients/[id]` groups that client’s work into current jobs, completed jobs, reports, and calendar context.
 - `/jobs/[id]` now presents job identity first: job title/type/status at the top, with linked client/property context and related certificates/invoices below.
+
+## Follow-Up Logic
+- CP12 is the main compliance lifecycle anchor. When a CP12 is completed, always create a 12-month CP12 follow-up.
+- Boiler Service follow-up depends on context. If linked to CP12 on the same job, do not create a separate boiler service follow-up because the CP12 renewal cycle covers it.
+- If a Boiler Service is standalone, create a 12-month boiler service follow-up and add note: `Standalone service — confirm whether CP12 also required`.
+- Gas Warning Notice keeps its existing logic: it is triggered from unsafe CP12 appliance checks and should not be merged with boiler service follow-up logic.
+- Known future gap: standalone boiler service finding a dangerous appliance may need separate Gas Warning Notice handling later.
+
+## Invoice Completion Flow
+- Invoices already exist under `/invoices`, `/invoices/new`, and `/invoices/[invoiceId]`, but certificate completion should integrate them more directly.
+- At CP12 Step 4 completion, after successful PDF generation, prompt: `Create invoice for this job?`
+- The invoice CTA should open `/invoices/new` pre-populated with client name, property address, job date, job type, and engineer/company details.
+- Engineers should not need to navigate separately to invoices after completing a certificate, though standalone invoice creation from the dashboard/header should remain available.
+
+## Compatibility Guardrails
+- Preserve compatibility with the existing CP12 wizard, Supabase schema, certificate PDF generation pipeline, invoice routes, and follow-up system while adding the property/request/autofill direction.
+- New property and job request features should be additive. Do not break manual `/jobs/new`, existing client selection/creation, saved property prefill, dashboard prepare/start actions, `/jobs/[id]/pdf`, or current certificate issuance.
+- Public landlord links should act as acquisition/retention loops around properties and renewals, not as a replacement for engineer-controlled job creation.
 
 ## Landing Page & Assets
 - The public landing page lives at `src/app/page.tsx` and uses static product screenshots from `public/landing`.

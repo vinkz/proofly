@@ -17,7 +17,6 @@ import { BreakdownWizard } from './_components/breakdown-wizard';
 import { CommissioningWizard } from './_components/commissioning-wizard';
 import { mergeJobContextFields } from './_components/initial-job-context';
 import { CertificateClientStep } from './_components/certificate-client-step';
-import { BoilerServiceClientStep } from './_components/boiler-service-client-step';
 import { GeneralWorksClientStep } from './_components/general-works-client-step';
 import { GasWarningClientStep } from './_components/gas-warning-client-step';
 import { BreakdownClientStep } from './_components/breakdown-client-step';
@@ -80,23 +79,25 @@ export default async function CertificateWizardPage({
   const existingJobId =
     typeof resolvedSearchParams?.jobId === 'string' ? resolvedSearchParams.jobId : null;
   const isCp12 = normalizedType === 'cp12';
+  const startsInWizard = normalizedType === 'cp12' || normalizedType === 'gas_service';
+  const hasSeparateClientStep = !startsInWizard;
   const prepareOnly = isCp12 && resolvedSearchParams?.prepare === '1';
   const startStepParam =
     typeof resolvedSearchParams?.startStep === 'string' ? Number.parseInt(resolvedSearchParams.startStep, 10) : NaN;
   const requestedStartStep = Number.isFinite(startStepParam) ? Math.max(1, startStepParam) : 1;
-  const clientStep = !isCp12 && resolvedSearchParams?.clientStep === '1';
-  const forceClientStep = !isCp12 && resolvedSearchParams?.forceClientStep === '1';
+  const clientStep = hasSeparateClientStep && resolvedSearchParams?.clientStep === '1';
+  const forceClientStep = hasSeparateClientStep && resolvedSearchParams?.forceClientStep === '1';
   const baseSteps = CERTIFICATE_STEP_TOTALS[normalizedType as CertificateType] ?? 4;
-  // For CP12 we want the wizard's first step to be job info, even when coming from client selection.
-  const stepOffset = clientStep && !isCp12 ? 1 : 0;
-  let totalSteps = isCp12 ? baseSteps : baseSteps + 1;
+  // CP12 and Boiler Service now start inside the wizard; other flows keep their client pre-step.
+  const stepOffset = clientStep && hasSeparateClientStep ? 1 : 0;
+  let totalSteps = startsInWizard ? baseSteps : baseSteps + 1;
 
   if (clientStep && forceClientStep && isCp12 && existingJobId) {
     redirect(`/wizard/create/${normalizedType}?jobId=${existingJobId}`);
   }
 
   if (!existingJobId && !clientId) {
-    if (isCp12) {
+    if (startsInWizard) {
       try {
         const created = await createJob({ certificateType: normalizedType as CertificateType });
         return redirect(`/wizard/create/${normalizedType}?jobId=${created.jobId}`);
@@ -113,9 +114,6 @@ export default async function CertificateWizardPage({
     }
     try {
       const clients = await listClients();
-      if (normalizedType === 'gas_service') {
-        return <BoilerServiceClientStep clients={clients} totalSteps={totalSteps} />;
-      }
       if (normalizedType === 'general_works') {
         return <GeneralWorksClientStep clients={clients} totalSteps={totalSteps} />;
       }

@@ -190,8 +190,8 @@ type SignaturePlacement = {
 };
 
 const GAS_SERVICE_SIGNATURE_PLACEMENTS: Record<'engineer' | 'customer', SignaturePlacement> = {
-  engineer: { x: 250, y: 47, width: 165, height: 22 },
-  customer: { x: 442, y: 47, width: 165, height: 22 },
+  engineer: { x: 325, y: 47, width: 165, height: 22 },
+  customer: { x: 517, y: 47, width: 165, height: 22 },
 };
 
 type ApplianceTableFieldNames = {
@@ -262,27 +262,6 @@ function getFormFieldNames(form: ReturnType<PDFDocument['getForm']>) {
 function normalizeText(value: string | undefined) {
   if (value === undefined || value === null) return '';
   return String(value).trim();
-}
-
-function drawBrandWordmark(page: PDFPage, fonts: { regular: PDFFont; bold: PDFFont }, pageHeight: number) {
-  const x = 30;
-  const baselineY = pageHeight - 34;
-
-  page.drawText('certnow', {
-    x,
-    y: baselineY,
-    size: 20,
-    font: fonts.bold,
-    color: rgb(0.07, 0.09, 0.13),
-  });
-
-  page.drawText('Field compliance', {
-    x: x + 60,
-    y: baselineY + 4,
-    size: 6.5,
-    font: fonts.regular,
-    color: rgb(0.45, 0.49, 0.56),
-  });
 }
 
 async function fetchAssetBytes(url: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
@@ -520,7 +499,6 @@ export async function renderGasServicePdf(input: RenderGasServiceInput): Promise
 
   const [page] = pdfDoc.getPages();
   const { height } = page.getSize();
-  drawBrandWordmark(page, fonts, height);
 
   const fields: GasServiceFieldMap = {
     ...input.fields,

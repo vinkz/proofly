@@ -12,7 +12,6 @@ import { ShareReportLinkButton } from '@/components/report/share-link-button';
 import { JobProgressProvider } from '@/components/job-progress-context';
 import { JobProgressBar } from '@/components/job-progress-bar';
 import { DeleteJobButton } from '@/components/jobs/delete-job-button';
-import { GenerateJobSheetButton } from '@/components/jobs/generate-job-sheet-button';
 import { Button } from '@/components/ui/button';
 import { JobInvoicesCard } from '@/components/invoices/job-invoices-card';
 import type { Database } from '@/lib/database.types';
@@ -267,7 +266,6 @@ export default async function JobDetailPage({
               {formatLabel(jobStatus, 'Pending')}
             </span>
             <SignatureModal jobId={jobId} signatures={signaturePreviews} />
-            <GenerateJobSheetButton jobId={jobId} />
             <GenerateReportButton jobId={jobId} reportKind={reportKind} />
             {reportSignedUrl ? (
               <Link
