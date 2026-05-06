@@ -12,6 +12,11 @@ export function isInvalidRefreshTokenError(error: unknown) {
   return /invalid refresh token|refresh token not found/i.test(message);
 }
 
+export function isMissingAuthSessionError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /auth session missing/i.test(message);
+}
+
 export async function getSupabaseUser(
   supabase: Pick<SupabaseClient<Database>, 'auth'>,
 ): Promise<User | null> {
@@ -22,13 +27,13 @@ export async function getSupabaseUser(
     } = await supabase.auth.getUser();
 
     if (error) {
-      if (isInvalidRefreshTokenError(error)) return null;
+      if (isInvalidRefreshTokenError(error) || isMissingAuthSessionError(error)) return null;
       throw error;
     }
 
     return user ?? null;
   } catch (error) {
-    if (isInvalidRefreshTokenError(error)) return null;
+    if (isInvalidRefreshTokenError(error) || isMissingAuthSessionError(error)) return null;
     throw error;
   }
 }
