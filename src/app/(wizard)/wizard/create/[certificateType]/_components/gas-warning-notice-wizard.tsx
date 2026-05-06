@@ -26,6 +26,8 @@ import type { CertificateType, Cp12Appliance, PhotoCategory } from '@/types/cert
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
+const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
+
 type GasWarningNoticeWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
@@ -167,7 +169,7 @@ export function GasWarningNoticeWizard({
   const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
-  const demoEnabled = false;
+  const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 3 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey(certificateType, jobId), [certificateType, jobId]);

@@ -153,13 +153,15 @@ CREATE TABLE job_requests (
 - Public ID chain: jobs get an 8-digit `job_code` and a job-scoped `client_ref` (`{job_code}-01`); certificates get `public_id` (`{job_code}-{CERT_TYPE}-01`). UUIDs remain primary keys for all joins.
 
 ## Dashboard & Property-First UX
-- `/dashboard` is now an operational board, not a completed-jobs archive. It emphasizes the current job, grouped upcoming jobs (`Today`, `Tomorrow`, `This week`), and recent clients.
+- `/dashboard` is now an operational board, not a completed-jobs archive. It should use a modern minimal calendar as the main planning surface instead of separate upcoming/past job tabs or duplicate card lists.
+- The dashboard calendar should show scheduled and completed work together, encode day-level progress quickly, and allow URL-based day selection via `/dashboard?date=YYYY-MM-DD` so engineers can scan a month and open the selected day’s jobs.
+- Selected-day job rows should show job type labels, client/title, address, scheduled time, status, and the correct action (`Prepare`, `Start`, `Open`, or `Open PDF`). CP12 jobs with incomplete Step 1 prep should link to the prepare-only path.
 - Add a job requests section above upcoming jobs. It should show landlord-submitted `pending` requests before scheduled work so engineers can quickly schedule or dismiss inbound demand.
 - Request cards should be labelled by `request_type`: `New Job Request` for `new_job`, and `Renewal Request` for `renewal`.
 - Request cards should show property address, landlord name and phone, certificate expiry status when it is a renewal, tenant name and phone, access notes, and preferred dates.
 - Request actions are `Schedule Job` and `Dismiss`. `Schedule Job` opens `/jobs/new` pre-populated with property address, landlord/client details, job type, tenant details, access notes, and request id. Scheduling should link the new job to `job_requests.id` and update the request to `scheduled`.
-- Upcoming jobs compute a prep state from saved Step 1 fields. Unprepared jobs show `Prepare`; prepared jobs show `Start`.
-- The current dashboard cards show job type labels (e.g. `CP12`, `Gas Warning Notice`) alongside client/name/address. `Create invoice` lives in the header actions; `View all jobs` lives with the Upcoming jobs card.
+- Upcoming calendar jobs compute a prep state from saved Step 1 fields. Unprepared CP12 jobs show `Prepare`; prepared CP12 jobs show `Start`.
+- The current dashboard rows show job type labels (e.g. `CP12`, `Gas Warning Notice`) alongside client/name/address. `Create invoice` lives in the header actions; `View all jobs` lives with the calendar controls.
 - `/clients` is the main browse surface for customer history and `/clients/[id]` groups that client’s work into current jobs, completed jobs, reports, and calendar context.
 - `/jobs/[id]` now presents job identity first: job title/type/status at the top, with linked client/property context and related certificates/invoices below.
 

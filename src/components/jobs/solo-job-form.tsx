@@ -75,7 +75,7 @@ type SoloJobDraftState = {
 };
 
 const ADDRESS_SEARCH_MIN_QUERY_LENGTH = 3;
-const DEMO_AUTOFILL_VISIBLE = false;
+const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
 
 const WIZARD_ROUTE_BY_JOB_TYPE: Record<JobType, string> = {
   safety_check: 'cp12',
@@ -95,7 +95,10 @@ const splitAddressParts = (value: string | null | undefined) =>
     .filter(Boolean);
 
 const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && ['Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)) {
+  if (
+    error instanceof Error &&
+    ['Address lookup disabled', 'Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)
+  ) {
     return null;
   }
 

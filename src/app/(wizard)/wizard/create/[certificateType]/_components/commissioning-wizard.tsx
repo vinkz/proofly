@@ -21,6 +21,8 @@ import type { PhotoCategory } from '@/types/certificates';
 import { FgaAutofillModal } from '@/components/fga/FgaAutofillModal';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
+const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
+
 type CommissioningWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
@@ -161,7 +163,7 @@ export function CommissioningWizard({
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const today = new Date().toISOString().slice(0, 10);
-  const demoEnabled = false;
+  const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('commissioning', jobId), [jobId]);

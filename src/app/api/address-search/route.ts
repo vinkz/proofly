@@ -8,7 +8,9 @@ import {
 } from '@/lib/address-lookup';
 
 const getApiKey = () => process.env.IDEAL_POSTCODES_API_KEY?.trim() || '';
-const isAddressLookupDisabled = () => process.env.DISABLE_ADDRESS_LOOKUP?.trim().toLowerCase() === 'true';
+const isAddressLookupDisabled = () =>
+  process.env.ADDRESS_LOOKUP_ENABLED?.trim().toLowerCase() === 'false' ||
+  process.env.DISABLE_ADDRESS_LOOKUP?.trim().toLowerCase() === 'true';
 const IDEAL_POSTCODES_BASE_URL = 'https://api.ideal-postcodes.co.uk/v1';
 const MIN_QUERY_LENGTH = 3;
 
@@ -84,7 +86,7 @@ async function fetchJson(url: URL) {
 
 export async function GET(request: Request) {
   if (isAddressLookupDisabled()) {
-    return NextResponse.json({ error: 'Address lookup is disabled' }, { status: 503 });
+    return NextResponse.json({ error: 'Address lookup disabled' }, { status: 403 });
   }
 
   const apiKey = getApiKey();

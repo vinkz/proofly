@@ -96,7 +96,7 @@ const emptyAppliance: Cp12Appliance = {
 };
 
 const MAX_APPLIANCES = 5;
-const DEMO_FILL_VISIBLE = false;
+const DEMO_FILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
 
 const KNOWN_MAKES = getMakes()
   .filter((make) => make.toLowerCase() !== 'other')
@@ -115,7 +115,10 @@ const splitMakeModel = (value: string) => {
 const combineMakeModel = (make: string, model: string) => [make.trim(), model.trim()].filter(Boolean).join(' ').trim();
 
 const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && ['Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)) {
+  if (
+    error instanceof Error &&
+    ['Address lookup disabled', 'Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)
+  ) {
     return null;
   }
 

@@ -21,6 +21,8 @@ import { mergeJobContextFields, type InitialJobContext } from './initial-job-con
 import type { PhotoCategory } from '@/types/certificates';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
+const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
+
 type BreakdownWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
@@ -166,7 +168,7 @@ export function BreakdownWizard({
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : null;
   const today = new Date().toISOString().slice(0, 10);
-  const demoEnabled = false;
+  const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('breakdown', jobId), [jobId]);

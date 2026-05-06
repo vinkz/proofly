@@ -188,9 +188,13 @@ type AddressLookupApiResponse = {
 };
 
 const ADDRESS_SEARCH_MIN_QUERY_LENGTH = 3;
+const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
 
 const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && ['Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)) {
+  if (
+    error instanceof Error &&
+    ['Address lookup disabled', 'Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)
+  ) {
     return null;
   }
 
@@ -296,7 +300,7 @@ export function BoilerServiceWizard({
 
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
-  const demoEnabled = false;
+  const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
   const offsetStep = (step: number) => step + stepOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('gas_service', jobId), [jobId]);

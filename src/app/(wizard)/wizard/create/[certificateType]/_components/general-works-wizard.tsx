@@ -21,6 +21,8 @@ import { tryUpdateJobRecord } from '@/server/jobRecords';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
+const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
+
 type GeneralWorksWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
@@ -84,7 +86,7 @@ export function GeneralWorksWizard({
   const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
-  const demoEnabled = false;
+  const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
   const offsetStep = (value: number) => value + stepOffset;
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('general_works', jobId), [jobId]);
