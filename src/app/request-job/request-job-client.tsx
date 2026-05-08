@@ -5,7 +5,6 @@ import { useDeferredValue, useEffect, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { submitStandaloneLandlordJobRequest } from '@/server/job-requests';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
 
@@ -52,8 +51,7 @@ export function RequestJobClient() {
   const [addressLine2, setAddressLine2] = useState('');
   const [city, setCity] = useState('');
   const [postcode, setPostcode] = useState('');
-  const [preferredDateOne, setPreferredDateOne] = useState('');
-  const [preferredDateTwo, setPreferredDateTwo] = useState('');
+  const [preferredDate, setPreferredDate] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const deferredAddressSearchQuery = useDeferredValue(addressLine1.trim());
@@ -135,7 +133,6 @@ export function RequestJobClient() {
         const form = new FormData(event.currentTarget);
         setError(null);
         setMessage(null);
-        const preferredDates = [preferredDateOne, preferredDateTwo].filter(Boolean).join(', ');
         startSubmitTransition(async () => {
           try {
             const result = await submitStandaloneLandlordJobRequest({
@@ -145,15 +142,13 @@ export function RequestJobClient() {
               propertyAddress: composeAddress(addressLine1, addressLine2, city, postcode),
               propertyPostcode: postcode,
               jobType: String(form.get('jobType') ?? 'cp12') as 'cp12' | 'service' | 'both' | 'other',
-              tenantName: String(form.get('tenantName') ?? ''),
-              tenantPhone: String(form.get('tenantPhone') ?? ''),
-              accessNotes: String(form.get('accessNotes') ?? ''),
-              preferredDates,
+              tenantName: '',
+              tenantPhone: String(form.get('sitePhone') ?? ''),
+              accessNotes: '',
+              preferredDates: preferredDate,
               engineerName: String(form.get('engineerName') ?? ''),
-              engineerCompany: String(form.get('engineerCompany') ?? ''),
               engineerEmail: String(form.get('engineerEmail') ?? ''),
               engineerPhone: String(form.get('engineerPhone') ?? ''),
-              engineerGasSafeNumber: String(form.get('engineerGasSafeNumber') ?? ''),
             });
             const confirmation =
               result.landlordConfirmationStatus === 'sent'
@@ -172,77 +167,83 @@ export function RequestJobClient() {
         });
       }}
     >
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Input name="landlordName" required placeholder="Your name" className="rounded-2xl bg-white" />
-        <Input name="landlordEmail" required type="email" placeholder="Email" className="rounded-2xl bg-white" />
-        <Input name="landlordPhone" required type="tel" placeholder="Phone" className="rounded-2xl bg-white" />
-      </div>
-
-      <div className="relative">
-        <Input
-          required
-          value={addressLine1}
-          onChange={(event) => {
-            setAddressLine1(event.target.value);
-            setAddressSearchError(null);
-            setSelectedAddressMatchId(null);
-          }}
-          placeholder="Start typing property address or postcode"
-          className="rounded-2xl bg-white"
-        />
-        {isAddressLookupPending && !addressSuggestions.length ? (
-          <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
-            Searching addresses…
-          </div>
-        ) : null}
-        {addressSuggestions.length ? (
-          <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
-            <div className="max-h-72 overflow-y-auto p-2">
-              {addressSuggestions.map((suggestion) => {
-                const isSelected = selectedAddressMatchId === suggestion.id;
-                return (
-                  <button
-                    key={suggestion.id}
-                    type="button"
-                    onClick={() => void handleAddressSelect(suggestion)}
-                    className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
-                      isSelected ? 'bg-emerald-50 text-slate-950' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    {suggestion.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-        {addressSearchError ? <p className="mt-2 text-xs text-red-700">{addressSearchError}</p> : null}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Input value={addressLine2} onChange={(event) => setAddressLine2(event.target.value)} placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-3" />
-        <Input required value={city} onChange={(event) => setCity(event.target.value)} placeholder="Town / city" className="rounded-2xl bg-white" />
-        <Input required value={postcode} onChange={(event) => setPostcode(event.target.value)} placeholder="Postcode" className="rounded-2xl bg-white" />
-        <Select name="jobType" defaultValue="cp12" className="rounded-2xl bg-white">
-          <option value="cp12">Annual gas safety check</option>
-          <option value="service">Boiler service</option>
-          <option value="both">Gas safety check + boiler service</option>
-          <option value="other">Other</option>
-        </Select>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Input name="tenantName" placeholder="Tenant name if different" className="rounded-2xl bg-white" />
-        <Input name="tenantPhone" placeholder="Tenant phone" className="rounded-2xl bg-white" />
-      </div>
-      <Textarea name="accessNotes" placeholder="Access notes" className="rounded-2xl bg-white" />
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preferred date</label>
-          <Input type="date" value={preferredDateOne} onChange={(event) => setPreferredDateOne(event.target.value)} className="mt-1 rounded-2xl bg-white" />
+      <div className="rounded-3xl bg-white/70 p-4">
+        <p className="text-sm font-semibold">Landlord / Property owner</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Input name="landlordName" required placeholder="Landlord / Owner name" className="rounded-2xl bg-white" />
+          <Input name="landlordCompany" placeholder="Company (optional)" className="rounded-2xl bg-white" />
+          <Input name="landlordEmail" required type="email" placeholder="Email" className="rounded-2xl bg-white" />
+          <Input name="landlordPhone" required type="tel" placeholder="Tel. No." className="rounded-2xl bg-white" />
+          <Input placeholder="Address line 1" className="rounded-2xl bg-white sm:col-span-2" disabled />
+          <Input placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-2" disabled />
+          <Input placeholder="City / town" className="rounded-2xl bg-white" disabled />
+          <Input placeholder="Postcode" className="rounded-2xl bg-white" disabled />
         </div>
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Alternative date</label>
-          <Input type="date" value={preferredDateTwo} onChange={(event) => setPreferredDateTwo(event.target.value)} className="mt-1 rounded-2xl bg-white" />
+      </div>
+
+      <div className="rounded-3xl bg-white/70 p-4">
+        <p className="text-sm font-semibold">Job Address</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Input placeholder="Property name / reference" className="rounded-2xl bg-white sm:col-span-2" disabled />
+          <div className="relative sm:col-span-2">
+            <Input
+              required
+              value={addressLine1}
+              onChange={(event) => {
+                setAddressLine1(event.target.value);
+                setAddressSearchError(null);
+                setSelectedAddressMatchId(null);
+              }}
+              placeholder="Address line 1"
+              className="rounded-2xl bg-white"
+            />
+            {isAddressLookupPending && !addressSuggestions.length ? (
+              <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
+                Searching addresses…
+              </div>
+            ) : null}
+            {addressSuggestions.length ? (
+              <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+                <div className="max-h-72 overflow-y-auto p-2">
+                  {addressSuggestions.map((suggestion) => {
+                    const isSelected = selectedAddressMatchId === suggestion.id;
+                    return (
+                      <button
+                        key={suggestion.id}
+                        type="button"
+                        onClick={() => void handleAddressSelect(suggestion)}
+                        className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
+                          isSelected ? 'bg-emerald-50 text-slate-950' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        {suggestion.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            {addressSearchError ? <p className="mt-2 text-xs text-red-700">{addressSearchError}</p> : null}
+          </div>
+          <Input value={addressLine2} onChange={(event) => setAddressLine2(event.target.value)} placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-2" />
+          <Input required value={city} onChange={(event) => setCity(event.target.value)} placeholder="City / town" className="rounded-2xl bg-white" />
+          <Input required value={postcode} onChange={(event) => setPostcode(event.target.value)} placeholder="Postcode" className="rounded-2xl bg-white" />
+          <Input name="sitePhone" placeholder="Site telephone" className="rounded-2xl bg-white" />
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preferred date</label>
+            <Input
+              type="date"
+              value={preferredDate}
+              onChange={(event) => setPreferredDate(event.target.value)}
+              className="mt-1 rounded-2xl bg-white"
+            />
+          </div>
+          <Select name="jobType" defaultValue="cp12" className="rounded-2xl bg-white">
+            <option value="cp12">Annual gas safety check</option>
+            <option value="service">Boiler service</option>
+            <option value="both">Gas safety check + boiler service</option>
+            <option value="other">Other</option>
+          </Select>
         </div>
       </div>
 
@@ -251,12 +252,10 @@ export function RequestJobClient() {
         <p className="mt-1 text-xs text-slate-600">
           Add your engineer’s details. CertNow will send them the request if an email is supplied.
         </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <Input name="engineerName" required placeholder="Engineer name" className="rounded-2xl bg-white" />
-          <Input name="engineerCompany" placeholder="Company name" className="rounded-2xl bg-white" />
           <Input name="engineerEmail" type="email" placeholder="Engineer email" className="rounded-2xl bg-white" />
           <Input name="engineerPhone" type="tel" placeholder="Engineer phone" className="rounded-2xl bg-white" />
-          <Input name="engineerGasSafeNumber" placeholder="Gas Safe number if known" className="rounded-2xl bg-white sm:col-span-2" />
         </div>
       </div>
 

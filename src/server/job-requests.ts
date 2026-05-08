@@ -19,10 +19,8 @@ const StandaloneJobRequestSchema = z.object({
   accessNotes: z.string().max(1000).optional().default(''),
   preferredDates: z.string().max(500).optional().default(''),
   engineerName: z.string().min(2).max(120),
-  engineerCompany: z.string().max(160).optional().default(''),
   engineerEmail: z.string().email().optional().or(z.literal('')),
   engineerPhone: z.string().max(80).optional().default(''),
-  engineerGasSafeNumber: z.string().max(80).optional().default(''),
 });
 
 type UntypedQuery = {
@@ -282,16 +280,14 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
     accessNotes: cleanText(parsedRequest.accessNotes),
     preferredDates: cleanText(parsedRequest.preferredDates),
     engineerName: cleanText(parsedRequest.engineerName),
-    engineerCompany: cleanText(parsedRequest.engineerCompany),
     engineerEmail: cleanText(parsedRequest.engineerEmail),
     engineerPhone: cleanText(parsedRequest.engineerPhone),
-    engineerGasSafeNumber: cleanText(parsedRequest.engineerGasSafeNumber),
   };
   const admin = await supabaseServerServiceRole();
   const requestId = randomUUID();
   const requestType = request.jobType === 'service' ? 'new_job' : 'new_job';
   const jobType = request.jobType === 'service' ? 'service' : 'cp12';
-  const engineerContact = [request.engineerName, request.engineerCompany, request.engineerEmail, request.engineerPhone]
+  const engineerContact = [request.engineerName, request.engineerEmail, request.engineerPhone]
     .filter(Boolean)
     .join(' / ');
   const engineerPrefillUrl = `${getSiteUrl()}/jobs/new?requestId=${requestId}`;
@@ -313,10 +309,10 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
     access_notes: request.accessNotes || null,
     preferred_dates: request.preferredDates || null,
     engineer_name: request.engineerName,
-    engineer_company: request.engineerCompany || null,
+    engineer_company: null,
     engineer_email: request.engineerEmail || null,
     engineer_phone: request.engineerPhone || null,
-    engineer_gas_safe_number: request.engineerGasSafeNumber || null,
+    engineer_gas_safe_number: null,
     status: 'pending',
   });
   if (error) {
