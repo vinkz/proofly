@@ -51,6 +51,10 @@ export function RequestJobClient() {
   const [addressLine2, setAddressLine2] = useState('');
   const [city, setCity] = useState('');
   const [postcode, setPostcode] = useState('');
+  const [landlordAddressLine1, setLandlordAddressLine1] = useState('');
+  const [landlordAddressLine2, setLandlordAddressLine2] = useState('');
+  const [landlordCity, setLandlordCity] = useState('');
+  const [landlordPostcode, setLandlordPostcode] = useState('');
   const [preferredDate, setPreferredDate] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +129,16 @@ export function RequestJobClient() {
     }
   };
 
+  const copyLandlordAddressToJobAddress = () => {
+    setAddressLine1(landlordAddressLine1);
+    setAddressLine2(landlordAddressLine2);
+    setCity(landlordCity);
+    setPostcode(landlordPostcode);
+    setAddressSearchError(null);
+    setSelectedAddressMatchId(null);
+    setAddressSuggestions([]);
+  };
+
   return (
     <form
       className="grid gap-3"
@@ -174,15 +188,46 @@ export function RequestJobClient() {
           <Input name="landlordCompany" placeholder="Company (optional)" className="rounded-2xl bg-white" />
           <Input name="landlordEmail" required type="email" placeholder="Email" className="rounded-2xl bg-white" />
           <Input name="landlordPhone" required type="tel" placeholder="Tel. No." className="rounded-2xl bg-white" />
-          <Input placeholder="Address line 1" className="rounded-2xl bg-white sm:col-span-2" disabled />
-          <Input placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-2" disabled />
-          <Input placeholder="City / town" className="rounded-2xl bg-white" disabled />
-          <Input placeholder="Postcode" className="rounded-2xl bg-white" disabled />
+          <Input
+            value={landlordAddressLine1}
+            onChange={(event) => setLandlordAddressLine1(event.target.value)}
+            placeholder="Address line 1"
+            className="rounded-2xl bg-white sm:col-span-2"
+          />
+          <Input
+            value={landlordAddressLine2}
+            onChange={(event) => setLandlordAddressLine2(event.target.value)}
+            placeholder="Address line 2"
+            className="rounded-2xl bg-white sm:col-span-2"
+          />
+          <Input
+            value={landlordCity}
+            onChange={(event) => setLandlordCity(event.target.value)}
+            placeholder="City / town"
+            className="rounded-2xl bg-white"
+          />
+          <Input
+            value={landlordPostcode}
+            onChange={(event) => setLandlordPostcode(event.target.value)}
+            placeholder="Postcode"
+            className="rounded-2xl bg-white"
+          />
         </div>
       </div>
 
       <div className="rounded-3xl bg-white/70 p-4">
-        <p className="text-sm font-semibold">Job Address</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-semibold">Job Address</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full text-xs"
+            onClick={copyLandlordAddressToJobAddress}
+            disabled={!landlordAddressLine1 && !landlordCity && !landlordPostcode}
+          >
+            Same as landlord address
+          </Button>
+        </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Input placeholder="Property name / reference" className="rounded-2xl bg-white sm:col-span-2" disabled />
           <div className="relative sm:col-span-2">
