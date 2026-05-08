@@ -33,6 +33,34 @@ const isAuthError = (error: unknown) =>
   error instanceof Error &&
   (error.message === 'Unauthorized' || error.message.includes('Auth session missing'));
 
+function applyCp12ApplianceDefaultsToBoilerService(
+  fields: Record<string, string | null | undefined>,
+  appliances: Awaited<ReturnType<typeof getCertificateWizardState>>['appliances'],
+) {
+  if (!appliances.length) return fields;
+  const source =
+    appliances.find((appliance) => /boiler/i.test(`${appliance.appliance_type ?? ''} ${appliance.make_model ?? ''}`)) ??
+    appliances[0];
+  const [make, ...modelParts] = String(source.make_model ?? '').split(/\s+/).filter(Boolean);
+
+  return {
+    ...fields,
+    boiler_type: pickText(fields.boiler_type, source.appliance_type),
+    boiler_make: pickText(fields.boiler_make, make),
+    boiler_model: pickText(fields.boiler_model, modelParts.join(' ')),
+    boiler_location: pickText(fields.boiler_location, source.location),
+    flue_type: pickText(fields.flue_type, source.flue_type),
+    operating_pressure_mbar: pickText(fields.operating_pressure_mbar, source.operating_pressure),
+    heat_input: pickText(fields.heat_input, source.heat_input),
+    high_combustion_co_ppm: pickText(fields.high_combustion_co_ppm, source.high_co_ppm, source.co_reading_high),
+    high_combustion_co2: pickText(fields.high_combustion_co2, source.high_co2),
+    high_combustion_ratio: pickText(fields.high_combustion_ratio, source.high_ratio),
+    low_combustion_co_ppm: pickText(fields.low_combustion_co_ppm, source.low_co_ppm, source.co_reading_low),
+    low_combustion_co2: pickText(fields.low_combustion_co2, source.low_co2),
+    low_combustion_ratio: pickText(fields.low_combustion_ratio, source.low_ratio),
+  };
+}
+
 const CERTIFICATE_STEP_TOTALS: Record<CertificateType, number> = {
   cp12: 4,
   gas_service: 4,
@@ -214,13 +242,16 @@ export default async function CertificateWizardPage({
   };
 
   const serviceDate = job?.scheduled_for ?? wizardState.fields.service_date ?? '';
-  const initialInfo = mergeJobContextFields(
+  let initialInfo = mergeJobContextFields(
     {
       ...wizardState.fields,
       service_date: serviceDate,
     },
     initialJobContext,
   );
+  if (normalizedType === 'gas_service') {
+    initialInfo = applyCp12ApplianceDefaultsToBoilerService(initialInfo, wizardState.appliances);
+  }
 
   const hideBillingCustomerStep = isCp12 ? true : false;
   if (isCp12) {

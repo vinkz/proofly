@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import { listJobs } from '@/server/jobs';
+import { dismissJobRequest, listPendingJobRequestsForDashboard, type DashboardJobRequest } from '@/server/job-requests';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -53,7 +54,11 @@ export default async function DashboardPage({
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups] = await Promise.all([getProfile(), listJobs()]);
+  const [{ profile }, jobGroups, jobRequests] = await Promise.all([
+    getProfile(),
+    listJobs(),
+    listPendingJobRequestsForDashboard(),
+  ]);
   const activeJobs = jobGroups.active as BasicJob[];
   const completedJobs = jobGroups.completed as BasicJob[];
 
@@ -168,6 +173,23 @@ export default async function DashboardPage({
           </div>
         </div>
       </section>
+
+      {jobRequests.length ? (
+        <section className="rounded-[2rem] border border-amber-200/70 bg-amber-50/80 p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-700/80">Landlord requests</p>
+              <h2 className="text-xl font-semibold text-amber-950">Requests needing review</h2>
+            </div>
+            <p className="text-sm text-amber-900/75">{jobRequests.length} pending</p>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {jobRequests.map((request) => (
+              <JobRequestCard key={request.id} request={request} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#f8faf6] shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
         <div className="grid lg:grid-cols-[1.35fr,0.85fr]">
@@ -441,6 +463,53 @@ function CalendarStat({ label, value }: { label: string; value: number | string 
     <div className="rounded-2xl bg-slate-950 px-3 py-3 text-white">
       <p className="text-lg font-semibold leading-none">{value}</p>
       <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55">{label}</p>
+    </div>
+  );
+}
+
+function JobRequestCard({ request }: { request: DashboardJobRequest }) {
+  const label = request.requestType === 'renewal' ? 'Renewal Request' : 'New Job Request';
+  return (
+    <div className="rounded-3xl bg-white/85 p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-amber-950">{label}</p>
+          <p className="mt-1 text-sm text-amber-900/80">{request.propertyAddress ?? 'Property address missing'}</p>
+        </div>
+        <Badge variant="brand" className="uppercase">
+          {request.source === 'public_job_page' ? 'Public link' : 'New landlord'}
+        </Badge>
+      </div>
+      <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+        <p>Landlord: {request.landlordName ?? request.landlordEmail ?? 'Not captured'}</p>
+        <p>Phone: {request.landlordPhone ?? 'Not captured'}</p>
+        <p>Tenant: {request.tenantName ?? 'Not provided'}</p>
+        <p>Tenant phone: {request.tenantPhone ?? 'Not provided'}</p>
+        <p className="sm:col-span-2">Access: {request.accessNotes ?? 'Not provided'}</p>
+        <p className="sm:col-span-2">Preferred dates: {request.preferredDates ?? 'Not provided'}</p>
+        {request.engineerName || request.engineerEmail || request.engineerPhone ? (
+          <p className="sm:col-span-2">
+            Engineer supplied: {[request.engineerName, request.engineerCompany, request.engineerEmail, request.engineerPhone, request.engineerGasSafeNumber ? `Gas Safe ${request.engineerGasSafeNumber}` : null]
+              .filter(Boolean)
+              .join(' / ')}
+          </p>
+        ) : null}
+      </div>
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+        <Button asChild className="rounded-full">
+          <Link href={`/jobs/new?requestId=${request.id}`}>Schedule job</Link>
+        </Button>
+        <form
+          action={async () => {
+            'use server';
+            await dismissJobRequest(request.id);
+          }}
+        >
+          <Button type="submit" variant="outline" className="w-full rounded-full sm:w-auto">
+            Dismiss
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

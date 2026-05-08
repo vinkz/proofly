@@ -28,6 +28,7 @@
 - Production is intended to run on Vercel behind the custom domain `certnow.uk`; Vercel preview URLs remain useful for test deployments. Keep `NEXT_PUBLIC_SITE_URL` aligned with the exact public origin used for OAuth callbacks.
 - Product direction is property-first and link-based: properties hold long-term compliance history, jobs are execution events at a property, and landlords can request work from public property links while engineers can still create jobs manually.
 - Core model: Property = long-term compliance anchor; Job = one execution event at a property; Job Request = landlord-submitted request for work; Engineer Profile = reusable engineer/company identity for autofill.
+- Every job must have a random, unguessable `jobs.public_token` generated at creation time. Public landlord/job routes must resolve by token, never by internal UUID.
 - App navigation remains engineer-first operationally: `/dashboard` is the operational home, `/jobs/new` must always support manual engineer-created jobs, `/clients` remains useful for customer history, and `/jobs/[id]` is treated as an execution record with related client/property/certificate/invoice context.
 - Document preview is canonical at `/jobs/[id]/pdf` (legacy report/pdf routes should redirect here); saved documents live under `/documents` and use Supabase signed URLs.
 - External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, address lookup via Ideal Postcodes, and planned engineer notifications via Resend; isolate integration code under server/API routes.
@@ -57,18 +58,34 @@
 
 ## Job Request Schema Direction
 - Use one broad table called `job_requests`, not a `renewal_requests`-only table.
-- Suggested schema:
+- Current schema direction includes property/job source context, optional assigned engineer, standalone public requests, and request scheduling:
 ```sql
 CREATE TABLE job_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id UUID REFERENCES properties,
+  property_id UUID,
+  source_job_id UUID REFERENCES jobs,
+  scheduled_job_id UUID REFERENCES jobs,
   user_id UUID REFERENCES auth.users,
+  assigned_engineer_id UUID REFERENCES auth.users,
   request_type TEXT NOT NULL, -- 'new_job' or 'renewal'
+  source TEXT DEFAULT 'public_job_page',
   job_type TEXT NOT NULL DEFAULT 'cp12',
+  landlord_name TEXT,
+  landlord_email TEXT,
+  landlord_phone TEXT,
+  property_address TEXT,
+  property_postcode TEXT,
   tenant_name TEXT,
   tenant_phone TEXT,
   access_notes TEXT,
   preferred_dates TEXT,
+  engineer_name TEXT,
+  engineer_company TEXT,
+  engineer_email TEXT,
+  engineer_phone TEXT,
+  engineer_gas_safe_number TEXT,
+  landlord_confirmation_status TEXT,
+  engineer_notification_status TEXT,
   status TEXT DEFAULT 'pending',
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -76,6 +93,7 @@ CREATE TABLE job_requests (
 - Status lifecycle: `pending -> scheduled -> completed -> dismissed`.
 - When a landlord submits the form, create a `job_requests` row, classify it as `new_job` or `renewal`, notify the engineer via Resend, and show it on the engineer dashboard.
 - When an engineer creates a job from a request, link the job to `job_requests.id` and update the request status to `scheduled`.
+- Public standalone landlord requests live at `/request-job`. Do not expose a public engineer directory by default. Landlords enter the engineer they already want to contact: name, company, email, phone, and Gas Safe number if known. CertNow stores the request and sends confirmation/engineer emails when email delivery is configured.
 
 ## Security Boundaries
 - Any module that reads private environment variables (`OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) must stay server-only and include `import 'server-only';` unless it is a top-level Next server action file with `'use server'`.
@@ -142,6 +160,7 @@ CREATE TABLE job_requests (
   - Saved property selection fills property-side fields only: `job_address_name`, `job_address_line1`, `job_address_line2`, `job_address_city`, `job_postcode`, and `job_tel`. Landlord/property-owner fields remain separate for CP12 compliance.
   - Step 1 Job location requires `job_address_name`, `job_address_line1`, `job_postcode`, and `job_tel` (site telephone); `job_address_line2` and `job_address_city` are supported and render on separate PDF address lines.
   - Step 1 Landlord / Property owner uses structured fields: `landlord_name`, `landlord_company` (optional), `landlord_address_line1`, `landlord_address_line2` (optional), `landlord_city`, `landlord_postcode`, `landlord_tel` (optional). For backward compatibility, `landlord_address` is still persisted and used as a fallback.
+  - Step 1 also captures optional `landlord_email` and `landlord_mobile`. These persist to `job_fields` and update the linked client email/phone so future jobs for that client prefill landlord contact automatically. Missing landlord email shows a non-blocking advisory on the final step; it must never block CP12 issue.
   - CP12 Step 1 also supports a **prepare-only** entry path from dashboard upcoming jobs via `?prepare=1`; saving People & Location persists Step 1 data and returns to `/dashboard` without forcing the rest of the wizard.
   - Appliances capped at 5 rows to match the PDF table capacity.
   - Mobile UX is intentionally tight: demo-fill buttons are hidden, address lookup disabled/configuration errors are suppressed in the UI, Step 2 has no extra "Appliance profile" wrapper, and `+ Appliance` is inline with "Appliance 1 identity".
@@ -154,6 +173,7 @@ CREATE TABLE job_requests (
 
 ## Dashboard & Property-First UX
 - `/dashboard` is now an operational board, not a completed-jobs archive. It should use a modern minimal calendar as the main planning surface instead of separate upcoming/past job tabs or duplicate card lists.
+- `/dashboard` must surface pending `job_requests` above the calendar. Renewal requests from public job links and standalone landlord requests use the same cards and scheduling path.
 - The dashboard calendar should show scheduled and completed work together, encode day-level progress quickly, and allow URL-based day selection via `/dashboard?date=YYYY-MM-DD` so engineers can scan a month and open the selected day’s jobs.
 - Selected-day job rows should show job type labels, client/title, address, scheduled time, status, and the correct action (`Prepare`, `Start`, `Open`, or `Open PDF`). CP12 jobs with incomplete Step 1 prep should link to the prepare-only path.
 - Add a job requests section above upcoming jobs. It should show landlord-submitted `pending` requests before scheduled work so engineers can quickly schedule or dismiss inbound demand.
@@ -167,6 +187,7 @@ CREATE TABLE job_requests (
 
 ## Follow-Up Logic
 - CP12 is the main compliance lifecycle anchor. When a CP12 is completed, always create a 12-month CP12 follow-up.
+- CP12 issue also schedules reminder rows: landlord at eight weeks and four weeks before next inspection due, and engineer at eight weeks before. `/api/cron/reminders` processes due reminder rows daily; real email delivery should be wired to Resend/Postmark before production reminders are considered live.
 - Boiler Service follow-up depends on context. If linked to CP12 on the same job, do not create a separate boiler service follow-up because the CP12 renewal cycle covers it.
 - If a Boiler Service is standalone, create a 12-month boiler service follow-up and add note: `Standalone service — confirm whether CP12 also required`.
 - Gas Warning Notice keeps its existing logic: it is triggered from unsafe CP12 appliance checks and should not be merged with boiler service follow-up logic.
@@ -175,8 +196,16 @@ CREATE TABLE job_requests (
 ## Invoice Completion Flow
 - Invoices already exist under `/invoices`, `/invoices/new`, and `/invoices/[invoiceId]`, but certificate completion should integrate them more directly.
 - At CP12 Step 4 completion, after successful PDF generation, prompt: `Create invoice for this job?`
-- The invoice CTA should open `/invoices/new` pre-populated with client name, property address, job date, job type, and engineer/company details.
+- CP12 completion first asks whether a boiler service was also completed. If yes, open `/wizard/create/boiler_service?jobId=...` on the same job so the boiler service certificate links to the CP12 job. If no, show invoice options.
+- The invoice CTA should open `/invoices/new?jobId=...` and create one draft invoice for the job with line items derived from all certificates on that job. Unit prices default to the engineer’s last used price for that certificate type when available; otherwise they remain zero/empty for editing.
 - Engineers should not need to navigate separately to invoices after completing a certificate, though standalone invoice creation from the dashboard/header should remain available.
+
+## Public Job Links
+- Public job pages live at `/j/[publicToken]` and must never require login. The first visible content for landlords is the full property address.
+- Public job pages show completed compliance work, certificate downloads, engineer name/company/contact/Gas Safe number, and next inspection due.
+- If landlord email is missing, show a one-field email capture for reminders. If the job is within 60 days of expiry or expired, show the four-field renewal request form: tenant name, tenant phone, access notes, preferred dates.
+- Logged-in engineers who own the job may see an engineer progress panel and quick actions, but public visitors must only see landlord-safe job/certificate data.
+- CP12 completion should include a WhatsApp share button with landlord name, full stored job address including postcode, and the `/j/[publicToken]` link.
 
 ## Compatibility Guardrails
 - Preserve compatibility with the existing CP12 wizard, Supabase schema, certificate PDF generation pipeline, invoice routes, and follow-up system while adding the property/request/autofill direction.

@@ -73,6 +73,7 @@ const SoloJobSchema = z
     landlordCity: z.string().optional(),
     landlordPostcode: z.string().optional(),
     landlordTel: z.string().optional(),
+    requestId: z.string().uuid().optional(),
   })
   .superRefine((value, ctx) => {
     const isSafetyCheck = value.jobType === 'safety_check';
@@ -205,6 +206,14 @@ type ReportRow = Database['public']['Tables']['reports']['Row'];
 type TemplateRow = Database['public']['Tables']['templates']['Row'];
 type ReportDeliveryRow = Database['public']['Tables']['report_deliveries']['Row'];
 type ClientRow = Database['public']['Tables']['clients']['Row'];
+type UntypedMutationQuery = {
+  select: (columns?: string) => UntypedMutationQuery;
+  update: (payload: Record<string, unknown>) => UntypedMutationQuery;
+  eq: (column: string, value: unknown) => UntypedMutationQuery;
+  maybeSingle: () => Promise<{ data: unknown; error: { code?: string; message: string } | null }>;
+  or: (query: string) => Promise<{ error: { code?: string; message: string } | null }>;
+};
+type UntypedTableClient = { from: (table: string) => UntypedMutationQuery };
 
 const jobColumns =
   'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name, job_type';
@@ -580,7 +589,7 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
         { job_id: job.id as string, field_key: 'inspection_date', value: inspectionDate },
         { job_id: job.id as string, field_key: 'customer_name', value: landlordName },
         { job_id: job.id as string, field_key: 'customer_phone', value: landlordTel },
-        { job_id: job.id as string, field_key: 'customer_email', value: null },
+        { job_id: job.id as string, field_key: 'customer_email', value: normalizeOptionalText(input.clientEmail) },
         { job_id: job.id as string, field_key: 'job_address_name', value: jobAddressName },
         { job_id: job.id as string, field_key: 'job_address_line1', value: jobAddressLine1 },
         { job_id: job.id as string, field_key: 'job_address_line2', value: jobAddressLine2 },
@@ -601,6 +610,7 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
         { job_id: job.id as string, field_key: 'landlord_city', value: landlordCity },
         { job_id: job.id as string, field_key: 'landlord_postcode', value: landlordPostcode },
         { job_id: job.id as string, field_key: 'landlord_tel', value: landlordTel },
+        { job_id: job.id as string, field_key: 'landlord_email', value: normalizeOptionalText(input.clientEmail) },
         { job_id: job.id as string, field_key: 'landlord_address', value: landlordAddress },
       ]
       : [
@@ -631,6 +641,41 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
     fieldRows,
     'createSoloJob',
   );
+
+  if (input.requestId) {
+    const { data: requestRow, error: requestReadErr } = await (sb as unknown as UntypedTableClient)
+      .from('job_requests')
+      .select('id, source, tenant_name, tenant_phone, access_notes, preferred_dates, landlord_email')
+      .eq('id', input.requestId)
+      .maybeSingle();
+    if (requestReadErr && requestReadErr.code !== '42P01') throw new Error(requestReadErr.message);
+
+    const { error: requestErr } = await (sb as unknown as UntypedTableClient)
+      .from('job_requests')
+      .update({
+        status: 'scheduled',
+        scheduled_job_id: job.id,
+        user_id: user.id,
+        assigned_engineer_id: user.id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', input.requestId)
+      .or(`user_id.eq.${user.id},assigned_engineer_id.eq.${user.id},source.eq.standalone_external_engineer`);
+    if (requestErr && requestErr.code !== '42P01') throw new Error(requestErr.message);
+    const request = (requestRow ?? {}) as Record<string, unknown>;
+    await persistJobFields(
+      sb,
+      job.id as string,
+      [
+        { job_id: job.id as string, field_key: 'source_job_request_id', value: input.requestId },
+        { job_id: job.id as string, field_key: 'request_tenant_name', value: typeof request.tenant_name === 'string' ? request.tenant_name : null },
+        { job_id: job.id as string, field_key: 'request_tenant_phone', value: typeof request.tenant_phone === 'string' ? request.tenant_phone : null },
+        { job_id: job.id as string, field_key: 'request_access_notes', value: typeof request.access_notes === 'string' ? request.access_notes : null },
+        { job_id: job.id as string, field_key: 'request_preferred_dates', value: typeof request.preferred_dates === 'string' ? request.preferred_dates : null },
+      ],
+      'createSoloJob request link',
+    );
+  }
 
   revalidatePath('/dashboard');
   revalidatePath('/clients');

@@ -14,6 +14,7 @@ The current product direction is now **property-first and link-based**:
 - **jobs** are individual execution events at a property
 - **job requests** are landlord-submitted requests for work
 - **engineer profiles** provide reusable company/engineer identity for autofill
+- every job now needs an unguessable `public_token` at creation so landlord-facing links are available before certificate issue
 - the dashboard remains for **upcoming/prep work**, but should also surface pending landlord requests above scheduled jobs
 - clients/landlords remain important for contact, billing, and portfolio history
 - the public site is intended to live on **certnow.uk**, with Vercel preview URLs used for testing/staging
@@ -138,6 +139,8 @@ Examples:
 
 Jobs should connect property, landlord/client, certificate outputs, invoices, photos, signatures, and follow-up state. Existing job routes and wizard flows remain valid.
 
+Every job should have a shareable public token from creation time. The token supports `/j/[publicToken]`, WhatsApp sharing, public certificate downloads, renewal requests, and future landlord portal entry. Internal UUIDs should stay private.
+
 ### Job Request
 
 A job request is landlord-triggered demand that may become a job.
@@ -153,14 +156,30 @@ Suggested schema:
 ```sql
 CREATE TABLE job_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  property_id UUID REFERENCES properties,
+  property_id UUID,
+  source_job_id UUID REFERENCES jobs,
+  scheduled_job_id UUID REFERENCES jobs,
   user_id UUID REFERENCES auth.users,
+  assigned_engineer_id UUID REFERENCES auth.users,
   request_type TEXT NOT NULL, -- 'new_job' or 'renewal'
+  source TEXT DEFAULT 'public_job_page',
   job_type TEXT NOT NULL DEFAULT 'cp12',
+  landlord_name TEXT,
+  landlord_email TEXT,
+  landlord_phone TEXT,
+  property_address TEXT,
+  property_postcode TEXT,
   tenant_name TEXT,
   tenant_phone TEXT,
   access_notes TEXT,
   preferred_dates TEXT,
+  engineer_name TEXT,
+  engineer_company TEXT,
+  engineer_email TEXT,
+  engineer_phone TEXT,
+  engineer_gas_safe_number TEXT,
+  landlord_confirmation_status TEXT,
+  engineer_notification_status TEXT,
   status TEXT DEFAULT 'pending',
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -180,6 +199,8 @@ When a landlord submits a public property request:
 When an engineer creates a job from a request:
 - link the job to `job_requests.id`
 - update request status to `scheduled`
+
+Public standalone requests from `/request-job` also use `job_requests`. They should not rely on a public list of CertNow engineers. The landlord supplies the engineer they already want to contact, including engineer name, company, email, phone, and Gas Safe number if known. Confirmation emails are sent when `RESEND_API_KEY` and `EMAIL_FROM` are configured.
 
 ### Engineer Profile
 
@@ -276,6 +297,8 @@ Engineers must always be able to edit prefilled values before creating the job.
 - If that client has previous jobs, Step 1 can also offer a **saved property** so engineers can reuse property/location details before arriving on site.
 - Job address captures **Name, Address lines, City, Post Code, Tel. No. (site)** and writes to `job_address_*` + `property_postcode`.
 - Customer/Landlord card captures **Name, Company, Address, Post Code, Tel. No.** and writes to `landlord_*` fields; billable customer is **removed** from CP12.
+- Customer/Landlord card also captures optional **landlord email** and **landlord mobile**. These save to per-job fields and update the linked client record so future CP12 jobs prefill landlord contact automatically.
+- If landlord email is missing on the final CP12 step, show a non-blocking advisory that points back to People & location. Missing email must never block certificate issue.
 - Appliance identity captures **Location, Appliance Type, Make, Model, Flue type** (up to **5 appliances** to match the PDF table capacity).
 - Appliance checks capture the inspection table values: **Operating Pressure, Heat Input, combustion readings (hi/lo), Safety device operation, Ventilation, Flue visual/performance, Appliance serviced, Appliance safe to use**, plus defect + warning notice logic.
 - Upcoming jobs can now enter a **prepare-only** CP12 Step 1 flow from the dashboard. Saving Step 1 persists People & Location details and returns the engineer to the dashboard without forcing the full wizard.
@@ -316,6 +339,12 @@ Engineers must always be able to edit prefilled values before creating the job.
   - Landlords can request a new CP12 or renewal without logging in
   - The request feeds the engineer dashboard and then `/jobs/new`
   - The loop turns completed certificates into future retention/acquisition touchpoints
+
+- **Public Job Link Loop**
+  - Each job has `/j/[publicToken]`
+  - The public page starts with the full property address
+  - Landlords can download available certificates, add reminder email, and request renewal when due
+  - Logged-in owning engineers see progress and quick actions on the same page
 
 ---
 
@@ -376,6 +405,7 @@ It focuses on:
 - **Prep state** for upcoming jobs so engineers know whether a visit is ready to start
 - **Job type visibility** so cards show labels such as CP12 or Gas Warning Notice, not only name/address
 - **Pending job requests** from landlord public links, shown above upcoming jobs
+- **Standalone landlord requests** from `/request-job`, shown in the same request section
 
 Dashboard actions currently separate intent:
 - `+ New Job` and `Create invoice` live in the welcome/header actions
@@ -404,6 +434,8 @@ Actions:
 - tenant details
 - access notes
 - request id
+
+Creating the job from this prefill updates the request status to `scheduled` and stores `source_job_request_id` on the new job fields.
 
 Completed work is still best explored from **Jobs** and the relevant **client page**, not from a heavy dashboard archive.
 
@@ -440,6 +472,13 @@ CP12 is the main compliance lifecycle anchor.
 ### CP12
 
 When completed, always create a 12-month CP12 follow-up.
+
+When issued, schedule reminder rows:
+- landlord eight weeks before next inspection due
+- landlord four weeks before next inspection due
+- engineer eight weeks before next inspection due
+
+The daily route `/api/cron/reminders` processes due rows and marks them sent. Email-provider delivery is still a production integration step.
 
 ### Boiler Service
 
@@ -488,6 +527,11 @@ Keep existing logic:
 - triggered from unsafe CP12 appliance checks
 - do not merge with boiler service follow-up logic
 
+Urgency reminder rows should be scheduled from unsafe CP12 appliance checks:
+- Immediately Dangerous: engineer follow-up within 48 hours
+- At Risk: engineer follow-up at 14 days
+- Not to Current Standards: engineer follow-up at 30 days
+
 Known future gap:
 - Standalone boiler service finding a dangerous appliance may need separate gas warning notice handling later.
 
@@ -499,7 +543,12 @@ Invoices already exist, but should be better integrated into certificate complet
 
 At CP12 Step 4 completion, after PDF generation, prompt:
 
-**Create invoice for this job?**
+**Did you also service the boiler on this visit?**
+
+If yes, open the boiler service wizard on the same job. If no, show invoice options:
+- create invoice now
+- save draft invoice for later
+- skip invoice
 
 The button should open `/invoices/new` pre-populated with:
 - client name
@@ -509,6 +558,8 @@ The button should open `/invoices/new` pre-populated with:
 - engineer/company details
 
 The engineer should not need to navigate separately to invoices after completing a certificate. Existing standalone invoice routes must remain available.
+
+One job should have one invoice. The invoice line items are derived from all certificates on the job, such as CP12 plus linked boiler service. Prices remain editable and can use last-used prices as suggestions.
 
 ---
 
@@ -577,6 +628,9 @@ Before real users, run a deliberate RLS/storage audit across:
 - Operational home: `/dashboard`
 - Job creation: `/jobs/new`
 - Public property link: `/p/[public_token]` (planned; no login)
+- Public job link: `/j/[publicToken]` (implemented direction; no login)
+- Public standalone landlord request: `/request-job`
+- Reminder cron: `/api/cron/reminders`
 - Certificate wizard: `/wizard/create/[certificateType]`
 - Job record/detail: `/jobs/[id]`
 - Canonical document preview: `/jobs/[id]/pdf`

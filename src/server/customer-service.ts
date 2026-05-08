@@ -164,8 +164,13 @@ export async function upsertCustomerFromJobFields(params: {
   );
   const landlordName = pickText(toText(params.fields.landlord_name));
   const landlordAddress = pickText(toText(params.fields.landlord_address));
-  const email = pickText(toText(params.fields.customer_email), toText(params.fields.email));
-  const phone = pickText(toText(params.fields.customer_phone), toText(params.fields.phone));
+  const email = pickText(toText(params.fields.landlord_email), toText(params.fields.customer_email), toText(params.fields.email));
+  const phone = pickText(
+    toText(params.fields.landlord_mobile),
+    toText(params.fields.landlord_tel),
+    toText(params.fields.customer_phone),
+    toText(params.fields.phone),
+  );
   const organization = pickText(toText(params.fields.customer_company), toText(params.fields.organization));
 
   if (!name && !address && !postcode && !landlordName && !landlordAddress && !email && !phone) {

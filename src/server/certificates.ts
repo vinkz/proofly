@@ -75,6 +75,8 @@ const pickText = (...values: Array<string | null | undefined>) => {
   return '';
 };
 
+const toPlainText = (value: unknown) => (value === undefined || value === null ? '' : String(value).trim());
+
 async function loadJobContext(
   sb: SupabaseClient<Database>,
   jobId: string,
@@ -1265,6 +1267,73 @@ const normalizeCp12SafetyClassification = (value?: string | null) => {
 };
 const cp12SafetyClassification = z.string().optional().default('').transform(normalizeCp12SafetyClassification);
 
+function offsetDate(dateOnly: string, days: number) {
+  const date = new Date(`${dateOnly.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function addYearDate(dateOnly: string) {
+  const date = new Date(`${dateOnly.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+async function scheduleCp12ReminderRows(params: {
+  sb: Awaited<ReturnType<typeof supabaseServerServiceRole>>;
+  jobId: string;
+  userId: string;
+  fields: Record<string, unknown>;
+  issuedAt: string;
+}) {
+  const dueDate =
+    toPlainText(params.fields.next_inspection_due ?? params.fields.next_inspection_date ?? '') ||
+    addYearDate(toPlainText(params.fields.completion_date ?? params.issuedAt) || params.issuedAt);
+  if (!dueDate) return;
+
+  const rows = [
+    { job_id: params.jobId, user_id: params.userId, kind: 'landlord_cp12_8_weeks', due_date: offsetDate(dueDate, -56) },
+    { job_id: params.jobId, user_id: params.userId, kind: 'landlord_cp12_4_weeks', due_date: offsetDate(dueDate, -28) },
+    { job_id: params.jobId, user_id: params.userId, kind: 'engineer_cp12_8_weeks', due_date: offsetDate(dueDate, -56) },
+  ].filter((row): row is { job_id: string; user_id: string; kind: string; due_date: string } => Boolean(row.due_date));
+
+  if (!rows.length) return;
+  const kinds = rows.map((row) => row.kind);
+  await params.sb.from('reminders').delete().eq('job_id', params.jobId).in('kind', kinds);
+  const { error } = await params.sb.from('reminders').insert(rows);
+  if (error && error.code !== '42P01') throw new Error(error.message);
+}
+
+async function scheduleGasWarningReminderRows(params: {
+  sb: Awaited<ReturnType<typeof supabaseServerServiceRole>>;
+  jobId: string;
+  userId: string;
+  appliances: Cp12Appliance[];
+  issuedAt: string;
+}) {
+  const rows = params.appliances
+    .map((appliance, index) => {
+      const classification = normalizeCp12SafetyClassification(appliance.safety_classification || appliance.classification_code);
+      const offset = classification === 'id' ? 2 : classification === 'ar' ? 14 : classification === 'ncs' ? 30 : null;
+      if (!offset) return null;
+      return {
+        job_id: params.jobId,
+        user_id: params.userId,
+        kind: `gas_warning_${classification}_${index + 1}`,
+        due_date: offsetDate(params.issuedAt, offset),
+      };
+    })
+    .filter((row): row is { job_id: string; user_id: string; kind: string; due_date: string } => Boolean(row?.due_date));
+
+  if (!rows.length) return;
+  const kinds = rows.map((row) => row.kind);
+  await params.sb.from('reminders').delete().eq('job_id', params.jobId).in('kind', kinds);
+  const { error } = await params.sb.from('reminders').insert(rows);
+  if (error && error.code !== '42P01') throw new Error(error.message);
+}
+
 const BoilerServiceJobInfoSchema = z.object({
   jobId: z.string().uuid(),
   data: z.object({
@@ -1733,6 +1802,8 @@ const Cp12JobSchema = z.object({
     landlord_city: optionalText,
     landlord_postcode: optionalText,
     landlord_tel: optionalText,
+    landlord_email: z.string().optional(),
+    landlord_mobile: z.string().optional(),
     landlord_address: optionalText,
     engineer_name: optionalText,
     gas_safe_number: optionalText,
@@ -3151,6 +3222,13 @@ async function generateCp12CertificateForJob(params: {
     propertyAddress,
     fields: mergedFieldMap,
   });
+  await scheduleCp12ReminderRows({
+    sb: admin,
+    userId,
+    jobId,
+    fields: mergedFieldMap,
+    issuedAt: issuedAt.toISOString(),
+  });
   const gasWarningNoticeJobs = await ensureGasWarningNoticeFollowUpJobs({
     sb: admin,
     jobCodeClient: sb,
@@ -3161,6 +3239,13 @@ async function generateCp12CertificateForJob(params: {
     propertyAddress,
     fields: mergedFieldMap,
     appliances,
+  });
+  await scheduleGasWarningReminderRows({
+    sb: admin,
+    userId,
+    jobId,
+    appliances,
+    issuedAt: issuedAt.toISOString(),
   });
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath('/jobs');

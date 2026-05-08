@@ -43,12 +43,20 @@ export async function signInWithPassword(payload: unknown) {
   return { ok: true };
 }
 
-export async function signInWithMagicLink(email: string) {
+const safeNextPath = (nextPath: unknown) =>
+  typeof nextPath === 'string' && nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : null;
+
+export async function signInWithMagicLink(email: string, nextPath?: string) {
   const parsed = z.string().email().parse(email);
   const sb = await createAuthedSupabaseClient();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
+  const safeNext = safeNextPath(nextPath);
+  const emailRedirectTo = siteUrl
+    ? `${siteUrl}/auth/callback${safeNext ? `?next=${encodeURIComponent(safeNext)}` : ''}`
+    : undefined;
   const { error } = await sb.auth.signInWithOtp({
     email: parsed,
-    options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/callback` || undefined },
+    options: { emailRedirectTo },
   });
   if (error) throw new Error(error.message);
   return { ok: true };

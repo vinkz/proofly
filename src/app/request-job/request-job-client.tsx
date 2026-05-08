@@ -1,0 +1,270 @@
+'use client';
+
+import { useDeferredValue, useEffect, useState, useTransition } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { submitStandaloneLandlordJobRequest } from '@/server/job-requests';
+import type { AddressLookupSuggestion } from '@/lib/address-lookup';
+
+type AddressLookupApiResponse = {
+  suggestions?: AddressLookupSuggestion[];
+  address?: {
+    id: string;
+    name: string;
+    line1: string;
+    line2: string;
+    city: string;
+    postcode: string;
+    summary: string;
+    label: string;
+  };
+  error?: string;
+};
+
+const ADDRESS_SEARCH_MIN_QUERY_LENGTH = 3;
+
+const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
+  if (
+    error instanceof Error &&
+    ['Address lookup disabled', 'Address lookup is disabled', 'Address lookup is not configured'].includes(error.message)
+  ) {
+    return null;
+  }
+  return error instanceof Error ? error.message : fallback;
+};
+
+const composeAddress = (...parts: Array<string | null | undefined>) =>
+  parts
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(', ');
+
+export function RequestJobClient() {
+  const [isSubmitting, startSubmitTransition] = useTransition();
+  const [isAddressLookupPending, setIsAddressLookupPending] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
+  const [selectedAddressMatchId, setSelectedAddressMatchId] = useState<string | null>(null);
+  const [addressSearchError, setAddressSearchError] = useState<string | null>(null);
+  const [addressLine1, setAddressLine1] = useState('');
+  const [addressLine2, setAddressLine2] = useState('');
+  const [city, setCity] = useState('');
+  const [postcode, setPostcode] = useState('');
+  const [preferredDateOne, setPreferredDateOne] = useState('');
+  const [preferredDateTwo, setPreferredDateTwo] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const deferredAddressSearchQuery = useDeferredValue(addressLine1.trim());
+
+  useEffect(() => {
+    if (!deferredAddressSearchQuery) {
+      setAddressSuggestions([]);
+      setSelectedAddressMatchId(null);
+      setAddressSearchError(null);
+      setIsAddressLookupPending(false);
+      return;
+    }
+
+    if (deferredAddressSearchQuery.length < ADDRESS_SEARCH_MIN_QUERY_LENGTH) {
+      setAddressSuggestions([]);
+      setSelectedAddressMatchId(null);
+      setAddressSearchError(`Type at least ${ADDRESS_SEARCH_MIN_QUERY_LENGTH} characters to search.`);
+      setIsAddressLookupPending(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setIsAddressLookupPending(true);
+      setAddressSearchError(null);
+      try {
+        const response = await fetch(`/api/address-search?q=${encodeURIComponent(deferredAddressSearchQuery)}`, {
+          signal: controller.signal,
+        });
+        const payload = (await response.json()) as AddressLookupApiResponse;
+        if (!response.ok) throw new Error(payload.error || 'Lookup failed');
+        const suggestions = payload.suggestions ?? [];
+        setAddressSuggestions(suggestions);
+        setSelectedAddressMatchId(null);
+        setAddressSearchError(suggestions.length ? null : 'No addresses found. Try a postcode or add more detail.');
+      } catch (lookupError) {
+        if (controller.signal.aborted) return;
+        setAddressSuggestions([]);
+        setSelectedAddressMatchId(null);
+        setAddressSearchError(getAddressLookupErrorMessage(lookupError, 'Try another search.'));
+      } finally {
+        if (!controller.signal.aborted) setIsAddressLookupPending(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [deferredAddressSearchQuery]);
+
+  const handleAddressSelect = async (suggestion: AddressLookupSuggestion) => {
+    setIsAddressLookupPending(true);
+    setSelectedAddressMatchId(suggestion.id);
+    setAddressSearchError(null);
+    try {
+      const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`);
+      const payload = (await response.json()) as AddressLookupApiResponse;
+      if (!response.ok || !payload.address) throw new Error(payload.error || 'Lookup failed');
+      const address = payload.address;
+      setAddressLine1(address.line1 || suggestion.label);
+      setAddressLine2(address.line2 || '');
+      setCity(address.city || '');
+      setPostcode(address.postcode || '');
+      setAddressSuggestions([]);
+    } catch (selectError) {
+      setSelectedAddressMatchId(null);
+      setAddressSearchError(selectError instanceof Error ? selectError.message : 'Try again.');
+    } finally {
+      setIsAddressLookupPending(false);
+    }
+  };
+
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        setError(null);
+        setMessage(null);
+        const preferredDates = [preferredDateOne, preferredDateTwo].filter(Boolean).join(', ');
+        startSubmitTransition(async () => {
+          try {
+            const result = await submitStandaloneLandlordJobRequest({
+              landlordName: String(form.get('landlordName') ?? ''),
+              landlordEmail: String(form.get('landlordEmail') ?? ''),
+              landlordPhone: String(form.get('landlordPhone') ?? ''),
+              propertyAddress: composeAddress(addressLine1, addressLine2, city, postcode),
+              propertyPostcode: postcode,
+              jobType: String(form.get('jobType') ?? 'cp12') as 'cp12' | 'service' | 'both' | 'other',
+              tenantName: String(form.get('tenantName') ?? ''),
+              tenantPhone: String(form.get('tenantPhone') ?? ''),
+              accessNotes: String(form.get('accessNotes') ?? ''),
+              preferredDates,
+              engineerName: String(form.get('engineerName') ?? ''),
+              engineerCompany: String(form.get('engineerCompany') ?? ''),
+              engineerEmail: String(form.get('engineerEmail') ?? ''),
+              engineerPhone: String(form.get('engineerPhone') ?? ''),
+              engineerGasSafeNumber: String(form.get('engineerGasSafeNumber') ?? ''),
+            });
+            const confirmation =
+              result.landlordConfirmationStatus === 'sent'
+                ? 'A confirmation email has been sent to you.'
+                : 'Your request is saved; email delivery is not configured yet.';
+            const engineerNotice =
+              result.engineerNotificationStatus === 'sent'
+                ? ' The engineer contact has also been emailed.'
+                : result.engineerNotificationStatus === 'not_configured'
+                  ? ' The engineer email was not sent because email delivery is not configured or no engineer email was supplied.'
+                  : ' The engineer email could not be sent, but the request details were saved.';
+            setMessage(`${confirmation}${engineerNotice}`);
+          } catch (submitError) {
+            setError(submitError instanceof Error ? submitError.message : 'Could not submit request.');
+          }
+        });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Input name="landlordName" required placeholder="Your name" className="rounded-2xl bg-white" />
+        <Input name="landlordEmail" required type="email" placeholder="Email" className="rounded-2xl bg-white" />
+        <Input name="landlordPhone" required type="tel" placeholder="Phone" className="rounded-2xl bg-white" />
+      </div>
+
+      <div className="relative">
+        <Input
+          required
+          value={addressLine1}
+          onChange={(event) => {
+            setAddressLine1(event.target.value);
+            setAddressSearchError(null);
+            setSelectedAddressMatchId(null);
+          }}
+          placeholder="Start typing property address or postcode"
+          className="rounded-2xl bg-white"
+        />
+        {isAddressLookupPending && !addressSuggestions.length ? (
+          <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
+            Searching addresses…
+          </div>
+        ) : null}
+        {addressSuggestions.length ? (
+          <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+            <div className="max-h-72 overflow-y-auto p-2">
+              {addressSuggestions.map((suggestion) => {
+                const isSelected = selectedAddressMatchId === suggestion.id;
+                return (
+                  <button
+                    key={suggestion.id}
+                    type="button"
+                    onClick={() => void handleAddressSelect(suggestion)}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
+                      isSelected ? 'bg-emerald-50 text-slate-950' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    {suggestion.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        {addressSearchError ? <p className="mt-2 text-xs text-red-700">{addressSearchError}</p> : null}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Input value={addressLine2} onChange={(event) => setAddressLine2(event.target.value)} placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-3" />
+        <Input required value={city} onChange={(event) => setCity(event.target.value)} placeholder="Town / city" className="rounded-2xl bg-white" />
+        <Input required value={postcode} onChange={(event) => setPostcode(event.target.value)} placeholder="Postcode" className="rounded-2xl bg-white" />
+        <Select name="jobType" defaultValue="cp12" className="rounded-2xl bg-white">
+          <option value="cp12">Annual gas safety check</option>
+          <option value="service">Boiler service</option>
+          <option value="both">Gas safety check + boiler service</option>
+          <option value="other">Other</option>
+        </Select>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input name="tenantName" placeholder="Tenant name if different" className="rounded-2xl bg-white" />
+        <Input name="tenantPhone" placeholder="Tenant phone" className="rounded-2xl bg-white" />
+      </div>
+      <Textarea name="accessNotes" placeholder="Access notes" className="rounded-2xl bg-white" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preferred date</label>
+          <Input type="date" value={preferredDateOne} onChange={(event) => setPreferredDateOne(event.target.value)} className="mt-1 rounded-2xl bg-white" />
+        </div>
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Alternative date</label>
+          <Input type="date" value={preferredDateTwo} onChange={(event) => setPreferredDateTwo(event.target.value)} className="mt-1 rounded-2xl bg-white" />
+        </div>
+      </div>
+
+      <div className="rounded-3xl bg-white/70 p-4">
+        <p className="text-sm font-semibold">Engineer you want to contact</p>
+        <p className="mt-1 text-xs text-slate-600">
+          Add your engineer’s details. CertNow will send them the request if an email is supplied.
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Input name="engineerName" required placeholder="Engineer name" className="rounded-2xl bg-white" />
+          <Input name="engineerCompany" placeholder="Company name" className="rounded-2xl bg-white" />
+          <Input name="engineerEmail" type="email" placeholder="Engineer email" className="rounded-2xl bg-white" />
+          <Input name="engineerPhone" type="tel" placeholder="Engineer phone" className="rounded-2xl bg-white" />
+          <Input name="engineerGasSafeNumber" placeholder="Gas Safe number if known" className="rounded-2xl bg-white sm:col-span-2" />
+        </div>
+      </div>
+
+      <Button type="submit" disabled={isSubmitting} className="rounded-full">
+        {isSubmitting ? 'Submitting…' : 'Send job request'}
+      </Button>
+      {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p> : null}
+      {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
+    </form>
+  );
+}

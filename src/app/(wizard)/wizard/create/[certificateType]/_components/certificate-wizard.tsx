@@ -138,6 +138,8 @@ type Cp12InfoState = {
   landlord_city: string;
   landlord_postcode: string;
   landlord_tel: string;
+  landlord_email: string;
+  landlord_mobile: string;
   landlord_address: string;
   reg_26_9_confirmed: boolean;
   company_address: string;
@@ -341,6 +343,8 @@ export function CertificateWizard({
   const [step, setStep] = useState(() => Math.max(startStep, 1));
   const [isPending, startTransition] = useTransition();
   const resolvedInitialInfo = mergeJobContextFields(initialInfo, initialJobContext);
+  const [issuedJobId, setIssuedJobId] = useState<string | null>(null);
+  const [boilerServiceDecision, setBoilerServiceDecision] = useState<'yes' | 'no' | null>(null);
   const [isPostcodeLookupPending, setIsPostcodeLookupPending] = useState(false);
   const [postcodeSuggestions, setPostcodeSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedPostcodeMatchId, setSelectedPostcodeMatchId] = useState<string | null>(null);
@@ -369,6 +373,9 @@ export function CertificateWizard({
     (initialLandlordAddressParts.length > 1 ? initialLandlordAddressParts.at(-1) ?? '' : '');
   const initialLandlordPostcode = resolvedInitialInfo.landlord_postcode ?? '';
   const initialLandlordTel = resolvedInitialInfo.landlord_tel ?? '';
+  const initialLandlordEmail = resolvedInitialInfo.landlord_email ?? resolvedInitialInfo.customer_email ?? '';
+  const initialLandlordMobile =
+    resolvedInitialInfo.landlord_mobile ?? resolvedInitialInfo.customer_mobile ?? resolvedInitialInfo.customer_phone ?? '';
   const initialLandlordAddress =
     resolvedInitialInfo.landlord_address ?? buildLandlordAddress(initialLandlordLine1, initialLandlordLine2, initialLandlordCity);
 
@@ -385,6 +392,8 @@ export function CertificateWizard({
     landlord_city: initialLandlordCity,
     landlord_postcode: initialLandlordPostcode,
     landlord_tel: initialLandlordTel,
+    landlord_email: initialLandlordEmail,
+    landlord_mobile: initialLandlordMobile,
     landlord_address: initialLandlordAddress,
     reg_26_9_confirmed: (() => {
       const value = String(resolvedInitialInfo.reg_26_9_confirmed ?? '').toLowerCase();
@@ -774,6 +783,8 @@ export function CertificateWizard({
           landlord_city: demoLandlordCity,
           landlord_postcode: demoLandlordPostcode,
           landlord_tel: info.landlord_tel || CP12_DEMO_INFO.landlord_tel || '',
+          landlord_email: info.landlord_email || CP12_DEMO_INFO.landlord_email || '',
+          landlord_mobile: info.landlord_mobile || CP12_DEMO_INFO.landlord_mobile || CP12_DEMO_INFO.customer_phone || '',
           landlord_address: demoLandlordAddress || CP12_DEMO_INFO.landlord_address,
           reg_26_9_confirmed: true,
           company_address: info.company_address || CP12_DEMO_INFO.company_address || '',
@@ -1214,6 +1225,12 @@ export function CertificateWizard({
             });
           }
         }
+        if (certificateType === 'cp12') {
+          setIssuedJobId(resultJobId);
+          setBoilerServiceDecision(null);
+          setStep(4);
+          return;
+        }
         router.push(`/jobs/${resultJobId}/pdf?certificateType=${certificateType}`);
       } catch (error) {
         pushToast({
@@ -1225,6 +1242,28 @@ export function CertificateWizard({
         setIsGeneratingPdf(false);
       }
     })();
+  };
+
+  const handleLinkedBoilerService = () => {
+    if (!issuedJobId) return;
+    startTransition(async () => {
+      try {
+        await saveJobFields({
+          jobId: issuedJobId,
+          fields: {
+            gas_service_linked_to_cp12: 'true',
+            gas_service_linked_to_cp12_at: new Date().toISOString(),
+          },
+        });
+        router.push(`/wizard/create/boiler_service?jobId=${issuedJobId}`);
+      } catch (error) {
+        pushToast({
+          title: 'Could not prepare boiler service',
+          description: error instanceof Error ? error.message : 'Try again.',
+          variant: 'error',
+        });
+      }
+    });
   };
 
   const handleCreateRemoteSignatureLink = () => {
@@ -1630,6 +1669,138 @@ export function CertificateWizard({
     customerSignature,
   ]);
 
+  if (issuedJobId && certificateType === 'cp12') {
+    const pdfHref = `/jobs/${issuedJobId}/pdf?certificateType=cp12`;
+    const publicToken = initialJobContext?.job?.public_token ?? '';
+    const publicPath = publicToken ? `/j/${publicToken}` : pdfHref;
+    const publicUrl =
+      typeof window !== 'undefined' && publicToken ? `${window.location.origin}${publicPath}` : publicPath;
+    const certificateRecipientEmail = [
+      info.landlord_email,
+      resolvedInitialInfo.landlord_email,
+      resolvedInitialInfo.customer_email,
+    ].find((email) => typeof email === 'string' && email.trim().length > 0)?.trim() ?? '';
+    const fullJobAddress = [
+      jobAddress.job_address_line1,
+      jobAddress.job_address_line2,
+      jobAddress.job_address_city,
+      jobAddress.job_postcode,
+    ]
+      .filter((part) => part && part.trim())
+      .join(', ');
+    const whatsAppMessage = [
+      `Hi ${info.landlord_name || 'there'},`,
+      `Your gas safety record for ${fullJobAddress || info.property_address} is ready.`,
+      `You can view and download it here: ${publicUrl}`,
+    ].join(' ');
+    const whatsAppHref = `https://wa.me/?text=${encodeURIComponent(whatsAppMessage)}`;
+    const certificateEmailSubject = `Gas safety certificate for ${fullJobAddress || info.property_address || 'your property'}`;
+    const certificateEmailBody = [
+      `Hi ${info.landlord_name || 'there'},`,
+      '',
+      `Your gas safety certificate for ${fullJobAddress || info.property_address || 'the property'} is ready.`,
+      '',
+      `You can view and download it here: ${publicUrl}`,
+      '',
+      'Regards',
+    ].join('\n');
+    const mailtoHref = certificateRecipientEmail
+      ? `mailto:${encodeURIComponent(certificateRecipientEmail)}?subject=${encodeURIComponent(certificateEmailSubject)}&body=${encodeURIComponent(certificateEmailBody)}`
+      : '';
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-16 pt-6">
+        <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">CP12 issued</p>
+          <h1 className="mt-2 text-2xl font-semibold text-[var(--brand)]">Finish this job</h1>
+          <p className="mt-2 text-sm text-muted-foreground/75">
+            The CP12 PDF has been generated. Confirm any boiler service and invoice action before sharing the job.
+          </p>
+        </div>
+
+        <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
+          <p className="text-sm font-semibold text-muted">Did you also service the boiler on this visit?</p>
+          <p className="mt-1 text-xs text-muted-foreground/70">
+            If yes, the boiler service opens on the same job and uses the CP12 client, address and landlord details.
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <Button type="button" className="rounded-full" disabled={isPending} onClick={handleLinkedBoilerService}>
+              Yes, complete boiler service
+            </Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setBoilerServiceDecision('no')}>
+              No boiler service
+            </Button>
+          </div>
+        </div>
+
+        {boilerServiceDecision ? (
+          <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Invoice for this job</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              One invoice should cover all certificates on this job. Prices stay editable before sending.
+            </p>
+            <div className="mt-4 grid gap-2">
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--muted)]/30 p-4">
+                <p className="text-sm font-semibold text-muted">Send certificate to landlord</p>
+                <p className="mt-1 text-xs text-muted-foreground/70">
+                  Recipient is taken from the landlord details captured at job creation or CP12 Step 1.
+                </p>
+                <Input
+                  readOnly
+                  value={certificateRecipientEmail}
+                  placeholder="No landlord email captured"
+                  className="mt-3 bg-white"
+                />
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Button asChild variant="outline" className="rounded-full" disabled={!certificateRecipientEmail}>
+                    <a href={mailtoHref}>Open email to landlord</a>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={async () => {
+                      if (!certificateRecipientEmail || !navigator.clipboard?.writeText) return;
+                      await navigator.clipboard.writeText(certificateRecipientEmail);
+                      pushToast({ title: 'Landlord email copied', variant: 'success' });
+                    }}
+                    disabled={!certificateRecipientEmail}
+                  >
+                    Copy email
+                  </Button>
+                </div>
+              </div>
+              <Button asChild className="rounded-full">
+                <Link href={`/invoices/new?jobId=${issuedJobId}`}>Create invoice now</Link>
+              </Button>
+              <Button asChild variant="outline" className="rounded-full">
+                <Link href={`/invoices/new?jobId=${issuedJobId}`}>Save draft invoice for later</Link>
+              </Button>
+              <Button asChild variant="ghost" className="rounded-full">
+                <Link href={pdfHref}>Skip invoice and open share page</Link>
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {publicToken ? (
+          <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
+            <p className="text-sm font-semibold text-muted">Share with landlord</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">{publicUrl}</p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <Button asChild className="rounded-full bg-emerald-600 text-white hover:bg-emerald-700">
+                <Link href={whatsAppHref} target="_blank">
+                  Share by WhatsApp
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="rounded-full">
+                <Link href={publicPath}>Open public job page</Link>
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   const StepOne = (
     <WizardLayout
@@ -1871,6 +2042,20 @@ export function CertificateWizard({
                 value={info.landlord_tel}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_tel: e.target.value }))}
                 placeholder="Tel. No. (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                type="tel"
+                value={info.landlord_mobile}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_mobile: e.target.value }))}
+                placeholder="Mobile number (optional)"
+                className="rounded-2xl"
+              />
+              <Input
+                type="email"
+                value={info.landlord_email}
+                onChange={(e) => setInfo((prev) => ({ ...prev, landlord_email: e.target.value }))}
+                placeholder="Email for reminders (optional)"
                 className="rounded-2xl sm:col-span-2"
               />
             </div>
@@ -2433,6 +2618,17 @@ export function CertificateWizard({
       }
     >
       <div className="space-y-3">
+        {!info.landlord_email.trim() ? (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm">
+            <p className="font-semibold">Landlord email is missing</p>
+            <p className="mt-1 text-amber-900/80">
+              You can still issue this CP12, but adding an email enables renewal reminders and landlord portal links later.
+            </p>
+            <Button type="button" variant="outline" className="mt-3 rounded-full" onClick={() => setStep(1)}>
+              Add landlord email
+            </Button>
+          </div>
+        ) : null}
         <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-muted">Ready to issue?</p>

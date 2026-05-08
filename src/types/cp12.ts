@@ -166,6 +166,8 @@ export const CP12_DEMO_INFO = {
   landlord_city: 'London',
   landlord_postcode: 'SW1A 1AA',
   landlord_tel: '+44 20 7000 1122',
+  landlord_email: 'landlord@example.com',
+  landlord_mobile: '+44 7700 900456',
   reg_26_9_confirmed: true,
   defect_description: 'No safety defects identified at time of inspection.',
   remedial_action: '',

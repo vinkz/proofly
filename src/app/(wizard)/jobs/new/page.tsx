@@ -4,6 +4,7 @@ import { ProfileRequiredCard } from '@/components/profile/profile-required-card'
 import { getMissingOnboardingFields, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { listClients } from '@/server/clients';
+import { getJobRequestPrefill, type JobRequestPrefill } from '@/server/job-requests';
 import { getProfile } from '@/server/profile';
 
 const pickText = (...values: Array<string | null | undefined>) => {
@@ -19,7 +20,15 @@ const splitAddressParts = (value: string | null | undefined) =>
     .map((part) => part.trim())
     .filter(Boolean);
 
-export default async function NewJobPage() {
+export default async function NewJobPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ requestId?: string | string[] }>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const requestIdParam = Array.isArray(resolvedSearchParams?.requestId)
+    ? resolvedSearchParams?.requestId[0]
+    : resolvedSearchParams?.requestId;
   const { profile } = await getProfile();
   if (!isOnboardingProfileComplete(profile)) {
     return <ProfileRequiredCard title="Finish your profile before creating a job" missingFields={getMissingOnboardingFields(profile)} />;
@@ -27,6 +36,9 @@ export default async function NewJobPage() {
 
   const clients = await listClients();
   const supabase = await supabaseServerReadOnly();
+  const requestPrefill: JobRequestPrefill | null = requestIdParam
+    ? await getJobRequestPrefill(requestIdParam)
+    : null;
 
   const clientIdToPrimary = new Map<string, string>();
   clients.forEach((client) => {
@@ -114,8 +126,29 @@ export default async function NewJobPage() {
         </p>
       </div>
 
+      {requestIdParam ? (
+        requestPrefill ? (
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+            <p className="font-semibold">Landlord request loaded</p>
+            <p className="mt-1">
+              Prefilling from {requestPrefill.landlordName || 'landlord'} for {requestPrefill.propertyAddress || 'the requested property'}.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-semibold">Landlord request not found</p>
+            <p className="mt-1">The request link was received, but no request row loaded for ID {requestIdParam}.</p>
+          </div>
+        )
+      ) : null}
+
       <Card className="border border-white/10 bg-white/95 p-6 shadow">
-        <SoloJobForm clients={clients} propertiesByClientId={propertiesByClientId} />
+        <SoloJobForm
+          key={requestPrefill?.id ?? 'manual-job'}
+          clients={clients}
+          propertiesByClientId={propertiesByClientId}
+          initialRequest={requestPrefill}
+        />
       </Card>
     </div>
   );

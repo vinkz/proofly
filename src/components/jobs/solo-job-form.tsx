@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useState, useTransition, type For
 import { useRouter } from 'next/navigation';
 
 import { createSoloJob } from '@/server/jobs';
+import type { JobRequestPrefill } from '@/server/job-requests';
 import type { ClientListItem } from '@/types/client';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
@@ -27,6 +28,7 @@ export type SavedPropertyOption = {
 type SoloJobFormProps = {
   clients: ClientListItem[];
   propertiesByClientId: Record<string, SavedPropertyOption[]>;
+  initialRequest?: JobRequestPrefill | null;
 };
 
 type AddressLookupApiResponse = {
@@ -93,6 +95,25 @@ const splitAddressParts = (value: string | null | undefined) =>
     .split(/[\r\n,]+/)
     .map((part) => part.trim())
     .filter(Boolean);
+
+const parseRequestAddress = (address: string | null | undefined, postcode: string | null | undefined) => {
+  const parts = splitAddressParts(address);
+  const normalizedPostcode = String(postcode ?? '').trim();
+  const withoutPostcode = normalizedPostcode
+    ? parts.filter((part) => part.toLowerCase() !== normalizedPostcode.toLowerCase())
+    : parts;
+  return {
+    line1: withoutPostcode[0] ?? '',
+    line2: withoutPostcode.length > 2 ? withoutPostcode.slice(1, -1).join(', ') : '',
+    city: withoutPostcode.length > 1 ? withoutPostcode.at(-1) ?? '' : '',
+    postcode: normalizedPostcode || parts.at(-1) || '',
+  };
+};
+
+const firstDateFromPreferredDates = (value: string | null | undefined) => {
+  const match = String(value ?? '').match(/\d{4}-\d{2}-\d{2}/);
+  return match?.[0] ?? '';
+};
 
 const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
   if (
@@ -215,38 +236,40 @@ const JOB_DEMO_VALUES: Record<
   },
 };
 
-export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps) {
+export function SoloJobForm({ clients, propertiesByClientId, initialRequest = null }: SoloJobFormProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('jobs_new', 'create'), []);
+  const requestAddress = parseRequestAddress(initialRequest?.propertyAddress, initialRequest?.propertyPostcode);
+  const requestPreferredDate = firstDateFromPreferredDates(initialRequest?.preferredDates);
   const [clientMode, setClientMode] = useState<'existing' | 'new'>('new');
   const [selectedClientId, setSelectedClientId] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
-  const [clientEmail, setClientEmail] = useState('');
+  const [clientName, setClientName] = useState(initialRequest?.landlordName ?? '');
+  const [clientPhone, setClientPhone] = useState(initialRequest?.landlordPhone ?? '');
+  const [clientEmail, setClientEmail] = useState(initialRequest?.landlordEmail ?? '');
   const [selectedPropertyKey, setSelectedPropertyKey] = useState('');
-  const [propertyName, setPropertyName] = useState('');
-  const [addressLine1, setAddressLine1] = useState('');
-  const [city, setCity] = useState('');
-  const [postcode, setPostcode] = useState('');
-  const [sitePhone, setSitePhone] = useState('');
-  const [scheduledFor, setScheduledFor] = useState('');
-  const [jobType, setJobType] = useState<JobType>('safety_check');
-  const [inspectionDate, setInspectionDate] = useState('');
-  const [jobAddressName, setJobAddressName] = useState('');
-  const [jobAddressLine1, setJobAddressLine1] = useState('');
-  const [jobAddressLine2, setJobAddressLine2] = useState('');
-  const [jobAddressCity, setJobAddressCity] = useState('');
-  const [jobAddressPostcode, setJobAddressPostcode] = useState('');
-  const [jobAddressTel, setJobAddressTel] = useState('');
-  const [landlordName, setLandlordName] = useState('');
+  const [propertyName, setPropertyName] = useState(initialRequest ? 'Landlord request' : '');
+  const [addressLine1, setAddressLine1] = useState(requestAddress.line1);
+  const [city, setCity] = useState(requestAddress.city);
+  const [postcode, setPostcode] = useState(requestAddress.postcode);
+  const [sitePhone, setSitePhone] = useState(initialRequest?.tenantPhone ?? initialRequest?.landlordPhone ?? '');
+  const [scheduledFor, setScheduledFor] = useState(requestPreferredDate ? `${requestPreferredDate}T09:00` : '');
+  const [jobType, setJobType] = useState<JobType>(initialRequest?.jobType === 'service' ? 'service' : 'safety_check');
+  const [inspectionDate, setInspectionDate] = useState(requestPreferredDate);
+  const [jobAddressName, setJobAddressName] = useState(initialRequest ? 'Landlord request' : '');
+  const [jobAddressLine1, setJobAddressLine1] = useState(requestAddress.line1);
+  const [jobAddressLine2, setJobAddressLine2] = useState(requestAddress.line2);
+  const [jobAddressCity, setJobAddressCity] = useState(requestAddress.city);
+  const [jobAddressPostcode, setJobAddressPostcode] = useState(requestAddress.postcode);
+  const [jobAddressTel, setJobAddressTel] = useState(initialRequest?.tenantPhone ?? initialRequest?.landlordPhone ?? '');
+  const [landlordName, setLandlordName] = useState(initialRequest?.landlordName ?? '');
   const [landlordCompany, setLandlordCompany] = useState('');
   const [landlordAddressLine1, setLandlordAddressLine1] = useState('');
   const [landlordAddressLine2, setLandlordAddressLine2] = useState('');
   const [landlordCity, setLandlordCity] = useState('');
   const [landlordPostcode, setLandlordPostcode] = useState('');
-  const [landlordTel, setLandlordTel] = useState('');
+  const [landlordTel, setLandlordTel] = useState(initialRequest?.landlordPhone ?? '');
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
   const [isJobAddressLookupPending, setIsJobAddressLookupPending] = useState(false);
   const [jobAddressSuggestions, setJobAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
@@ -283,6 +306,41 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
       setClientMode('new');
     }
   }, [clients.length]);
+
+  useEffect(() => {
+    if (!initialRequest) return;
+    const address = parseRequestAddress(initialRequest.propertyAddress, initialRequest.propertyPostcode);
+    const preferredDate = firstDateFromPreferredDates(initialRequest.preferredDates);
+    const siteContact = initialRequest.tenantPhone || initialRequest.landlordPhone;
+
+    setClientMode('new');
+    setSelectedClientId('');
+    setSelectedPropertyKey('');
+    setClientName(initialRequest.landlordName);
+    setClientPhone(initialRequest.landlordPhone);
+    setClientEmail(initialRequest.landlordEmail);
+    setPropertyName('Landlord request');
+    setAddressLine1(address.line1);
+    setCity(address.city);
+    setPostcode(address.postcode);
+    setSitePhone(siteContact);
+    setScheduledFor(preferredDate ? `${preferredDate}T09:00` : '');
+    setInspectionDate(preferredDate);
+    setJobType(initialRequest.jobType === 'service' ? 'service' : 'safety_check');
+    setJobAddressName('Landlord request');
+    setJobAddressLine1(address.line1);
+    setJobAddressLine2(address.line2);
+    setJobAddressCity(address.city);
+    setJobAddressPostcode(address.postcode);
+    setJobAddressTel(siteContact);
+    setLandlordName(initialRequest.landlordName);
+    setLandlordCompany('');
+    setLandlordAddressLine1('');
+    setLandlordAddressLine2('');
+    setLandlordCity('');
+    setLandlordPostcode('');
+    setLandlordTel(initialRequest.landlordPhone);
+  }, [initialRequest]);
 
   const soloJobDraft = useMemo<SoloJobDraftState>(
     () => ({
@@ -348,6 +406,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
   const { clearDraft } = useWizardDraft<SoloJobDraftState>({
     storageKey: draftStorageKey,
     state: soloJobDraft,
+    enabled: !initialRequest,
     onRestore: (draft) => {
       setClientMode(draft.clientMode ?? 'new');
       setSelectedClientId(draft.selectedClientId ?? '');
@@ -743,6 +802,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
           landlordCity,
           landlordPostcode,
           landlordTel,
+          requestId: initialRequest?.id,
         });
         clearDraft();
         pushToast({
@@ -821,6 +881,20 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
         </CardContent>
       </Card>
 
+      {initialRequest ? (
+        <Card className="border border-[color:var(--action-soft)] bg-[color:var(--action-soft)]/35">
+          <CardContent className="space-y-2 py-4 text-sm text-muted">
+            <p className="font-semibold">Landlord request details</p>
+            <div className="grid gap-2 md:grid-cols-2">
+              <p><span className="text-muted-foreground">Tenant:</span> {initialRequest.tenantName || 'Not provided'}</p>
+              <p><span className="text-muted-foreground">Tenant phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
+              <p className="md:col-span-2"><span className="text-muted-foreground">Preferred dates:</span> {initialRequest.preferredDates || 'Not provided'}</p>
+              <p className="md:col-span-2"><span className="text-muted-foreground">Access notes:</span> {initialRequest.accessNotes || 'Not provided'}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="border border-white/10">
         <CardHeader className="pb-1 pt-4">
           <CardTitle className="text-lg text-muted">Job Address</CardTitle>
@@ -881,7 +955,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
                   setSelectedJobAddressMatchId(null);
                 }}
                 placeholder="Start typing address or postcode"
-                required
+                required={!initialRequest}
                 disabled={isPending}
               />
               {isJobAddressLookupPending && !jobAddressSuggestions.length ? (
@@ -934,7 +1008,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
               onChange={(event) => setJobAddressCity(event.target.value)}
               placeholder="London"
               className="mt-1"
-              required
+              required={!initialRequest}
               disabled={isPending}
             />
           </div>
@@ -945,7 +1019,7 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
               onChange={(event) => setJobAddressPostcode(event.target.value)}
               placeholder="SW1A 1AA"
               className="mt-1"
-              required
+              required={!initialRequest}
               disabled={isPending}
             />
           </div>
@@ -1090,6 +1164,17 @@ export function SoloJobForm({ clients, propertiesByClientId }: SoloJobFormProps)
               value={landlordTel}
               onChange={(event) => setLandlordTel(event.target.value)}
               placeholder="Optional"
+              className="mt-1"
+              disabled={isPending}
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Email</label>
+            <Input
+              value={clientEmail}
+              onChange={(event) => setClientEmail(event.target.value)}
+              type="email"
+              placeholder="landlord@example.com"
               className="mt-1"
               disabled={isPending}
             />

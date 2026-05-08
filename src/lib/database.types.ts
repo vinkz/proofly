@@ -499,15 +499,18 @@ export type Database = {
           certificate_type: string | null
           client_id: string | null
           client_name: string | null
+          client_ref: string | null
           client_signature_path: string | null
           completed_at: string | null
           contact_id: string | null
           created_at: string | null
           engineer_signature_path: string | null
           id: string
+          job_code: string | null
           job_type: string | null
           notes: string | null
           parent_job_id: string | null
+          public_token: string
           scheduled_for: string | null
           source_appliance_id: string | null
           source_appliance_key: string | null
@@ -523,15 +526,18 @@ export type Database = {
           certificate_type?: string | null
           client_id?: string | null
           client_name?: string | null
+          client_ref?: string | null
           client_signature_path?: string | null
           completed_at?: string | null
           contact_id?: string | null
           created_at?: string | null
           engineer_signature_path?: string | null
           id?: string
+          job_code?: string | null
           job_type?: string | null
           notes?: string | null
           parent_job_id?: string | null
+          public_token?: string
           scheduled_for?: string | null
           source_appliance_id?: string | null
           source_appliance_key?: string | null
@@ -547,15 +553,18 @@ export type Database = {
           certificate_type?: string | null
           client_id?: string | null
           client_name?: string | null
+          client_ref?: string | null
           client_signature_path?: string | null
           completed_at?: string | null
           contact_id?: string | null
           created_at?: string | null
           engineer_signature_path?: string | null
           id?: string
+          job_code?: string | null
           job_type?: string | null
           notes?: string | null
           parent_job_id?: string | null
+          public_token?: string
           scheduled_for?: string | null
           source_appliance_id?: string | null
           source_appliance_key?: string | null

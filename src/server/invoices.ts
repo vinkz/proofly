@@ -57,6 +57,7 @@ export type InvoiceMetaInput = {
 
 const INVOICE_DEFAULT_LINE_ITEM_BY_CERTIFICATE_TYPE: Partial<Record<CertificateType, string>> = {
   cp12: 'Gas Safety Certificate (CP12)',
+  gas_service: 'Boiler Service Record',
   gas_warning_notice: 'Gas Warning Notice Inspection',
 };
 
@@ -112,6 +113,38 @@ async function resolveInvoiceCertificateType(params: {
     .maybeSingle() as unknown as Promise<{ data: { cert_type?: string | null } | null; error: { message: string } | null }>);
 
   return typeof certificate?.cert_type === 'string' ? certificate.cert_type : '';
+}
+
+async function resolveInvoiceCertificateTypes(params: {
+  sb: Awaited<ReturnType<typeof supabaseServerAction>>;
+  jobId: string;
+  jobCertificateType?: string | null;
+}) {
+  const types = new Set<string>();
+  const normalizedJobType = typeof params.jobCertificateType === 'string' ? params.jobCertificateType.trim() : '';
+  if (normalizedJobType) types.add(normalizedJobType);
+
+  const { data: certificates, error } = await (params.sb
+    .from('certificates')
+    .select('cert_type, created_at')
+    .eq('job_id', params.jobId)
+    .order('created_at', { ascending: true }) as unknown as Promise<{
+    data: Array<{ cert_type?: string | null }> | null;
+    error: { message: string } | null;
+  }>);
+  if (error) throw new Error(error.message);
+
+  (certificates ?? []).forEach((certificate) => {
+    const type = typeof certificate.cert_type === 'string' ? certificate.cert_type.trim() : '';
+    if (type) types.add(type);
+  });
+
+  if (!types.size) {
+    const fallback = await resolveInvoiceCertificateType(params);
+    if (fallback) types.add(fallback);
+  }
+
+  return Array.from(types);
 }
 
 async function findLastUsedUnitPriceForCertificateType(params: {
@@ -201,7 +234,7 @@ export async function createInvoiceForJob(jobId: string) {
     .maybeSingle();
   if (jobErr || !job) throw new Error(jobErr?.message ?? 'Job not found');
 
-  const certificateType = await resolveInvoiceCertificateType({
+  const certificateTypes = await resolveInvoiceCertificateTypes({
     sb,
     jobId,
     jobCertificateType: job.certificate_type,
@@ -229,23 +262,24 @@ export async function createInvoiceForJob(jobId: string) {
     .maybeSingle();
   if (updateErr || !updated) throw new Error(updateErr?.message ?? 'Unable to set invoice number');
 
-  const defaultDescription =
-    INVOICE_DEFAULT_LINE_ITEM_BY_CERTIFICATE_TYPE[certificateType as CertificateType] ?? null;
-  if (defaultDescription) {
-    const lastUsedUnitPrice = await findLastUsedUnitPriceForCertificateType({
-      sb,
-      userId: user.id,
-      certificateType,
-    });
-    const { error: lineItemErr } = await (fromInvoiceLineItems(sb)
-      .insert({
+  const lineItems = [];
+  for (const certificateType of certificateTypes) {
+    const defaultDescription = INVOICE_DEFAULT_LINE_ITEM_BY_CERTIFICATE_TYPE[certificateType as CertificateType] ?? null;
+    if (!defaultDescription) continue;
+    const lastUsedUnitPrice = await findLastUsedUnitPriceForCertificateType({ sb, userId: user.id, certificateType });
+    lineItems.push({
         invoice_id: createdRow.id,
-        position: 0,
+        position: lineItems.length,
         description: defaultDescription,
         quantity: 1,
         unit_price: lastUsedUnitPrice ?? 0,
         vat_exempt: false,
-      }) as unknown as Promise<{ error: { message: string } | null }>);
+    });
+  }
+
+  if (lineItems.length) {
+    const { error: lineItemErr } = await (fromInvoiceLineItems(sb)
+      .insert(lineItems) as unknown as Promise<{ error: { message: string } | null }>);
     if (lineItemErr) throw new Error(lineItemErr.message);
   }
 
