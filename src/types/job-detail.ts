@@ -51,6 +51,7 @@ export interface JobDetailPayload {
     template_id: string | null;
     user_id: string | null;
     notes: string | null;
+    public_token?: string | null;
     job_type?: JobType | null;
   };
   items: JobChecklistItem[];

@@ -11,6 +11,10 @@ const StandaloneJobRequestSchema = z.object({
   landlordName: z.string().min(2).max(120),
   landlordEmail: z.string().email(),
   landlordPhone: z.string().min(3).max(80),
+  landlordAddressLine1: z.string().max(240).optional().default(''),
+  landlordAddressLine2: z.string().max(240).optional().default(''),
+  landlordCity: z.string().max(120).optional().default(''),
+  landlordPostcode: z.string().max(40).optional().default(''),
   propertyAddress: z.string().min(5).max(500),
   propertyPostcode: z.string().max(40).optional().default(''),
   jobType: z.enum(['cp12', 'service', 'both', 'other']),
@@ -145,6 +149,10 @@ export type DashboardJobRequest = {
   landlordName: string | null;
   landlordEmail: string | null;
   landlordPhone: string | null;
+  landlordAddressLine1: string | null;
+  landlordAddressLine2: string | null;
+  landlordCity: string | null;
+  landlordPostcode: string | null;
   tenantName: string | null;
   tenantPhone: string | null;
   accessNotes: string | null;
@@ -166,6 +174,10 @@ export type JobRequestPrefill = {
   landlordName: string;
   landlordEmail: string;
   landlordPhone: string;
+  landlordAddressLine1: string;
+  landlordAddressLine2: string;
+  landlordCity: string;
+  landlordPostcode: string;
   propertyAddress: string;
   propertyPostcode: string;
   tenantName: string;
@@ -184,6 +196,10 @@ function normalizeRequest(row: Record<string, unknown>): DashboardJobRequest {
     landlordName: typeof row.landlord_name === 'string' ? row.landlord_name : null,
     landlordEmail: typeof row.landlord_email === 'string' ? row.landlord_email : null,
     landlordPhone: typeof row.landlord_phone === 'string' ? row.landlord_phone : null,
+    landlordAddressLine1: typeof row.landlord_address_line1 === 'string' ? row.landlord_address_line1 : null,
+    landlordAddressLine2: typeof row.landlord_address_line2 === 'string' ? row.landlord_address_line2 : null,
+    landlordCity: typeof row.landlord_city === 'string' ? row.landlord_city : null,
+    landlordPostcode: typeof row.landlord_postcode === 'string' ? row.landlord_postcode : null,
     tenantName: typeof row.tenant_name === 'string' ? row.tenant_name : null,
     tenantPhone: typeof row.tenant_phone === 'string' ? row.tenant_phone : null,
     accessNotes: typeof row.access_notes === 'string' ? row.access_notes : null,
@@ -257,6 +273,10 @@ export async function getJobRequestPrefill(requestId: string): Promise<JobReques
     landlordName: request.landlordName ?? '',
     landlordEmail: request.landlordEmail ?? '',
     landlordPhone: request.landlordPhone ?? '',
+    landlordAddressLine1: request.landlordAddressLine1 ?? '',
+    landlordAddressLine2: request.landlordAddressLine2 ?? '',
+    landlordCity: request.landlordCity ?? '',
+    landlordPostcode: request.landlordPostcode ?? '',
     propertyAddress: request.propertyAddress ?? '',
     propertyPostcode: request.propertyPostcode ?? '',
     tenantName: request.tenantName ?? '',
@@ -272,6 +292,10 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
     landlordName: cleanText(parsedRequest.landlordName),
     landlordEmail: cleanText(parsedRequest.landlordEmail),
     landlordPhone: cleanText(parsedRequest.landlordPhone),
+    landlordAddressLine1: cleanText(parsedRequest.landlordAddressLine1),
+    landlordAddressLine2: cleanText(parsedRequest.landlordAddressLine2),
+    landlordCity: cleanText(parsedRequest.landlordCity),
+    landlordPostcode: cleanText(parsedRequest.landlordPostcode),
     propertyAddress: cleanText(parsedRequest.propertyAddress),
     propertyPostcode: cleanText(parsedRequest.propertyPostcode),
     jobType: parsedRequest.jobType,
@@ -302,6 +326,10 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
     landlord_name: request.landlordName,
     landlord_email: request.landlordEmail,
     landlord_phone: request.landlordPhone,
+    landlord_address_line1: request.landlordAddressLine1 || null,
+    landlord_address_line2: request.landlordAddressLine2 || null,
+    landlord_city: request.landlordCity || null,
+    landlord_postcode: request.landlordPostcode || null,
     property_address: request.propertyAddress,
     property_postcode: request.propertyPostcode || null,
     tenant_name: request.tenantName || null,

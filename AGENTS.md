@@ -31,7 +31,7 @@
 - Every job must have a random, unguessable `jobs.public_token` generated at creation time. Public landlord/job routes must resolve by token, never by internal UUID.
 - App navigation remains engineer-first operationally: `/dashboard` is the operational home, `/jobs/new` must always support manual engineer-created jobs, `/clients` remains useful for customer history, and `/jobs/[id]` is treated as an execution record with related client/property/certificate/invoice context.
 - Document preview is canonical at `/jobs/[id]/pdf` (legacy report/pdf routes should redirect here); saved documents live under `/documents` and use Supabase signed URLs.
-- External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, address lookup via Ideal Postcodes, and planned engineer notifications via Resend; isolate integration code under server/API routes.
+- External integrations: Supabase (auth/storage), PDF generation via `pdf-lib`, address lookup via Ideal Postcodes, and transactional email via Resend; isolate integration code under server/API routes.
 - Job sheet scan/QR flows have been removed from the active product. Do not reintroduce QR scanning or drag-and-drop interactions without a clear mobile-field use case.
 - Cross-certificate links: CP12 can deep-link to Gas Warning Notice using the same jobId; Gas Warning Notice may prefill from CP12 job fields and appliances when available.
 
@@ -94,6 +94,13 @@ CREATE TABLE job_requests (
 - When a landlord submits the form, create a `job_requests` row, classify it as `new_job` or `renewal`, notify the engineer via Resend, and show it on the engineer dashboard.
 - When an engineer creates a job from a request, link the job to `job_requests.id` and update the request status to `scheduled`.
 - Public standalone landlord requests live at `/request-job`. Do not expose a public engineer directory by default. Landlords enter the engineer they already want to contact: name, company, email, phone, and Gas Safe number if known. CertNow stores the request and sends confirmation/engineer emails when email delivery is configured.
+
+## Email Sending Policy
+- CertNow owns the sending infrastructure for product emails. Transactional messages should send from a CertNow-controlled sender such as `notifications@certnow.uk` or `general@certnow.uk`, using Resend or the configured provider.
+- Emails should still feel like they come from the engineer relationship. Include the engineer/company name prominently in subject/body copy where relevant, and set `Reply-To` to the engineer/company email when available so landlord replies go to the engineer, not CertNow support.
+- Do not send directly from arbitrary engineer email addresses in the MVP. Per-engineer sender domains create SPF/DKIM/domain-verification and deliverability support burden. Treat custom sender domains as a future paid/advanced feature.
+- For landlord request, job completion, certificate, invoice, and reminder emails, CertNow is the system sender and the engineer is the represented service provider. Copy should say or imply `Sent on behalf of [Engineer / Company]` where that context matters.
+- Email links should point to stable CertNow routes: `/jobs/new?requestId=...` for engineer request acceptance and `/j/[publicToken]` for landlord-safe job/certificate views. Avoid exposing internal UUIDs in public landlord links.
 
 ## Security Boundaries
 - Any module that reads private environment variables (`OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) must stay server-only and include `import 'server-only';` unless it is a top-level Next server action file with `'use server'`.
@@ -187,7 +194,7 @@ CREATE TABLE job_requests (
 
 ## Follow-Up Logic
 - CP12 is the main compliance lifecycle anchor. When a CP12 is completed, always create a 12-month CP12 follow-up.
-- CP12 issue also schedules reminder rows: landlord at eight weeks and four weeks before next inspection due, and engineer at eight weeks before. `/api/cron/reminders` processes due reminder rows daily; real email delivery should be wired to Resend/Postmark before production reminders are considered live.
+- CP12 issue also schedules reminder rows: landlord at eight weeks and four weeks before next inspection due, and engineer at eight weeks before. `/api/cron/reminders` processes due reminder rows daily and sends through the configured CertNow email provider. Only mark a reminder `sent_at` after a successful send; missing recipients or provider failures should remain visible in cron output rather than being silently discarded.
 - Boiler Service follow-up depends on context. If linked to CP12 on the same job, do not create a separate boiler service follow-up because the CP12 renewal cycle covers it.
 - If a Boiler Service is standalone, create a 12-month boiler service follow-up and add note: `Standalone service — confirm whether CP12 also required`.
 - Gas Warning Notice keeps its existing logic: it is triggered from unsafe CP12 appliance checks and should not be merged with boiler service follow-up logic.

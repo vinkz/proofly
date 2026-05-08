@@ -277,6 +277,13 @@ export default async function JobDetailPage({
               </Link>
             ) : null}
             {report?.storage_path ? <ShareReportLinkButton jobId={jobId} /> : null}
+            {job.public_token ? (
+              <Button asChild variant="outline" className="rounded-full">
+                <Link href={`/j/${job.public_token}`} target="_blank">
+                  Open shared page
+                </Link>
+              </Button>
+            ) : null}
             <DeleteJobButton jobId={jobId} />
           </div>
         </div>

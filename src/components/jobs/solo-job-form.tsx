@@ -265,10 +265,10 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [jobAddressTel, setJobAddressTel] = useState(initialRequest?.tenantPhone ?? initialRequest?.landlordPhone ?? '');
   const [landlordName, setLandlordName] = useState(initialRequest?.landlordName ?? '');
   const [landlordCompany, setLandlordCompany] = useState('');
-  const [landlordAddressLine1, setLandlordAddressLine1] = useState('');
-  const [landlordAddressLine2, setLandlordAddressLine2] = useState('');
-  const [landlordCity, setLandlordCity] = useState('');
-  const [landlordPostcode, setLandlordPostcode] = useState('');
+  const [landlordAddressLine1, setLandlordAddressLine1] = useState(initialRequest?.landlordAddressLine1 ?? '');
+  const [landlordAddressLine2, setLandlordAddressLine2] = useState(initialRequest?.landlordAddressLine2 ?? '');
+  const [landlordCity, setLandlordCity] = useState(initialRequest?.landlordCity ?? '');
+  const [landlordPostcode, setLandlordPostcode] = useState(initialRequest?.landlordPostcode ?? '');
   const [landlordTel, setLandlordTel] = useState(initialRequest?.landlordPhone ?? '');
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
   const [isJobAddressLookupPending, setIsJobAddressLookupPending] = useState(false);
@@ -335,10 +335,10 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     setJobAddressTel(siteContact);
     setLandlordName(initialRequest.landlordName);
     setLandlordCompany('');
-    setLandlordAddressLine1('');
-    setLandlordAddressLine2('');
-    setLandlordCity('');
-    setLandlordPostcode('');
+    setLandlordAddressLine1(initialRequest.landlordAddressLine1);
+    setLandlordAddressLine2(initialRequest.landlordAddressLine2);
+    setLandlordCity(initialRequest.landlordCity);
+    setLandlordPostcode(initialRequest.landlordPostcode);
     setLandlordTel(initialRequest.landlordPhone);
   }, [initialRequest]);
 

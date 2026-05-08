@@ -216,7 +216,7 @@ type UntypedMutationQuery = {
 type UntypedTableClient = { from: (table: string) => UntypedMutationQuery };
 
 const jobColumns =
-  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name, job_type';
+  'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name, job_type, public_token';
 const parseTemplateItems = (items: TemplateRow['items']): TemplateItem[] =>
   Array.isArray(items) ? (items as unknown as TemplateItem[]) : [];
 const templateFromRow = (row: TemplateRow): TemplateModel => ({
@@ -822,6 +822,7 @@ export async function getJobWithChecklist(jobId: string) {
       template_id: jobData.template_id ?? null,
       user_id: jobOwner ?? null,
       notes,
+      public_token: (job as { public_token?: string | null }).public_token ?? null,
       job_type: (job as { job_type?: JobType | null }).job_type ?? null,
     },
     items: checklistItems,
