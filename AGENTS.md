@@ -35,6 +35,44 @@
 - Job sheet scan/QR flows have been removed from the active product. Do not reintroduce QR scanning or drag-and-drop interactions without a clear mobile-field use case.
 - Cross-certificate links: CP12 can deep-link to Gas Warning Notice using the same jobId; Gas Warning Notice may prefill from CP12 job fields and appliances when available.
 
+## Business Model & Flywheel
+- CertNow's paying customer is the engineer. Landlords are the distribution channel and retention/referral loop, not the direct customer.
+- The core commercial offer is a solo-engineer subscription around `£12.99/month` for unlimited certificates, automated landlord reminders, permanent certificate storage, shareable job links, and renewal request notifications.
+- Each completed job should automatically create landlord-facing value: a shareable property/job link proving compliance, certificate access, engineer contact details, reminder capture, and renewal request entry where appropriate.
+- The intended flywheel is: engineer pays and uses CertNow on every job -> landlord receives a professional free link without login -> landlord perceives the engineer as organised -> landlord mentions it to other landlords -> those landlords ask their engineers to use CertNow -> more engineers subscribe.
+- Engineer acquisition is the priority because engineers already pay for job-management tools, feel paperwork pain daily, decide quickly, and refer through trade networks. Landlord-facing features exist to make engineers stickier and more referable.
+- Landlords should not be asked to pay in the core model. Their value is passive usage, trust, referral, and future compliance data, not direct SaaS revenue.
+- Product decisions should favor anything that helps engineers finish work faster, look more professional, retain landlords, and trigger landlord word-of-mouth without adding CRM complexity.
+
+## Validated Market Pain Points
+- Missed CP12 reminders are usually accidental: emails go to spam, reminders are never sent, or landlords assume an agent handled it. CertNow schedules reminders as soon as the certificate is issued so renewal does not depend on memory.
+- Possession and enforcement risk makes gas compliance high-stakes. Missing or invalid CP12 records can undermine a landlord's legal position, so CertNow should validate mandated fields, preserve timestamps, and keep an audit trail of documents and notifications.
+- Renters' Rights Act context: GOV.UK landlord guidance says the 1 May 2026 changes removed the Section 21 no-fault eviction route and require landlords to use lawful possession grounds/processes. Treat this as product risk context, not legal advice; public copy should be reviewed before making legal claims.
+- Lost certificates are treated operationally like missing certificates. Landlords often lose PDFs in email inboxes, WhatsApp threads, or local folders; CertNow should store certificates permanently against the property and expose them through stable shareable links.
+- Certificate accuracy matters. Common omissions such as the landlord correspondence address can make a certificate unusable for compliance evidence, so CP12 validation should keep requiring legally mandated fields before issue.
+- Access and tenant coordination create risk for landlords. Renewal request flows should capture tenant contact details and access notes so there is a clear record of attempts to arrange the visit.
+- Portfolio tracking becomes difficult across CP12, EICR, and EPC dates. The long-term property dashboard should show red/amber/green status for all key property compliance documents and reduce reliance on spreadsheets.
+
+## Competitor & Positioning Notes
+- Gas Engineer Software and Gas Safety App are established engineer-facing competitors starting around `£7.50/month`. Treat them as validation that engineers pay for tools, but differentiate CertNow on mobile-first speed and landlord share links rather than desktop-style feature breadth.
+- CertNudge is a landlord-facing CP12/EICR/EPC tracking competitor. Its weakness is manual upload: landlords must add documents themselves. CertNow's structural advantage is that CP12 certificates and reminders are created automatically because the engineer issues through CertNow.
+- Initial market focus remains sole traders and micro-businesses. The strategy assumes most Gas Safe engineers are solo or very small teams, making fast individual purchasing and Facebook/trade-network referrals more practical than enterprise sales.
+- Avoid building a public engineer directory by default. Landlords requesting work should be able to enter the engineer they already want to contact; open marketplace matching is a later business decision.
+
+## EICR & EPC Tracking Scope
+- EICR and EPC support should be document tracking only. CertNow must not generate EICR certificates because they belong to electricians and a different regulatory workflow.
+- CertNow must not generate EPC certificates because EPCs require government accreditation and national register/Landmark integration.
+- Correct scope: landlord or engineer uploads an existing EICR/EPC PDF against a property, confirms expiry date, and CertNow tracks compliance status and reminders using the same reminder infrastructure as CP12.
+- Reminder direction: EICR reminders at six months before expiry; EPC reminders at twelve months before expiry.
+- EICR/EPC tracking should appear on the property compliance dashboard alongside CP12 status. It is a planned expansion that makes the landlord view more valuable while preserving CP12 as the automatic engineer-led anchor.
+
+## Targeting & Pricing Strategy
+- Primary acquisition target: UK Gas Safe engineers, especially sole traders and micro-businesses, because they feel daily paperwork pain, already buy business software, and can decide in days to weeks.
+- Primary engineer outreach channels: trade Facebook groups such as Gas Safe Engineers UK, UK Gas and Heating Engineers, The Gas Network, Worcester Bosch Installers Group, and direct outreach to small gas companies already promising annual reminders on their websites.
+- Secondary distribution channel: landlords reached through engineer share links. Landlord community outreach should be helpful and informational only; do not post unprompted promotional content in landlord forums or groups.
+- Planned pricing direction: solo engineer `£12.99/month`; company plan for two to five engineers around `£39/month` with admin dashboard and company branding; letting agent tier around `£49/month` for portfolio compliance; landlord accounts stay free and read-only.
+- The free landlord compliance tracker for uploaded CP12/EICR/EPC documents is a later acquisition funnel, not a launch priority. It exists to create landlord referrals back to engineers.
+
 ## Property-First Job Model
 - Property is the long-term compliance anchor. It should own the public landlord link, compliance history, reminder eligibility, job request history, and future certificate history. Current job address/client structures must remain compatible while the property model is introduced.
 - Job is one execution event at a property. Examples include CP12, boiler service, gas warning notice, general works, and commissioning. Jobs should be linkable to `property_id` and optionally to `job_requests.id` when created from a landlord request.

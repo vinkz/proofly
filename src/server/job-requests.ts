@@ -326,10 +326,6 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
     landlord_name: request.landlordName,
     landlord_email: request.landlordEmail,
     landlord_phone: request.landlordPhone,
-    landlord_address_line1: request.landlordAddressLine1 || null,
-    landlord_address_line2: request.landlordAddressLine2 || null,
-    landlord_city: request.landlordCity || null,
-    landlord_postcode: request.landlordPostcode || null,
     property_address: request.propertyAddress,
     property_postcode: request.propertyPostcode || null,
     tenant_name: request.tenantName || null,
@@ -346,6 +342,25 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
   if (error) {
     if (error.code === '42P01') throw new Error('Job requests are not configured yet.');
     throw new Error(error.message);
+  }
+
+  if (
+    request.landlordAddressLine1 ||
+    request.landlordAddressLine2 ||
+    request.landlordCity ||
+    request.landlordPostcode
+  ) {
+    const { error: landlordAddressErr } = await fromJobRequests(admin)
+      .update({
+        landlord_address_line1: request.landlordAddressLine1 || null,
+        landlord_address_line2: request.landlordAddressLine2 || null,
+        landlord_city: request.landlordCity || null,
+        landlord_postcode: request.landlordPostcode || null,
+      })
+      .eq('id', requestId);
+    if (landlordAddressErr && !['42703', 'PGRST204'].includes(landlordAddressErr.code ?? '')) {
+      throw new Error(landlordAddressErr.message);
+    }
   }
 
   const landlordConfirmationStatus = await sendTransactionalEmail({

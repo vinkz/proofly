@@ -190,8 +190,8 @@ type SignaturePlacement = {
 };
 
 const GAS_SERVICE_SIGNATURE_PLACEMENTS: Record<'engineer' | 'customer', SignaturePlacement> = {
-  engineer: { x: 325, y: 47, width: 165, height: 22 },
-  customer: { x: 517, y: 47, width: 165, height: 22 },
+  engineer: { x: 307, y: 47, width: 165, height: 22 },
+  customer: { x: 499, y: 47, width: 165, height: 22 },
 };
 
 type ApplianceTableFieldNames = {
