@@ -1,6 +1,11 @@
 'use server';
 
 import { supabaseServerAction } from '@/lib/supabaseServer';
+import {
+  STANDARD_RATE_DESCRIPTIONS,
+  normalizeStandardRates,
+  type StandardRates,
+} from '@/lib/standard-rates';
 import type { CertificateType } from '@/types/certificates';
 
 export type InvoiceRow = {
@@ -16,8 +21,12 @@ export type InvoiceRow = {
   currency: string;
   vat_rate: number | string | null;
   status: string;
+  payment_link_url?: string | null;
+  payment_status?: string | null;
   issue_date: string | null;
   due_date: string | null;
+  sent_at?: string | null;
+  public_visible?: boolean | null;
   notes: string | null;
   pdf_path?: string | null;
   created_at: string;
@@ -89,6 +98,9 @@ const fromInvoices = (sb: Awaited<ReturnType<typeof supabaseServerAction>>) =>
 
 const fromInvoiceLineItems = (sb: Awaited<ReturnType<typeof supabaseServerAction>>) =>
   (sb as unknown as UntypedSupabase).from('invoice_line_items');
+
+const fromProfiles = (sb: Awaited<ReturnType<typeof supabaseServerAction>>) =>
+  (sb as unknown as UntypedSupabase).from('profiles');
 
 const buildInvoiceNumber = (invoiceId: string) => {
   const year = new Date().getFullYear();
@@ -223,6 +235,32 @@ async function findLastUsedUnitPriceForCertificateType(params: {
   return null;
 }
 
+async function getStandardRatesForUser(params: {
+  sb: Awaited<ReturnType<typeof supabaseServerAction>>;
+  userId: string;
+}) {
+  const { data, error } = await (fromProfiles(params.sb)
+    .select('standard_rates')
+    .eq('id', params.userId)
+    .maybeSingle() as unknown as Promise<{
+    data: { standard_rates?: unknown } | null;
+    error: { code?: string; message: string } | null;
+  }>);
+
+  if (error) {
+    if (error.code === '42703' || /standard_rates/i.test(error.message)) return {};
+    throw new Error(error.message);
+  }
+
+  return normalizeStandardRates(data?.standard_rates);
+}
+
+function getStandardRateForCertificateType(certificateType: string, standardRates: StandardRates) {
+  if (certificateType === 'cp12') return standardRates.cp12 ?? null;
+  if (certificateType === 'gas_service') return standardRates.boiler_service ?? null;
+  return null;
+}
+
 export async function createInvoiceForJob(jobId: string) {
   const { sb, user } = await getAuthedClient();
 
@@ -239,6 +277,7 @@ export async function createInvoiceForJob(jobId: string) {
     jobId,
     jobCertificateType: job.certificate_type,
   });
+  const standardRates = await getStandardRatesForUser({ sb, userId: user.id });
 
   const { data: created, error: insertErr } = await fromInvoices(sb)
     .insert({
@@ -262,18 +301,42 @@ export async function createInvoiceForJob(jobId: string) {
     .maybeSingle();
   if (updateErr || !updated) throw new Error(updateErr?.message ?? 'Unable to set invoice number');
 
-  const lineItems = [];
-  for (const certificateType of certificateTypes) {
+  const lineItems: Array<{
+    invoice_id: string;
+    position: number;
+    description: string;
+    quantity: number;
+    unit_price: number;
+    vat_exempt: boolean;
+  }> = [];
+  const pendingCertificateTypes = [...certificateTypes];
+  const hasCp12AndBoiler = pendingCertificateTypes.includes('cp12') && pendingCertificateTypes.includes('gas_service');
+  if (hasCp12AndBoiler && standardRates.cp12_boiler_service) {
+    lineItems.push({
+      invoice_id: createdRow.id,
+      position: lineItems.length,
+      description: STANDARD_RATE_DESCRIPTIONS.cp12_boiler_service,
+      quantity: 1,
+      unit_price: standardRates.cp12_boiler_service,
+      vat_exempt: false,
+    });
+    pendingCertificateTypes.splice(pendingCertificateTypes.indexOf('cp12'), 1);
+    pendingCertificateTypes.splice(pendingCertificateTypes.indexOf('gas_service'), 1);
+  }
+
+  for (const certificateType of pendingCertificateTypes) {
     const defaultDescription = INVOICE_DEFAULT_LINE_ITEM_BY_CERTIFICATE_TYPE[certificateType as CertificateType] ?? null;
     if (!defaultDescription) continue;
-    const lastUsedUnitPrice = await findLastUsedUnitPriceForCertificateType({ sb, userId: user.id, certificateType });
+    const standardRate = getStandardRateForCertificateType(certificateType, standardRates);
+    const lastUsedUnitPrice =
+      standardRate ?? (await findLastUsedUnitPriceForCertificateType({ sb, userId: user.id, certificateType }));
     lineItems.push({
-        invoice_id: createdRow.id,
-        position: lineItems.length,
-        description: defaultDescription,
-        quantity: 1,
-        unit_price: lastUsedUnitPrice ?? 0,
-        vat_exempt: false,
+      invoice_id: createdRow.id,
+      position: lineItems.length,
+      description: defaultDescription,
+      quantity: 1,
+      unit_price: lastUsedUnitPrice ?? 0,
+      vat_exempt: false,
     });
   }
 

@@ -34,6 +34,7 @@ export default async function PublicJobPage({
       ? 'Job in progress'
       : labelStatus(job.jobStatus);
   const invoiceStatus = job.invoice ? labelStatus(job.invoice.status) : 'Not issued yet';
+  const paymentStatus = job.invoice?.paymentStatus ? labelStatus(job.invoice.paymentStatus) : null;
 
   return (
     <main className="min-h-screen bg-[#f5f2ea] text-slate-950">
@@ -114,6 +115,9 @@ export default async function PublicJobPage({
               {job.invoice?.dueDate ? (
                 <p className="mt-1 text-xs text-slate-600">Due {job.invoice.dueDate.slice(0, 10)}</p>
               ) : null}
+              {paymentStatus ? (
+                <p className="mt-1 text-xs text-slate-600">Payment: {paymentStatus}</p>
+              ) : null}
               {job.invoice?.downloadUrl ? (
                 <Button asChild variant="secondary" className="mt-3 rounded-full">
                   <Link href={job.invoice.downloadUrl}>Download invoice</Link>
@@ -123,6 +127,11 @@ export default async function PublicJobPage({
                   {job.invoice ? 'Invoice PDF is not available yet.' : 'Your engineer has not shared an invoice yet.'}
                 </p>
               )}
+              {job.invoice?.paymentLinkUrl ? (
+                <Button asChild className="mt-2 rounded-full bg-slate-950 text-white hover:bg-slate-800">
+                  <Link href={job.invoice.paymentLinkUrl}>Open payment link</Link>
+                </Button>
+              ) : null}
             </div>
           </div>
 

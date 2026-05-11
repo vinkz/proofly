@@ -6,6 +6,7 @@ import { listClients } from '@/server/clients';
 import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
 import { CERTIFICATE_TYPES, CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import type { Database } from '@/lib/database.types';
+import { getInvoiceReadiness } from '@/lib/handover-readiness';
 import { getMissingOnboardingFields, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
 import { getProfile } from '@/server/profile';
 import type { InitialJobContext } from './_components/initial-job-context';
@@ -93,6 +94,7 @@ export default async function CertificateWizardPage({
   }
 
   const { profile } = await getProfile();
+  const invoiceReadiness = getInvoiceReadiness(profile as Parameters<typeof getInvoiceReadiness>[0]);
   if (!isOnboardingProfileComplete(profile)) {
     return (
       <ProfileRequiredCard
@@ -332,6 +334,12 @@ export default async function CertificateWizardPage({
       initialJobContext={initialJobContext}
       initialPhotoPreviews={wizardState.photoPreviews}
       initialAppliances={wizardState.appliances}
+      invoiceReadiness={{
+        ready: invoiceReadiness.ready,
+        hasStandardRates: invoiceReadiness.hasStandardRates,
+        hasBankTransferDetails: invoiceReadiness.hasBankTransferDetails,
+        missingFields: invoiceReadiness.missingFields,
+      }}
       stepOffset={stepOffset}
       startStep={requestedStartStep}
       hideBillingCustomerStep={hideBillingCustomerStep}

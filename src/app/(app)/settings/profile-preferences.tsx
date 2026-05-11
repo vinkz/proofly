@@ -7,6 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { TRADE_TYPES } from '@/lib/profile-options';
+import {
+  STANDARD_RATE_KEYS,
+  STANDARD_RATE_LABELS,
+  type StandardRateKey,
+  type StandardRates,
+} from '@/lib/standard-rates';
 import { updateProfileBasics } from '@/server/profile';
 
 type ProfilePreferencesProps = {
@@ -27,7 +33,23 @@ type ProfilePreferencesProps = {
   initialBankAccountName?: string;
   initialBankSortCode?: string;
   initialBankAccountNumber?: string;
+  initialStandardRates?: StandardRates;
 };
+
+const buildRateInputState = (rates: StandardRates): Record<StandardRateKey, string> =>
+  STANDARD_RATE_KEYS.reduce<Record<StandardRateKey, string>>((state, key) => {
+    state[key] = rates[key] ? String(rates[key]) : '';
+    return state;
+  }, {} as Record<StandardRateKey, string>);
+
+const parseRateInputState = (rates: Record<StandardRateKey, string>): StandardRates =>
+  STANDARD_RATE_KEYS.reduce<StandardRates>((parsed, key) => {
+    const amount = Number(rates[key]);
+    if (Number.isFinite(amount) && amount > 0) {
+      parsed[key] = amount;
+    }
+    return parsed;
+  }, {});
 
 export function ProfilePreferences({
   mode = 'settings',
@@ -47,6 +69,7 @@ export function ProfilePreferences({
   initialBankAccountName = '',
   initialBankSortCode = '',
   initialBankAccountNumber = '',
+  initialStandardRates = {},
 }: ProfilePreferencesProps) {
   const router = useRouter();
   const [fullName, setFullName] = useState(initialFullName);
@@ -68,8 +91,10 @@ export function ProfilePreferences({
   const [bankAccountName, setBankAccountName] = useState(initialBankAccountName);
   const [bankSortCode, setBankSortCode] = useState(initialBankSortCode);
   const [bankAccountNumber, setBankAccountNumber] = useState(initialBankAccountNumber);
+  const [standardRates, setStandardRates] = useState(() => buildRateInputState(initialStandardRates));
   const [isPending, startTransition] = useTransition();
   const { pushToast } = useToast();
+  const initialRateInputs = buildRateInputState(initialStandardRates);
 
   const handleSave = () => {
     const missing = [
@@ -112,6 +137,7 @@ export function ProfilePreferences({
           bank_account_name: bankAccountName.trim() || undefined,
           bank_sort_code: bankSortCode.trim() || undefined,
           bank_account_number: bankAccountNumber.trim() || undefined,
+          standard_rates: parseRateInputState(standardRates),
         });
 
         if (!result.profileComplete) {
@@ -162,7 +188,8 @@ export function ProfilePreferences({
     bankName !== initialBankName ||
     bankAccountName !== initialBankAccountName ||
     bankSortCode !== initialBankSortCode ||
-    bankAccountNumber !== initialBankAccountNumber;
+    bankAccountNumber !== initialBankAccountNumber ||
+    STANDARD_RATE_KEYS.some((key) => standardRates[key] !== initialRateInputs[key]);
 
   const saveLabel = isPending
     ? 'Saving…'
@@ -384,6 +411,37 @@ export function ProfilePreferences({
               placeholder="12345678"
             />
           </label>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-[var(--line)] bg-white/70 p-4">
+          <p className="text-sm font-semibold text-muted">Standard rates</p>
+          <p className="mt-1 text-xs text-muted-foreground/70">
+            Optional. These prices prefill draft invoices after a certificate is issued. Certificates can still be issued without them.
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            {STANDARD_RATE_KEYS.map((key) => (
+              <label key={key} className="block text-sm font-semibold text-muted">
+                {STANDARD_RATE_LABELS[key]}
+                <div className="mt-2 flex overflow-hidden rounded-xl border border-white/50 bg-white/80">
+                  <span className="grid place-items-center border-r border-slate-200 px-3 text-sm text-muted-foreground/70">£</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={standardRates[key]}
+                    onChange={(event) =>
+                      setStandardRates((current) => ({
+                        ...current,
+                        [key]: event.target.value,
+                      }))
+                    }
+                    className="w-full bg-transparent px-3 py-2 text-sm outline-none"
+                    disabled={isPending}
+                  />
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
       </div>
 

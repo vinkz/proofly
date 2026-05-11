@@ -662,6 +662,14 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
       .eq('id', input.requestId)
       .or(`user_id.eq.${user.id},assigned_engineer_id.eq.${user.id},source.eq.standalone_external_engineer`);
     if (requestErr && requestErr.code !== '42P01') throw new Error(requestErr.message);
+    const { error: jobRequestLinkErr } = await (sb as unknown as UntypedTableClient)
+      .from('jobs')
+      .update({ job_request_id: input.requestId })
+      .eq('id', job.id as string)
+      .eq('user_id', user.id)
+      .select('id')
+      .maybeSingle();
+    if (jobRequestLinkErr && jobRequestLinkErr.code !== '42703') throw new Error(jobRequestLinkErr.message);
     const request = (requestRow ?? {}) as Record<string, unknown>;
     await persistJobFields(
       sb,

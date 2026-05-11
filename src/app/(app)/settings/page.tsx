@@ -3,6 +3,7 @@ import { userHasPassword } from '@/server/auth';
 import { ProfilePreferences } from './profile-preferences';
 import { PasswordSection } from './password-section';
 import { Button } from '@/components/ui/button';
+import { normalizeStandardRates } from '@/lib/standard-rates';
 
 export default async function SettingsPage() {
   const { profile, user } = await getProfile();
@@ -23,6 +24,9 @@ export default async function SettingsPage() {
   const bankSortCode = (profile as { bank_sort_code?: string | null } | null)?.bank_sort_code ?? '';
   const bankAccountNumber =
     (profile as { bank_account_number?: string | null } | null)?.bank_account_number ?? '';
+  const standardRates = normalizeStandardRates(
+    (profile as { standard_rates?: unknown } | null)?.standard_rates,
+  );
 
   const { hasPassword } = await userHasPassword();
 
@@ -51,6 +55,7 @@ export default async function SettingsPage() {
         initialBankAccountName={bankAccountName}
         initialBankSortCode={bankSortCode}
         initialBankAccountNumber={bankAccountNumber}
+        initialStandardRates={standardRates}
       />
       <PasswordSection hasPassword={hasPassword} email={user.email ?? ''} />
       <form action="/logout" method="post" className="flex justify-end">

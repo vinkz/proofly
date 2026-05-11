@@ -55,6 +55,12 @@ type WizardProps = {
   startStep?: number;
   hideBillingCustomerStep?: boolean;
   prepareOnly?: boolean;
+  invoiceReadiness?: {
+    ready: boolean;
+    hasStandardRates: boolean;
+    hasBankTransferDetails: boolean;
+    missingFields: string[];
+  };
 };
 
 const emptyAppliance: Cp12Appliance = {
@@ -337,6 +343,7 @@ export function CertificateWizard({
   stepOffset = 0,
   startStep = 1,
   prepareOnly = false,
+  invoiceReadiness,
 }: WizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
@@ -1736,8 +1743,21 @@ export function CertificateWizard({
           <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
             <p className="text-sm font-semibold text-muted">Invoice for this job</p>
             <p className="mt-1 text-xs text-muted-foreground/70">
-              One invoice should cover all certificates on this job. Prices stay editable before sending.
+              Certificate issuing is complete. Invoice setup is optional and can be finished now or later.
             </p>
+            {invoiceReadiness?.ready ? (
+              <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-xs text-emerald-900">
+                Standard rates and bank transfer details are set. The invoice will prefill and can be reviewed before sending.
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-xs text-amber-950">
+                <p className="font-semibold">Certificate issued. Add invoice details to complete the bundle.</p>
+                <p className="mt-1">
+                  Missing: {invoiceReadiness?.missingFields.length ? invoiceReadiness.missingFields.join(', ') : 'invoice settings'}.
+                  You can still create an editable draft invoice or skip invoicing for this job.
+                </p>
+              </div>
+            )}
             <div className="mt-4 grid gap-2">
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--muted)]/30 p-4">
                 <p className="text-sm font-semibold text-muted">Send certificate to landlord</p>
@@ -1770,13 +1790,15 @@ export function CertificateWizard({
                 </div>
               </div>
               <Button asChild className="rounded-full">
-                <Link href={`/invoices/new?jobId=${issuedJobId}`}>Create invoice now</Link>
+                <Link href={`/invoices/new?jobId=${issuedJobId}`}>
+                  {invoiceReadiness?.ready ? 'Create invoice now' : 'Create editable draft invoice'}
+                </Link>
               </Button>
               <Button asChild variant="outline" className="rounded-full">
-                <Link href={`/invoices/new?jobId=${issuedJobId}`}>Save draft invoice for later</Link>
+                <Link href="/settings">Add rates and bank details</Link>
               </Button>
               <Button asChild variant="ghost" className="rounded-full">
-                <Link href={pdfHref}>Skip invoice and open share page</Link>
+                <Link href={pdfHref}>Send certificate now / skip invoice</Link>
               </Button>
             </div>
           </div>

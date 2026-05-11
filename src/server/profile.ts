@@ -12,6 +12,7 @@ import {
   type OnboardingProfileShape,
 } from '@/lib/onboarding-profile';
 import { CERTIFICATIONS, TRADE_TYPES } from '@/lib/profile-options';
+import { normalizeStandardRates } from '@/lib/standard-rates';
 import type { Database, Tables } from '@/lib/database.types';
 
 const TradeSchema = z.array(z.enum(TRADE_TYPES)).min(1, 'Select at least one trade');
@@ -43,6 +44,7 @@ async function upsertProfile(
     'bank_account_name',
     'bank_sort_code',
     'bank_account_number',
+    'standard_rates',
   ]);
   const workingPatch = { ...patch } as Record<string, unknown>;
 
@@ -70,8 +72,8 @@ export async function getProfile() {
   noStore();
   const { sb, user } = await requireUser();
   const selectVariants = [
-    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number',
-    'id, full_name, profession, trade_types, certifications, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number',
+    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates',
+    'id, full_name, profession, trade_types, certifications, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates',
     'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number',
     'id, full_name, profession, trade_types, certifications, company_name, company_address, company_postcode, company_phone',
   ];
@@ -157,6 +159,7 @@ export async function updateProfileBasics(payload: {
   bank_account_name?: string;
   bank_sort_code?: string;
   bank_account_number?: string;
+  standard_rates?: Record<string, unknown>;
 }): Promise<{ profileComplete: boolean; missingFields: string[] }> {
   const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(payload, key);
   const schema = z
@@ -177,6 +180,7 @@ export async function updateProfileBasics(payload: {
       bank_account_name: z.string().min(2).optional(),
       bank_sort_code: z.string().min(6).optional(),
       bank_account_number: z.string().min(6).optional(),
+      standard_rates: z.record(z.string(), z.unknown()).optional(),
     })
     .transform((data) => ({
       full_name: data.full_name?.trim(),
@@ -195,6 +199,7 @@ export async function updateProfileBasics(payload: {
       bank_account_name: data.bank_account_name?.trim(),
       bank_sort_code: data.bank_sort_code?.trim(),
       bank_account_number: data.bank_account_number?.trim(),
+      standard_rates: normalizeStandardRates(data.standard_rates),
     }));
   const parsed = schema.parse(payload);
   const { user } = await requireUser({ write: true });
@@ -227,6 +232,9 @@ export async function updateProfileBasics(payload: {
   if (hasOwn('bank_sort_code')) profilePatch.bank_sort_code = parsed.bank_sort_code ?? null;
   if (hasOwn('bank_account_number')) profilePatch.bank_account_number = parsed.bank_account_number ?? null;
   const extendedPatch = profilePatch as Record<string, unknown>;
+  if (hasOwn('standard_rates')) {
+    extendedPatch.standard_rates = parsed.standard_rates ?? {};
+  }
   if (hasOwn('company_address_line2')) {
     extendedPatch.company_address_line2 = parsed.company_address_line2 ?? null;
   }

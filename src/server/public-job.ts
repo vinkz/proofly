@@ -17,6 +17,8 @@ type PublicInvoice = {
   id: string;
   invoiceNumber: string | null;
   status: string | null;
+  paymentStatus: string | null;
+  paymentLinkUrl: string | null;
   issueDate: string | null;
   dueDate: string | null;
   downloadUrl: string | null;
@@ -130,7 +132,7 @@ export async function getPublicJobByToken(token: string): Promise<PublicJobPageD
       ? admin.from('clients').select('name, email, phone').eq('id', job.client_id).maybeSingle()
       : Promise.resolve({ data: null }),
     fromUntyped(admin, 'invoices')
-      .select('id, invoice_number, status, issue_date, due_date, pdf_path, created_at')
+      .select('id, invoice_number, status, payment_status, payment_link_url, issue_date, due_date, pdf_path, created_at')
       .eq('job_id', job.id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -186,6 +188,8 @@ export async function getPublicJobByToken(token: string): Promise<PublicJobPageD
         id: String(invoiceRow.id ?? ''),
         invoiceNumber: typeof invoiceRow.invoice_number === 'string' ? invoiceRow.invoice_number : null,
         status: typeof invoiceRow.status === 'string' ? invoiceRow.status : null,
+        paymentStatus: typeof invoiceRow.payment_status === 'string' ? invoiceRow.payment_status : null,
+        paymentLinkUrl: typeof invoiceRow.payment_link_url === 'string' ? invoiceRow.payment_link_url : null,
         issueDate: typeof invoiceRow.issue_date === 'string' ? invoiceRow.issue_date : null,
         dueDate: typeof invoiceRow.due_date === 'string' ? invoiceRow.due_date : null,
         downloadUrl: invoiceDownloadUrl,
