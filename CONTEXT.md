@@ -11,15 +11,22 @@ It is evolving from a high-speed documentation engine into a **complete job life
 
 This evolution should be integrated with the existing property-first, link-based direction rather than replacing it. The current engineer-created job workflow, CP12 wizard, invoice routes, public job links, Supabase tables, and certificate PDF pipeline remain the foundation.
 
-### Pillar 1: Bidirectional Entry
+### Pillar 1: Three Entry Points, One Job Lifecycle
 
-CertNow must support both directions of job creation:
-- **Landlord-Initiated / Inbound Pull:** a landlord requests work through `/request-job`, a public job link, or a future property vault link. The request becomes a `job_requests` row and flows into `/jobs/new` with prefill.
-- **Engineer-Initiated / Outbound Push:** an engineer creates or prepares a job manually through `/jobs/new`, then sends a tokenized link when landlord details, tenant/access notes, or preferred dates are missing.
+CertNow must support three ways into the same job lifecycle:
+- **Landlord public request:** the landlord starts from `/request` target route (current implementation compatibility: `/request-job`), enters the engineer contact they already know, and submits the job details without an account.
+- **Engineer-created job:** the engineer starts from `/jobs/new` exactly as today, either filling Step 1 themselves or sending a scoped pre-fill link when landlord/tenant/access details are missing.
+- **Engineer personal request link:** the engineer shares a permanent `/request/[request_link_slug]` link from settings, WhatsApp, a business card, van QR, or Google Business profile. The landlord fills the same form, already scoped to that engineer.
+
+These entry points are about who starts the job and which link they use. They are separate from `request_type`, which classifies landlord demand as `new_job` or `renewal` once property/certificate history is known.
 
 This means a job can exist before all landlord data is complete. The product should support an **Awaiting Landlord Input** state without blocking the engineer from creating the job or starting prep.
 
 Manual engineer creation remains mandatory because real work arrives through phone calls, WhatsApp, email, repeat clients, urgent visits, and site conversations.
+
+The dashboard should reflect both sides of the loop:
+- **Inbox:** landlord-submitted requests waiting for the engineer to schedule, accept, or dismiss.
+- **Outbox:** engineer-created jobs where a pre-fill link has been sent and the app is waiting for landlord response.
 
 ### Pillar 2: The Property Vault
 
@@ -343,6 +350,16 @@ Every job should have a shareable public token from creation time. The token sup
 
 Engineer-created jobs may be created before all landlord data exists. In that case the job should support an **Awaiting Landlord Input** lifecycle state and a tokenized data-collection link, rather than forcing the engineer to enter unknown landlord/tenant/access details at creation time.
 
+Target shared job status model:
+- `draft` — engineer started creating the job but Step 1 is incomplete
+- `awaiting_landlord` — shell job exists and a scoped pre-fill link has been sent
+- `prepared` — Step 1 data is complete from engineer input or landlord pre-fill
+- `in_progress` — engineer has opened the wizard on site
+- `issued` — required certificate PDFs/signatures are generated but not delivered
+- `delivered` — certificate/invoice bundle has been sent and the property record is updated
+
+This status model should be introduced additively around current job status/prep logic so existing `/jobs/new`, dashboard prepare/start, and certificate issuance flows keep working during migration.
+
 ### Job Request
 
 A job request is landlord-triggered demand that may become a job, or landlord-supplied context that completes an engineer-created job.
@@ -358,6 +375,8 @@ Current compatibility direction:
 - renewal requests from `/j/[publicToken]` or future `/p/[public_token]` use `source_job_id` and/or `property_id`
 - engineer-created jobs awaiting landlord input should reuse `jobs.public_token` and either a `job_requests` row linked by `source_job_id`/`scheduled_job_id`, or narrow job status fields added later
 - do not create a duplicate job when landlord data arrives; merge it into the existing job context where the engineer initiated the work first
+- public `/request` should not become a browseable engineer marketplace. The landlord supplies the engineer contact they already know, or uses the engineer's personal `/request/[slug]` link.
+- if the requested engineer is not registered, the pending job/request should carry a `claim_token`. The token, not email matching, is the canonical link between the pending work and the engineer account created later.
 
 Suggested schema:
 
@@ -410,6 +429,19 @@ When an engineer creates a job from a request:
 
 Public standalone requests from `/request-job` also use `job_requests`. They should not rely on a public list of CertNow engineers. The landlord supplies the engineer they already want to contact, including engineer name, company, email, phone, and Gas Safe number if known. Confirmation emails are sent when `RESEND_API_KEY` and `EMAIL_FROM` are configured.
 
+Planned job-level fields for the complete lifecycle:
+- `status`
+- `pending_engineer_email` or equivalent pending contact field
+- `claim_token`
+- `entry_point`
+- `cert_types`
+- `property_id`
+- `source_job_request_id`
+
+Planned profile fields:
+- `request_link_slug`
+- invoice default pricing, preferably through existing `profiles.standard_rates`; a single `default_rate` can be a fallback but should not replace CP12/boiler/combo rates.
+
 ### Engineer Profile
 
 The engineer profile is persistent engineer/company identity.
@@ -441,70 +473,83 @@ Payment setup is bank-transfer-first for MVP using existing profile bank fields.
 
 ---
 
-## Job Creation Entry Points
+## Job Lifecycle Entry Points
 
-CertNow must support the current three entry points plus the new outbound-push lifecycle state.
+CertNow has three entry points into one shared lifecycle.
 
-### 1. Engineer Manual Job Creation
+### 1. Landlord Public Request
 
-Engineers must retain the ability to create jobs manually via `/jobs/new` at all times.
+The landlord starts from `/request` target route. Current app compatibility route is `/request-job`.
 
-This is used when an engineer receives work through:
-- phone
-- WhatsApp
-- email
-- repeat clients
-- urgent visits
-- any situation where no landlord request exists
+The landlord enters the engineer contact they already know. This should be an exact/contact-based lookup or direct contact submission, not a public browseable engineer directory.
 
-The new job request system must not replace manual job creation.
+If the engineer is already on CertNow:
+- create a job/request assigned to that engineer
+- write landlord/property/tenant/preferred-date data into `job_fields` and/or `job_requests`
+- set the job/request to `prepared` when enough Step 1 data exists
+- notify the engineer
+- send landlord confirmation
 
-### 2. Landlord New Job Request
+If the engineer is not yet on CertNow:
+- still accept the landlord request
+- store pending engineer contact in `pending_engineer_email` or equivalent field
+- generate a `claim_token`
+- send the engineer an invite link like `/signup?claim=[claim_token]`
+- attach the pending job to the new engineer account by token after signup, regardless of which email the engineer registers with
 
-Used when a landlord requests work for a property with no existing CertNow certificate history.
+The claim token is the canonical link. Email matching is not sufficient.
 
-Classification:
+### 2. Engineer-Created Job
 
-`request_type = 'new_job'`
+The engineer starts from `/jobs/new`, exactly as today.
 
-This is new work, not a renewal.
+Path A: engineer fills everything. They select/create the client, optionally reuse saved property details, fill Step 1, and the job becomes `prepared`.
 
-### 3. Landlord Renewal Request
+Path B: engineer requests landlord pre-fill. They create/select the client and cert type, then send a scoped pre-fill link. The shell job becomes `awaiting_landlord` until the landlord submits.
 
-Used when a landlord requests work for an existing property with previous CP12/certificate history, especially where a certificate is due soon, within 60 days of expiry, or already expired.
+Escape hatch: while a job is `awaiting_landlord`, the dashboard must expose **Fill in myself**. This returns the job to manual prep without losing any already-collected data.
 
-Classification:
+This path preserves the real-world engineer workflow for phone, WhatsApp, repeat clients, urgent callouts, and jobs created while already on site.
 
-`request_type = 'renewal'`
+### 3. Engineer Personal Request Link
 
-### Converged Job Creation
+Each engineer should eventually have a permanent personal request URL:
 
-All three flows should converge into the same `/jobs/new` route:
-- Manual engineer-created job = low/no prefill
-- New job request = medium prefill
-- Renewal request = high prefill
+`/request/[request_link_slug]`
 
-Prefill should come from:
+The engineer can share this from settings, WhatsApp, business cards, van QR, or Google Business profile.
+
+The landlord fills the same pre-fill form, but no engineer lookup is needed because the slug scopes the request to that engineer. The request/job appears in the engineer dashboard inbox as prepared or pending schedule.
+
+### Request Type Classification
+
+Entry point is not the same as request type.
+
+Once property/certificate history is known:
+- `request_type = 'new_job'` when no previous CertNow CP12/certificate history exists
+- `request_type = 'renewal'` when previous CP12/certificate history exists and the certificate is due soon, within 60 days of expiry, or already expired
+
+### Convergence
+
+All entry points converge once the job is `prepared`.
+
+Step 1 is prefilled and editable. From there the engineer continues through the same CP12/boiler/GWN wizard and completion flow.
+
+Prefill depth:
+- Engineer manual job = low/no prefill
+- Landlord public request = medium prefill
+- Renewal/property-linked request = high prefill
+- Engineer personal link = medium prefill, already scoped to the engineer
+
+Prefill sources:
 - job request
+- scoped pre-fill form
 - property record
 - previous jobs/certificates
 - landlord/client record
 - engineer profile
 
-Engineers must always be able to edit prefilled values before creating the job.
-
-### 4. Engineer Outbound Data Collection
-
-Used when the engineer creates the job first but does not yet have full landlord, tenant, or access details.
-
-This is not a separate job creation route. It is a lifecycle state on top of manual `/jobs/new`:
-- engineer creates or prepares the job
-- job receives `jobs.public_token` immediately
-- engineer sends a tokenized landlord input link
-- landlord completes only missing contact/tenant/access details
-- AutofillAgent merges the submitted values back into the existing job/wizard context
-
-This supports bidirectional entry without creating duplicate jobs or forcing landlords into accounts.
+Engineers must always be able to edit prefilled values before issuing documents.
 
 ---
 
@@ -626,6 +671,45 @@ This supports bidirectional entry without creating duplicate jobs or forcing lan
 
 ---
 
+## Job-As-Container Completion Model
+
+The **job** is the unit of completion, not an individual certificate.
+
+A job may produce:
+- CP12 certificate
+- boiler service record
+- gas warning notice
+- invoice
+- public landlord/property record update
+
+Target flow:
+- engineer completes the relevant wizard/signatures
+- engineer lands on `/jobs/[jobId]/complete`
+- the page lists required and completed documents for that job
+- required items block sending until resolved
+- once resolved, engineer continues to `/jobs/[jobId]/deliver`
+- delivery decides only who receives the bundle and how it is sent
+
+`/jobs/[jobId]/complete` should compute required items from:
+- `jobs.cert_types` for CP12 and boiler service
+- unsafe appliance flags in `job_fields` for Gas Warning Notice
+- final `certificates` rows for completed documents
+
+This replaces the long-term need for one-off prompts such as "continue to boiler service?" or deep-linking away from CP12 into Gas Warning Notice. Those current paths can remain during transition, but new work should move toward the checklist model.
+
+Sub-wizards opened from `/jobs/[jobId]/complete` must redirect back to `/jobs/[jobId]/complete` on completion. The engineer should stay inside job context until the whole bundle is ready.
+
+`/jobs/[jobId]/deliver` should show:
+- read-only list of certificate PDFs being sent
+- inline invoice editing
+- recipient choice: landlord, tenant, or both
+- send method: Resend email or WhatsApp
+- one Send CTA for the complete bundle
+
+The delivery screen should not ask the engineer to manually choose individual documents. All documents attached to the job are included automatically according to recipient rules.
+
+---
+
 ## Dashboard Direction
 
 The dashboard is intentionally **not** a completed-jobs homepage anymore.
@@ -637,9 +721,8 @@ It focuses on:
 - **Operational milestones**
 - **Prep state** for upcoming jobs so engineers know whether a visit is ready to start
 - **Job type visibility** so cards show labels such as CP12 or Gas Warning Notice, not only name/address
-- **Pending job requests** from landlord public links, shown above upcoming jobs
-- **Standalone landlord requests** from `/request-job`, shown in the same request section
-- **Awaiting Landlord Input** jobs created by engineers where a tokenized link has been sent for missing landlord/tenant/access details
+- **Request inbox** for landlord-submitted demand from `/request-job`, future `/request`, `/request/[slug]`, public job links, and property links
+- **Awaiting landlord outbox** for engineer-created jobs where a tokenized pre-fill link has been sent for missing landlord/tenant/access details
 
 Dashboard actions currently separate intent:
 - `+ New Job` and `Create invoice` live in the welcome/header actions
@@ -648,6 +731,12 @@ Dashboard actions currently separate intent:
 Pending request cards should be labelled by `request_type`:
 - **New Job Request**
 - **Renewal Request**
+
+Inbox cards should also indicate source where useful:
+- public request
+- personal request link
+- public job/property renewal
+- unregistered engineer claim flow
 
 Each request card should show:
 - property address
@@ -670,6 +759,23 @@ Actions:
 - request id
 
 Creating the job from this prefill updates the request status to `scheduled` and stores `source_job_request_id` on the new job fields.
+
+Outbox cards for `awaiting_landlord` jobs should show:
+- job/client/property summary
+- landlord contact used for the link
+- sent timestamp
+- copy/resend link action
+- **Fill in myself** escape hatch
+
+Status badges should use the shared lifecycle language:
+- Draft
+- Awaiting landlord
+- Prepared
+- In progress
+- Issued
+- Delivered
+
+New engineers with no prepared work may see a prompt to create a job or send a pre-fill request to a landlord. This is an activation nudge, not a requirement.
 
 Completed work is still best explored from **Jobs** and the relevant **client page**, not from a heavy dashboard archive.
 
@@ -762,6 +868,13 @@ Keep existing logic:
 - triggered from unsafe CP12 appliance checks
 - do not merge with boiler service follow-up logic
 
+Target completion model:
+- unsafe CP12 appliance flags (`ID` or `AR`) make Gas Warning Notice a required row on `/jobs/[jobId]/complete`
+- engineer opens the warning notice wizard from that checklist
+- warning notice is prefilled from job/property/landlord/appliance defect data
+- on issue, PDF is final/immutable and engineer returns to `/jobs/[jobId]/complete`
+- remedial follow-up job is created when the warning notice is issued, not at delivery
+
 Urgency reminder rows should be scheduled from unsafe CP12 appliance checks:
 - Immediately Dangerous: engineer follow-up within 48 hours
 - At Risk: engineer follow-up at 14 days
@@ -775,6 +888,8 @@ Known future gap:
 ## Invoice Flow Direction
 
 Invoices already exist, but should be better integrated into certificate completion.
+
+Current near-term flow may still prompt after CP12 PDF generation:
 
 At CP12 Step 4 completion, after PDF generation, prompt:
 
@@ -795,6 +910,13 @@ The button should open `/invoices/new` pre-populated with:
 The engineer should not need to navigate separately to invoices after completing a certificate. Existing standalone invoice routes must remain available.
 
 One job should have one invoice. The invoice line items are derived from all certificates on the job, such as CP12 plus linked boiler service. Prices remain editable and can use last-used prices as suggestions.
+
+Target flow once `/jobs/[jobId]/complete` and `/jobs/[jobId]/deliver` exist:
+- no mid-wizard boiler-service prompt is needed for jobs with `cert_types = ['cp12', 'boiler_service']`
+- boiler service appears as a required completion row after CP12 if missing
+- invoice editing happens inline on `/jobs/[jobId]/deliver`
+- clean case is one Send tap with no separate invoice navigation
+- existing `/invoices` routes remain available for standalone/admin invoice work
 
 Handover Bundle target:
 - certificate generation remains handled by the existing certificate PDF pipeline
@@ -878,10 +1000,15 @@ Before real users, run a deliberate RLS/storage audit across:
 - Job creation: `/jobs/new`
 - Public property link: `/p/[public_token]` (planned; no login)
 - Public job link: `/j/[publicToken]` (implemented direction; no login)
-- Public standalone landlord request: `/request-job`
+- Public standalone landlord request: `/request-job` today; target `/request`
+- Engineer personal request link: `/request/[request_link_slug]` (planned; no login)
+- Engineer-created job pre-fill link: `/prefill/[jobId]?token=...` (planned; no login)
+- Public property record: `/record/[token]` (planned; no login)
 - Reminder cron: `/api/cron/reminders`
 - Certificate wizard: `/wizard/create/[certificateType]`
 - Job record/detail: `/jobs/[id]`
+- Job completion checklist: `/jobs/[jobId]/complete` (planned; auth required)
+- Job delivery bundle: `/jobs/[jobId]/deliver` (planned; auth required)
 - Canonical document preview: `/jobs/[id]/pdf`
 - Clients: `/clients`, `/clients/[id]`
 - Documents: `/documents`
@@ -896,6 +1023,8 @@ Before real users, run a deliberate RLS/storage audit across:
 - Job address persistence is in `src/server/address-service.ts`
 - Property records and `job_requests` are the planned persistence layer for public links, request classification, renewal/new-job intake, and property-first compliance history.
 - Job context generation should merge request, property, prior certificate/job, client/landlord, and engineer profile context before `/jobs/new` or certificate wizards consume it.
+- Planned lifecycle actions live around `src/server/jobs.ts`: create pending landlord-request jobs, claim pending jobs by `claim_token`, create shell jobs, send pre-fill links, submit public pre-fill forms, compute job completion state, mark in-progress/issued/delivered states, and create remedial follow-up jobs.
+- Planned delivery bundle actions live around `src/server/certificates.ts` and invoice helpers: build the delivery bundle from existing `certificates` rows and invoice data, then send via Resend or WhatsApp without moving PDF rendering out of the current renderers.
 
 ### PDF/Document Layer
 - CP12 AcroForm renderer: `src/server/pdf/renderCp12Certificate.ts`
@@ -929,12 +1058,17 @@ Success criteria for future implementation:
 - manual engineer job creation still works without a request
 - first-time landlord job requests create `new_job` requests
 - renewal landlord requests create `renewal` requests
+- public `/request` and current `/request-job` do not become a browseable engineer marketplace
+- unregistered-engineer requests can be claimed by `claim_token`, not email matching
+- dashboard has a clear request inbox and awaiting-landlord outbox
+- engineers can always use **Fill in myself** when a landlord pre-fill link is not answered
 - public property links show compliance status without login
 - property-first compliance history becomes the source of renewal truth
 - engineer-side autofill reduces repeated typing
 - duplicate follow-ups are avoided
 - CP12 remains the main compliance lifecycle anchor
 - boiler service follow-ups are linked correctly to CP12 where relevant
+- job completion/delivery treats the job as the container for all certificates and invoice
 - landlord links create acquisition/retention loops without taking control away from engineers
 
 ---

@@ -80,11 +80,22 @@ export type BoilerServiceChecks = {
   low_combustion_ratio: string;
   flue_gas_temp_c: string;
   system_pressure_bar: string;
+  appliance_operating_correctly: string;
   appliance_conforms_standards: string;
+  appliance_controls_checked: string;
+  appliance_flueing_safe: string;
+  appliance_ventilation_safe: string;
+  emission_combustion_test: string;
+  burner_pressure_gas_rate_correct: string;
+  tightness_test_carried_out: string;
+  boiler_working_correctly: string;
   cylinder_condition_checked: string;
+  programmer_controls_working: string;
   co_alarm_fitted: string;
+  appliance_safe: string;
   all_functional_parts_available: string;
   warm_air_grills_working: string;
+  pipework_free_from_leaks: string;
   magnetic_filter_fitted: string;
   water_quality_acceptable: string;
   warning_notice_explained: string;
@@ -126,7 +137,7 @@ export const BOILER_SERVICE_EVIDENCE_CARDS: {
 }[] = [
   {
     key: 'boiler',
-    title: 'Boiler details',
+    title: 'Appliance details',
     fields: [
       { key: 'boiler_make', label: 'Boiler make' },
       { key: 'boiler_model', label: 'Boiler model' },
@@ -211,11 +222,22 @@ export const BOILER_SERVICE_DEMO_CHECKS: BoilerServiceChecks = {
   low_combustion_ratio: '0.0007',
   flue_gas_temp_c: '68',
   system_pressure_bar: '1.2',
+  appliance_operating_correctly: 'yes',
   appliance_conforms_standards: 'yes',
+  appliance_controls_checked: 'yes',
+  appliance_flueing_safe: 'yes',
+  appliance_ventilation_safe: 'yes',
+  emission_combustion_test: 'yes',
+  burner_pressure_gas_rate_correct: 'yes',
+  tightness_test_carried_out: 'yes',
+  boiler_working_correctly: 'yes',
   cylinder_condition_checked: 'yes',
+  programmer_controls_working: 'yes',
   co_alarm_fitted: 'yes',
+  appliance_safe: 'yes',
   all_functional_parts_available: 'yes',
   warm_air_grills_working: 'yes',
+  pipework_free_from_leaks: 'yes',
   magnetic_filter_fitted: 'yes',
   water_quality_acceptable: 'yes',
   warning_notice_explained: 'no',

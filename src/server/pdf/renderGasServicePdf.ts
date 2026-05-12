@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type PDFTextField } from 'pdf-lib';
 
 export type ApplianceInput = {
   description: string;
@@ -190,8 +190,8 @@ type SignaturePlacement = {
 };
 
 const GAS_SERVICE_SIGNATURE_PLACEMENTS: Record<'engineer' | 'customer', SignaturePlacement> = {
-  engineer: { x: 307, y: 47, width: 165, height: 22 },
-  customer: { x: 499, y: 47, width: 165, height: 22 },
+  engineer: { x: 280, y: 47, width: 165, height: 22 },
+  customer: { x: 472, y: 47, width: 165, height: 22 },
 };
 
 type ApplianceTableFieldNames = {
@@ -264,6 +264,99 @@ function normalizeText(value: string | undefined) {
   return String(value).trim();
 }
 
+function getTextFieldSize(field: PDFTextField) {
+  const fieldWithWidgets = field as PDFTextField & {
+    acroField?: {
+      getWidgets?: () => Array<{
+        getRectangle: () => { width?: number; height?: number };
+      }>;
+    };
+  };
+  const [widget] = fieldWithWidgets.acroField?.getWidgets?.() ?? [];
+  const rectangle = widget?.getRectangle();
+  return {
+    width: rectangle?.width ?? 220,
+    height: rectangle?.height ?? 30,
+  };
+}
+
+function wrapTextToWidth(text: string, font: PDFFont, fontSize: number, maxWidth: number) {
+  const lines: string[] = [];
+  const paragraphs = text.split(/\r?\n/);
+
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      if (paragraphIndex < paragraphs.length - 1) lines.push('');
+      return;
+    }
+
+    let line = '';
+    words.forEach((word) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+        line = candidate;
+        return;
+      }
+
+      if (line) lines.push(line);
+
+      if (font.widthOfTextAtSize(word, fontSize) <= maxWidth) {
+        line = word;
+        return;
+      }
+
+      let chunk = '';
+      for (const char of word) {
+        const nextChunk = `${chunk}${char}`;
+        if (font.widthOfTextAtSize(nextChunk, fontSize) > maxWidth && chunk) {
+          lines.push(chunk);
+          chunk = char;
+        } else {
+          chunk = nextChunk;
+        }
+      }
+      line = chunk;
+    });
+
+    if (line) lines.push(line);
+  });
+
+  return lines;
+}
+
+function fitTextToField(field: PDFTextField, text: string, font: PDFFont) {
+  const { width, height } = getTextFieldSize(field);
+  const maxWidth = Math.max(20, width - 4);
+  const maxHeight = Math.max(8, height - 4);
+  const maxFontSize = 8;
+  const minFontSize = 2.2;
+
+  field.enableMultiline();
+  field.disableScrolling();
+
+  for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.2) {
+    const lineHeight = fontSize * 1.12;
+    const lines = wrapTextToWidth(text, font, fontSize, maxWidth);
+    if (lines.length * lineHeight <= maxHeight) {
+      field.setFontSize(fontSize);
+      field.setText(lines.join('\n'));
+      return;
+    }
+  }
+
+  const lineHeight = minFontSize * 1.12;
+  const lines = wrapTextToWidth(text, font, minFontSize, maxWidth);
+  const maxLines = Math.max(1, Math.floor(maxHeight / lineHeight));
+  const fittedLines = lines.slice(0, maxLines);
+  if (lines.length > maxLines && fittedLines.length) {
+    const lastIndex = fittedLines.length - 1;
+    fittedLines[lastIndex] = `${fittedLines[lastIndex].slice(0, Math.max(0, fittedLines[lastIndex].length - 1))}...`;
+  }
+  field.setFontSize(minFontSize);
+  field.setText(fittedLines.join('\n'));
+}
+
 async function fetchAssetBytes(url: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
   if (!url) return null;
   try {
@@ -299,8 +392,10 @@ function setTextIfExists(params: {
   fieldName: FormFieldName;
   value: string | undefined;
   filledFields: Set<string>;
+  fitToField?: boolean;
+  font?: PDFFont;
 }) {
-  const { form, fieldNames, fieldName, value, filledFields } = params;
+  const { form, fieldNames, fieldName, value, filledFields, fitToField, font } = params;
   const text = normalizeText(value);
   if (!text) return;
   const entries = toFieldNameList(fieldName);
@@ -309,7 +404,11 @@ function setTextIfExists(params: {
     if (!fieldNames.has(name) || filledFields.has(name)) return;
     try {
       const field = form.getTextField(name);
-      field.setText(text);
+      if (fitToField && font) {
+        fitTextToField(field, text, font);
+      } else {
+        field.setText(text);
+      }
       filledFields.add(name);
     } catch {
       // Ignore missing fields or non-text fields.
@@ -513,6 +612,8 @@ export async function renderGasServicePdf(input: RenderGasServiceInput): Promise
         fieldName: GAS_SERVICE_FORM_FIELD_NAMES[key],
         value: fields[key],
         filledFields,
+        fitToField: key === 'engineerComments',
+        font: regularFont,
       });
     });
 

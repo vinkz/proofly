@@ -111,11 +111,22 @@ const EMPTY_CHECKS: BoilerServiceChecks = {
   low_combustion_ratio: '',
   flue_gas_temp_c: '',
   system_pressure_bar: '',
+  appliance_operating_correctly: '',
   appliance_conforms_standards: '',
+  appliance_controls_checked: '',
+  appliance_flueing_safe: '',
+  appliance_ventilation_safe: '',
+  emission_combustion_test: '',
+  burner_pressure_gas_rate_correct: '',
+  tightness_test_carried_out: '',
+  boiler_working_correctly: '',
   cylinder_condition_checked: '',
+  programmer_controls_working: '',
   co_alarm_fitted: '',
+  appliance_safe: '',
   all_functional_parts_available: '',
   warm_air_grills_working: '',
+  pipework_free_from_leaks: '',
   magnetic_filter_fitted: '',
   water_quality_acceptable: '',
   warning_notice_explained: '',
@@ -661,6 +672,21 @@ export function BoilerServiceWizard({
     }
   };
 
+  const copyJobAddressToCustomerAddress = () => {
+    setJobInfo((prev) => ({
+      ...prev,
+      customer_address_line1: jobAddress.job_address_line1,
+      customer_address_line2: jobAddress.job_address_line2,
+      customer_city: jobAddress.job_address_city,
+      customer_postcode: jobAddress.job_postcode,
+    }));
+    setCustomerAddressSearchQuery(jobAddress.job_address_line1);
+    setCustomerAddressSearchError(null);
+    setSelectedCustomerAddressMatchId(null);
+    setCustomerAddressSuggestions([]);
+    pushToast({ title: 'Job address copied to landlord details', variant: 'success' });
+  };
+
   const handleJobInfoNext = () => {
     startTransition(async () => {
       try {
@@ -708,7 +734,7 @@ export function BoilerServiceWizard({
       try {
         await saveBoilerServiceDetails({ jobId, data: details });
         setStep(3);
-        pushToast({ title: 'Saved boiler details', variant: 'success' });
+        pushToast({ title: 'Saved appliance details', variant: 'success' });
       } catch (error) {
         pushToast({
           title: 'Could not save details',
@@ -848,29 +874,8 @@ export function BoilerServiceWizard({
       });
     };
 
-  const checkItems: Array<{ key: keyof BoilerServiceChecks; label: string }> = [
-    { key: 'service_visual_inspection', label: 'Visual inspection' },
-    { key: 'service_flue_checked', label: 'Flue checked' },
-    { key: 'service_ventilation_checked', label: 'Ventilation checked' },
-    { key: 'service_controls_checked', label: 'Controls checked' },
-    { key: 'service_leaks_checked', label: 'Leaks checked' },
-  ];
-  const additionalTemplateChecks: Array<{ key: keyof BoilerServiceChecks; label: string }> = [
-    { key: 'appliance_conforms_standards', label: 'Appliance conforms to standards' },
-    { key: 'cylinder_condition_checked', label: 'Cylinder condition checked' },
-    { key: 'co_alarm_fitted', label: 'CO alarm fitted' },
-    { key: 'all_functional_parts_available', label: 'All functional parts available' },
-    { key: 'warm_air_grills_working', label: 'Warm air grills working' },
-    { key: 'magnetic_filter_fitted', label: 'Magnetic filter fitted' },
-    { key: 'water_quality_acceptable', label: 'Water quality acceptable' },
-    { key: 'warning_notice_explained', label: 'Warning notice explained' },
-    { key: 'appliance_replacement_recommended', label: 'Appliance replacement recommended' },
-    { key: 'system_improvements_recommended', label: 'System improvements recommended' },
-  ];
-  const hasValue = (value: string) => value.trim().length > 0;
-  const readingsFields: Array<keyof BoilerServiceChecks> = [
-    'operating_pressure_mbar',
-    'heat_input',
+  type CheckItem = { key: keyof BoilerServiceChecks; label: string };
+  const combustionReadingFields: Array<keyof BoilerServiceChecks> = [
     'high_combustion_co_ppm',
     'high_combustion_co2',
     'high_combustion_ratio',
@@ -878,22 +883,75 @@ export function BoilerServiceWizard({
     'low_combustion_co2',
     'low_combustion_ratio',
   ];
-  const checksCompleted = checkItems.filter((item) => hasValue(checks[item.key] ?? '')).length;
-  const templateChecksCompleted = additionalTemplateChecks.filter((item) => hasValue(checks[item.key] ?? '')).length;
-  const readingsCompleted = readingsFields.filter((key) => hasValue(checks[key] ?? '')).length;
+  const safetyCheckItems: CheckItem[] = [
+    { key: 'appliance_operating_correctly', label: 'Appliance is operating correctly' },
+    { key: 'appliance_conforms_standards', label: 'Appliance conforms to current safety standards' },
+    { key: 'appliance_controls_checked', label: 'Appliance/system controls checked/adjusted' },
+    { key: 'appliance_flueing_safe', label: 'Appliance flueing is safe' },
+    { key: 'appliance_ventilation_safe', label: 'Appliance ventilation is safe' },
+    { key: 'emission_combustion_test', label: 'Emission/combustion test' },
+    { key: 'burner_pressure_gas_rate_correct', label: 'Burner pressure/Gas rate correct' },
+    { key: 'tightness_test_carried_out', label: 'Tightness Test carried out' },
+  ];
+  const safetyNumericFields: Array<keyof BoilerServiceChecks> = ['operating_pressure_mbar', 'heat_input'];
+  const centralHeatingCheckItems: CheckItem[] = [
+    { key: 'boiler_working_correctly', label: 'Boiler/warm air working correctly' },
+    { key: 'cylinder_condition_checked', label: 'Hot water cylinder condition checked and in working order' },
+    { key: 'programmer_controls_working', label: 'Programmer/timer and all controls working correctly' },
+    { key: 'warm_air_grills_working', label: 'Warm air/outlet grills working correctly' },
+    { key: 'pipework_free_from_leaks', label: 'Visible pipework free from water leaks' },
+    { key: 'magnetic_filter_fitted', label: 'Magnetic System filter fitted (where applicable)' },
+    { key: 'water_quality_acceptable', label: 'Water quality/level of inhibitor acceptable' },
+  ];
+  const adviceCheckItems: CheckItem[] = [
+    { key: 'co_alarm_fitted', label: 'Approved audible Carbon Monoxide Alarm fitted*' },
+    { key: 'appliance_safe', label: 'Appliance is safe' },
+    { key: 'all_functional_parts_available', label: 'All functional parts available' },
+  ];
+  const hasValue = (value: string) => value.trim().length > 0;
+  const renderCheckToggle = (item: CheckItem) => (
+    <div
+      key={item.key}
+      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/30 bg-white/80 px-3 py-2 shadow-sm"
+    >
+      <p className="text-sm font-semibold text-muted">{item.label}</p>
+      <div className="flex gap-2">
+        {['yes', 'no'].map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            onClick={() => setCheckValue(item.key, choice)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              checks[item.key] === choice ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-gray-700'
+            }`}
+          >
+            {choice.toUpperCase()}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+  const readingsCompleted = combustionReadingFields.filter((key) => hasValue(checks[key] ?? '')).length;
+  const safetyCompleted =
+    safetyCheckItems.filter((item) => hasValue(checks[item.key] ?? '')).length +
+    safetyNumericFields.filter((key) => hasValue(checks[key] ?? '')).length;
+  const safetyTotal = safetyCheckItems.length + safetyNumericFields.length;
+  const centralHeatingCompleted = centralHeatingCheckItems.filter((item) => hasValue(checks[item.key] ?? '')).length;
+  const adviceCompleted = adviceCheckItems.filter((item) => hasValue(checks[item.key] ?? '')).length;
   const summaryComplete = hasValue(checks.service_summary) && hasValue(checks.recommendations);
   const defectsActive = (checks.defects_found ?? '') === 'yes';
   const defectsComplete = !defectsActive || hasValue(checks.defects_details ?? '');
   const nextServiceComplete = hasValue(checks.next_service_due ?? '');
   const sectionOrder = [
-    { key: 'checks', complete: checksCompleted === checkItems.length },
-    { key: 'template', complete: templateChecksCompleted === additionalTemplateChecks.length },
-    { key: 'readings', complete: readingsCompleted === readingsFields.length },
+    { key: 'readings', complete: readingsCompleted === combustionReadingFields.length },
+    { key: 'safety', complete: safetyCompleted === safetyTotal },
+    { key: 'central-heating', complete: centralHeatingCompleted === centralHeatingCheckItems.length },
+    { key: 'advice', complete: adviceCompleted === adviceCheckItems.length },
     { key: 'summary', complete: summaryComplete },
     { key: 'defects', complete: defectsComplete },
     { key: 'next', complete: nextServiceComplete },
   ];
-  const firstIncompleteKey = sectionOrder.find((section) => !section.complete)?.key ?? 'checks';
+  const firstIncompleteKey = sectionOrder.find((section) => !section.complete)?.key ?? 'readings';
 
   return (
     <>
@@ -906,7 +964,7 @@ export function BoilerServiceWizard({
           actions={
             <div className="flex justify-end">
               <Button className="rounded-full px-6" onClick={handleJobInfoNext} disabled={isPending}>
-                Next → Boiler details
+                Next → Appliance details
               </Button>
             </div>
           }
@@ -1056,7 +1114,23 @@ export function BoilerServiceWizard({
             </Card>
             <Card className="border border-white/10">
               <CardHeader>
-                <CardTitle className="text-lg text-muted">Client / Landlord</CardTitle>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="text-lg text-muted">Client / Landlord</CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full text-xs"
+                    onClick={copyJobAddressToCustomerAddress}
+                    disabled={
+                      !jobAddress.job_address_line1 &&
+                      !jobAddress.job_address_line2 &&
+                      !jobAddress.job_address_city &&
+                      !jobAddress.job_postcode
+                    }
+                  >
+                    Copy job address details
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div>
@@ -1166,7 +1240,7 @@ export function BoilerServiceWizard({
           </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleJobInfoNext} disabled={isPending}>
-              Next → Boiler details
+              Next → Appliance details
             </Button>
           </div>
         </WizardLayout>
@@ -1176,8 +1250,8 @@ export function BoilerServiceWizard({
         <WizardLayout
           step={offsetStep(2)}
           total={totalSteps}
-          title="Boiler details"
-          status="Boiler profile"
+          title="Appliance details"
+          status="Appliance profile"
           onBack={goBackOneStep}
           actions={
             <div className="flex justify-end">
@@ -1238,76 +1312,13 @@ export function BoilerServiceWizard({
             </div>
           ) : null}
           <CollapsibleSection
-            title="Service checks"
-            subtitle={`${checksCompleted}/${checkItems.length} complete`}
-            defaultOpen={firstIncompleteKey === 'checks'}
-          >
-            <div className="space-y-2">
-              {checkItems.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/30 bg-white/80 px-3 py-2 shadow-sm"
-                >
-                  <p className="text-sm font-semibold text-muted">{item.label}</p>
-                  <div className="flex gap-2">
-                    {['yes', 'no'].map((choice) => (
-                      <button
-                        key={choice}
-                        type="button"
-                        onClick={() => setCheckValue(item.key, choice)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          checks[item.key] === choice
-                            ? 'bg-[var(--accent)] text-white'
-                            : 'bg-[var(--muted)] text-gray-700'
-                        }`}
-                      >
-                        {choice.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Additional template fields"
-            subtitle={`${templateChecksCompleted}/${additionalTemplateChecks.length} complete`}
-            defaultOpen={firstIncompleteKey === 'template'}
-          >
-            <div className="space-y-2">
-              {additionalTemplateChecks.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/30 bg-white/80 px-3 py-2 shadow-sm"
-                >
-                  <p className="text-sm font-semibold text-muted">{item.label}</p>
-                  <div className="flex gap-2">
-                    {['yes', 'no'].map((choice) => (
-                      <button
-                        key={choice}
-                        type="button"
-                        onClick={() => setCheckValue(item.key, choice)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          checks[item.key] === choice
-                            ? 'bg-[var(--accent)] text-white'
-                            : 'bg-[var(--muted)] text-gray-700'
-                        }`}
-                      >
-                        {choice.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title="Readings"
-            subtitle={`${readingsCompleted}/${readingsFields.length} captured`}
+            title="High / Low combustion readings"
+            subtitle={`${readingsCompleted}/${combustionReadingFields.length} captured`}
             defaultOpen={firstIncompleteKey === 'readings'}
           >
+            <div className="mb-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">FGA readings</p>
+            </div>
             <div className="mb-3 grid gap-2 sm:grid-cols-2">
               <FgaAutofillInline
                 jobId={jobId}
@@ -1334,10 +1345,10 @@ export function BoilerServiceWizard({
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <UnitNumberInput
-                label="Operating pressure"
-                value={checks.operating_pressure_mbar}
-                onChange={(value) => setCheckValue('operating_pressure_mbar', value)}
-                unit="mbar"
+                label="High CO"
+                value={checks.high_combustion_co_ppm}
+                onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
+                unit="ppm"
                 labelAction={
                   <Cp12VoiceReadings
                     jobId={jobId}
@@ -1345,18 +1356,6 @@ export function BoilerServiceWizard({
                     onApply={applyVoiceReadings}
                   />
                 }
-              />
-              <UnitNumberInput
-                label="Heat input"
-                value={checks.heat_input}
-                onChange={(value) => setCheckValue('heat_input', value)}
-                unit="kW"
-              />
-              <UnitNumberInput
-                label="High CO"
-                value={checks.high_combustion_co_ppm}
-                onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
-                unit="ppm"
               />
               <UnitNumberInput
                 label="High CO2"
@@ -1389,6 +1388,54 @@ export function BoilerServiceWizard({
                 unit="ratio"
               />
             </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Safety Checks"
+            subtitle={`${safetyCompleted}/${safetyTotal} complete`}
+            defaultOpen={firstIncompleteKey === 'safety'}
+          >
+            <div className="space-y-2">
+              {safetyCheckItems.slice(0, 3).map(renderCheckToggle)}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <UnitNumberInput
+                  label="Operating pressure"
+                  value={checks.operating_pressure_mbar}
+                  onChange={(value) => setCheckValue('operating_pressure_mbar', value)}
+                  unit="mbar"
+                  labelAction={
+                    <Cp12VoiceReadings
+                      jobId={jobId}
+                      buttonClassName="h-7 rounded-full px-3 text-[11px]"
+                      onApply={applyVoiceReadings}
+                    />
+                  }
+                />
+                <UnitNumberInput
+                  label="Heat Input"
+                  value={checks.heat_input}
+                  onChange={(value) => setCheckValue('heat_input', value)}
+                  unit="kW"
+                />
+              </div>
+              {safetyCheckItems.slice(3).map(renderCheckToggle)}
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Central heating Annual Service and Plumbing Inspection"
+            subtitle={`${centralHeatingCompleted}/${centralHeatingCheckItems.length} complete`}
+            defaultOpen={firstIncompleteKey === 'central-heating'}
+          >
+            <div className="space-y-2">{centralHeatingCheckItems.map(renderCheckToggle)}</div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title="Appliance / system advice and recommendations"
+            subtitle={`${adviceCompleted}/${adviceCheckItems.length} complete`}
+            defaultOpen={firstIncompleteKey === 'advice'}
+          >
+            <div className="space-y-2">{adviceCheckItems.map(renderCheckToggle)}</div>
           </CollapsibleSection>
 
           </div>
