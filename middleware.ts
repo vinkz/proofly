@@ -21,7 +21,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const response = NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-current-path', request.nextUrl.pathname);
+  requestHeaders.set('x-current-search', request.nextUrl.search);
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) return response;

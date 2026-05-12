@@ -376,7 +376,9 @@ Current compatibility direction:
 - engineer-created jobs awaiting landlord input should reuse `jobs.public_token` and either a `job_requests` row linked by `source_job_id`/`scheduled_job_id`, or narrow job status fields added later
 - do not create a duplicate job when landlord data arrives; merge it into the existing job context where the engineer initiated the work first
 - public `/request` should not become a browseable engineer marketplace. The landlord supplies the engineer contact they already know, or uses the engineer's personal `/request/[slug]` link.
-- if the requested engineer is not registered, the pending job/request should carry a `claim_token`. The token, not email matching, is the canonical link between the pending work and the engineer account created later.
+- if the requested engineer is not registered, the pending work should remain in `job_requests` with `claim_token` and `claim_token_expires_at`. The token, not email matching, is the canonical link between the pending request and the engineer account created later.
+- do not expose `jobs` through unauthenticated RLS policies keyed by `claim_token`. Public claim and pre-fill flows should be validated server-side by route handlers/server actions, then write only the allowed request/job fields.
+- `supabase/migrations/20260512100000_minimum_job_lifecycle_fields.sql` is the minimum lifecycle migration for the first milestone. It extends job statuses additively, adds `job_entry_point`, `jobs.entry_point`, `jobs.cert_types`, scoped pre-fill token columns, `job_requests` claim metadata, and `profiles.request_link_slug`/`default_rate`.
 
 Suggested schema:
 
@@ -429,16 +431,30 @@ When an engineer creates a job from a request:
 
 Public standalone requests from `/request-job` also use `job_requests`. They should not rely on a public list of CertNow engineers. The landlord supplies the engineer they already want to contact, including engineer name, company, email, phone, and Gas Safe number if known. Confirmation emails are sent when `RESEND_API_KEY` and `EMAIL_FROM` are configured.
 
-Planned job-level fields for the complete lifecycle:
+Transactional email delivery is centralized in `src/lib/resend.ts`. Use `sendEmail()` for landlord request confirmations, engineer notifications, claim invites, scoped pre-fill links, reminders, certificate delivery, and invoice/bundle delivery. Feature code should not hand-roll Resend `fetch` calls.
+
+Entry-point server action foundation now exists:
+- `src/server/job-requests.ts` handles `createPendingJobRequest`, `submitStandaloneLandlordJobRequest`, `claimPendingJobRequest`, and `sendJobRequestNotification`.
+- `createPendingJobRequest` tries to resolve an existing engineer profile by exact company email, Gas Safe number, or company phone. If found, it assigns the `job_requests` row to that engineer so it appears on their dashboard. If not found, it stores `claim_token`/`claim_token_expires_at` on `job_requests` and emails a signup claim link.
+- `src/server/jobs.ts` handles `markJobPrepared` and `submitPrefillForm` for engineer-owned jobs that receive landlord data through scoped pre-fill links.
+- `createSoloJob` marks jobs created from `requestId` as `prepared`, links `jobs.job_request_id`, stores lifecycle `entry_point`/`cert_types`, and schedules the request by setting `job_requests.scheduled_job_id`.
+
+Minimum job-level fields for the complete lifecycle:
 - `status`
-- `pending_engineer_email` or equivalent pending contact field
-- `claim_token`
 - `entry_point`
 - `cert_types`
 - `property_id`
-- `source_job_request_id`
+- `job_request_id`
+- `data_collection_status`
+- `landlord_input_requested_at`
+- `landlord_input_submitted_at`
+- `prefill_token`
+- `prefill_token_expires_at`
+- `handover_sent_at`
 
-Planned profile fields:
+Nullable `jobs.pending_engineer_email`, `jobs.claim_token`, and `jobs.claim_token_expires_at` exist only as placeholders for owned/claimed-job transitions. For the current unregistered-engineer path, use `job_requests.claim_token` instead of creating ownerless jobs.
+
+Minimum profile fields:
 - `request_link_slug`
 - invoice default pricing, preferably through existing `profiles.standard_rates`; a single `default_rate` can be a fallback but should not replace CP12/boiler/combo rates.
 
@@ -492,12 +508,13 @@ If the engineer is already on CertNow:
 
 If the engineer is not yet on CertNow:
 - still accept the landlord request
-- store pending engineer contact in `pending_engineer_email` or equivalent field
-- generate a `claim_token`
+- store pending engineer contact in `job_requests.pending_engineer_email`
+- generate `job_requests.claim_token` and `job_requests.claim_token_expires_at`
 - send the engineer an invite link like `/signup?claim=[claim_token]`
 - attach the pending job to the new engineer account by token after signup, regardless of which email the engineer registers with
 
 The claim token is the canonical link. Email matching is not sufficient.
+For the first milestone, do not create ownerless `jobs` for unregistered engineers. Keep the request in `job_requests` until claim/signup, then create or schedule the prepared job under the authenticated engineer.
 
 ### 2. Engineer-Created Job
 
@@ -995,7 +1012,7 @@ Before real users, run a deliberate RLS/storage audit across:
 
 ### Frontend Routes
 - Landing page: `/`
-- Auth: `/login`, `/signup/step1`, `/signup/step2`, reset/password routes, `/auth/callback`
+- Auth: `/login`, `/signup/step1`, `/signup/step2`, `/signup/step3`, reset/password routes, `/auth/callback`; profile completion happens in protected `/onboarding?step=N`
 - Operational home: `/dashboard`
 - Job creation: `/jobs/new`
 - Public property link: `/p/[public_token]` (planned; no login)
@@ -1016,14 +1033,17 @@ Before real users, run a deliberate RLS/storage audit across:
 
 ### Server/Data Layer
 - Supabase auth/session helpers live in `src/lib/supabaseServer.ts` and `src/lib/supabaseClient.ts`
+- Shared transactional email helper lives in `src/lib/resend.ts`; it wraps Resend using `RESEND_API_KEY` and `EMAIL_FROM`, returns `sent | not_configured | failed`, and is covered by `tests/resend.test.ts`.
 - Profile/onboarding defaults live around `src/server/profile.ts`
 - Job creation/list/detail/report logic is in `src/server/jobs.ts`
 - Certificate persistence/PDF orchestration is in `src/server/certificates.ts`
 - Client/customer resolution is in `src/server/clients.ts` and `src/server/customer-service.ts`
 - Job address persistence is in `src/server/address-service.ts`
 - Property records and `job_requests` are the planned persistence layer for public links, request classification, renewal/new-job intake, and property-first compliance history.
+- Minimum lifecycle schema support is in `supabase/migrations/20260512100000_minimum_job_lifecycle_fields.sql`; deploy it before implementing the next request-to-prepared-job server actions.
 - Job context generation should merge request, property, prior certificate/job, client/landlord, and engineer profile context before `/jobs/new` or certificate wizards consume it.
-- Planned lifecycle actions live around `src/server/jobs.ts`: create pending landlord-request jobs, claim pending jobs by `claim_token`, create shell jobs, send pre-fill links, submit public pre-fill forms, compute job completion state, mark in-progress/issued/delivered states, and create remedial follow-up jobs.
+- Lifecycle actions follow ownership. `src/server/job-requests.ts` owns pending landlord requests for existing or unregistered engineers, request notifications, and token claims from `job_requests.claim_token`. `src/server/jobs.ts` owns authenticated engineer jobs: create shell jobs, send pre-fill links, submit scoped pre-fill data into existing jobs, mark jobs prepared, compute job completion state, mark in-progress/issued/delivered states, and create remedial follow-up jobs.
+- Public token validation for claim/pre-fill should happen inside server actions or route handlers using authenticated/service-role Supabase clients after explicit token checks. Do not solve this by granting anonymous reads on `jobs`.
 - Planned delivery bundle actions live around `src/server/certificates.ts` and invoice helpers: build the delivery bundle from existing `certificates` rows and invoice data, then send via Resend or WhatsApp without moving PDF rendering out of the current renderers.
 
 ### PDF/Document Layer
@@ -1060,6 +1080,8 @@ Success criteria for future implementation:
 - renewal landlord requests create `renewal` requests
 - public `/request` and current `/request-job` do not become a browseable engineer marketplace
 - unregistered-engineer requests can be claimed by `claim_token`, not email matching
+- unregistered-engineer requests remain in `job_requests` until claim/signup, avoiding ownerless `jobs`
+- public claim/pre-fill token handling stays server-side and does not require anonymous `jobs` RLS
 - dashboard has a clear request inbox and awaiting-landlord outbox
 - engineers can always use **Fill in myself** when a landlord pre-fill link is not answered
 - public property links show compliance status without login

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { isOnboardingProfileComplete } from '@/lib/onboarding-profile';
+import { getOnboardingStep, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
 import { supabaseServerAction } from '@/lib/supabaseServer';
 
 export async function GET(request: Request) {
@@ -48,7 +48,9 @@ export async function GET(request: Request) {
   const onboardingComplete = (profile as { onboarding_complete?: boolean | null } | null)?.onboarding_complete ?? null;
   const needsOnboarding = onboardingComplete !== true || !isOnboardingProfileComplete(profile as Record<string, unknown>);
   const safeNext = typeof next === 'string' && next.startsWith('/') && !next.startsWith('//') ? next : null;
-  const destination = needsOnboarding ? '/onboarding' : safeNext ?? '/dashboard';
+  const destination = needsOnboarding
+    ? `/onboarding?step=${getOnboardingStep(profile as Record<string, unknown>)}`
+    : safeNext ?? '/dashboard';
 
   return NextResponse.redirect(new URL(destination, url.origin));
 }

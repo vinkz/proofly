@@ -8,6 +8,15 @@ import { Select } from '@/components/ui/select';
 import { submitStandaloneLandlordJobRequest } from '@/server/job-requests';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
 
+export type ScopedRequestEngineer = {
+  requestLinkSlug: string;
+  engineerName: string | null;
+  companyName: string | null;
+  email: string | null;
+  phone: string | null;
+  gasSafeNumber: string | null;
+};
+
 type AddressLookupApiResponse = {
   suggestions?: AddressLookupSuggestion[];
   address?: {
@@ -41,7 +50,7 @@ const composeAddress = (...parts: Array<string | null | undefined>) =>
     .filter(Boolean)
     .join(', ');
 
-export function RequestJobClient() {
+export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: ScopedRequestEngineer | null }) {
   const [isSubmitting, startSubmitTransition] = useTransition();
   const [isAddressLookupPending, setIsAddressLookupPending] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
@@ -164,9 +173,13 @@ export function RequestJobClient() {
               tenantPhone: String(form.get('sitePhone') ?? ''),
               accessNotes: '',
               preferredDates: preferredDate,
-              engineerName: String(form.get('engineerName') ?? ''),
-              engineerEmail: String(form.get('engineerEmail') ?? ''),
-              engineerPhone: String(form.get('engineerPhone') ?? ''),
+              engineerName: scopedEngineer
+                ? scopedEngineer.engineerName ?? scopedEngineer.companyName ?? 'Selected engineer'
+                : String(form.get('engineerName') ?? ''),
+              engineerEmail: scopedEngineer?.email ?? String(form.get('engineerEmail') ?? ''),
+              engineerPhone: scopedEngineer?.phone ?? String(form.get('engineerPhone') ?? ''),
+              engineerGasSafeNumber: scopedEngineer?.gasSafeNumber ?? '',
+              engineerRequestSlug: scopedEngineer?.requestLinkSlug ?? '',
             });
             const confirmation =
               result.landlordConfirmationStatus === 'sent'
@@ -298,14 +311,30 @@ export function RequestJobClient() {
 
       <div className="rounded-3xl bg-white/70 p-4">
         <p className="text-sm font-semibold">Engineer you want to contact</p>
-        <p className="mt-1 text-xs text-slate-600">
-          Add your engineer’s details. CertNow will send them the request if an email is supplied.
-        </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <Input name="engineerName" required placeholder="Engineer name" className="rounded-2xl bg-white" />
-          <Input name="engineerEmail" type="email" placeholder="Engineer email" className="rounded-2xl bg-white" />
-          <Input name="engineerPhone" type="tel" placeholder="Engineer phone" className="rounded-2xl bg-white" />
-        </div>
+        {scopedEngineer ? (
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-950">
+              {scopedEngineer.companyName ?? scopedEngineer.engineerName ?? 'Your selected engineer'}
+            </p>
+            <p className="mt-1">
+              {[scopedEngineer.engineerName, scopedEngineer.gasSafeNumber ? `Gas Safe ${scopedEngineer.gasSafeNumber}` : null]
+                .filter(Boolean)
+                .join(' / ')}
+            </p>
+            <p className="mt-1">{[scopedEngineer.email, scopedEngineer.phone].filter(Boolean).join(' / ')}</p>
+          </div>
+        ) : (
+          <>
+            <p className="mt-1 text-xs text-slate-600">
+              Add your engineer’s details. CertNow will send them the request if an email is supplied.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <Input name="engineerName" required placeholder="Engineer name" className="rounded-2xl bg-white" />
+              <Input name="engineerEmail" type="email" placeholder="Engineer email" className="rounded-2xl bg-white" />
+              <Input name="engineerPhone" type="tel" placeholder="Engineer phone" className="rounded-2xl bg-white" />
+            </div>
+          </>
+        )}
       </div>
 
       <Button type="submit" disabled={isSubmitting} className="rounded-full">

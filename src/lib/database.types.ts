@@ -493,10 +493,157 @@ export type Database = {
           },
         ]
       }
+      job_requests: {
+        Row: {
+          access_notes: string | null
+          assigned_engineer_id: string | null
+          cert_types: string[]
+          claim_token: string | null
+          claim_token_expires_at: string | null
+          claimed_at: string | null
+          created_at: string
+          engineer_company: string | null
+          engineer_email: string | null
+          engineer_gas_safe_number: string | null
+          engineer_name: string | null
+          engineer_notification_status: string | null
+          engineer_phone: string | null
+          entry_point: Database["public"]["Enums"]["job_entry_point"]
+          id: string
+          job_type: string
+          landlord_address_line1: string | null
+          landlord_address_line2: string | null
+          landlord_city: string | null
+          landlord_confirmation_status: string | null
+          landlord_email: string | null
+          landlord_name: string | null
+          landlord_phone: string | null
+          landlord_postcode: string | null
+          missing_fields: Json
+          pending_engineer_email: string | null
+          preferred_dates: string | null
+          property_address: string | null
+          property_id: string | null
+          property_postcode: string | null
+          request_type: string
+          scheduled_job_id: string | null
+          source: string
+          source_job_id: string | null
+          status: string
+          submitted_at: string | null
+          tenant_name: string | null
+          tenant_phone: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          access_notes?: string | null
+          assigned_engineer_id?: string | null
+          cert_types?: string[]
+          claim_token?: string | null
+          claim_token_expires_at?: string | null
+          claimed_at?: string | null
+          created_at?: string
+          engineer_company?: string | null
+          engineer_email?: string | null
+          engineer_gas_safe_number?: string | null
+          engineer_name?: string | null
+          engineer_notification_status?: string | null
+          engineer_phone?: string | null
+          entry_point?: Database["public"]["Enums"]["job_entry_point"]
+          id?: string
+          job_type?: string
+          landlord_address_line1?: string | null
+          landlord_address_line2?: string | null
+          landlord_city?: string | null
+          landlord_confirmation_status?: string | null
+          landlord_email?: string | null
+          landlord_name?: string | null
+          landlord_phone?: string | null
+          landlord_postcode?: string | null
+          missing_fields?: Json
+          pending_engineer_email?: string | null
+          preferred_dates?: string | null
+          property_address?: string | null
+          property_id?: string | null
+          property_postcode?: string | null
+          request_type: string
+          scheduled_job_id?: string | null
+          source?: string
+          source_job_id?: string | null
+          status?: string
+          submitted_at?: string | null
+          tenant_name?: string | null
+          tenant_phone?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          access_notes?: string | null
+          assigned_engineer_id?: string | null
+          cert_types?: string[]
+          claim_token?: string | null
+          claim_token_expires_at?: string | null
+          claimed_at?: string | null
+          created_at?: string
+          engineer_company?: string | null
+          engineer_email?: string | null
+          engineer_gas_safe_number?: string | null
+          engineer_name?: string | null
+          engineer_notification_status?: string | null
+          engineer_phone?: string | null
+          entry_point?: Database["public"]["Enums"]["job_entry_point"]
+          id?: string
+          job_type?: string
+          landlord_address_line1?: string | null
+          landlord_address_line2?: string | null
+          landlord_city?: string | null
+          landlord_confirmation_status?: string | null
+          landlord_email?: string | null
+          landlord_name?: string | null
+          landlord_phone?: string | null
+          landlord_postcode?: string | null
+          missing_fields?: Json
+          pending_engineer_email?: string | null
+          preferred_dates?: string | null
+          property_address?: string | null
+          property_id?: string | null
+          property_postcode?: string | null
+          request_type?: string
+          scheduled_job_id?: string | null
+          source?: string
+          source_job_id?: string | null
+          status?: string
+          submitted_at?: string | null
+          tenant_name?: string | null
+          tenant_phone?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_requests_scheduled_job_id_fkey"
+            columns: ["scheduled_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_requests_source_job_id_fkey"
+            columns: ["source_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jobs: {
         Row: {
           address: string | null
           certificate_type: string | null
+          cert_types: string[]
+          claim_token: string | null
+          claim_token_expires_at: string | null
           client_id: string | null
           client_name: string | null
           client_ref: string | null
@@ -504,12 +651,22 @@ export type Database = {
           completed_at: string | null
           contact_id: string | null
           created_at: string | null
+          data_collection_status: string
           engineer_signature_path: string | null
+          entry_point: Database["public"]["Enums"]["job_entry_point"]
+          handover_sent_at: string | null
           id: string
           job_code: string | null
+          job_request_id: string | null
           job_type: string | null
+          landlord_input_requested_at: string | null
+          landlord_input_submitted_at: string | null
           notes: string | null
           parent_job_id: string | null
+          pending_engineer_email: string | null
+          prefill_token: string | null
+          prefill_token_expires_at: string | null
+          property_id: string | null
           public_token: string
           scheduled_for: string | null
           source_appliance_id: string | null
@@ -524,6 +681,9 @@ export type Database = {
         Insert: {
           address?: string | null
           certificate_type?: string | null
+          cert_types?: string[]
+          claim_token?: string | null
+          claim_token_expires_at?: string | null
           client_id?: string | null
           client_name?: string | null
           client_ref?: string | null
@@ -531,12 +691,22 @@ export type Database = {
           completed_at?: string | null
           contact_id?: string | null
           created_at?: string | null
+          data_collection_status?: string
           engineer_signature_path?: string | null
+          entry_point?: Database["public"]["Enums"]["job_entry_point"]
+          handover_sent_at?: string | null
           id?: string
           job_code?: string | null
+          job_request_id?: string | null
           job_type?: string | null
+          landlord_input_requested_at?: string | null
+          landlord_input_submitted_at?: string | null
           notes?: string | null
           parent_job_id?: string | null
+          pending_engineer_email?: string | null
+          prefill_token?: string | null
+          prefill_token_expires_at?: string | null
+          property_id?: string | null
           public_token?: string
           scheduled_for?: string | null
           source_appliance_id?: string | null
@@ -551,6 +721,9 @@ export type Database = {
         Update: {
           address?: string | null
           certificate_type?: string | null
+          cert_types?: string[]
+          claim_token?: string | null
+          claim_token_expires_at?: string | null
           client_id?: string | null
           client_name?: string | null
           client_ref?: string | null
@@ -558,12 +731,22 @@ export type Database = {
           completed_at?: string | null
           contact_id?: string | null
           created_at?: string | null
+          data_collection_status?: string
           engineer_signature_path?: string | null
+          entry_point?: Database["public"]["Enums"]["job_entry_point"]
+          handover_sent_at?: string | null
           id?: string
           job_code?: string | null
+          job_request_id?: string | null
           job_type?: string | null
+          landlord_input_requested_at?: string | null
+          landlord_input_submitted_at?: string | null
           notes?: string | null
           parent_job_id?: string | null
+          pending_engineer_email?: string | null
+          prefill_token?: string | null
+          prefill_token_expires_at?: string | null
+          property_id?: string | null
           public_token?: string
           scheduled_for?: string | null
           source_appliance_id?: string | null
@@ -588,6 +771,20 @@ export type Database = {
             columns: ["contact_id"]
             isOneToOne: false
             referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_job_request_id_fkey"
+            columns: ["job_request_id"]
+            isOneToOne: false
+            referencedRelation: "job_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
             referencedColumns: ["id"]
           },
           {
@@ -650,6 +847,59 @@ export type Database = {
           },
         ]
       }
+      properties: {
+        Row: {
+          address_line1: string | null
+          address_line2: string | null
+          client_id: string | null
+          created_at: string
+          id: string
+          name: string | null
+          phone: string | null
+          postcode: string | null
+          public_token: string
+          town: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          address_line1?: string | null
+          address_line2?: string | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string | null
+          phone?: string | null
+          postcode?: string | null
+          public_token?: string
+          town?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          address_line1?: string | null
+          address_line2?: string | null
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          name?: string | null
+          phone?: string | null
+          postcode?: string | null
+          public_token?: string
+          town?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "properties_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           bank_account_name: string | null
@@ -659,11 +909,14 @@ export type Database = {
           certifications: string[] | null
           company_name: string | null
           company_address: string | null
+          company_address_line2: string | null
           company_postcode: string | null
+          company_town: string | null
           company_phone: string | null
           company_email: string | null
           created_at: string | null
           date_of_birth: string | null
+          default_rate: number | null
           default_engineer_id: string | null
           default_engineer_name: string | null
           full_name: string | null
@@ -673,6 +926,8 @@ export type Database = {
           onboarding_complete: boolean | null
           plan_tier: string | null
           profession: string | null
+          request_link_slug: string | null
+          standard_rates: Json
           trade_type: string | null
           trade_types: string[] | null
         }
@@ -684,11 +939,14 @@ export type Database = {
           certifications?: string[] | null
           company_name?: string | null
           company_address?: string | null
+          company_address_line2?: string | null
           company_postcode?: string | null
+          company_town?: string | null
           company_phone?: string | null
           company_email?: string | null
           created_at?: string | null
           date_of_birth?: string | null
+          default_rate?: number | null
           default_engineer_id?: string | null
           default_engineer_name?: string | null
           full_name?: string | null
@@ -698,6 +956,8 @@ export type Database = {
           onboarding_complete?: boolean | null
           plan_tier?: string | null
           profession?: string | null
+          request_link_slug?: string | null
+          standard_rates?: Json
           trade_type?: string | null
           trade_types?: string[] | null
         }
@@ -709,11 +969,14 @@ export type Database = {
           certifications?: string[] | null
           company_name?: string | null
           company_address?: string | null
+          company_address_line2?: string | null
           company_postcode?: string | null
+          company_town?: string | null
           company_phone?: string | null
           company_email?: string | null
           created_at?: string | null
           date_of_birth?: string | null
+          default_rate?: number | null
           default_engineer_id?: string | null
           default_engineer_name?: string | null
           full_name?: string | null
@@ -723,6 +986,8 @@ export type Database = {
           onboarding_complete?: boolean | null
           plan_tier?: string | null
           profession?: string | null
+          request_link_slug?: string | null
+          standard_rates?: Json
           trade_type?: string | null
           trade_types?: string[] | null
         }
@@ -1009,6 +1274,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      job_entry_point: "landlord_request" | "engineer_created" | "engineer_link"
       job_item_status: "pending" | "pass" | "fail"
       job_type: "general" | "safety_check" | "service" | "breakdown" | "installation" | "warning_notice"
       job_status:
@@ -1017,6 +1283,11 @@ export type Database = {
         | "awaiting_signatures"
         | "awaiting_report"
         | "completed"
+        | "awaiting_landlord"
+        | "prepared"
+        | "in_progress"
+        | "issued"
+        | "delivered"
       template_item_type: "toggle" | "text" | "number" | "note"
     }
     CompositeTypes: {
@@ -1145,6 +1416,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      job_entry_point: ["landlord_request", "engineer_created", "engineer_link"],
       job_item_status: ["pending", "pass", "fail"],
       job_status: [
         "draft",
@@ -1152,6 +1424,11 @@ export const Constants = {
         "awaiting_signatures",
         "awaiting_report",
         "completed",
+        "awaiting_landlord",
+        "prepared",
+        "in_progress",
+        "issued",
+        "delivered",
       ],
       template_item_type: ["toggle", "text", "number", "note"],
     },

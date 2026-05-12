@@ -66,7 +66,7 @@ export async function signUpWithPassword(payload: unknown) {
   const body = CredentialsSchema.parse(payload);
   const sb = await createAuthedSupabaseClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
-  const emailRedirectTo = siteUrl ? `${siteUrl}/auth/callback?next=${encodeURIComponent('/onboarding')}` : undefined;
+  const emailRedirectTo = siteUrl ? `${siteUrl}/auth/callback?next=${encodeURIComponent('/signup/step2')}` : undefined;
 
   const { data, error } = await sb.auth.signUp({
     email: body.email,

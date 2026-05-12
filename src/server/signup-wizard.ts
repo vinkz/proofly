@@ -4,6 +4,12 @@ import { z } from 'zod';
 
 import { supabaseServerAction, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import { TRADE_TYPES } from '@/lib/profile-options';
+import {
+  ENGINEER_ID_CARD_NUMBER_MESSAGE,
+  ENGINEER_ID_CARD_NUMBER_PATTERN,
+  GAS_SAFE_NUMBER_MESSAGE,
+  GAS_SAFE_NUMBER_PATTERN,
+} from '@/lib/onboarding-profile';
 import type { TablesInsert } from '@/lib/database.types';
 
 const defaultTrades = TRADE_TYPES as unknown as string[];
@@ -21,8 +27,8 @@ const SignupWizardSchema = z.object({
   company_postcode: z.string().min(3, 'Company postcode required'),
   company_phone: z.string().min(6, 'Company phone required'),
   default_engineer_name: z.string().min(2, 'Engineer name required'),
-  default_engineer_id: z.string().min(2, 'Engineer ID card number required'),
-  gas_safe_number: z.string().min(2, 'Gas Safe number required'),
+  default_engineer_id: z.string().trim().regex(ENGINEER_ID_CARD_NUMBER_PATTERN, ENGINEER_ID_CARD_NUMBER_MESSAGE),
+  gas_safe_number: z.string().trim().regex(GAS_SAFE_NUMBER_PATTERN, GAS_SAFE_NUMBER_MESSAGE),
   trade_types: z
     .array(z.string())
     .default(defaultTrades)
@@ -97,7 +103,7 @@ export async function completeSignupWizard(payload: unknown) {
     company_address: body.company_address ?? null,
     company_postcode: body.company_postcode ?? null,
     company_phone: body.company_phone ?? null,
-    default_engineer_name: body.default_engineer_name ?? null,
+    default_engineer_name: body.default_engineer_name ?? body.full_name,
     default_engineer_id: body.default_engineer_id ?? null,
     gas_safe_number: body.gas_safe_number ?? null,
     onboarding_complete: true,

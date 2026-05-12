@@ -65,7 +65,7 @@ export default function SignupStep1Page() {
           description: 'Continue to complete your profile.',
           variant: 'success',
         });
-        router.push('/onboarding');
+        router.push('/signup/step2');
       } catch (error) {
         pushToast({
           title: 'Could not create account',
@@ -86,7 +86,7 @@ export default function SignupStep1Page() {
       </div>
 
       <div className="space-y-4 rounded-2xl border border-white/60 bg-white/90 p-6 shadow-xl">
-        <GoogleAuthButton label="Continue with Google" nextPath="/onboarding" />
+        <GoogleAuthButton label="Continue with Google" nextPath="/signup/step2" />
 
         <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
           <span className="h-px flex-1 bg-slate-200" />

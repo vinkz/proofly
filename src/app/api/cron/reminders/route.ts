@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { isEmailConfigured, sendEmail } from '@/lib/resend';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
 
 type ReminderRow = {
@@ -115,28 +116,6 @@ const reminderCopy = (kind: string | null, address: string, publicUrl: string, e
   };
 };
 
-async function sendEmail(input: { to: string; subject: string; text: string }): Promise<boolean> {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim();
-  if (!apiKey || !from) return false;
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to: input.to,
-      subject: input.subject,
-      text: input.text,
-    }),
-  });
-
-  return response.ok;
-}
-
 export async function GET(request: Request) {
   const configuredSecret = process.env.CRON_SECRET?.trim();
   if (configuredSecret) {
@@ -146,7 +125,7 @@ export async function GET(request: Request) {
     }
   }
 
-  if (!process.env.RESEND_API_KEY?.trim() || !process.env.EMAIL_FROM?.trim()) {
+  if (!isEmailConfigured()) {
     return NextResponse.json({
       processed: 0,
       sent: 0,
@@ -218,13 +197,13 @@ export async function GET(request: Request) {
     }
 
     const copy = reminderCopy(reminder.kind, address || 'the property', publicUrl, engineerName);
-    const ok = await sendEmail({
+    const delivery = await sendEmail({
       to: recipient,
       subject: copy.subject,
       text: copy.text,
     });
 
-    if (ok) {
+    if (delivery.status === 'sent') {
       results.sent += 1;
       sentIds.push(reminder.id);
     } else {

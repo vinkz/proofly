@@ -4,9 +4,11 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 
+import { sendEmail } from '@/lib/resend';
 import { supabaseServerReadOnly, supabaseServerServiceRole, getSupabaseUser } from '@/lib/supabaseServer';
 
 const RequestIdSchema = z.string().uuid();
+const ClaimTokenSchema = z.string().uuid();
 const StandaloneJobRequestSchema = z.object({
   landlordName: z.string().min(2).max(120),
   landlordEmail: z.string().email(),
@@ -25,6 +27,8 @@ const StandaloneJobRequestSchema = z.object({
   engineerName: z.string().min(2).max(120),
   engineerEmail: z.string().email().optional().or(z.literal('')),
   engineerPhone: z.string().max(80).optional().default(''),
+  engineerGasSafeNumber: z.string().max(40).optional().default(''),
+  engineerRequestSlug: z.string().max(120).optional().default(''),
 });
 
 type UntypedQuery = {
@@ -40,7 +44,14 @@ type UntypedQuery = {
 type UntypedSupabase = { from: (table: string) => UntypedQuery };
 const fromJobRequests = (sb: unknown) => (sb as UntypedSupabase).from('job_requests');
 
-type EmailDeliveryStatus = 'sent' | 'not_configured' | 'failed';
+type EngineerProfileMatch = {
+  id: string;
+  companyName: string | null;
+  engineerName: string | null;
+  email: string | null;
+  phone: string | null;
+  gasSafeNumber: string | null;
+};
 
 const getSiteUrl = () =>
   (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(/\/$/, '');
@@ -61,6 +72,78 @@ const formatJobType = (jobType: string) => {
 };
 
 const cleanText = (value: string | null | undefined) => String(value ?? '').trim();
+
+const normalizeCertTypes = (jobType: string) => {
+  if (jobType === 'both') return ['cp12', 'boiler_service'];
+  if (jobType === 'service') return ['boiler_service'];
+  return ['cp12'];
+};
+
+const addDaysIso = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString();
+};
+
+const normalizeProfileMatch = (row: Record<string, unknown> | null | undefined): EngineerProfileMatch | null => {
+  if (!row || typeof row.id !== 'string') return null;
+  return {
+    id: row.id,
+    companyName: typeof row.company_name === 'string' ? row.company_name : null,
+    engineerName:
+      typeof row.default_engineer_name === 'string'
+        ? row.default_engineer_name
+        : typeof row.full_name === 'string'
+          ? row.full_name
+          : null,
+    email: typeof row.company_email === 'string' ? row.company_email : null,
+    phone: typeof row.company_phone === 'string' ? row.company_phone : null,
+    gasSafeNumber: typeof row.gas_safe_number === 'string' ? row.gas_safe_number : null,
+  };
+};
+
+async function findEngineerProfileByColumn(
+  sb: unknown,
+  column: 'company_email' | 'company_phone' | 'gas_safe_number' | 'request_link_slug',
+  value: string,
+) {
+  if (!value) return null;
+  const { data, error } = await (sb as UntypedSupabase)
+    .from('profiles')
+    .select('id, full_name, default_engineer_name, company_name, company_email, company_phone, gas_safe_number, request_link_slug')
+    .eq(column, value)
+    .maybeSingle();
+  if (error) {
+    if (['42P01', '42703', 'PGRST204'].includes(error.code ?? '')) return null;
+    throw new Error(error.message);
+  }
+  return normalizeProfileMatch(data as Record<string, unknown> | null);
+}
+
+async function findEngineerProfileForRequest(
+  sb: unknown,
+  request: {
+    engineerEmail: string;
+    engineerPhone: string;
+    engineerGasSafeNumber?: string;
+    engineerRequestSlug?: string;
+  },
+) {
+  const slugMatch = await findEngineerProfileByColumn(sb, 'request_link_slug', cleanText(request.engineerRequestSlug));
+  if (slugMatch) return slugMatch;
+
+  const emailMatch = await findEngineerProfileByColumn(sb, 'company_email', request.engineerEmail.toLowerCase());
+  if (emailMatch) return emailMatch;
+
+  const gasSafeMatch = await findEngineerProfileByColumn(
+    sb,
+    'gas_safe_number',
+    cleanText(request.engineerGasSafeNumber),
+  );
+  if (gasSafeMatch) return gasSafeMatch;
+
+  return findEngineerProfileByColumn(sb, 'company_phone', request.engineerPhone);
+}
 
 function renderEmailShell(input: {
   preheader: string;
@@ -112,32 +195,6 @@ function renderEmailShell(input: {
     </main>
   </body>
 </html>`;
-}
-
-async function sendTransactionalEmail(input: { to: string; subject: string; text: string; html?: string }): Promise<EmailDeliveryStatus> {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim();
-  if (!apiKey || !from) return 'not_configured';
-
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from,
-        to: input.to,
-        subject: input.subject,
-        text: input.text,
-        html: input.html,
-      }),
-    });
-    return response.ok ? 'sent' : 'failed';
-  } catch {
-    return 'failed';
-  }
 }
 
 export type DashboardJobRequest = {
@@ -249,6 +306,125 @@ export async function dismissJobRequest(requestId: string) {
   return { ok: true };
 }
 
+export async function claimPendingJobRequest(claimToken: string) {
+  const parsed = ClaimTokenSchema.parse(claimToken);
+  const readClient = await supabaseServerReadOnly();
+  const user = await getSupabaseUser(readClient);
+  if (!user) throw new Error('Unauthorized');
+
+  const admin = await supabaseServerServiceRole();
+  const { data, error } = await fromJobRequests(admin)
+    .select('id, status, claim_token_expires_at, claimed_at')
+    .eq('claim_token', parsed)
+    .maybeSingle();
+  if (error) {
+    if (error.code === '42P01') throw new Error('Job requests are not configured yet.');
+    throw new Error(error.message);
+  }
+  const request = data as Record<string, unknown> | null;
+  if (!request || typeof request.id !== 'string') throw new Error('Request not found');
+  if (request.status && request.status !== 'pending') throw new Error('Request is no longer pending');
+  if (request.claimed_at) throw new Error('Request has already been claimed');
+  const expiresAt = typeof request.claim_token_expires_at === 'string'
+    ? new Date(request.claim_token_expires_at).getTime()
+    : 0;
+  if (!expiresAt || expiresAt < Date.now()) throw new Error('Request claim link has expired');
+
+  const { error: updateErr } = await fromJobRequests(admin)
+    .update({
+      assigned_engineer_id: user.id,
+      user_id: user.id,
+      pending_engineer_email: null,
+      claimed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', request.id);
+  if (updateErr) throw new Error(updateErr.message);
+
+  revalidatePath('/dashboard');
+  return { ok: true, requestId: request.id };
+}
+
+export async function getEngineerRequestProfileBySlug(slug: string) {
+  const parsed = z.string().min(3).max(120).parse(slug).trim();
+  const admin = await supabaseServerServiceRole();
+  const profile = await findEngineerProfileByColumn(admin, 'request_link_slug', parsed);
+  if (!profile) return null;
+  return {
+    requestLinkSlug: parsed,
+    engineerName: profile.engineerName,
+    companyName: profile.companyName,
+    email: profile.email,
+    phone: profile.phone,
+    gasSafeNumber: profile.gasSafeNumber,
+  };
+}
+
+export async function sendJobRequestNotification(requestId: string) {
+  const parsed = RequestIdSchema.parse(requestId);
+  const readClient = await supabaseServerReadOnly();
+  const user = await getSupabaseUser(readClient);
+  if (!user) throw new Error('Unauthorized');
+
+  const admin = await supabaseServerServiceRole();
+  const { data, error } = await fromJobRequests(admin)
+    .select('*')
+    .eq('id', parsed)
+    .maybeSingle();
+  if (error) {
+    if (error.code === '42P01') throw new Error('Job requests are not configured yet.');
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error('Request not found');
+  const row = data as Record<string, unknown>;
+  const assignedEngineerId = typeof row.assigned_engineer_id === 'string' ? row.assigned_engineer_id : null;
+  const ownerId = typeof row.user_id === 'string' ? row.user_id : null;
+  if (assignedEngineerId !== user.id && ownerId !== user.id) throw new Error('Unauthorized');
+
+  const request = normalizeRequest(row);
+  if (!request.engineerEmail) return { ok: true, status: 'not_configured' as const };
+
+  const href = `${getSiteUrl()}/jobs/new?requestId=${request.id}`;
+  const status = (await sendEmail({
+    to: request.engineerEmail,
+    subject: 'New landlord job request from CertNow',
+    text: [
+      `${request.landlordName ?? 'A landlord'} submitted a gas compliance job request.`,
+      '',
+      `Property: ${request.propertyAddress ?? 'Not provided'}`,
+      `Landlord phone: ${request.landlordPhone ?? 'Not provided'}`,
+      `Preferred dates: ${request.preferredDates ?? 'Not provided'}`,
+      '',
+      `Open prefilled job: ${href}`,
+    ].join('\n'),
+    html: renderEmailShell({
+      preheader: `${request.landlordName ?? 'A landlord'} sent a gas compliance job request.`,
+      title: 'New landlord job request',
+      intro: 'Open the request to create a job with Step 1 prefilled.',
+      rows: [
+        { label: 'Landlord', value: request.landlordName },
+        { label: 'Landlord phone', value: request.landlordPhone },
+        { label: 'Landlord email', value: request.landlordEmail },
+        { label: 'Property', value: request.propertyAddress },
+        { label: 'Work needed', value: formatJobType(request.jobType) },
+        { label: 'Tenant', value: request.tenantName || 'Not provided' },
+        { label: 'Access notes', value: request.accessNotes || 'Not provided' },
+        { label: 'Preferred dates', value: request.preferredDates || 'Not provided' },
+      ],
+      button: { label: 'Open prefilled job', href },
+    }),
+  })).status;
+
+  const { error: updateErr } = await fromJobRequests(admin)
+    .update({
+      engineer_notification_status: status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', request.id);
+  if (updateErr) throw new Error(updateErr.message);
+  return { ok: true, status };
+}
+
 export async function getJobRequestPrefill(requestId: string): Promise<JobRequestPrefill | null> {
   const parsed = RequestIdSchema.parse(requestId);
   const readClient = await supabaseServerReadOnly();
@@ -286,7 +462,7 @@ export async function getJobRequestPrefill(requestId: string): Promise<JobReques
   };
 }
 
-export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof StandaloneJobRequestSchema>) {
+export async function createPendingJobRequest(input: z.input<typeof StandaloneJobRequestSchema>) {
   const parsedRequest = StandaloneJobRequestSchema.parse(input);
   const request = {
     landlordName: cleanText(parsedRequest.landlordName),
@@ -304,25 +480,35 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
     accessNotes: cleanText(parsedRequest.accessNotes),
     preferredDates: cleanText(parsedRequest.preferredDates),
     engineerName: cleanText(parsedRequest.engineerName),
-    engineerEmail: cleanText(parsedRequest.engineerEmail),
+    engineerEmail: cleanText(parsedRequest.engineerEmail).toLowerCase(),
     engineerPhone: cleanText(parsedRequest.engineerPhone),
+    engineerGasSafeNumber: cleanText(parsedRequest.engineerGasSafeNumber),
+    engineerRequestSlug: cleanText(parsedRequest.engineerRequestSlug),
   };
   const admin = await supabaseServerServiceRole();
+  const engineerProfile = await findEngineerProfileForRequest(admin, request);
   const requestId = randomUUID();
+  const claimToken = engineerProfile ? null : randomUUID();
   const requestType = request.jobType === 'service' ? 'new_job' : 'new_job';
   const jobType = request.jobType === 'service' ? 'service' : 'cp12';
+  const certTypes = normalizeCertTypes(request.jobType);
+  const engineerDisplayName = engineerProfile?.engineerName ?? request.engineerName;
   const engineerContact = [request.engineerName, request.engineerEmail, request.engineerPhone]
     .filter(Boolean)
     .join(' / ');
   const engineerPrefillUrl = `${getSiteUrl()}/jobs/new?requestId=${requestId}`;
+  const engineerClaimUrl = claimToken ? `${getSiteUrl()}/signup/step1?claim=${claimToken}` : null;
+  const engineerActionUrl = engineerClaimUrl ?? engineerPrefillUrl;
 
   const { error } = await fromJobRequests(admin).insert({
     id: requestId,
-    user_id: null,
-    assigned_engineer_id: null,
+    user_id: engineerProfile?.id ?? null,
+    assigned_engineer_id: engineerProfile?.id ?? null,
     request_type: requestType,
-    source: 'standalone_external_engineer',
+    source: engineerProfile ? 'standalone_known_engineer' : 'standalone_external_engineer',
     job_type: jobType,
+    entry_point: 'landlord_request',
+    cert_types: certTypes,
     landlord_name: request.landlordName,
     landlord_email: request.landlordEmail,
     landlord_phone: request.landlordPhone,
@@ -333,10 +519,13 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
     access_notes: request.accessNotes || null,
     preferred_dates: request.preferredDates || null,
     engineer_name: request.engineerName,
-    engineer_company: null,
+    engineer_company: engineerProfile?.companyName ?? null,
     engineer_email: request.engineerEmail || null,
     engineer_phone: request.engineerPhone || null,
-    engineer_gas_safe_number: null,
+    engineer_gas_safe_number: request.engineerGasSafeNumber || engineerProfile?.gasSafeNumber || null,
+    pending_engineer_email: engineerProfile ? null : request.engineerEmail || null,
+    claim_token: claimToken,
+    claim_token_expires_at: claimToken ? addDaysIso(30) : null,
     status: 'pending',
   });
   if (error) {
@@ -363,7 +552,7 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
     }
   }
 
-  const landlordConfirmationStatus = await sendTransactionalEmail({
+  const landlordConfirmationStatus = (await sendEmail({
     to: request.landlordEmail,
     subject: 'Your CertNow job request has been submitted',
     text: [
@@ -392,13 +581,15 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
       ],
       footer: 'The engineer will contact you directly to arrange the visit.',
     }),
-  });
+  })).status;
   const engineerNotificationStatus = request.engineerEmail
-    ? await sendTransactionalEmail({
+    ? (await sendEmail({
         to: request.engineerEmail,
-        subject: 'New landlord job request from CertNow',
+        subject: engineerProfile
+          ? 'New landlord job request from CertNow'
+          : 'A landlord requested you through CertNow',
         text: [
-          `Hi ${request.engineerName},`,
+          `Hi ${engineerDisplayName},`,
           '',
           `${request.landlordName} submitted a gas compliance job request and listed you as their chosen engineer.`,
           '',
@@ -411,12 +602,16 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
           `Access notes: ${request.accessNotes || 'Not provided'}`,
           `Preferred dates: ${request.preferredDates || 'Not provided'}`,
           '',
-          `Open prefilled job: ${engineerPrefillUrl}`,
+          engineerProfile
+            ? `Open prefilled job: ${engineerPrefillUrl}`
+            : `Create your CertNow account to claim this request: ${engineerActionUrl}`,
         ].join('\n'),
         html: renderEmailShell({
           preheader: `${request.landlordName} sent a gas compliance job request for ${request.propertyAddress}.`,
-          title: 'New landlord job request',
-          intro: `${request.landlordName} listed you as their chosen engineer. Open the request to create a job with Step 1 prefilled.`,
+          title: engineerProfile ? 'New landlord job request' : 'A landlord requested you through CertNow',
+          intro: engineerProfile
+            ? `${request.landlordName} listed you as their chosen engineer. Open the request to create a job with Step 1 prefilled.`
+            : `${request.landlordName} listed you as their chosen engineer. Create your CertNow account to claim the request and open the job with Step 1 prefilled.`,
           rows: [
             { label: 'Landlord', value: request.landlordName },
             { label: 'Landlord phone', value: request.landlordPhone },
@@ -428,10 +623,15 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
             { label: 'Access notes', value: request.accessNotes || 'Not provided' },
             { label: 'Preferred dates', value: request.preferredDates || 'Not provided' },
           ],
-          button: { label: 'Open prefilled job', href: engineerPrefillUrl },
-          footer: 'You will need to sign in to CertNow. When you save the job, this request is linked to your account and marked as scheduled.',
+          button: {
+            label: engineerProfile ? 'Open prefilled job' : 'Create account and claim request',
+            href: engineerActionUrl,
+          },
+          footer: engineerProfile
+            ? 'You will need to sign in to CertNow. When you save the job, this request is linked to your account and marked as scheduled.'
+            : 'The claim link is token-based, so you can sign up with the email address you normally use for CertNow.',
         }),
-      })
+      })).status
     : 'not_configured';
 
   const { error: statusErr } = await fromJobRequests(admin).update({
@@ -442,4 +642,8 @@ export async function submitStandaloneLandlordJobRequest(input: z.infer<typeof S
   if (statusErr) throw new Error(statusErr.message);
 
   return { ok: true, landlordConfirmationStatus, engineerNotificationStatus, requestId };
+}
+
+export async function submitStandaloneLandlordJobRequest(input: z.input<typeof StandaloneJobRequestSchema>) {
+  return createPendingJobRequest(input);
 }

@@ -3,7 +3,12 @@ import { redirect } from 'next/navigation';
 
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
-import { listJobs } from '@/server/jobs';
+import {
+  fillAwaitingLandlordJobMyself,
+  listAwaitingLandlordJobsForDashboard,
+  listJobs,
+  type AwaitingLandlordDashboardJob,
+} from '@/server/jobs';
 import { dismissJobRequest, listPendingJobRequestsForDashboard, type DashboardJobRequest } from '@/server/job-requests';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,10 +59,11 @@ export default async function DashboardPage({
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups, jobRequests] = await Promise.all([
+  const [{ profile }, jobGroups, jobRequests, awaitingLandlordJobs] = await Promise.all([
     getProfile(),
     listJobs(),
     listPendingJobRequestsForDashboard(),
+    listAwaitingLandlordJobsForDashboard(),
   ]);
   const activeJobs = jobGroups.active as BasicJob[];
   const completedJobs = jobGroups.completed as BasicJob[];
@@ -186,6 +192,23 @@ export default async function DashboardPage({
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
             {jobRequests.map((request) => (
               <JobRequestCard key={request.id} request={request} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {awaitingLandlordJobs.length ? (
+        <section className="rounded-[2rem] border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Awaiting landlord</p>
+              <h2 className="text-xl font-semibold text-slate-950">Pre-fill links sent</h2>
+            </div>
+            <p className="text-sm text-slate-600">{awaitingLandlordJobs.length} waiting</p>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {awaitingLandlordJobs.map((job) => (
+              <AwaitingLandlordJobCard key={job.id} job={job} />
             ))}
           </div>
         </section>
@@ -507,6 +530,70 @@ function JobRequestCard({ request }: { request: DashboardJobRequest }) {
         >
           <Button type="submit" variant="outline" className="w-full rounded-full sm:w-auto">
             Dismiss
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function getAwaitingLandlordPrepareHref(job: AwaitingLandlordDashboardJob) {
+  if (job.jobType === 'safety_check') {
+    return `/wizard/create/cp12?jobId=${job.id}&prepare=1`;
+  }
+  if (job.jobType === 'service') {
+    return `/wizard/create/boiler_service?jobId=${job.id}`;
+  }
+  if (job.jobType === 'warning_notice') {
+    return `/wizard/create/gas_warning_notice?jobId=${job.id}`;
+  }
+  return `/jobs/${job.id}`;
+}
+
+function AwaitingLandlordJobCard({ job }: { job: AwaitingLandlordDashboardJob }) {
+  const expired = job.prefillExpiresAt ? new Date(job.prefillExpiresAt).getTime() < Date.now() : false;
+  return (
+    <div className="rounded-3xl bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-950">{job.clientName ?? job.title ?? 'Awaiting landlord details'}</p>
+          <p className="mt-1 text-sm text-slate-600">{job.address ?? 'Address not completed yet'}</p>
+        </div>
+        <Badge variant={expired ? 'outline' : 'brand'} className="uppercase">
+          {expired ? 'Expired' : 'Waiting'}
+        </Badge>
+      </div>
+      <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+        <p>Job type: {getDashboardJobTypeLabel(job.jobType)}</p>
+        <p>Sent: {job.landlordInputRequestedAt ? formatDateTime(job.landlordInputRequestedAt) : 'Not recorded'}</p>
+        <p>Visit: {job.scheduledFor ? formatDateTime(job.scheduledFor) : 'Not scheduled'}</p>
+        <p>Expires: {job.prefillExpiresAt ? formatDateTime(job.prefillExpiresAt) : 'Not recorded'}</p>
+      </div>
+      {job.prefillUrl ? (
+        <div className="mt-3 rounded-2xl bg-slate-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Landlord pre-fill link</p>
+          <p className="mt-1 break-all text-xs text-slate-700">{job.prefillUrl}</p>
+        </div>
+      ) : (
+        <p className="mt-3 rounded-2xl bg-amber-50 p-3 text-xs text-amber-800">
+          No active pre-fill token is available. Fill this in manually or resend a link once resend support is added.
+        </p>
+      )}
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+        {job.prefillPath && !expired ? (
+          <Button asChild variant="secondary" className="rounded-full">
+            <Link href={job.prefillPath}>Open link</Link>
+          </Button>
+        ) : null}
+        <form
+          action={async () => {
+            'use server';
+            await fillAwaitingLandlordJobMyself(job.id);
+            redirect(getAwaitingLandlordPrepareHref(job));
+          }}
+        >
+          <Button type="submit" className="w-full rounded-full sm:w-auto">
+            Fill in myself
           </Button>
         </form>
       </div>

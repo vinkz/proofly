@@ -11,6 +11,7 @@ import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole
 import type { PostgrestError } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { formatAddressLine } from '@/lib/address';
+import { sendEmail } from '@/lib/resend';
 import { photoPath, reportPath, signaturePath } from '@/lib/storage';
 import type { Database } from '@/lib/database.types';
 import type { TemplateItem, TemplateModel } from '@/types/template';
@@ -195,6 +196,28 @@ const ReportPdfInputSchema = z.object({
   fields: z.record(z.string(), z.unknown()),
   issuedAt: z.date().optional(),
 });
+const PrefillFormSchema = z.object({
+  jobId: z.string().uuid(),
+  token: z.string().uuid(),
+  jobAddressName: z.string().max(160).optional().default(''),
+  jobAddressLine1: z.string().max(240).optional().default(''),
+  jobAddressLine2: z.string().max(240).optional().default(''),
+  jobAddressCity: z.string().max(120).optional().default(''),
+  jobPostcode: z.string().max(40).optional().default(''),
+  jobTel: z.string().max(80).optional().default(''),
+  landlordName: z.string().max(160).optional().default(''),
+  landlordCompany: z.string().max(160).optional().default(''),
+  landlordAddressLine1: z.string().max(240).optional().default(''),
+  landlordAddressLine2: z.string().max(240).optional().default(''),
+  landlordCity: z.string().max(120).optional().default(''),
+  landlordPostcode: z.string().max(40).optional().default(''),
+  landlordTel: z.string().max(80).optional().default(''),
+  landlordEmail: z.string().email().optional().or(z.literal('')).default(''),
+  tenantName: z.string().max(120).optional().default(''),
+  tenantPhone: z.string().max(80).optional().default(''),
+  accessNotes: z.string().max(1000).optional().default(''),
+  preferredDates: z.string().max(500).optional().default(''),
+});
 type ReportPdfInput = z.infer<typeof ReportPdfInputSchema>;
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
@@ -206,7 +229,8 @@ type ReportRow = Database['public']['Tables']['reports']['Row'];
 type TemplateRow = Database['public']['Tables']['templates']['Row'];
 type ReportDeliveryRow = Database['public']['Tables']['report_deliveries']['Row'];
 type ClientRow = Database['public']['Tables']['clients']['Row'];
-type UntypedMutationQuery = {
+type UntypedMutationResult = { data?: unknown; error: { code?: string; message: string } | null };
+type UntypedMutationQuery = PromiseLike<UntypedMutationResult> & {
   select: (columns?: string) => UntypedMutationQuery;
   update: (payload: Record<string, unknown>) => UntypedMutationQuery;
   eq: (column: string, value: unknown) => UntypedMutationQuery;
@@ -235,6 +259,11 @@ const normalizeOptionalText = (value: string | null | undefined) => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+};
+const certTypesForJobType = (jobType: JobType) => {
+  if (jobType === 'service') return ['boiler_service'];
+  if (jobType === 'safety_check') return ['cp12'];
+  return [];
 };
 
 async function requireUser(options: { write?: boolean } = {}) {
@@ -298,6 +327,92 @@ export async function listJobs() {
     active: filtered.filter((job) => job.status !== 'completed'),
     completed: filtered.filter((job) => job.status === 'completed'),
   };
+}
+
+export type AwaitingLandlordDashboardJob = {
+  id: string;
+  clientName: string | null;
+  address: string | null;
+  title: string | null;
+  jobType: string | null;
+  scheduledFor: string | null;
+  createdAt: string | null;
+  landlordInputRequestedAt: string | null;
+  prefillExpiresAt: string | null;
+  prefillPath: string | null;
+  prefillUrl: string | null;
+};
+
+export async function listAwaitingLandlordJobsForDashboard(): Promise<AwaitingLandlordDashboardJob[]> {
+  const { sb, user } = await requireUser();
+  const { data, error } = await sb
+    .from('jobs')
+    .select('id, client_name, address, title, job_type, scheduled_for, created_at, landlord_input_requested_at, prefill_token, prefill_token_expires_at')
+    .eq('user_id', user.id)
+    .eq('status', 'awaiting_landlord')
+    .order('landlord_input_requested_at', { ascending: false });
+
+  if (error) {
+    if (['22P02', '42703', 'PGRST204'].includes(error.code ?? '')) return [];
+    throw new Error(error.message);
+  }
+
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(/\/$/, '');
+  return ((data ?? []) as Array<Record<string, unknown>>).map((job) => {
+    const id = typeof job.id === 'string' ? job.id : '';
+    const token = typeof job.prefill_token === 'string' ? job.prefill_token : '';
+    const prefillPath = id && token ? `/prefill/${id}?token=${token}` : null;
+    return {
+      id,
+      clientName: typeof job.client_name === 'string' ? job.client_name : null,
+      address: typeof job.address === 'string' ? job.address : null,
+      title: typeof job.title === 'string' ? job.title : null,
+      jobType: typeof job.job_type === 'string' ? job.job_type : null,
+      scheduledFor: typeof job.scheduled_for === 'string' ? job.scheduled_for : null,
+      createdAt: typeof job.created_at === 'string' ? job.created_at : null,
+      landlordInputRequestedAt:
+        typeof job.landlord_input_requested_at === 'string' ? job.landlord_input_requested_at : null,
+      prefillExpiresAt: typeof job.prefill_token_expires_at === 'string' ? job.prefill_token_expires_at : null,
+      prefillPath,
+      prefillUrl: prefillPath ? `${siteUrl}${prefillPath}` : null,
+    };
+  });
+}
+
+export async function fillAwaitingLandlordJobMyself(jobId: string) {
+  JobId.parse(jobId);
+  const { sb, user, job } = await fetchOwnedJob(jobId, { write: true });
+  if (job.status !== 'awaiting_landlord') {
+    return { ok: true, jobId };
+  }
+
+  const fullPayload = {
+    status: 'draft',
+    data_collection_status: 'complete',
+    prefill_token: null,
+    prefill_token_expires_at: null,
+    updated_at: new Date().toISOString(),
+  } as Database['public']['Tables']['jobs']['Update'];
+
+  const { error } = await sb
+    .from('jobs')
+    .update(fullPayload)
+    .eq('id', jobId as JobRow['id'])
+    .eq('user_id', user.id);
+
+  if (error) {
+    if (error.code !== '42703') throw new Error(error.message);
+    const { error: fallbackErr } = await sb
+      .from('jobs')
+      .update({ status: 'draft' } as Database['public']['Tables']['jobs']['Update'])
+      .eq('id', jobId as JobRow['id'])
+      .eq('user_id', user.id);
+    if (fallbackErr) throw new Error(fallbackErr.message);
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath(`/jobs/${jobId}`);
+  return { ok: true, jobId };
 }
 
 export async function createJob(form: FormData | Record<string, unknown>) {
@@ -441,6 +556,167 @@ export async function createJobDraftFromClient(clientId: string) {
   return { jobId: job.id };
 }
 
+export async function markJobPrepared(jobId: string, options: { requestId?: string } = {}) {
+  JobId.parse(jobId);
+  if (options.requestId) z.string().uuid().parse(options.requestId);
+  const { sb, user } = await fetchOwnedJob(jobId, { write: true });
+  const now = new Date().toISOString();
+  const updatePayload = {
+    status: 'prepared',
+    data_collection_status: 'complete',
+    landlord_input_submitted_at: now,
+    ...(options.requestId ? { job_request_id: options.requestId } : {}),
+  } as Database['public']['Tables']['jobs']['Update'];
+
+  const { error } = await sb
+    .from('jobs')
+    .update(updatePayload)
+    .eq('id', jobId as JobRow['id'])
+    .eq('user_id', user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/dashboard');
+  revalidatePath(`/jobs/${jobId}`);
+  return { ok: true, jobId };
+}
+
+export async function submitPrefillForm(payload: z.infer<typeof PrefillFormSchema>) {
+  const input = PrefillFormSchema.parse(payload);
+  const sb = await supabaseServerServiceRole();
+  const { data, error } = await (sb as unknown as UntypedTableClient)
+    .from('jobs')
+    .select('id, user_id, client_name, address, prefill_token_expires_at')
+    .eq('id', input.jobId)
+    .eq('prefill_token', input.token)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+
+  const job = data as Record<string, unknown> | null;
+  if (!job || typeof job.id !== 'string') throw new Error('Prefill link not found');
+  const expiresAt = typeof job.prefill_token_expires_at === 'string'
+    ? new Date(job.prefill_token_expires_at).getTime()
+    : 0;
+  if (!expiresAt || expiresAt < Date.now()) throw new Error('Prefill link has expired');
+
+  const jobAddress = formatAddressLine({
+    line1: normalizeOptionalText(input.jobAddressLine1),
+    line2: normalizeOptionalText(input.jobAddressLine2),
+    town: normalizeOptionalText(input.jobAddressCity),
+    postcode: normalizeOptionalText(input.jobPostcode),
+  });
+  const landlordAddress = formatAddressLine({
+    line1: normalizeOptionalText(input.landlordAddressLine1),
+    line2: normalizeOptionalText(input.landlordAddressLine2),
+    town: normalizeOptionalText(input.landlordCity),
+    postcode: normalizeOptionalText(input.landlordPostcode),
+  });
+  const now = new Date().toISOString();
+
+  await persistJobFields(
+    sb,
+    input.jobId,
+    [
+      { job_id: input.jobId, field_key: 'job_address_name', value: normalizeOptionalText(input.jobAddressName) },
+      { job_id: input.jobId, field_key: 'job_address_line1', value: normalizeOptionalText(input.jobAddressLine1) },
+      { job_id: input.jobId, field_key: 'job_address_line2', value: normalizeOptionalText(input.jobAddressLine2) },
+      { job_id: input.jobId, field_key: 'job_address_city', value: normalizeOptionalText(input.jobAddressCity) },
+      { job_id: input.jobId, field_key: 'job_postcode', value: normalizeOptionalText(input.jobPostcode) },
+      { job_id: input.jobId, field_key: 'job_tel', value: normalizeOptionalText(input.jobTel) },
+      { job_id: input.jobId, field_key: 'property_name', value: normalizeOptionalText(input.jobAddressName) },
+      { job_id: input.jobId, field_key: 'property_address', value: jobAddress },
+      { job_id: input.jobId, field_key: 'property_address_line1', value: normalizeOptionalText(input.jobAddressLine1) },
+      { job_id: input.jobId, field_key: 'property_address_line2', value: normalizeOptionalText(input.jobAddressLine2) },
+      { job_id: input.jobId, field_key: 'property_town', value: normalizeOptionalText(input.jobAddressCity) },
+      { job_id: input.jobId, field_key: 'property_postcode', value: normalizeOptionalText(input.jobPostcode) },
+      { job_id: input.jobId, field_key: 'postcode', value: normalizeOptionalText(input.jobPostcode) },
+      { job_id: input.jobId, field_key: 'landlord_name', value: normalizeOptionalText(input.landlordName) },
+      { job_id: input.jobId, field_key: 'landlord_company', value: normalizeOptionalText(input.landlordCompany) },
+      { job_id: input.jobId, field_key: 'landlord_address_line1', value: normalizeOptionalText(input.landlordAddressLine1) },
+      { job_id: input.jobId, field_key: 'landlord_address_line2', value: normalizeOptionalText(input.landlordAddressLine2) },
+      { job_id: input.jobId, field_key: 'landlord_city', value: normalizeOptionalText(input.landlordCity) },
+      { job_id: input.jobId, field_key: 'landlord_postcode', value: normalizeOptionalText(input.landlordPostcode) },
+      { job_id: input.jobId, field_key: 'landlord_tel', value: normalizeOptionalText(input.landlordTel) },
+      { job_id: input.jobId, field_key: 'landlord_email', value: normalizeOptionalText(input.landlordEmail) },
+      { job_id: input.jobId, field_key: 'landlord_address', value: landlordAddress },
+      { job_id: input.jobId, field_key: 'request_tenant_name', value: normalizeOptionalText(input.tenantName) },
+      { job_id: input.jobId, field_key: 'request_tenant_phone', value: normalizeOptionalText(input.tenantPhone) },
+      { job_id: input.jobId, field_key: 'request_access_notes', value: normalizeOptionalText(input.accessNotes) },
+      { job_id: input.jobId, field_key: 'request_preferred_dates', value: normalizeOptionalText(input.preferredDates) },
+    ],
+    'submitPrefillForm',
+  );
+
+  const { error: updateErr } = await (sb as unknown as UntypedTableClient)
+    .from('jobs')
+    .update({
+      address: jobAddress || job.address || null,
+      client_name: normalizeOptionalText(input.landlordName) ?? job.client_name ?? null,
+      status: 'prepared',
+      data_collection_status: 'submitted',
+      landlord_input_submitted_at: now,
+      prefill_token: null,
+      prefill_token_expires_at: null,
+      updated_at: now,
+    })
+    .eq('id', input.jobId);
+  if (updateErr) throw new Error(updateErr.message);
+
+  let notificationStatus: 'sent' | 'not_configured' | 'failed' = 'not_configured';
+  if (typeof job.user_id === 'string' && job.user_id) {
+    const { data: profile } = await (sb as unknown as UntypedTableClient)
+      .from('profiles')
+      .select('company_email, default_engineer_name, full_name, company_name')
+      .eq('id', job.user_id)
+      .maybeSingle();
+    const profileRow = (profile ?? {}) as Record<string, unknown>;
+    const recipient = normalizeOptionalText(profileRow.company_email as string | null);
+    if (recipient) {
+      notificationStatus = (await sendEmail({
+        to: recipient,
+        subject: 'Landlord details submitted for your CertNow job',
+        text: [
+          'The landlord has submitted the missing job details.',
+          '',
+          `Property: ${jobAddress || job.address || 'Not provided'}`,
+          `Landlord: ${input.landlordName || 'Not provided'}`,
+          `Open dashboard: ${(process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(/\/$/, '')}/dashboard`,
+        ].join('\n'),
+      })).status;
+    }
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath(`/jobs/${input.jobId}`);
+  return { ok: true, jobId: input.jobId, notificationStatus };
+}
+
+export async function getPrefillJobSummary(jobId: string, token: string) {
+  JobId.parse(jobId);
+  z.string().uuid().parse(token);
+  const sb = await supabaseServerServiceRole();
+  const { data, error } = await (sb as unknown as UntypedTableClient)
+    .from('jobs')
+    .select('id, client_name, address, title, job_type, prefill_token_expires_at')
+    .eq('id', jobId)
+    .eq('prefill_token', token)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const job = data as Record<string, unknown> | null;
+  if (!job || typeof job.id !== 'string') return null;
+  const expiresAt = typeof job.prefill_token_expires_at === 'string'
+    ? new Date(job.prefill_token_expires_at).getTime()
+    : 0;
+  if (!expiresAt || expiresAt < Date.now()) return null;
+
+  return {
+    id: job.id,
+    clientName: typeof job.client_name === 'string' ? job.client_name : null,
+    address: typeof job.address === 'string' ? job.address : null,
+    title: typeof job.title === 'string' ? job.title : null,
+    jobType: typeof job.job_type === 'string' ? job.job_type : null,
+  };
+}
+
 export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
   const input = SoloJobSchema.parse(payload);
   const sb = await supabaseServerServiceRole();
@@ -555,11 +831,15 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
     client_id: client?.id ?? null,
     client_name: client?.name ?? landlordName ?? null,
     address: propertyAddress,
-    status: 'active',
+    status: input.requestId ? 'prepared' : 'active',
     user_id: user.id,
     title: isSafetyCheck ? `CP12 for ${landlordName ?? 'upcoming job'}` : jobTypeLabel,
     scheduled_for: input.scheduledFor,
     job_type: input.jobType,
+    entry_point: input.requestId ? 'landlord_request' : 'engineer_created',
+    cert_types: certTypesForJobType(input.jobType),
+    data_collection_status: 'complete',
+    job_request_id: input.requestId ?? null,
     job_code: jobCode,
     client_ref: buildClientRef(jobCode),
   } as Database['public']['Tables']['jobs']['Insert'];

@@ -6,6 +6,12 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
+import {
+  ENGINEER_ID_CARD_NUMBER_MESSAGE,
+  ENGINEER_ID_CARD_NUMBER_PATTERN,
+  GAS_SAFE_NUMBER_MESSAGE,
+  GAS_SAFE_NUMBER_PATTERN,
+} from '@/lib/onboarding-profile';
 import { TRADE_TYPES } from '@/lib/profile-options';
 import {
   STANDARD_RATE_KEYS,
@@ -106,13 +112,31 @@ export function ProfilePreferences({
       { key: 'Address line 1', value: companyAddressLine1 },
       { key: 'Postcode', value: companyPostcode },
       { key: 'Tel No.', value: companyPhone },
-      { key: 'Gas Safe Reg', value: gasSafeNumber },
-      { key: 'ID Card No.', value: engineerId },
+      { key: 'Gas Safe registration number', value: gasSafeNumber },
+      { key: 'Engineer ID card number', value: engineerId },
     ].filter((item) => !item.value || !item.value.trim());
     if (missing.length) {
       pushToast({
         title: 'Required fields missing',
         description: `Fill: ${missing.map((m) => m.key).join(', ')}`,
+        variant: 'error',
+      });
+      return;
+    }
+
+    if (!GAS_SAFE_NUMBER_PATTERN.test(gasSafeNumber.trim())) {
+      pushToast({
+        title: 'Check Gas Safe number',
+        description: GAS_SAFE_NUMBER_MESSAGE,
+        variant: 'error',
+      });
+      return;
+    }
+
+    if (!ENGINEER_ID_CARD_NUMBER_PATTERN.test(engineerId.trim())) {
+      pushToast({
+        title: 'Check ID card number',
+        description: ENGINEER_ID_CARD_NUMBER_MESSAGE,
         variant: 'error',
       });
       return;
@@ -344,22 +368,32 @@ export function ProfilePreferences({
           />
         </label>
         <label className="block text-sm font-semibold text-muted">
-          Gas Safe Reg
+          Gas Safe registration number
           <input
             value={gasSafeNumber}
             onChange={(e) => setGasSafeNumber(e.target.value)}
             className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
             disabled={isPending}
+            inputMode="numeric"
+            maxLength={6}
+            pattern="[0-9]{6}"
+            placeholder="123456"
           />
+          <span className="mt-1 block text-xs font-normal text-muted-foreground/70">6 digits</span>
         </label>
         <label className="block text-sm font-semibold text-muted">
-          ID Card No.
+          Engineer ID card number
           <input
             value={engineerId}
             onChange={(e) => setEngineerId(e.target.value)}
             className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
             disabled={isPending}
+            inputMode="numeric"
+            maxLength={7}
+            pattern="[0-9]{7}"
+            placeholder="1234567"
           />
+          <span className="mt-1 block text-xs font-normal text-muted-foreground/70">7 digits</span>
         </label>
       </div>
 

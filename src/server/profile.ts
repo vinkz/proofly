@@ -7,6 +7,10 @@ import { z } from 'zod';
 
 import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import {
+  ENGINEER_ID_CARD_NUMBER_MESSAGE,
+  ENGINEER_ID_CARD_NUMBER_PATTERN,
+  GAS_SAFE_NUMBER_MESSAGE,
+  GAS_SAFE_NUMBER_PATTERN,
   getMissingOnboardingFields,
   isOnboardingProfileComplete,
   type OnboardingProfileShape,
@@ -174,8 +178,8 @@ export async function updateProfileBasics(payload: {
       company_postcode: z.string().min(3).optional(),
       company_phone: z.string().min(6).optional(),
       default_engineer_name: z.string().min(2).optional(),
-      default_engineer_id: z.string().min(2).optional(),
-      gas_safe_number: z.string().min(2).optional(),
+      default_engineer_id: z.string().trim().regex(ENGINEER_ID_CARD_NUMBER_PATTERN, ENGINEER_ID_CARD_NUMBER_MESSAGE).optional(),
+      gas_safe_number: z.string().trim().regex(GAS_SAFE_NUMBER_PATTERN, GAS_SAFE_NUMBER_MESSAGE).optional(),
       bank_name: z.string().min(2).optional(),
       bank_account_name: z.string().min(2).optional(),
       bank_sort_code: z.string().min(6).optional(),

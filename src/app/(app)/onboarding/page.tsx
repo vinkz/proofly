@@ -1,11 +1,16 @@
 import { redirect } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import { isOnboardingProfileComplete } from '@/lib/onboarding-profile';
+import { getOnboardingStep, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
 import { getProfile } from '@/server/profile';
 import { OnboardingWizard } from './onboarding-wizard';
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ step?: string }>;
+}) {
+  const resolvedSearchParams = await searchParams;
   const { profile } = await getProfile();
 
   const onboardingComplete =
@@ -14,6 +19,13 @@ export default async function OnboardingPage() {
   if (onboardingComplete === true && isOnboardingProfileComplete(profile)) {
     redirect('/dashboard');
   }
+
+  const requiredStep = getOnboardingStep(profile);
+  const requestedStep = Number(resolvedSearchParams?.step ?? '');
+  const initialStep =
+    Number.isInteger(requestedStep) && requestedStep >= 1 && requestedStep <= 3
+      ? Math.min(requestedStep, requiredStep)
+      : requiredStep;
 
   return (
     <div className="space-y-6">
@@ -38,6 +50,7 @@ export default async function OnboardingPage() {
         initialCompanyTown={(profile as { company_town?: string | null } | null)?.company_town ?? ''}
         initialCompanyPostcode={(profile as { company_postcode?: string | null } | null)?.company_postcode ?? ''}
         initialCompanyPhone={(profile as { company_phone?: string | null } | null)?.company_phone ?? ''}
+        initialStep={initialStep}
       />
 
       <form action="/logout" method="post" className="flex justify-end">

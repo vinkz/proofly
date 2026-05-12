@@ -8,6 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
+import {
+  ENGINEER_ID_CARD_NUMBER_MESSAGE,
+  ENGINEER_ID_CARD_NUMBER_PATTERN,
+  GAS_SAFE_NUMBER_MESSAGE,
+  GAS_SAFE_NUMBER_PATTERN,
+} from '@/lib/onboarding-profile';
 import { TRADE_TYPES } from '@/lib/profile-options';
 import { updateProfileBasics } from '@/server/profile';
 
@@ -23,6 +29,7 @@ type OnboardingWizardProps = {
   initialCompanyPhone?: string;
   initialEngineerId?: string;
   initialGasSafeNumber?: string;
+  initialStep?: number;
 };
 
 const steps = [
@@ -56,6 +63,7 @@ export function OnboardingWizard({
   initialCompanyPhone = '',
   initialEngineerId = '',
   initialGasSafeNumber = '',
+  initialStep,
 }: OnboardingWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
@@ -85,6 +93,15 @@ export function OnboardingWizard({
   const [gasSafeNumber, setGasSafeNumber] = useState(initialGasSafeNumber);
   const deferredCompanyAddressSearchQuery = useDeferredValue(companyAddressSearchQuery.trim());
   const [step, setStep] = useState(() => {
+    const requestedInitialStep = initialStep;
+    if (
+      typeof requestedInitialStep === 'number' &&
+      Number.isInteger(requestedInitialStep) &&
+      requestedInitialStep >= 1 &&
+      requestedInitialStep <= steps.length
+    ) {
+      return requestedInitialStep;
+    }
     if (!fullName.trim() || !dateOfBirth.trim() || !profession.trim()) return 1;
     if (!companyName.trim() || !companyAddressLine1.trim() || !companyPostcode.trim() || !companyPhone.trim()) {
       return 2;
@@ -220,6 +237,26 @@ export function OnboardingWizard({
         variant: 'error',
       });
       return false;
+    }
+
+    if (step === 3) {
+      if (!GAS_SAFE_NUMBER_PATTERN.test(gasSafeNumber.trim())) {
+        pushToast({
+          title: 'Check Gas Safe number',
+          description: GAS_SAFE_NUMBER_MESSAGE,
+          variant: 'error',
+        });
+        return false;
+      }
+
+      if (!ENGINEER_ID_CARD_NUMBER_PATTERN.test(engineerId.trim())) {
+        pushToast({
+          title: 'Check ID card number',
+          description: ENGINEER_ID_CARD_NUMBER_MESSAGE,
+          variant: 'error',
+        });
+        return false;
+      }
     }
 
     return true;
@@ -442,12 +479,32 @@ export function OnboardingWizard({
       {step === 3 ? (
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block text-sm font-semibold text-muted md:col-span-2">
-            Gas Safe number
-            <Input value={gasSafeNumber} onChange={(event) => setGasSafeNumber(event.target.value)} className="mt-2" disabled={isPending} />
+            Gas Safe registration number
+            <Input
+              value={gasSafeNumber}
+              onChange={(event) => setGasSafeNumber(event.target.value)}
+              className="mt-2"
+              disabled={isPending}
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]{6}"
+              placeholder="123456"
+            />
+            <span className="mt-1 block text-xs font-normal text-muted-foreground/70">6 digits</span>
           </label>
           <label className="block text-sm font-semibold text-muted md:col-span-2">
-            ID card number
-            <Input value={engineerId} onChange={(event) => setEngineerId(event.target.value)} className="mt-2" disabled={isPending} />
+            Engineer ID card number
+            <Input
+              value={engineerId}
+              onChange={(event) => setEngineerId(event.target.value)}
+              className="mt-2"
+              disabled={isPending}
+              inputMode="numeric"
+              maxLength={7}
+              pattern="[0-9]{7}"
+              placeholder="1234567"
+            />
+            <span className="mt-1 block text-xs font-normal text-muted-foreground/70">7 digits</span>
           </label>
         </div>
       ) : null}
