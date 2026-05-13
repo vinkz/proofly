@@ -2,7 +2,7 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
-import type { SupabaseClient, User } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 
 import type { Database } from '@/lib/database.types';
 import { env, assertSupabaseEnv } from '@/lib/env';
@@ -114,18 +114,10 @@ export async function supabaseServerAction() {
 
 export async function supabaseServerServiceRole() {
   assertSupabaseEnv();
-  const cookieStore = await cookies();
-  return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
-      },
-      set() {
-        return;
-      },
-      remove() {
-        return;
-      },
+  return createClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
     },
   });
 }

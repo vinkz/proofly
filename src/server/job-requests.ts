@@ -58,7 +58,11 @@ type EngineerProfileMatch = {
 };
 
 const getSiteUrl = () =>
-  (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(/\/$/, '');
+  (
+    process.env.NEXT_PUBLIC_SHARE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    'https://certnow.uk'
+  ).replace(/\/$/, '');
 
 const escapeHtml = (value: string | null | undefined) =>
   String(value ?? '')
