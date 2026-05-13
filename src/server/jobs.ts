@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { createClient } from '@supabase/supabase-js';
-import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { getSupabaseUser, supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { formatAddressLine } from '@/lib/address';
@@ -721,12 +721,11 @@ export async function getPrefillJobSummary(jobId: string, token: string) {
 
 export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
   const input = SoloJobSchema.parse(payload);
+  const readClient = await supabaseServerReadOnly();
+  const user = await getSupabaseUser(readClient);
+  if (!user) throw new Error('Unauthorized');
+
   const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
   const isSafetyCheck = input.jobType === 'safety_check';
   const inspectionDate =
