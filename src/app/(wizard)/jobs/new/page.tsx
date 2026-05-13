@@ -37,10 +37,16 @@ export default async function NewJobPage({
 
   const clients = await listClients();
   const supabase = await supabaseServerReadOnly();
-  const requestPrefill: JobRequestPrefill | null = requestIdParam
-    ? await getJobRequestPrefill(requestIdParam)
-    : null;
-  const requestLink = await getOrCreateEngineerRequestLink();
+  let requestPrefill: JobRequestPrefill | null = null;
+  let requestPrefillError = '';
+  if (requestIdParam) {
+    try {
+      requestPrefill = await getJobRequestPrefill(requestIdParam);
+    } catch (error) {
+      requestPrefillError = error instanceof Error ? error.message : 'Unable to load landlord request.';
+    }
+  }
+  const requestLink = requestIdParam ? null : await getOrCreateEngineerRequestLink();
 
   const clientIdToPrimary = new Map<string, string>();
   clients.forEach((client) => {
@@ -138,13 +144,15 @@ export default async function NewJobPage({
           </div>
         ) : (
           <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-            <p className="font-semibold">Landlord request not found</p>
-            <p className="mt-1">The request link was received, but no request row loaded for ID {requestIdParam}.</p>
+            <p className="font-semibold">Landlord request not loaded</p>
+            <p className="mt-1">
+              {requestPrefillError || `The request link was received, but no request row loaded for ID ${requestIdParam}.`}
+            </p>
           </div>
         )
       ) : null}
 
-      {!requestIdParam ? <RequestLandlordDetailsCard requestUrl={requestLink.url} /> : null}
+      {!requestIdParam && requestLink ? <RequestLandlordDetailsCard requestUrl={requestLink.url} /> : null}
 
       <Card className="border border-white/10 bg-white/95 p-6 shadow">
         <SoloJobForm
