@@ -5,7 +5,7 @@ import { unstable_noStore as noStore } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
-import { supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { getSupabaseUser, supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import {
   ENGINEER_ID_CARD_NUMBER_MESSAGE,
   ENGINEER_ID_CARD_NUMBER_PATTERN,
@@ -27,11 +27,8 @@ const getMissingColumnFromSchemaError = (message: string) =>
 
 async function requireUser(options: { write?: boolean } = {}) {
   const sb = options.write ? await supabaseServerAction() : await supabaseServerReadOnly();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  const user = await getSupabaseUser(sb);
+  if (!user) throw new Error('Unauthorized');
   return { sb, user };
 }
 
@@ -76,8 +73,8 @@ export async function getProfile() {
   noStore();
   const { sb, user } = await requireUser();
   const selectVariants = [
-    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates',
-    'id, full_name, profession, trade_types, certifications, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates',
+    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates, request_link_slug',
+    'id, full_name, profession, trade_types, certifications, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates, request_link_slug',
     'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number',
     'id, full_name, profession, trade_types, certifications, company_name, company_address, company_postcode, company_phone',
   ];

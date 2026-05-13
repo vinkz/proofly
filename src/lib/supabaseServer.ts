@@ -17,25 +17,46 @@ export function isMissingAuthSessionError(error: unknown) {
   return /auth session missing/i.test(message);
 }
 
+export function isAuthRateLimitError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /request rate limit reached/i.test(message);
+}
+
 export async function getSupabaseUser(
   supabase: Pick<SupabaseClient<Database>, 'auth'>,
 ): Promise<User | null> {
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
+  let lastError: unknown = null;
 
-    if (error) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (error) {
+        if (isInvalidRefreshTokenError(error) || isMissingAuthSessionError(error)) return null;
+        if (isAuthRateLimitError(error) && attempt < 2) {
+          lastError = error;
+          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+          continue;
+        }
+        throw error;
+      }
+
+      return user ?? null;
+    } catch (error) {
       if (isInvalidRefreshTokenError(error) || isMissingAuthSessionError(error)) return null;
+      if (isAuthRateLimitError(error) && attempt < 2) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+        continue;
+      }
       throw error;
     }
-
-    return user ?? null;
-  } catch (error) {
-    if (isInvalidRefreshTokenError(error) || isMissingAuthSessionError(error)) return null;
-    throw error;
   }
+
+  throw lastError instanceof Error ? lastError : new Error('Request rate limit reached');
 }
 
 export async function supabaseServerReadOnly() {

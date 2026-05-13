@@ -2921,7 +2921,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
 
   await sb
     .from('jobs')
-    .update({ status: 'completed' } as Record<string, unknown>)
+    .update({ status: 'issued' } as Record<string, unknown>)
     .eq('id', input.jobId);
   await ensureBoilerServiceFollowUpJob({
     sb: admin,
@@ -2933,6 +2933,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     fields: mergedFieldMap,
   });
   revalidatePath(`/jobs/${input.jobId}`);
+  revalidatePath(`/jobs/${input.jobId}/complete`);
   revalidatePath('/jobs');
   revalidatePath('/dashboard');
   return { pdfUrl: signed.signedUrl, jobId: input.jobId };
@@ -3220,7 +3221,7 @@ async function generateCp12CertificateForJob(params: {
       { onConflict: 'job_id,field_key' },
     );
 
-  const { error: completeJobErr } = await admin.from('jobs').update({ status: 'completed' }).eq('id', jobId);
+  const { error: completeJobErr } = await admin.from('jobs').update({ status: 'issued' }).eq('id', jobId);
   if (completeJobErr) {
     throw new Error(completeJobErr.message);
   }
@@ -3259,6 +3260,7 @@ async function generateCp12CertificateForJob(params: {
     issuedAt: issuedAt.toISOString(),
   });
   revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/jobs/${jobId}/complete`);
   revalidatePath('/jobs');
   revalidatePath('/dashboard');
   gasWarningNoticeJobs.forEach((job) => {
@@ -3552,9 +3554,11 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     }
     await admin
       .from('jobs')
-      .update({ status: 'completed' } as Record<string, unknown>)
+      .update({ status: 'issued' } as Record<string, unknown>)
       .eq('id', input.jobId);
     revalidatePath(`/jobs/${input.jobId}`);
+    revalidatePath(`/jobs/${input.jobId}/complete`);
+    revalidatePath('/dashboard');
     return { pdfUrl: admin.storage.from('certificates').getPublicUrl(path).data.publicUrl, jobId: input.jobId };
   }
 

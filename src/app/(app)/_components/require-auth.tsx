@@ -5,9 +5,30 @@ import type { ReactNode } from 'react';
 import { getOnboardingStep, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 
+function getCurrentPathname(requestHeaders: Headers) {
+  const directPath = requestHeaders.get('x-current-path');
+  if (directPath) return directPath;
+
+  const nextUrl = requestHeaders.get('next-url') ?? requestHeaders.get('x-invoke-path') ?? '';
+  if (nextUrl.startsWith('/')) {
+    return nextUrl.split('?')[0] || '/';
+  }
+
+  const referer = requestHeaders.get('referer');
+  if (referer) {
+    try {
+      return new URL(referer).pathname;
+    } catch {
+      return '';
+    }
+  }
+
+  return '';
+}
+
 export default async function RequireAuth({ children }: { children: ReactNode }) {
   const requestHeaders = await headers();
-  const pathname = requestHeaders.get('x-current-path') ?? '';
+  const pathname = getCurrentPathname(requestHeaders);
   const supabase = await supabaseServerReadOnly();
   const user = await getSupabaseUser(supabase);
 
@@ -21,7 +42,7 @@ export default async function RequireAuth({ children }: { children: ReactNode })
     pathname === '/settings' ||
     pathname.startsWith('/settings/');
 
-  if (!allowIncompleteProfile) {
+  if (pathname && !allowIncompleteProfile) {
     const { data: profile, error } = await supabase
       .from('profiles')
       .select(

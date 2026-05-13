@@ -1,10 +1,11 @@
 import { Card } from '@/components/ui/card';
+import { RequestLandlordDetailsCard } from '@/components/jobs/request-landlord-details-card';
 import { SoloJobForm, type SavedPropertyOption } from '@/components/jobs/solo-job-form';
 import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
 import { getMissingOnboardingFields, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { listClients } from '@/server/clients';
-import { getJobRequestPrefill, type JobRequestPrefill } from '@/server/job-requests';
+import { getJobRequestPrefill, getOrCreateEngineerRequestLink, type JobRequestPrefill } from '@/server/job-requests';
 import { getProfile } from '@/server/profile';
 
 const pickText = (...values: Array<string | null | undefined>) => {
@@ -39,6 +40,7 @@ export default async function NewJobPage({
   const requestPrefill: JobRequestPrefill | null = requestIdParam
     ? await getJobRequestPrefill(requestIdParam)
     : null;
+  const requestLink = await getOrCreateEngineerRequestLink();
 
   const clientIdToPrimary = new Map<string, string>();
   clients.forEach((client) => {
@@ -141,6 +143,8 @@ export default async function NewJobPage({
           </div>
         )
       ) : null}
+
+      {!requestIdParam ? <RequestLandlordDetailsCard requestUrl={requestLink.url} /> : null}
 
       <Card className="border border-white/10 bg-white/95 p-6 shadow">
         <SoloJobForm

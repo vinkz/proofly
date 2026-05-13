@@ -234,6 +234,8 @@ type UntypedMutationQuery = PromiseLike<UntypedMutationResult> & {
   select: (columns?: string) => UntypedMutationQuery;
   update: (payload: Record<string, unknown>) => UntypedMutationQuery;
   eq: (column: string, value: unknown) => UntypedMutationQuery;
+  order: (column: string, options?: { ascending?: boolean }) => UntypedMutationQuery;
+  limit: (count: number) => Promise<{ data: unknown[] | null; error: { code?: string; message: string } | null }>;
   maybeSingle: () => Promise<{ data: unknown; error: { code?: string; message: string } | null }>;
   or: (query: string) => Promise<{ error: { code?: string; message: string } | null }>;
 };
@@ -1212,6 +1214,223 @@ export async function markJobComplete(jobId: string) {
 
   revalidatePath('/jobs');
   revalidatePath(`/jobs/${jobId}`);
+}
+
+export type JobCompletionChecklistStatus = 'completed' | 'required' | 'ready' | 'draft_needed' | 'not_required';
+
+export type JobCompletionChecklistItem = {
+  id: 'cp12' | 'boiler_service' | 'gas_warning_notice' | 'invoice';
+  label: string;
+  description: string;
+  status: JobCompletionChecklistStatus;
+  blocking: boolean;
+  href: string | null;
+  completedAt: string | null;
+};
+
+export type JobCompletionState = {
+  job: {
+    id: string;
+    title: string | null;
+    clientName: string | null;
+    address: string | null;
+    status: string | null;
+    jobType: string | null;
+    certTypes: string[];
+    publicToken: string | null;
+  };
+  required: JobCompletionChecklistItem[];
+  optional: JobCompletionChecklistItem[];
+  unsafeApplianceCount: number;
+  canSend: boolean;
+  missingBlockingLabels: string[];
+  pdfHref: string;
+  publicHref: string | null;
+};
+
+const CERTIFICATE_COMPLETION_LABELS: Record<string, string> = {
+  cp12: 'CP12 Gas Safety Certificate',
+  boiler_service: 'Boiler Service Record',
+  gas_warning_notice: 'Gas Warning Notice',
+};
+
+const normalizeCertType = (value: unknown) => {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'gas_service' ? 'boiler_service' : normalized;
+};
+
+const inferRequiredCertTypes = (job: Record<string, unknown>, certificateTypes: string[]) => {
+  const explicit = Array.isArray(job.cert_types)
+    ? job.cert_types.map(normalizeCertType).filter(Boolean)
+    : [];
+  if (explicit.length) return Array.from(new Set(explicit));
+
+  const jobType = normalizeCertType(job.job_type);
+  const certificateType = normalizeCertType(job.certificate_type);
+  if (jobType === 'safety_check' || certificateType === 'cp12') return ['cp12'];
+  if (jobType === 'service' || certificateType === 'boiler_service') return ['boiler_service'];
+
+  const existingTargetCertificates = certificateTypes.filter((type) => type === 'cp12' || type === 'boiler_service');
+  return Array.from(new Set(existingTargetCertificates));
+};
+
+const isFinalCertificate = (certificate: Record<string, unknown>) => {
+  const status = typeof certificate.status === 'string' ? certificate.status.toLowerCase() : 'final';
+  const hasPdf = Boolean(certificate.pdf_path || certificate.pdf_url);
+  return hasPdf && status !== 'draft';
+};
+
+const hasUnsafeClassification = (value: unknown) => {
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toUpperCase();
+  return normalized === 'AR' || normalized === 'ID';
+};
+
+const isUnsafeField = (field: Record<string, unknown>) => {
+  const key = typeof field.field_key === 'string' ? field.field_key.toLowerCase() : '';
+  if (!key.includes('classification') && !key.includes('safety') && !key.includes('rating')) return false;
+  return hasUnsafeClassification(field.value);
+};
+
+export async function getJobCompletionState(jobId: string): Promise<JobCompletionState> {
+  JobId.parse(jobId);
+  const { sb, user } = await requireUser();
+  const { data: job, error: jobErr } = await sb
+    .from('jobs')
+    .select('id, title, client_name, address, status, job_type, certificate_type, cert_types, public_token, user_id')
+    .eq('id', jobId as JobRow['id'])
+    .maybeSingle();
+  if (jobErr) throw new Error(jobErr.message);
+  if (!job) throw new Error('Job not found');
+  if (job.user_id && job.user_id !== user.id) throw new Error('Unauthorized');
+
+  const typedJobId = jobId as JobRow['id'];
+  const untypedSb = sb as unknown as UntypedTableClient;
+  const [{ data: certificateRows, error: certErr }, { data: fieldRows, error: fieldsErr }, appliancesResp, invoiceResp] =
+    await Promise.all([
+      sb
+        .from('certificates')
+        .select('id, cert_type, status, pdf_path, pdf_url, issued_at, created_at')
+        .eq('job_id', typedJobId)
+        .order('created_at', { ascending: false }),
+      sb.from('job_fields').select('field_key, value').eq('job_id', typedJobId),
+      sb
+        .from('cp12_appliances')
+        .select('id, safety_classification, classification_code, safety_rating, defect_notes, actions_taken, actions_required')
+        .eq('job_id', typedJobId),
+      untypedSb
+        .from('invoices')
+        .select('id, invoice_number, status, payment_status, payment_link_url, pdf_path, created_at')
+        .eq('job_id', typedJobId)
+        .order('created_at', { ascending: false })
+        .limit(1),
+    ]);
+  if (certErr) throw new Error(certErr.message);
+  if (fieldsErr) throw new Error(fieldsErr.message);
+  if (appliancesResp.error && appliancesResp.error.code !== '42P01') throw new Error(appliancesResp.error.message);
+  if (invoiceResp.error && invoiceResp.error.code !== '42P01') throw new Error(invoiceResp.error.message);
+
+  const certificates = ((certificateRows ?? []) as Record<string, unknown>[]).filter(isFinalCertificate);
+  const certificateTypes = certificates.map((certificate) => normalizeCertType(certificate.cert_type));
+  const requiredTypes = inferRequiredCertTypes(job as Record<string, unknown>, certificateTypes);
+  const fields = (fieldRows ?? []) as unknown as Record<string, unknown>[];
+  const appliances = (appliancesResp.data ?? []) as unknown as Record<string, unknown>[];
+  const unsafeAppliances = appliances.filter(
+    (appliance) =>
+      hasUnsafeClassification(appliance.safety_classification) ||
+      hasUnsafeClassification(appliance.classification_code) ||
+      hasUnsafeClassification(appliance.safety_rating),
+  );
+  const unsafeApplianceCount = unsafeAppliances.length + fields.filter(isUnsafeField).length;
+  const needsGasWarningNotice =
+    unsafeApplianceCount > 0 ||
+    normalizeCertType((job as Record<string, unknown>).job_type) === 'warning_notice' ||
+    certificateTypes.includes('gas_warning_notice');
+
+  const findCertificate = (type: string) =>
+    certificates.find((certificate) => normalizeCertType(certificate.cert_type) === type) ?? null;
+  const required = requiredTypes.map((type): JobCompletionChecklistItem => {
+    const certificate = findCertificate(type);
+    const completedAt =
+      typeof certificate?.issued_at === 'string'
+        ? certificate.issued_at
+        : typeof certificate?.created_at === 'string'
+          ? certificate.created_at
+          : null;
+    return {
+      id: type === 'boiler_service' ? 'boiler_service' : 'cp12',
+      label: CERTIFICATE_COMPLETION_LABELS[type] ?? type.replaceAll('_', ' '),
+      description: certificate ? 'Final certificate PDF is stored on this job.' : 'Required before this job can be sent.',
+      status: certificate ? 'completed' : 'required',
+      blocking: !certificate,
+      href: certificate
+        ? `/jobs/${jobId}/pdf?certificateType=${type === 'boiler_service' ? 'gas_service' : type}`
+        : `/wizard/create/${type === 'boiler_service' ? 'boiler_service' : type}?jobId=${jobId}`,
+      completedAt,
+    };
+  });
+
+  if (needsGasWarningNotice) {
+    const certificate = findCertificate('gas_warning_notice');
+    required.push({
+      id: 'gas_warning_notice',
+      label: CERTIFICATE_COMPLETION_LABELS.gas_warning_notice,
+      description: certificate
+        ? 'Final warning notice PDF is stored on this job.'
+        : 'Unsafe appliance details require a final warning notice.',
+      status: certificate ? 'completed' : 'required',
+      blocking: !certificate,
+      href: certificate
+        ? `/jobs/${jobId}/pdf?certificateType=gas_warning_notice`
+        : `/wizard/create/gas_warning_notice?jobId=${jobId}`,
+      completedAt:
+        typeof certificate?.issued_at === 'string'
+          ? certificate.issued_at
+          : typeof certificate?.created_at === 'string'
+            ? certificate.created_at
+            : null,
+    });
+  }
+
+  const invoice = ((invoiceResp.data ?? []) as Record<string, unknown>[])[0] ?? null;
+  const invoiceReady = Boolean(invoice?.pdf_path || invoice?.payment_link_url || invoice?.status === 'issued');
+  const optional: JobCompletionChecklistItem[] = [
+    {
+      id: 'invoice',
+      label: 'Invoice',
+      description: invoiceReady
+        ? 'Invoice/payment details are available for the handover bundle.'
+        : invoice
+          ? 'Draft invoice exists and can be reviewed before delivery.'
+          : 'Draft needed if this handover should include payment details.',
+      status: invoiceReady ? 'completed' : invoice ? 'ready' : 'draft_needed',
+      blocking: false,
+      href: invoice?.id ? `/invoices/${invoice.id}` : `/invoices/new?jobId=${jobId}`,
+      completedAt: typeof invoice?.created_at === 'string' ? invoice.created_at : null,
+    },
+  ];
+  const missingBlockingLabels = required.filter((item) => item.blocking).map((item) => item.label);
+
+  return {
+    job: {
+      id: job.id,
+      title: job.title ?? null,
+      clientName: job.client_name ?? null,
+      address: job.address ?? null,
+      status: job.status ?? null,
+      jobType: job.job_type ?? null,
+      certTypes: Array.isArray(job.cert_types) ? job.cert_types : [],
+      publicToken: job.public_token ?? null,
+    },
+    required,
+    optional,
+    unsafeApplianceCount,
+    canSend: missingBlockingLabels.length === 0,
+    missingBlockingLabels,
+    pdfHref: `/jobs/${jobId}/pdf`,
+    publicHref: job.public_token ? `/j/${job.public_token}` : null,
+  };
 }
 
 export async function getJobWizardState(jobId: string): Promise<JobWizardState> {

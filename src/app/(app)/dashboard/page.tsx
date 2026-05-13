@@ -4,16 +4,19 @@ import { redirect } from 'next/navigation';
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import {
-  fillAwaitingLandlordJobMyself,
-  listAwaitingLandlordJobsForDashboard,
   listJobs,
-  type AwaitingLandlordDashboardJob,
 } from '@/server/jobs';
-import { dismissJobRequest, listPendingJobRequestsForDashboard, type DashboardJobRequest } from '@/server/job-requests';
+import {
+  dismissJobRequest,
+  getOrCreateEngineerRequestLink,
+  listPendingJobRequestsForDashboard,
+  type DashboardJobRequest,
+} from '@/server/job-requests';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AwaitingSignaturesCard, type AwaitingSignatureJobCard } from './_components/awaiting-signatures-card';
+import { CopyRequestLinkButton } from './_components/copy-request-link-button';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 
 type BasicJob = {
@@ -59,11 +62,11 @@ export default async function DashboardPage({
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups, jobRequests, awaitingLandlordJobs] = await Promise.all([
+  const [{ profile }, jobGroups, jobRequests, requestLink] = await Promise.all([
     getProfile(),
     listJobs(),
     listPendingJobRequestsForDashboard(),
-    listAwaitingLandlordJobsForDashboard(),
+    getOrCreateEngineerRequestLink(),
   ]);
   const activeJobs = jobGroups.active as BasicJob[];
   const completedJobs = jobGroups.completed as BasicJob[];
@@ -76,6 +79,8 @@ export default async function DashboardPage({
     profile?.full_name && profile.full_name.trim().length
       ? profile.full_name.trim().split(/\s+/)[0]
       : user.email;
+  const personalRequestPath = requestLink.path;
+  const latestRequest = jobRequests[0] ?? null;
 
   const upcomingJobsBase = activeJobs
     .filter((job) => job.scheduled_for && isTodayOrFuture(job.scheduled_for, now))
@@ -180,39 +185,50 @@ export default async function DashboardPage({
         </div>
       </section>
 
-      {jobRequests.length ? (
-        <section className="rounded-[2rem] border border-amber-200/70 bg-amber-50/80 p-4 shadow-sm sm:p-5">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-700/80">Landlord requests</p>
-              <h2 className="text-xl font-semibold text-amber-950">Requests needing review</h2>
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold text-slate-950">Landlord Requests</h2>
+              {jobRequests.length ? (
+                <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-2 text-xs font-semibold text-white">
+                  {jobRequests.length}
+                </span>
+              ) : null}
             </div>
-            <p className="text-sm text-amber-900/75">{jobRequests.length} pending</p>
           </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {jobRequests.map((request) => (
-              <JobRequestCard key={request.id} request={request} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+        </div>
 
-      {awaitingLandlordJobs.length ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-5">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Awaiting landlord</p>
-              <h2 className="text-xl font-semibold text-slate-950">Pre-fill links sent</h2>
+        <div className="mt-4">
+          {latestRequest ? (
+            <div className="space-y-3">
+              <JobRequestCard request={latestRequest} />
+              <Button asChild variant="secondary" className="rounded-full">
+                <Link href="/requests">View all requests</Link>
+              </Button>
             </div>
-            <p className="text-sm text-slate-600">{awaitingLandlordJobs.length} waiting</p>
-          </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {awaitingLandlordJobs.map((job) => (
-              <AwaitingLandlordJobCard key={job.id} job={job} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+          ) : (
+            <div className="rounded-3xl border border-dashed border-slate-300/80 bg-slate-50 p-5">
+              <p className="text-sm font-semibold text-slate-950">No landlord requests yet</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Share your request link so landlords can submit job details without entering your engineer details.
+              </p>
+              <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs text-slate-700 break-all">
+                {requestLink.url}
+              </div>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <CopyRequestLinkButton url={requestLink.url} />
+                <Button asChild className="rounded-full">
+                  <Link href={personalRequestPath}>Open link</Link>
+                </Button>
+                <Button asChild variant="secondary" className="rounded-full">
+                  <Link href="/requests">View all requests</Link>
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#f8faf6] shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
         <div className="grid lg:grid-cols-[1.35fr,0.85fr]">
@@ -428,7 +444,11 @@ function buildCalendarMonth(selectedDate: string, jobs: BasicJob[]) {
 }
 
 function isCompletedJob(job: BasicJob) {
-  return ['completed', 'issued', 'closed'].includes(String(job.status ?? '').toLowerCase());
+  return ['completed', 'closed', 'delivered'].includes(String(job.status ?? '').toLowerCase());
+}
+
+function isIssuedJob(job: BasicJob) {
+  return String(job.status ?? '').toLowerCase() === 'issued';
 }
 
 function formatSelectedDate(dateString: string) {
@@ -456,6 +476,9 @@ function getUpcomingJobHref(job: BasicJob & { prepComplete?: boolean }) {
 }
 
 function getUpcomingJobActionLabel(job: BasicJob & { prepComplete?: boolean }) {
+  if (isIssuedJob(job)) {
+    return 'Review & send';
+  }
   if (isCompletedJob(job)) {
     return 'Open PDF';
   }
@@ -493,30 +516,24 @@ function CalendarStat({ label, value }: { label: string; value: number | string 
 function JobRequestCard({ request }: { request: DashboardJobRequest }) {
   const label = request.requestType === 'renewal' ? 'Renewal Request' : 'New Job Request';
   return (
-    <div className="rounded-3xl bg-white/85 p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-amber-950">{label}</p>
-          <p className="mt-1 text-sm text-amber-900/80">{request.propertyAddress ?? 'Property address missing'}</p>
+    <div className="relative rounded-3xl border border-red-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <span className="absolute right-4 top-4 h-3 w-3 rounded-full bg-red-500 ring-4 ring-red-100" aria-hidden="true" />
+      <div className="flex items-start gap-3 pr-6">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-50 text-sm font-semibold text-red-700">
+          {(request.landlordName ?? request.landlordEmail ?? 'L').trim().charAt(0).toUpperCase()}
         </div>
-        <Badge variant="brand" className="uppercase">
-          {request.source === 'public_job_page' ? 'Public link' : 'New landlord'}
-        </Badge>
-      </div>
-      <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-        <p>Landlord: {request.landlordName ?? request.landlordEmail ?? 'Not captured'}</p>
-        <p>Phone: {request.landlordPhone ?? 'Not captured'}</p>
-        <p>Tenant: {request.tenantName ?? 'Not provided'}</p>
-        <p>Tenant phone: {request.tenantPhone ?? 'Not provided'}</p>
-        <p className="sm:col-span-2">Access: {request.accessNotes ?? 'Not provided'}</p>
-        <p className="sm:col-span-2">Preferred dates: {request.preferredDates ?? 'Not provided'}</p>
-        {request.engineerName || request.engineerEmail || request.engineerPhone ? (
-          <p className="sm:col-span-2">
-            Engineer supplied: {[request.engineerName, request.engineerCompany, request.engineerEmail, request.engineerPhone, request.engineerGasSafeNumber ? `Gas Safe ${request.engineerGasSafeNumber}` : null]
-              .filter(Boolean)
-              .join(' / ')}
-          </p>
-        ) : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-slate-950">{request.landlordName ?? 'New landlord request'}</p>
+            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 uppercase">
+              New
+            </Badge>
+            <Badge variant="brand" className="uppercase">
+              {label}
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm text-slate-700">{request.propertyAddress ?? 'Property address missing'}</p>
+        </div>
       </div>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
         <Button asChild className="rounded-full">
@@ -537,74 +554,11 @@ function JobRequestCard({ request }: { request: DashboardJobRequest }) {
   );
 }
 
-function getAwaitingLandlordPrepareHref(job: AwaitingLandlordDashboardJob) {
-  if (job.jobType === 'safety_check') {
-    return `/wizard/create/cp12?jobId=${job.id}&prepare=1`;
-  }
-  if (job.jobType === 'service') {
-    return `/wizard/create/boiler_service?jobId=${job.id}`;
-  }
-  if (job.jobType === 'warning_notice') {
-    return `/wizard/create/gas_warning_notice?jobId=${job.id}`;
-  }
-  return `/jobs/${job.id}`;
-}
-
-function AwaitingLandlordJobCard({ job }: { job: AwaitingLandlordDashboardJob }) {
-  const expired = job.prefillExpiresAt ? new Date(job.prefillExpiresAt).getTime() < Date.now() : false;
-  return (
-    <div className="rounded-3xl bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-950">{job.clientName ?? job.title ?? 'Awaiting landlord details'}</p>
-          <p className="mt-1 text-sm text-slate-600">{job.address ?? 'Address not completed yet'}</p>
-        </div>
-        <Badge variant={expired ? 'outline' : 'brand'} className="uppercase">
-          {expired ? 'Expired' : 'Waiting'}
-        </Badge>
-      </div>
-      <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-        <p>Job type: {getDashboardJobTypeLabel(job.jobType)}</p>
-        <p>Sent: {job.landlordInputRequestedAt ? formatDateTime(job.landlordInputRequestedAt) : 'Not recorded'}</p>
-        <p>Visit: {job.scheduledFor ? formatDateTime(job.scheduledFor) : 'Not scheduled'}</p>
-        <p>Expires: {job.prefillExpiresAt ? formatDateTime(job.prefillExpiresAt) : 'Not recorded'}</p>
-      </div>
-      {job.prefillUrl ? (
-        <div className="mt-3 rounded-2xl bg-slate-50 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Landlord pre-fill link</p>
-          <p className="mt-1 break-all text-xs text-slate-700">{job.prefillUrl}</p>
-        </div>
-      ) : (
-        <p className="mt-3 rounded-2xl bg-amber-50 p-3 text-xs text-amber-800">
-          No active pre-fill token is available. Fill this in manually or resend a link once resend support is added.
-        </p>
-      )}
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-        {job.prefillPath && !expired ? (
-          <Button asChild variant="secondary" className="rounded-full">
-            <Link href={job.prefillPath}>Open link</Link>
-          </Button>
-        ) : null}
-        <form
-          action={async () => {
-            'use server';
-            await fillAwaitingLandlordJobMyself(job.id);
-            redirect(getAwaitingLandlordPrepareHref(job));
-          }}
-        >
-          <Button type="submit" className="w-full rounded-full sm:w-auto">
-            Fill in myself
-          </Button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 function DashboardJobRow({ job }: { job: BasicJob & { prepComplete?: boolean } }) {
+  const issued = isIssuedJob(job);
   const completed = isCompletedJob(job);
-  const href = completed ? `/jobs/${job.id}/pdf` : getUpcomingJobHref(job);
-  const actionLabel = completed ? 'Open PDF' : getUpcomingJobActionLabel(job);
+  const href = issued ? `/jobs/${job.id}/complete` : completed ? `/jobs/${job.id}/pdf` : getUpcomingJobHref(job);
+  const actionLabel = issued ? 'Review & send' : completed ? 'Open PDF' : getUpcomingJobActionLabel(job);
   return (
     <div className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">

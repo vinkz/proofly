@@ -61,8 +61,10 @@ export default function SignupStep1Page() {
         }
 
         pushToast({
-          title: 'Account created',
-          description: 'Continue to complete your profile.',
+          title: result.existingAccount ? 'Signed in' : 'Account created',
+          description: result.existingAccount
+            ? 'Continue to profile setup with this account.'
+            : 'Continue to complete your profile.',
           variant: 'success',
         });
         router.push('/signup/step2');

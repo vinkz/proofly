@@ -56,6 +56,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
   const [addressSuggestions, setAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedAddressMatchId, setSelectedAddressMatchId] = useState<string | null>(null);
   const [addressSearchError, setAddressSearchError] = useState<string | null>(null);
+  const [propertyReference, setPropertyReference] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
   const [city, setCity] = useState('');
@@ -66,6 +67,8 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
   const [landlordPostcode, setLandlordPostcode] = useState('');
   const [preferredDate, setPreferredDate] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [engineerShareUrl, setEngineerShareUrl] = useState<string | null>(null);
+  const [engineerShareText, setEngineerShareText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const deferredAddressSearchQuery = useDeferredValue(addressLine1.trim());
 
@@ -156,8 +159,11 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         const form = new FormData(event.currentTarget);
         setError(null);
         setMessage(null);
+        setEngineerShareUrl(null);
+        setEngineerShareText(null);
         startSubmitTransition(async () => {
           try {
+            const propertyAddress = composeAddress(propertyReference, addressLine1, addressLine2, city, postcode);
             const result = await submitStandaloneLandlordJobRequest({
               landlordName: String(form.get('landlordName') ?? ''),
               landlordEmail: String(form.get('landlordEmail') ?? ''),
@@ -166,7 +172,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
               landlordAddressLine2,
               landlordCity,
               landlordPostcode,
-              propertyAddress: composeAddress(addressLine1, addressLine2, city, postcode),
+              propertyAddress,
               propertyPostcode: postcode,
               jobType: String(form.get('jobType') ?? 'cp12') as 'cp12' | 'service' | 'both' | 'other',
               tenantName: '',
@@ -192,6 +198,12 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
                   ? ' The engineer email was not sent because email delivery is not configured or no engineer email was supplied.'
                   : ' The engineer email could not be sent, but the request details were saved.';
             setMessage(`${confirmation}${engineerNotice}`);
+            if (result.engineerActionUrl) {
+              setEngineerShareUrl(result.engineerActionUrl);
+              setEngineerShareText(
+                `I sent you a CertNow job request for ${propertyAddress}. Open it here: ${result.engineerActionUrl}`,
+              );
+            }
           } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : 'Could not submit request.');
           }
@@ -246,7 +258,12 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
           </Button>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input placeholder="Property name / reference" className="rounded-2xl bg-white sm:col-span-2" disabled />
+          <Input
+            value={propertyReference}
+            onChange={(event) => setPropertyReference(event.target.value)}
+            placeholder="Property name / reference"
+            className="rounded-2xl bg-white sm:col-span-2"
+          />
           <div className="relative sm:col-span-2">
             <Input
               required
@@ -341,6 +358,30 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         {isSubmitting ? 'Submitting…' : 'Send job request'}
       </Button>
       {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p> : null}
+      {engineerShareUrl && engineerShareText ? (
+        <div className="rounded-2xl border border-emerald-100 bg-white p-4 text-sm text-slate-700">
+          <p className="font-semibold text-slate-950">Share with the engineer</p>
+          <p className="mt-1">
+            If you only have their mobile number, send this request link by WhatsApp so they can open or claim it.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <Button asChild className="rounded-full">
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(engineerShareText)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Share on WhatsApp
+              </a>
+            </Button>
+            <Button asChild variant="secondary" className="rounded-full">
+              <a href={engineerShareUrl} target="_blank" rel="noreferrer">
+                Open request link
+              </a>
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
     </form>
   );

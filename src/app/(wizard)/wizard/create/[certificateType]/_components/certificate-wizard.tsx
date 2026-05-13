@@ -1798,7 +1798,7 @@ export function CertificateWizard({
                 <Link href="/settings">Add rates and bank details</Link>
               </Button>
               <Button asChild variant="ghost" className="rounded-full">
-                <Link href={pdfHref}>Send certificate now / skip invoice</Link>
+                <Link href={`/jobs/${issuedJobId}/complete`}>Review completion checklist</Link>
               </Button>
             </div>
           </div>

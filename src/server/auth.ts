@@ -75,11 +75,28 @@ export async function signUpWithPassword(payload: unknown) {
       emailRedirectTo,
     },
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/already registered|already exists|user exists/i.test(error.message)) {
+      const { error: signInError } = await sb.auth.signInWithPassword({
+        email: body.email,
+        password: body.password,
+      });
+      if (signInError) {
+        throw new Error('This email is already registered. Log in with your password or reset it to test onboarding.');
+      }
+      return {
+        ok: true,
+        needsEmailConfirmation: false,
+        existingAccount: true,
+      };
+    }
+    throw new Error(error.message);
+  }
 
   return {
     ok: true,
     needsEmailConfirmation: !data.session,
+    existingAccount: false,
   };
 }
 
