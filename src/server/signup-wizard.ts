@@ -1,5 +1,6 @@
 'use server';
 
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
 import { supabaseServerAction, supabaseServerServiceRole } from '@/lib/supabaseServer';
@@ -13,6 +14,7 @@ import {
 import type { TablesInsert } from '@/lib/database.types';
 
 const defaultTrades = TRADE_TYPES as unknown as string[];
+const LEGACY_LONG_REQUEST_SLUG_PATTERN = /^cn-[a-f0-9]{20,}$/i;
 
 const SignupWizardSchema = z.object({
   email: z.string().email({ message: 'Valid email required' }),
@@ -35,6 +37,48 @@ const SignupWizardSchema = z.object({
     .transform((value) => (value.length ? value : defaultTrades)),
   certifications: z.array(z.string()).optional().default([]),
 });
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24);
+
+const buildSignupRequestSlug = (body: z.infer<typeof SignupWizardSchema>, suffix = '') => {
+  const gasSafeNumber = body.gas_safe_number.replace(/\D/g, '');
+  if (gasSafeNumber.length === 6) return `cn-${gasSafeNumber}${suffix}`;
+
+  const seed = slugify(body.company_name || body.default_engineer_name || body.full_name) || 'engineer';
+  return `cn-${seed}-${randomUUID().replace(/-/g, '').slice(0, 6)}`;
+};
+
+async function getAvailableRequestSlug(
+  profileSb: Awaited<ReturnType<typeof supabaseServerServiceRole>>,
+  userId: string,
+  body: z.infer<typeof SignupWizardSchema>,
+  existingSlug: string,
+) {
+  if (existingSlug && !LEGACY_LONG_REQUEST_SLUG_PATTERN.test(existingSlug)) return existingSlug;
+
+  const candidates = [
+    buildSignupRequestSlug(body),
+    buildSignupRequestSlug(body, `-${randomUUID().replace(/-/g, '').slice(0, 4)}`),
+    `cn-${randomUUID().replace(/-/g, '').slice(0, 8)}`,
+  ];
+
+  for (const candidate of candidates) {
+    const { data, error } = await profileSb
+      .from('profiles')
+      .select('id')
+      .eq('request_link_slug', candidate)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data?.id || data.id === userId) return candidate;
+  }
+
+  return `cn-${randomUUID().replace(/-/g, '').slice(0, 10)}`;
+}
 
 export async function completeSignupWizard(payload: unknown) {
   const body = SignupWizardSchema.parse(payload);
@@ -92,6 +136,20 @@ export async function completeSignupWizard(payload: unknown) {
 
   if (!userId) throw new Error('Unable to create user');
 
+  const profileSb = await supabaseServerServiceRole();
+  const { data: existingProfile, error: existingProfileErr } = await profileSb
+    .from('profiles')
+    .select('request_link_slug')
+    .eq('id', userId)
+    .maybeSingle();
+  if (existingProfileErr) throw new Error(existingProfileErr.message);
+  const requestLinkSlug = await getAvailableRequestSlug(
+    profileSb,
+    userId,
+    body,
+    existingProfile?.request_link_slug?.trim() ?? '',
+  );
+
   const profile: TablesInsert<'profiles'> = {
     id: userId,
     full_name: body.full_name,
@@ -106,10 +164,10 @@ export async function completeSignupWizard(payload: unknown) {
     default_engineer_name: body.default_engineer_name ?? body.full_name,
     default_engineer_id: body.default_engineer_id ?? null,
     gas_safe_number: body.gas_safe_number ?? null,
+    request_link_slug: requestLinkSlug,
     onboarding_complete: true,
   };
 
-  const profileSb = await supabaseServerServiceRole();
   const { error: profileErr } = await profileSb.from('profiles').upsert(profile, { onConflict: 'id' });
   if (profileErr) throw new Error(profileErr.message);
 

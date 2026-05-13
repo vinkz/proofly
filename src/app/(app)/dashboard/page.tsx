@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { AwaitingSignaturesCard, type AwaitingSignatureJobCard } from './_components/awaiting-signatures-card';
 import { CopyRequestLinkButton } from './_components/copy-request-link-button';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
+import { formatDisplayAddress } from '@/lib/address';
 
 type BasicJob = {
   id: string;
@@ -30,8 +31,6 @@ type BasicJob = {
   scheduled_for?: string | null;
 };
 type UpcomingJob = BasicJob & { prepComplete: boolean };
-const DAY_IN_MS = 86_400_000;
-const FOLLOW_UP_THRESHOLD_DAYS = 7;
 const PREP_REQUIRED_FIELD_KEYS = [
   'job_address_name',
   'job_address_line1',
@@ -73,7 +72,21 @@ export default async function DashboardPage({
 
   const now = new Date();
   const awaitingSignatures = activeJobs.filter((job) => job.status === 'awaiting_signatures').length;
-  const followUpsDue = activeJobs.filter((job) => ageInDays(job.created_at, now) >= FOLLOW_UP_THRESHOLD_DAYS).length;
+  const { count: followUpsDueCount, error: followUpsDueErr } = await (
+    // certificate_type and parent_job_id are legacy migration columns not present in every generated type.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase as any
+  )
+    .from('jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('certificate_type', 'gas_warning_notice')
+    .not('parent_job_id', 'is', null)
+    .in('status', ['draft', 'prepared']);
+  if (followUpsDueErr && !['42703', 'PGRST204'].includes(followUpsDueErr.code ?? '')) {
+    throw new Error(followUpsDueErr.message);
+  }
+  const followUpsDue = followUpsDueCount ?? 0;
 
   const displayName =
     profile?.full_name && profile.full_name.trim().length
@@ -179,7 +192,7 @@ export default async function DashboardPage({
               <Link href="/jobs/new">+ New Job</Link>
             </Button>
             <Button variant="secondary" asChild className="rounded-full">
-              <Link href="/invoices/new">Create invoice</Link>
+              <Link href="/invoices/new?guided=1">Create invoice</Link>
             </Button>
           </div>
         </div>
@@ -209,9 +222,9 @@ export default async function DashboardPage({
             </div>
           ) : (
             <div className="rounded-3xl border border-dashed border-slate-300/80 bg-slate-50 p-5">
-              <p className="text-sm font-semibold text-slate-950">No landlord requests yet</p>
+              <p className="text-sm font-semibold text-slate-950">No requests yet.</p>
               <p className="mt-1 text-sm text-slate-600">
-                Share your request link so landlords can submit job details without entering your engineer details.
+                Share your link and landlords can send you job details directly — no back-and-forth needed.
               </p>
               <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs text-slate-700 break-all">
                 {requestLink.url}
@@ -296,7 +309,7 @@ export default async function DashboardPage({
                             style={{ width: `${dayProgress}%` }}
                           />
                         </div>
-                        <p className="mt-1 text-[10px] font-medium text-muted-foreground/70">
+                        <p className="mt-1 text-[9px] font-medium leading-none text-muted-foreground/70">
                           {dayProgress}% complete
                         </p>
                       </div>
@@ -370,10 +383,6 @@ export default async function DashboardPage({
       </section>
     </div>
   );
-}
-
-function ageInDays(dateString: string, reference: Date) {
-  return Math.floor((reference.getTime() - new Date(dateString).getTime()) / DAY_IN_MS);
 }
 
 function formatDateTime(dateString: string) {
@@ -508,13 +517,13 @@ function CalendarStat({ label, value }: { label: string; value: number | string 
   return (
     <div className="rounded-2xl bg-slate-950 px-3 py-3 text-white">
       <p className="text-lg font-semibold leading-none">{value}</p>
-      <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55">{label}</p>
+      <p className="mt-1 text-[10px] font-semibold text-white/55">{label}</p>
     </div>
   );
 }
 
 function JobRequestCard({ request }: { request: DashboardJobRequest }) {
-  const label = request.requestType === 'renewal' ? 'Renewal Request' : 'New Job Request';
+  const label = request.requestType === 'renewal' ? 'Renewal request' : 'New request';
   return (
     <div className="relative rounded-3xl border border-red-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <span className="absolute right-4 top-4 h-3 w-3 rounded-full bg-red-500 ring-4 ring-red-100" aria-hidden="true" />
@@ -525,14 +534,16 @@ function JobRequestCard({ request }: { request: DashboardJobRequest }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-slate-950">{request.landlordName ?? 'New landlord request'}</p>
-            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 uppercase">
+            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 normal-case tracking-normal">
               New
             </Badge>
-            <Badge variant="brand" className="uppercase">
+            <Badge variant="brand" className="normal-case tracking-normal">
               {label}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-slate-700">{request.propertyAddress ?? 'Property address missing'}</p>
+          <p className="mt-1 text-sm text-slate-700">
+            {formatDisplayAddress(request.propertyAddress) || 'Property address missing'}
+          </p>
         </div>
       </div>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { dismissJobRequest, listPendingJobRequestsForDashboard, type DashboardJobRequest } from '@/server/job-requests';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { formatDisplayAddress } from '@/lib/address';
 
 export default async function RequestsPage() {
   const requests = await listPendingJobRequestsForDashboard();
@@ -33,7 +34,7 @@ export default async function RequestsPage() {
 }
 
 function RequestRow({ request }: { request: DashboardJobRequest }) {
-  const label = request.requestType === 'renewal' ? 'Renewal Request' : 'New Job Request';
+  const label = request.requestType === 'renewal' ? 'Renewal request' : 'New request';
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -41,11 +42,13 @@ function RequestRow({ request }: { request: DashboardJobRequest }) {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-slate-950">{request.landlordName ?? 'Landlord request'}</p>
-            <Badge variant="brand" className="uppercase">
+            <Badge variant="brand" className="normal-case tracking-normal">
               {label}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-slate-700">{request.propertyAddress ?? 'Property address missing'}</p>
+          <p className="mt-1 text-sm text-slate-700">
+            {formatDisplayAddress(request.propertyAddress) || 'Property address missing'}
+          </p>
           <p className="mt-2 text-xs text-slate-500">
             {[request.landlordPhone, request.landlordEmail, request.preferredDates].filter(Boolean).join(' / ') ||
               'No contact details captured'}

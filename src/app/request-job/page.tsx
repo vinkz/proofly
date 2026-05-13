@@ -9,14 +9,11 @@ export default function RequestJobPage() {
         <div className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
           <Image src="/certnow-logo.svg" alt="certnow" width={150} height={34} priority />
           <h1 className="mt-4 text-3xl font-bold text-[var(--brand)]">
-            Send a gas compliance job request to your engineer
+            Request a gas safety visit
           </h1>
           <p className="mt-2 text-sm text-muted-foreground/80">
-            Tell us the property, the work needed, and the engineer contact details. No account required.
+            Enter your engineer&apos;s email or phone to get started.
           </p>
-          <div className="mt-4 space-y-1 text-sm text-muted-foreground/75">
-            <p>CertNow helps Gas Safe engineers complete compliance records and invoices cleanly.</p>
-          </div>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/95 p-6 shadow">

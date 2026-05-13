@@ -24,7 +24,7 @@ type CertificateSummary = {
 export default async function NewInvoicePage({
   searchParams,
 }: {
-  searchParams: Promise<{ jobId?: string }>;
+  searchParams: Promise<{ jobId?: string; guided?: string }>;
 }) {
   const supabase = await supabaseServerReadOnly();
   const {
@@ -35,7 +35,7 @@ export default async function NewInvoicePage({
   // Invoices table is not in generated types yet; use an untyped handle for this page.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const anySupabase = supabase as any;
-  const { jobId } = await searchParams;
+  const { jobId, guided } = await searchParams;
   if (jobId) {
     const { data: existing, error: existingErr } = await anySupabase
       .from('invoices')
@@ -50,6 +50,36 @@ export default async function NewInvoicePage({
 
     const invoice = await createInvoiceForJob(jobId);
     redirect(`/invoices/${invoice.id}`);
+  }
+
+  if (guided === '1') {
+    return (
+      <main className="mx-auto max-w-3xl space-y-6 p-6">
+        <div>
+          <Link href="/dashboard" className="text-xs uppercase tracking-wide text-accent">
+            ← Back to dashboard
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold text-muted">Create invoice</h1>
+          <p className="text-sm text-muted-foreground/70">
+            Invoices are issued at the end of a job. Start a new job to get started.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Link
+            href="/jobs/new"
+            className="inline-flex items-center justify-center rounded-full bg-[var(--action)] px-4 py-2 text-sm font-semibold text-[var(--brand)] shadow-sm transition hover:-translate-y-0.5"
+          >
+            Start a new job
+          </Link>
+          <Link
+            href="/jobs"
+            className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 px-4 py-2 text-sm font-semibold text-[var(--brand)] transition hover:bg-white"
+          >
+            View jobs
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   const { data: jobs, error: jobsErr } = await (anySupabase

@@ -121,6 +121,52 @@ const slugify = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 48);
 
+const LEGACY_LONG_REQUEST_SLUG_PATTERN = /^cn-[a-f0-9]{20,}$/i;
+
+const buildReadableRequestSlug = (input: {
+  gasSafeNumber?: string | null;
+  companyName?: string | null;
+  engineerName?: string | null;
+  fullName?: string | null;
+  email?: string | null;
+}) => {
+  const gasSafeNumber = cleanText(input.gasSafeNumber).replace(/\D/g, '');
+  if (gasSafeNumber.length === 6) return `cn-${gasSafeNumber}`;
+
+  const seed =
+    cleanText(input.companyName) ||
+    cleanText(input.engineerName) ||
+    cleanText(input.fullName) ||
+    cleanText(input.email) ||
+    'engineer';
+  const readable = slugify(seed).slice(0, 24) || 'engineer';
+  return `cn-${readable}-${randomUUID().replace(/-/g, '').slice(0, 6)}`;
+};
+
+const persistEngineerRequestSlug = async (
+  admin: unknown,
+  userId: string,
+  preferredSlug: string,
+  fallbackInput: Parameters<typeof buildReadableRequestSlug>[0],
+) => {
+  const attempts = [
+    preferredSlug,
+    `cn-${slugify(cleanText(fallbackInput.companyName) || cleanText(fallbackInput.engineerName) || 'engineer').slice(0, 18)}-${randomUUID().replace(/-/g, '').slice(0, 6)}`,
+    `cn-${randomUUID().replace(/-/g, '').slice(0, 8)}`,
+  ];
+
+  for (const slug of attempts) {
+    const { error } = await (admin as unknown as UntypedSupabase)
+      .from('profiles')
+      .update({ request_link_slug: slug })
+      .eq('id', userId);
+    if (!error) return slug;
+    if (error.code !== '23505') throw new Error(error.message);
+  }
+
+  throw new Error('Unable to create request link slug');
+};
+
 const normalizeProfileMatch = (row: Record<string, unknown> | null | undefined): EngineerProfileMatch | null => {
   if (!row || typeof row.id !== 'string') return null;
   return {
@@ -408,30 +454,26 @@ export async function getOrCreateEngineerRequestLink() {
   const admin = await supabaseServerServiceRole();
   const { data: profile, error } = await (admin as unknown as UntypedSupabase)
     .from('profiles')
-    .select('id, full_name, default_engineer_name, company_name, request_link_slug')
+    .select('id, full_name, default_engineer_name, company_name, gas_safe_number, request_link_slug')
     .eq('id', user.id)
     .maybeSingle();
   if (error) throw new Error(error.message);
 
   const row = (profile ?? {}) as Record<string, unknown>;
   const existingSlug = typeof row.request_link_slug === 'string' ? row.request_link_slug.trim() : '';
-  if (existingSlug) {
+  if (existingSlug && !LEGACY_LONG_REQUEST_SLUG_PATTERN.test(existingSlug)) {
     const path = `/request/${existingSlug}`;
     return { slug: existingSlug, path, url: `${getSiteUrl()}${path}` };
   }
 
-  const nameSeed =
-    cleanText(row.company_name as string | undefined) ||
-    cleanText(row.default_engineer_name as string | undefined) ||
-    cleanText(row.full_name as string | undefined) ||
-    cleanText(user.email) ||
-    'engineer';
-  const slug = `${slugify(nameSeed) || 'engineer'}-${randomUUID().slice(0, 8)}`;
-  const { error: updateErr } = await (admin as unknown as UntypedSupabase)
-    .from('profiles')
-    .update({ request_link_slug: slug })
-    .eq('id', user.id);
-  if (updateErr) throw new Error(updateErr.message);
+  const slugInput = {
+    gasSafeNumber: row.gas_safe_number as string | undefined,
+    companyName: row.company_name as string | undefined,
+    engineerName: row.default_engineer_name as string | undefined,
+    fullName: row.full_name as string | undefined,
+    email: user.email,
+  };
+  const slug = await persistEngineerRequestSlug(admin, user.id, buildReadableRequestSlug(slugInput), slugInput);
 
   revalidatePath('/dashboard');
   revalidatePath('/jobs/new');

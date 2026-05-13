@@ -211,12 +211,12 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       }}
     >
       <div className="rounded-3xl bg-white/70 p-4">
-        <p className="text-sm font-semibold">Landlord / Property owner</p>
+        <p className="text-sm font-semibold">Your details</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input name="landlordName" required placeholder="Landlord / Owner name" className="rounded-2xl bg-white" />
+          <Input name="landlordName" required placeholder="Your name" className="rounded-2xl bg-white" />
           <Input name="landlordCompany" placeholder="Company (optional)" className="rounded-2xl bg-white" />
-          <Input name="landlordEmail" required type="email" placeholder="Email" className="rounded-2xl bg-white" />
-          <Input name="landlordPhone" required type="tel" placeholder="Tel. No." className="rounded-2xl bg-white" />
+          <Input name="landlordEmail" required type="email" placeholder="Email address" className="rounded-2xl bg-white" />
+          <Input name="landlordPhone" required type="tel" placeholder="Phone number" className="rounded-2xl bg-white" />
           <Input
             value={landlordAddressLine1}
             onChange={(event) => setLandlordAddressLine1(event.target.value)}
@@ -232,7 +232,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
           <Input
             value={landlordCity}
             onChange={(event) => setLandlordCity(event.target.value)}
-            placeholder="City / town"
+            placeholder="City"
             className="rounded-2xl bg-white"
           />
           <Input
@@ -246,7 +246,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
 
       <div className="rounded-3xl bg-white/70 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-semibold">Job Address</p>
+          <p className="text-sm font-semibold">Property details</p>
           <Button
             type="button"
             variant="outline"
@@ -305,7 +305,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
             {addressSearchError ? <p className="mt-2 text-xs text-red-700">{addressSearchError}</p> : null}
           </div>
           <Input value={addressLine2} onChange={(event) => setAddressLine2(event.target.value)} placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-2" />
-          <Input required value={city} onChange={(event) => setCity(event.target.value)} placeholder="City / town" className="rounded-2xl bg-white" />
+          <Input required value={city} onChange={(event) => setCity(event.target.value)} placeholder="City" className="rounded-2xl bg-white" />
           <Input required value={postcode} onChange={(event) => setPostcode(event.target.value)} placeholder="Postcode" className="rounded-2xl bg-white" />
           <Input name="sitePhone" placeholder="Site telephone" className="rounded-2xl bg-white" />
           <div>
@@ -327,7 +327,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       </div>
 
       <div className="rounded-3xl bg-white/70 p-4">
-        <p className="text-sm font-semibold">Engineer you want to contact</p>
+        <p className="text-sm font-semibold">{scopedEngineer ? 'Engineer' : 'Engineer you want to contact'}</p>
         {scopedEngineer ? (
           <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
             <p className="font-semibold text-slate-950">
@@ -343,7 +343,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         ) : (
           <>
             <p className="mt-1 text-xs text-slate-600">
-              Add your engineer’s details. CertNow will send them the request if an email is supplied.
+              Enter your engineer&apos;s email or phone and CertNow will send them the request.
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <Input name="engineerName" required placeholder="Engineer name" className="rounded-2xl bg-white" />

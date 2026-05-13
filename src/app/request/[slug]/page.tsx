@@ -12,6 +12,7 @@ export default async function EngineerRequestPage({
   const { slug } = await params;
   const engineer = await getEngineerRequestProfileBySlug(slug);
   if (!engineer) notFound();
+  const engineerName = engineer.engineerName ?? engineer.companyName ?? 'your engineer';
 
   return (
     <main className="min-h-screen bg-[var(--muted)] px-4 py-6 text-gray-900 sm:px-6">
@@ -19,10 +20,13 @@ export default async function EngineerRequestPage({
         <div className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
           <Image src="/certnow-logo.svg" alt="certnow" width={150} height={34} priority />
           <h1 className="mt-4 text-3xl font-bold text-[var(--brand)]">
-            Request gas compliance work from {engineer.companyName ?? engineer.engineerName ?? 'your engineer'}
+            Request a gas safety visit
           </h1>
           <p className="mt-2 text-sm text-muted-foreground/80">
-            Tell the engineer the property, work needed, and preferred date. No CertNow account required.
+            Fill in your property details below and {engineerName} will be in touch to confirm.
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground/80">
+            No account needed.
           </p>
         </div>
 
