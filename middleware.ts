@@ -8,6 +8,7 @@ const protectedPrefixes = [
   '/invoices',
   '/jobs',
   '/onboarding',
+  '/requests',
   '/settings',
   '/wizard',
 ];
@@ -72,6 +73,8 @@ export const config = {
     '/jobs/:path*',
     '/onboarding',
     '/onboarding/:path*',
+    '/requests',
+    '/requests/:path*',
     '/settings',
     '/settings/:path*',
     '/wizard',
