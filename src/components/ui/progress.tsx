@@ -15,7 +15,7 @@ export function Progress({ className, value = 0, min = 0, max = 100, ...props }:
   return (
     <div
       className={clsx(
-        'relative h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5',
+        'relative h-1 w-full overflow-hidden rounded-full bg-[var(--color-border-tertiary)]',
         className,
       )}
       role="progressbar"
@@ -25,7 +25,7 @@ export function Progress({ className, value = 0, min = 0, max = 100, ...props }:
       {...props}
     >
       <div
-        className="absolute inset-y-0 left-0 rounded-full bg-accent transition-[width]"
+        className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-action)] transition-[width]"
         style={{ width: `${percent}%` }}
       />
     </div>

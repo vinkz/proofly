@@ -28,13 +28,11 @@ export default async function OnboardingPage({
       : requiredStep;
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-muted">Complete your profile</h1>
-        <p className="text-sm text-muted-foreground/70">
-          Work through the essentials now, or save progress and come back later from Settings.
-        </p>
-      </div>
+    <div className="mx-auto max-w-md px-4 py-8">
+      <h1 className="text-[20px] font-medium text-[var(--color-text-primary)]">Complete your profile</h1>
+      <p className="mb-6 mt-1 text-[14px] text-[var(--color-text-secondary)]">
+        Work through the essentials now, or save progress and come back later from Settings.
+      </p>
 
       <OnboardingWizard
         initialFullName={profile?.full_name ?? ''}
@@ -53,8 +51,8 @@ export default async function OnboardingPage({
         initialStep={initialStep}
       />
 
-      <form action="/logout" method="post" className="flex justify-end">
-        <Button type="submit" variant="outline" className="rounded-full">
+      <form action="/logout" method="post" className="mt-6 flex justify-center">
+        <Button type="submit" variant="ghost" className="text-[13px] text-[var(--color-text-tertiary)]">
           Sign out
         </Button>
       </form>

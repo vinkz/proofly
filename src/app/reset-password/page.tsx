@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useTransition, useEffect } from 'react';
 import { z } from 'zod';
 
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
@@ -61,45 +60,53 @@ function ResetPasswordInner() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[var(--muted)] to-white">
-      <div className="mx-auto flex max-w-xl flex-col gap-6 px-4 py-10">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Password reset</p>
-          <h1 className="text-3xl font-bold text-[var(--brand)]">Set a new password</h1>
-          <p className="text-sm text-muted-foreground/80">Enter your new password below.</p>
+    <div className="min-h-screen bg-[var(--color-background-secondary)]">
+      <div className="mx-auto max-w-md px-4 pt-12">
+        <h1 className="text-[24px] font-medium text-[var(--color-text-primary)]">Set a new password</h1>
+        <p className="mb-8 mt-2 text-[14px] text-[var(--color-text-secondary)]">
+          Enter your new password below
+        </p>
+
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                New password
+              </p>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                Confirm new password
+              </p>
+              <Input
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="••••••••"
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+          </div>
         </div>
-        <Card className="space-y-4 border border-white/50 bg-white/90 p-6 shadow">
-          <label className="block text-sm font-semibold text-muted">
-            New password
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="mt-2"
-              disabled={isPending}
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Confirm new password
-            <Input
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="••••••••"
-              className="mt-2"
-              disabled={isPending}
-            />
-          </label>
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isPending || !code}
-            className="w-full rounded-full bg-[var(--action)] text-white"
-          >
-            {isPending ? 'Updating…' : 'Update password'}
-          </Button>
-        </Card>
+
+        <Button
+          type="button"
+          variant="primary"
+          onClick={handleSubmit}
+          disabled={isPending || !code}
+          className="mt-5 h-11 w-full"
+        >
+          {isPending ? 'Updating…' : 'Update password'}
+        </Button>
       </div>
     </div>
   );

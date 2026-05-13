@@ -13,14 +13,20 @@ export function EmptyState({ icon, title, description, cta, className }: EmptySt
   return (
     <div
       className={clsx(
-        'rounded-2xl border border-dashed border-white/15 bg-surface-elevated/60 px-8 py-12 text-center text-muted-foreground shadow-brand backdrop-blur-sm',
+        'rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-6 py-10 text-center text-[var(--color-text-primary)]',
         className,
       )}
     >
-      {icon ? <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-white/5 text-muted">{icon}</div> : null}
-      <h3 className="text-lg font-semibold text-muted">{title}</h3>
-      {description ? <p className="mt-2 text-sm text-muted-foreground/80">{description}</p> : null}
-      {cta ? <div className="mt-6 flex justify-center">{cta}</div> : null}
+      {icon ? (
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-background-tertiary)] text-[var(--color-text-secondary)]">
+          {icon}
+        </div>
+      ) : null}
+      <h3 className="text-base font-medium text-[var(--color-text-primary)]">{title}</h3>
+      {description ? (
+        <p className="mt-1.5 text-sm font-normal text-[var(--color-text-secondary)]">{description}</p>
+      ) : null}
+      {cta ? <div className="mt-5 flex justify-center">{cta}</div> : null}
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
 import {
@@ -34,7 +33,7 @@ type OnboardingWizardProps = {
 
 const steps = [
   { id: 1, title: 'About you' },
-  { id: 2, title: 'Business' },
+  { id: 2, title: 'Your business' },
   { id: 3, title: 'Engineer details' },
 ] as const;
 
@@ -50,6 +49,10 @@ const isAddressLookupUnavailable = (message: string | null) => {
   const normalized = String(message ?? '').toLowerCase();
   return normalized.includes('disabled') || normalized.includes('not configured');
 };
+
+const fieldLabel = (text: string) => (
+  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">{text}</p>
+);
 
 export function OnboardingWizard({
   initialFullName = '',
@@ -337,80 +340,102 @@ export function OnboardingWizard({
     });
   };
 
+  const progressPct = Math.round((step / steps.length) * 100);
+
   return (
-    <div className="space-y-6 rounded-3xl border border-white/20 bg-white/80 p-6 shadow-sm">
-      <div className="flex flex-wrap gap-2">
-        {steps.map((item) => {
-          const active = item.id === step;
-          return (
-            <div
-              key={item.id}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                active ? 'bg-[var(--accent)] text-white' : 'bg-slate-100 text-slate-600'
-              }`}
-            >
-              {item.id}. {item.title}
-            </div>
-          );
-        })}
+    <div>
+      {/* Step indicator */}
+      <p className="text-[12px] text-[var(--color-text-tertiary)]">
+        Step {step} of {steps.length}
+      </p>
+      <p className="mb-3 mt-0.5 text-[18px] font-medium text-[var(--color-text-primary)]">
+        {steps[step - 1].title}
+      </p>
+      <div className="mb-5 h-1 w-full overflow-hidden rounded-full bg-[var(--color-background-tertiary)]">
+        <div
+          className="h-full rounded-full bg-[var(--color-action)] transition-all duration-300"
+          style={{ width: `${progressPct}%` }}
+        />
       </div>
 
-      {step === 1 ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block text-sm font-semibold text-muted">
-            Full name
-            <Input value={fullName} onChange={(event) => setFullName(event.target.value)} className="mt-2" disabled={isPending} />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Date of birth
-            <Input type="date" value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} className="mt-2" disabled={isPending} />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Profession
-            <Select
-              value={professionChoice}
-              onChange={(event) => {
-                const value = event.target.value;
-                setProfessionChoice(value);
-                if (value && value !== 'Other') {
-                  setProfession(value);
-                } else if (value !== 'Other') {
-                  setProfession('');
-                }
-              }}
-              className="mt-2"
-              disabled={isPending}
-            >
-              <option value="">Select profession</option>
-              {TRADE_TYPES.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-              <option value="Other">Other</option>
-            </Select>
-          </label>
-          {professionChoice === 'Other' ? (
-            <label className="block text-sm font-semibold text-muted">
-              Profession (manual)
-              <Input value={profession} onChange={(event) => setProfession(event.target.value)} className="mt-2" disabled={isPending} />
-            </label>
-          ) : (
-            <div />
-          )}
-        </div>
-      ) : null}
+      {/* Fields card */}
+      <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
 
-      {step === 2 ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block text-sm font-semibold text-muted">
-            Company name
-            <Input value={companyName} onChange={(event) => setCompanyName(event.target.value)} className="mt-2" disabled={isPending} />
-          </label>
-          <div />
-          <div className="relative md:col-span-2">
-            <label className="block text-sm font-semibold text-muted">
-              Address line 1
+        {/* Step 1: About you */}
+        {step === 1 ? (
+          <div className="flex flex-col gap-4">
+            <div>
+              {fieldLabel('Full name')}
+              <Input
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+            <div>
+              {fieldLabel('Date of birth')}
+              <Input
+                type="date"
+                value={dateOfBirth}
+                onChange={(event) => setDateOfBirth(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+            <div>
+              {fieldLabel('Profession')}
+              <select
+                value={professionChoice}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setProfessionChoice(value);
+                  if (value && value !== 'Other') {
+                    setProfession(value);
+                  } else if (value !== 'Other') {
+                    setProfession('');
+                  }
+                }}
+                disabled={isPending}
+                className="mt-1.5 h-11 w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-[14px] text-[var(--color-text-primary)] focus:border-[var(--color-action)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-action-ring)]"
+              >
+                <option value="">Select profession</option>
+                {TRADE_TYPES.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            {professionChoice === 'Other' ? (
+              <div>
+                {fieldLabel('Profession (manual)')}
+                <Input
+                  value={profession}
+                  onChange={(event) => setProfession(event.target.value)}
+                  className="mt-1.5"
+                  disabled={isPending}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Step 2: Business */}
+        {step === 2 ? (
+          <div className="flex flex-col gap-4">
+            <div>
+              {fieldLabel('Company name')}
+              <Input
+                value={companyName}
+                onChange={(event) => setCompanyName(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+            <div className="relative">
+              {fieldLabel('Address line 1')}
               <Input
                 value={companyAddressSearchQuery}
                 onChange={(event) => {
@@ -420,106 +445,140 @@ export function OnboardingWizard({
                   setCompanyAddressSearchError(null);
                   setSelectedCompanyAddressMatchId(null);
                 }}
-                className="mt-2"
+                className="mt-1.5"
                 disabled={isPending}
                 placeholder="Start typing address or postcode"
               />
-            </label>
-            {isCompanyAddressLookupPending && !companyAddressSuggestions.length ? (
-              <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
-                Searching addresses…
-              </div>
-            ) : null}
-            {companyAddressSuggestions.length ? (
-              <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
-                <div className="max-h-72 overflow-y-auto p-2">
-                  {companyAddressSuggestions.map((suggestion) => {
-                    const isSelected = selectedCompanyAddressMatchId === suggestion.id;
-                    return (
-                      <button
-                        key={suggestion.id}
-                        type="button"
-                        onClick={() => void handleCompanyAddressMatchSelect(suggestion)}
-                        className={`w-full rounded-xl px-3 py-2 text-left transition ${
-                          isSelected
-                            ? 'bg-[color:var(--action-soft)] text-muted'
-                            : 'hover:bg-[color:var(--brand-soft)] text-muted'
-                        }`}
-                      >
-                        <div className="text-sm font-medium">{suggestion.label}</div>
-                      </button>
-                    );
-                  })}
+              {isCompanyAddressLookupPending && !companyAddressSuggestions.length ? (
+                <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-sm">
+                  Searching addresses…
                 </div>
-              </div>
-            ) : null}
-            {companyAddressSearchError ? (
-              <p className="mt-2 text-xs text-red-600">{companyAddressSearchError}</p>
-            ) : null}
+              ) : null}
+              {companyAddressSuggestions.length ? (
+                <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] shadow-sm">
+                  <div className="max-h-60 overflow-y-auto p-1.5">
+                    {companyAddressSuggestions.map((suggestion) => {
+                      const isSelected = selectedCompanyAddressMatchId === suggestion.id;
+                      return (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          onClick={() => void handleCompanyAddressMatchSelect(suggestion)}
+                          className={`w-full rounded-[8px] px-3 py-2 text-left text-[13px] transition-colors ${
+                            isSelected
+                              ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                              : 'text-[var(--color-text-primary)] hover:bg-[var(--color-background-tertiary)]'
+                          }`}
+                        >
+                          {suggestion.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {companyAddressSearchError ? (
+                <p className="mt-1.5 text-[12px] text-[var(--color-red)]">{companyAddressSearchError}</p>
+              ) : null}
+            </div>
+            <div>
+              {fieldLabel('Address line 2')}
+              <Input
+                value={companyAddressLine2}
+                onChange={(event) => setCompanyAddressLine2(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+            <div>
+              {fieldLabel('Town / city')}
+              <Input
+                value={companyTown}
+                onChange={(event) => setCompanyTown(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+            <div>
+              {fieldLabel('Postcode')}
+              <Input
+                value={companyPostcode}
+                onChange={(event) => setCompanyPostcode(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+            <div>
+              {fieldLabel('Tel. No')}
+              <Input
+                value={companyPhone}
+                onChange={(event) => setCompanyPhone(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
           </div>
-          <label className="block text-sm font-semibold text-muted md:col-span-2">
-            Address line 2
-            <Input value={companyAddressLine2} onChange={(event) => setCompanyAddressLine2(event.target.value)} className="mt-2" disabled={isPending} />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Town / city
-            <Input value={companyTown} onChange={(event) => setCompanyTown(event.target.value)} className="mt-2" disabled={isPending} />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Postcode
-            <Input value={companyPostcode} onChange={(event) => setCompanyPostcode(event.target.value)} className="mt-2" disabled={isPending} />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Tel. No
-            <Input value={companyPhone} onChange={(event) => setCompanyPhone(event.target.value)} className="mt-2" disabled={isPending} />
-          </label>
-        </div>
-      ) : null}
+        ) : null}
 
-      {step === 3 ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="block text-sm font-semibold text-muted md:col-span-2">
-            Gas Safe registration number
-            <Input
-              value={gasSafeNumber}
-              onChange={(event) => setGasSafeNumber(event.target.value)}
-              className="mt-2"
-              disabled={isPending}
-              inputMode="numeric"
-              maxLength={6}
-              pattern="[0-9]{6}"
-              placeholder="123456"
-            />
-            <span className="mt-1 block text-xs font-normal text-muted-foreground/70">6 digits</span>
-          </label>
-          <label className="block text-sm font-semibold text-muted md:col-span-2">
-            Engineer ID card number
-            <Input
-              value={engineerId}
-              onChange={(event) => setEngineerId(event.target.value)}
-              className="mt-2"
-              disabled={isPending}
-              inputMode="numeric"
-              maxLength={7}
-              pattern="[0-9]{7}"
-              placeholder="1234567"
-            />
-            <span className="mt-1 block text-xs font-normal text-muted-foreground/70">7 digits</span>
-          </label>
-        </div>
-      ) : null}
+        {/* Step 3: Engineer details */}
+        {step === 3 ? (
+          <div className="flex flex-col gap-4">
+            <div>
+              {fieldLabel('Gas Safe registration number')}
+              <Input
+                value={gasSafeNumber}
+                onChange={(event) => setGasSafeNumber(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+                inputMode="numeric"
+                maxLength={6}
+                pattern="[0-9]{6}"
+                placeholder="123456"
+              />
+              <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">6 digits</p>
+            </div>
+            <div>
+              {fieldLabel('Engineer ID card number')}
+              <Input
+                value={engineerId}
+                onChange={(event) => setEngineerId(event.target.value)}
+                className="mt-1.5"
+                disabled={isPending}
+                inputMode="numeric"
+                maxLength={7}
+                pattern="[0-9]{7}"
+                placeholder="1234567"
+              />
+              <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">7 digits</p>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-      <div className="flex flex-wrap justify-between gap-3">
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setStep((current) => Math.max(current - 1, 1))} disabled={isPending || step === 1}>
-            Back
-          </Button>
-          <Button variant="ghost" onClick={() => saveStep('later')} disabled={isPending}>
-            Save and return later
-          </Button>
-        </div>
-
-        <Button onClick={() => saveStep(step === steps.length ? 'finish' : 'next')} disabled={isPending}>
+      {/* Navigation */}
+      <div className="mt-4 flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => setStep((current) => Math.max(current - 1, 1))}
+          disabled={isPending || step === 1}
+          className="flex h-11 flex-1 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[14px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)] disabled:pointer-events-none disabled:opacity-40"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={() => saveStep('later')}
+          disabled={isPending}
+          className="flex h-11 flex-1 items-center justify-center rounded-full text-[14px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)]"
+        >
+          Save for later
+        </button>
+        <Button
+          variant="primary"
+          onClick={() => saveStep(step === steps.length ? 'finish' : 'next')}
+          disabled={isPending}
+          className="h-11 flex-[2]"
+        >
           {isPending ? 'Saving…' : step === steps.length ? 'Finish setup' : 'Save and continue'}
         </Button>
       </div>

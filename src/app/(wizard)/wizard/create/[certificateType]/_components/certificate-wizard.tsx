@@ -1715,18 +1715,18 @@ export function CertificateWizard({
       ? `mailto:${encodeURIComponent(certificateRecipientEmail)}?subject=${encodeURIComponent(certificateEmailSubject)}&body=${encodeURIComponent(certificateEmailBody)}`
       : '';
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 pb-16 pt-6">
-        <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">CP12 issued</p>
-          <h1 className="mt-2 text-2xl font-semibold text-[var(--brand)]">Finish this job</h1>
-          <p className="mt-2 text-sm text-muted-foreground/75">
+      <div className="mx-auto w-full max-w-2xl space-y-3 px-4 pb-16 pt-6">
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+          <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">CP12 issued</p>
+          <h1 className="mt-2 text-[22px] font-medium text-[var(--color-text-primary)]">Finish this job</h1>
+          <p className="mt-2 text-[13px] text-[var(--color-text-secondary)]">
             The CP12 PDF has been generated. Confirm any boiler service and invoice action before sharing the job.
           </p>
         </div>
 
-        <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
-          <p className="text-sm font-semibold text-muted">Did you also service the boiler on this visit?</p>
-          <p className="mt-1 text-xs text-muted-foreground/70">
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Did you also service the boiler on this visit?</p>
+          <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
             If yes, the boiler service opens on the same job and uses the CP12 client, address and landlord details.
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -1740,18 +1740,18 @@ export function CertificateWizard({
         </div>
 
         {boilerServiceDecision ? (
-          <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
-            <p className="text-sm font-semibold text-muted">Invoice for this job</p>
-            <p className="mt-1 text-xs text-muted-foreground/70">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Invoice for this job</p>
+            <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
               Certificate issuing is complete. Invoice setup is optional and can be finished now or later.
             </p>
             {invoiceReadiness?.ready ? (
-              <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-xs text-emerald-900">
+              <div className="mt-4 rounded-[12px] border-[0.5px] border-emerald-200 bg-emerald-50 p-4 text-[12px] text-emerald-900">
                 Standard rates and bank transfer details are set. The invoice will prefill and can be reviewed before sending.
               </div>
             ) : (
-              <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-xs text-amber-950">
-                <p className="font-semibold">Certificate issued. Add invoice details to complete the bundle.</p>
+              <div className="mt-4 rounded-[12px] border-[0.5px] border-amber-200 bg-amber-50 p-4 text-[12px] text-amber-950">
+                <p className="font-medium">Certificate issued. Add invoice details to complete the bundle.</p>
                 <p className="mt-1">
                   Missing: {invoiceReadiness?.missingFields.length ? invoiceReadiness.missingFields.join(', ') : 'invoice settings'}.
                   You can still create an editable draft invoice or skip invoicing for this job.
@@ -1759,16 +1759,16 @@ export function CertificateWizard({
               </div>
             )}
             <div className="mt-4 grid gap-2">
-              <div className="rounded-2xl border border-[var(--line)] bg-[var(--muted)]/30 p-4">
-                <p className="text-sm font-semibold text-muted">Send certificate to landlord</p>
-                <p className="mt-1 text-xs text-muted-foreground/70">
+              <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Send certificate to landlord</p>
+                <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
                   Recipient is taken from the landlord details captured at job creation or CP12 Step 1.
                 </p>
                 <Input
                   readOnly
                   value={certificateRecipientEmail}
                   placeholder="No landlord email captured"
-                  className="mt-3 bg-white"
+                  className="mt-3 bg-[var(--color-background-primary)]"
                 />
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <Button asChild variant="outline" className="rounded-full" disabled={!certificateRecipientEmail}>
@@ -1805,9 +1805,9 @@ export function CertificateWizard({
         ) : null}
 
         {publicToken ? (
-          <div className="rounded-[2rem] border border-white/20 bg-white/90 p-5 shadow-sm">
-            <p className="text-sm font-semibold text-muted">Share with landlord</p>
-            <p className="mt-1 text-xs text-muted-foreground/70">{publicUrl}</p>
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Share with landlord</p>
+            <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">{publicUrl}</p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <Button asChild className="rounded-full bg-emerald-600 text-white hover:bg-emerald-700">
                 <Link href={whatsAppHref} target="_blank">
@@ -1860,26 +1860,26 @@ export function CertificateWizard({
               </Button>
             </div>
           ) : null}
-          <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
-          <div className="grid gap-3 rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-            <p className="text-sm font-semibold text-muted">Job location</p>
+          <p className="text-[13px] text-[var(--color-text-secondary)]">Engineer and company details are pulled from account settings.</p>
+          <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job location</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
                 type="date"
                 value={info.inspection_date}
                 onChange={(e) => setInfo((prev) => ({ ...prev, inspection_date: e.target.value }))}
                 placeholder="Inspection date"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <Input
                 value={jobAddress.job_address_name}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
                 placeholder="Property name / reference"
                 required
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
-              <p className="text-xs text-muted-foreground/70 sm:col-span-2">
-                Shown as “Name” in the Job Address section of the certificate.
+              <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
+                Shown as "Name" in the Job Address section of the certificate.
               </p>
               <div className="relative sm:col-span-2">
                 <Input
@@ -1896,16 +1896,16 @@ export function CertificateWizard({
                     }));
                   }}
                   placeholder="Start typing address or postcode"
-                  className="rounded-2xl"
+                  className="rounded-[8px]"
                 />
                 {isPostcodeLookupPending && !postcodeSuggestions.length ? (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)]">
                     Searching addresses…
                   </div>
                 ) : null}
                 {postcodeSuggestions.length ? (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
-                    <div className="max-h-72 overflow-y-auto p-2">
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+                    <div className="max-h-72 overflow-y-auto">
                       {postcodeSuggestions.map((suggestion) => {
                         const isSelected = selectedPostcodeMatchId === suggestion.id;
                         return (
@@ -1913,32 +1913,32 @@ export function CertificateWizard({
                             key={suggestion.id}
                             type="button"
                             onClick={() => void handleAddressMatchSelect(suggestion)}
-                            className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                            className={`w-full border-b-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2 text-left transition last:border-0 ${
                               isSelected
-                                ? 'bg-[color:var(--action-soft)] text-muted'
-                                : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                                ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                                : 'hover:bg-[var(--color-action-bg)] text-[var(--color-text-primary)]'
                             }`}
                           >
-                            <div className="text-sm font-medium">{suggestion.label}</div>
+                            <div className="text-[13px] font-medium">{suggestion.label}</div>
                           </button>
                         );
                       })}
                     </div>
                   </div>
                 ) : null}
-                {addressSearchError ? <p className="mt-2 text-xs text-red-600">{addressSearchError}</p> : null}
+                {addressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-red)]">{addressSearchError}</p> : null}
               </div>
               <Input
                 value={jobAddress.job_address_line2}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
                 placeholder="Job address line 2"
-                className="rounded-2xl sm:col-span-2"
+                className="rounded-[8px] sm:col-span-2"
               />
               <Input
                 value={jobAddress.job_address_city}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
                 placeholder="City / Town"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
@@ -1949,24 +1949,24 @@ export function CertificateWizard({
                     setInfo((prev) => ({ ...prev, postcode: value }));
                   }}
                   placeholder="Postcode"
-                  className="rounded-2xl sm:flex-1"
+                  className="rounded-[8px] sm:flex-1"
                 />
               </div>
               <Input
                 value={jobAddress.job_tel}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
                 placeholder="Site telephone number"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
-              <p className="text-xs text-muted-foreground/70 sm:col-span-2">
+              <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
                 Shown as &apos;Tel. No&apos; in the Job Address section of the certificate.
               </p>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-            <p className="text-sm font-semibold text-muted">Landlord / Property owner</p>
-            <p className="mt-1 text-xs text-muted-foreground/70">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Landlord / Property owner</p>
+            <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
               Required for CP12. This is the property owner, not the billable agent.
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1974,14 +1974,14 @@ export function CertificateWizard({
                 value={info.landlord_name}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_name: e.target.value }))}
                 placeholder="Landlord / Owner name"
-                className="rounded-2xl"
+                className="rounded-[8px]"
                 data-testid="cp12-landlord-name"
               />
               <Input
                 value={info.landlord_company}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_company: e.target.value }))}
                 placeholder="Company (optional)"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <div className="relative sm:col-span-2">
                 <Input
@@ -1998,16 +1998,16 @@ export function CertificateWizard({
                     }));
                   }}
                   placeholder="Start typing address or postcode"
-                  className="rounded-2xl"
+                  className="rounded-[8px]"
                 />
                 {isLandlordLookupPending && !landlordAddressSuggestions.length ? (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)]">
                     Searching addresses…
                   </div>
                 ) : null}
                 {landlordAddressSuggestions.length ? (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
-                    <div className="max-h-72 overflow-y-auto p-2">
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+                    <div className="max-h-72 overflow-y-auto">
                       {landlordAddressSuggestions.map((suggestion) => {
                         const isSelected = selectedLandlordMatchId === suggestion.id;
                         return (
@@ -2015,20 +2015,20 @@ export function CertificateWizard({
                             key={suggestion.id}
                             type="button"
                             onClick={() => void handleLandlordAddressMatchSelect(suggestion)}
-                            className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                            className={`w-full border-b-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2 text-left transition last:border-0 ${
                               isSelected
-                                ? 'bg-[color:var(--action-soft)] text-muted'
-                                : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                                ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                                : 'hover:bg-[var(--color-action-bg)] text-[var(--color-text-primary)]'
                             }`}
                           >
-                            <div className="text-sm font-medium">{suggestion.label}</div>
+                            <div className="text-[13px] font-medium">{suggestion.label}</div>
                           </button>
                         );
                       })}
                     </div>
                   </div>
                 ) : null}
-                {landlordAddressSearchError ? <p className="mt-2 text-xs text-red-600">{landlordAddressSearchError}</p> : null}
+                {landlordAddressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-red)]">{landlordAddressSearchError}</p> : null}
               </div>
               <Input
                 value={info.landlord_address_line2}
@@ -2040,7 +2040,7 @@ export function CertificateWizard({
                   }))
                 }
                 placeholder="Address line 2 (optional)"
-                className="rounded-2xl sm:col-span-2"
+                className="rounded-[8px] sm:col-span-2"
               />
               <Input
                 value={info.landlord_city}
@@ -2052,52 +2052,52 @@ export function CertificateWizard({
                   }))
                 }
                 placeholder="City / Town"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <Input
                 value={info.landlord_postcode}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_postcode: e.target.value }))}
                 placeholder="Postcode"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <Input
                 value={info.landlord_tel}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_tel: e.target.value }))}
                 placeholder="Tel. No. (optional)"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <Input
                 type="tel"
                 value={info.landlord_mobile}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_mobile: e.target.value }))}
                 placeholder="Mobile number (optional)"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <Input
                 type="email"
                 value={info.landlord_email}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_email: e.target.value }))}
                 placeholder="Email for reminders (optional)"
-                className="rounded-2xl sm:col-span-2"
+                className="rounded-[8px] sm:col-span-2"
               />
             </div>
           </div>
 
-          <div className="flex items-start gap-3 rounded-2xl border border-white/40 bg-white/70 p-3">
+          <div className="flex items-start gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
             <input
               type="checkbox"
-              className="mt-1 h-4 w-4 accent-[var(--accent)]"
+              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
               checked={info.reg_26_9_confirmed}
               onChange={(e) => setInfo((prev) => ({ ...prev, reg_26_9_confirmed: e.target.checked }))}
             />
             <div>
-              <p className="text-sm font-semibold text-muted">Regulation 26(9) confirmed</p>
-              <p className="text-xs text-muted-foreground/70">Required before issuing a CP12 (see docs/specs/cp12.md).</p>
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Regulation 26(9) confirmed</p>
+              <p className="text-[12px] text-[var(--color-text-tertiary)]">Required before issuing a CP12 (see docs/specs/cp12.md).</p>
             </div>
           </div>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground/70">Non-CP12 certificates currently use the simplified flow.</p>
+        <p className="text-[13px] text-[var(--color-text-tertiary)]">Non-CP12 certificates currently use the simplified flow.</p>
       )}
       <div id="cp12-step1-footer-actions" className="mt-6 flex justify-end">
         <Button
@@ -2161,7 +2161,7 @@ export function CertificateWizard({
           }
         />
         {appliances.length >= MAX_APPLIANCES ? (
-          <p className="text-right text-xs text-muted-foreground/70">
+          <p className="text-right text-[12px] text-[var(--color-text-tertiary)]">
             CP12 PDF fits up to five appliances. Start another certificate for more.
           </p>
         ) : null}
@@ -2264,10 +2264,10 @@ export function CertificateWizard({
               ref={(el) => {
                 applianceRefs.current[index] = el;
               }}
-              className="rounded-3xl border border-white/40 bg-white p-4 shadow-md"
+              className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-muted">Appliance #{index + 1} checks</p>
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} checks</p>
               </div>
               <div className="mt-4">
                 <div className="mb-4">
@@ -2286,7 +2286,7 @@ export function CertificateWizard({
                   return (
                     <div className="space-y-4">
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                           <EnumChips
                             label="Landlord's appliance"
                             value={normalizeYesNoValue(appliance.landlords_appliance)}
@@ -2294,7 +2294,7 @@ export function CertificateWizard({
                             onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
                           />
                         </div>
-                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                           <EnumChips
                             label="Appliance inspected"
                             value={normalizeYesNoValue(appliance.appliance_inspected)}
@@ -2302,7 +2302,7 @@ export function CertificateWizard({
                             onChange={(val) => setApplianceField(index, 'appliance_inspected', yesNoLabel(val as YesNoValue))}
                           />
                         </div>
-                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                           <UnitNumberInput
                             label="Operating pressure"
                             unit="mbar"
@@ -2311,7 +2311,7 @@ export function CertificateWizard({
                             labelAction={renderReadingsVoiceButton(index)}
                           />
                         </div>
-                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                           <UnitNumberInput
                             label="Heat input"
                             unit="kW"
@@ -2322,11 +2322,11 @@ export function CertificateWizard({
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-white/30 bg-white/75 p-3 shadow-sm">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Combustion readings</p>
+                      <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                        <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Combustion readings</p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-2xl border border-white/25 bg-white/80 p-3 shadow-sm">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">High combustion reading</p>
+                          <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
+                            <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">High combustion reading</p>
                             <div className="mt-2 grid gap-3 sm:grid-cols-3">
                               <UnitNumberInput
                                 label="CO ppm"
@@ -2351,8 +2351,8 @@ export function CertificateWizard({
                               />
                             </div>
                           </div>
-                          <div className="rounded-2xl border border-white/25 bg-white/80 p-3 shadow-sm">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Low combustion reading</p>
+                          <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
+                            <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Low combustion reading</p>
                             <div className="mt-2 grid gap-3 sm:grid-cols-3">
                               <UnitNumberInput
                                 label="CO ppm"
@@ -2379,12 +2379,12 @@ export function CertificateWizard({
                           </div>
                         </div>
                         <div className="mt-3 space-y-2">
-                          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                          <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
                             <span>Combustion notes (optional)</span>
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
+                                className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
                                 onClick={() =>
                                   pushToast({
                                     title: 'Photo',
@@ -2397,7 +2397,7 @@ export function CertificateWizard({
                               </button>
                               <button
                                 type="button"
-                                className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 text-[11px] font-semibold text-muted shadow-sm transition hover:border-[var(--accent)]"
+                                className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
                                 onClick={() =>
                                   pushToast({
                                     title: 'Text',
@@ -2440,7 +2440,7 @@ export function CertificateWizard({
                           value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
                           onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
                         />
-                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                           <EnumChips
                             label="Appliance serviced"
                             value={normalizeYesNoValue(appliance.appliance_serviced)}
@@ -2448,7 +2448,7 @@ export function CertificateWizard({
                             onChange={(val) => setApplianceField(index, 'appliance_serviced', yesNoLabel(val as YesNoValue))}
                           />
                         </div>
-                        <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                           <EnumChips
                             label="Appliance safe to use"
                             value={safeToUse}
@@ -2458,7 +2458,7 @@ export function CertificateWizard({
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 shadow-sm">
+                      <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                         <EnumChips
                           label="Condition classification"
                           value={classification}
@@ -2471,43 +2471,43 @@ export function CertificateWizard({
                               value={appliance.defect_notes ?? ''}
                               onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
                               placeholder="Defect notes"
-                              className="min-h-[80px] bg-white"
+                              className="min-h-[80px]"
                             />
                             <Textarea
                               value={appliance.actions_taken ?? ''}
                               onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
                               placeholder="Actions taken"
-                              className="min-h-[80px] bg-white"
+                              className="min-h-[80px]"
                             />
                             <Textarea
                               value={appliance.actions_required ?? ''}
                               onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
                               placeholder="Actions required"
-                              className="min-h-[80px] bg-white"
+                              className="min-h-[80px]"
                             />
-                            <div className="grid gap-2 text-sm text-muted sm:grid-cols-3">
-                              <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                            <div className="grid gap-2 text-[13px] text-[var(--color-text-primary)] sm:grid-cols-3">
+                              <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
                                 <input
                                   type="checkbox"
-                                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                  className="mt-1 h-4 w-4 accent-[var(--color-action)]"
                                   checked={appliance.warning_notice_issued ?? false}
                                   onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
                                 />
                                 <span>Warning notice issued</span>
                               </label>
-                              <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                              <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
                                 <input
                                   type="checkbox"
-                                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                  className="mt-1 h-4 w-4 accent-[var(--color-action)]"
                                   checked={appliance.appliance_disconnected ?? false}
                                   onChange={(e) => setApplianceBooleanField(index, 'appliance_disconnected', e.target.checked)}
                                 />
                                 <span>Appliance disconnected</span>
                               </label>
-                              <label className="flex items-start gap-2 rounded-2xl bg-white/80 p-3">
+                              <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
                                 <input
                                   type="checkbox"
-                                  className="mt-1 h-4 w-4 accent-[var(--accent)]"
+                                  className="mt-1 h-4 w-4 accent-[var(--color-action)]"
                                   checked={appliance.danger_do_not_use_attached ?? false}
                                   onChange={(e) => setApplianceBooleanField(index, 'danger_do_not_use_attached', e.target.checked)}
                                 />
@@ -2516,14 +2516,14 @@ export function CertificateWizard({
                             </div>
                           </div>
                         ) : (
-                          <p className="mt-2 text-xs text-muted-foreground/70">
+                          <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
                             Use Safe or NCS when the appliance remains safe to use. Switch Appliance safe to use to No for AR or ID.
                           </p>
                         )}
                       </div>
 
-                      <div className="rounded-2xl border border-white/30 bg-white/75 p-3 shadow-sm">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Additional checks</p>
+                      <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                        <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Additional checks</p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <PassFailToggle
                             label="Stability test"
@@ -2545,8 +2545,8 @@ export function CertificateWizard({
           ))}
         </div>
 
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-muted">Whole-house safety</p>
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Whole-house safety</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <PassFailToggle
               label="Emergency control accessible"
@@ -2571,8 +2571,8 @@ export function CertificateWizard({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-muted">CO alarms</p>
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">CO alarms</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <PassFailToggle
               label="CO alarm fitted"
@@ -2592,8 +2592,8 @@ export function CertificateWizard({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-muted">Comments (optional)</p>
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Comments (optional)</p>
           <Textarea
             className="mt-3 min-h-[90px]"
             value={evidenceFields.comments ?? ''}
@@ -2629,7 +2629,7 @@ export function CertificateWizard({
             Edit before send
           </Button>
           <Button
-            className="rounded-full bg-[var(--action)] px-6 text-white"
+            className="rounded-full bg-[var(--color-action)] px-6 text-white"
             disabled={isBusy || checklist.blockingMissing > 0}
             onClick={handleGenerate}
             data-testid="cp12-issue"
@@ -2641,8 +2641,8 @@ export function CertificateWizard({
     >
       <div className="space-y-3">
         {!info.landlord_email.trim() ? (
-          <div className="rounded-3xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm">
-            <p className="font-semibold">Landlord email is missing</p>
+          <div className="rounded-[16px] border-[0.5px] border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-950">
+            <p className="font-medium">Landlord email is missing</p>
             <p className="mt-1 text-amber-900/80">
               You can still issue this CP12, but adding an email enables renewal reminders and landlord portal links later.
             </p>
@@ -2651,10 +2651,10 @@ export function CertificateWizard({
             </Button>
           </div>
         ) : null}
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-muted">Ready to issue?</p>
-            <p className="text-xs text-muted-foreground/70">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Ready to issue?</p>
+            <p className="text-[12px] text-[var(--color-text-tertiary)]">
               {checklist.blockingMissing > 0 ? `${checklist.blockingMissing} required item(s) missing` : 'All required items complete'}
             </p>
           </div>
@@ -2662,17 +2662,17 @@ export function CertificateWizard({
             {checklist.items.map((item) => (
               <div
                 key={item.id}
-                className={`flex items-start gap-2 rounded-2xl px-3 py-2 text-sm ${
-                  item.ok ? 'bg-[var(--muted)]/40 text-muted' : item.blocking !== false ? 'bg-amber-50 text-amber-900' : 'bg-white/60 text-muted'
+                className={`flex items-start gap-2 rounded-[8px] px-3 py-2 text-[13px] ${
+                  item.ok ? 'bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]' : item.blocking !== false ? 'bg-amber-50 text-amber-900' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
                 }`}
               >
                 <span className="mt-1 text-base">{item.ok ? '✅' : item.blocking === false ? 'ℹ️' : '⚠️'}</span>
                 <div className="flex-1">
-                  <p className="font-semibold">{item.label}</p>
-                  {!item.ok && item.hint ? <p className="text-xs text-muted-foreground/80">{item.hint}</p> : null}
+                  <p className="font-medium">{item.label}</p>
+                  {!item.ok && item.hint ? <p className="text-[12px] text-[var(--color-text-tertiary)]">{item.hint}</p> : null}
                 </div>
                 {!item.ok && item.action ? (
-                  <Button type="button" variant="ghost" className="rounded-full px-3 py-1 text-xs" onClick={item.action}>
+                  <Button type="button" variant="ghost" className="rounded-full px-3 py-1 text-[12px]" onClick={item.action}>
                     Go
                   </Button>
                 ) : null}
@@ -2729,12 +2729,12 @@ export function CertificateWizard({
           }}
         />
         {remoteSignatureLink ? (
-          <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm">
-            <p className="text-sm font-semibold text-emerald-900">Remote landlord signature link ready</p>
-            <p className="mt-1 text-xs text-emerald-800/80">
+          <div className="rounded-[16px] border-[0.5px] border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-[13px] font-medium text-emerald-900">Remote landlord signature link ready</p>
+            <p className="mt-1 text-[12px] text-emerald-800">
               Share this link with the landlord or responsible person to review and sign the CP12 remotely.
             </p>
-            <div className="mt-3 rounded-2xl border border-emerald-200 bg-white/90 px-3 py-2 text-xs text-emerald-950">
+            <div className="mt-3 rounded-[8px] border-[0.5px] border-emerald-200 bg-[var(--color-background-primary)] px-3 py-2 text-[12px] text-emerald-950">
               {remoteSignatureLink}
             </div>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -2761,8 +2761,8 @@ export function CertificateWizard({
             </div>
           </div>
         ) : null}
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-muted">Completion</p>
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Completion</p>
           <Input
             type="date"
             value={completionDate}
@@ -2770,8 +2770,8 @@ export function CertificateWizard({
             className="mt-2"
           />
         </div>
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-muted">Next inspection due</p>
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Next inspection due</p>
           <Input
             type="date"
             value={evidenceFields.next_inspection_due ?? ''}
@@ -2779,8 +2779,8 @@ export function CertificateWizard({
             className="mt-2"
           />
         </div>
-        <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Evidence photos (optional)</p>
           <div className="mt-3">
             <EvidenceCard
               title="Upload photos"
@@ -2807,7 +2807,7 @@ export function CertificateWizard({
           {isPending ? 'Preparing link…' : 'Send to landlord for signature'}
         </Button>
         <Button
-          className="rounded-full bg-[var(--action)] px-6 text-white"
+          className="rounded-full bg-[var(--color-action)] px-6 text-white"
           disabled={isBusy || checklist.blockingMissing > 0}
           onClick={handleGenerate}
           data-testid="cp12-issue"

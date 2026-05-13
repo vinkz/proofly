@@ -2,9 +2,6 @@
 
 import Link from 'next/link';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 
 export type AwaitingSignatureJobCard = {
@@ -48,77 +45,150 @@ export function AwaitingSignaturesCard({
   };
 
   return (
-    <Card className="border border-white/10">
-      <CardHeader>
-        <CardTitle className="text-lg text-muted">PDFs Awaiting Signatures</CardTitle>
-        <CardDescription className="text-sm text-muted-foreground/70">
-          CP12 certificates sent out for remote landlord signature.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 px-0.5">
+        <h2 className="text-[13px] font-medium text-[var(--color-text-primary)]">Awaiting signatures</h2>
         {jobs.length ? (
-          jobs.map((job) => (
-            <div key={job.id} className="rounded-2xl border border-white/10 bg-white/40 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-muted">{job.client_name ?? job.title ?? 'Job'}</p>
-                  <p className="text-xs text-muted-foreground/70">{job.address}</p>
-                  <p className="mt-1 text-xs text-muted-foreground/70">
-                    Created {formatDateTime(job.created_at)}
-                  </p>
-                  {job.expiresAt ? (
-                    <p className="mt-1 text-xs text-muted-foreground/70">
-                      Link expires {formatDate(job.expiresAt)}
-                    </p>
-                  ) : null}
-                </div>
-                <Badge variant="brand" className="uppercase">
-                  Awaiting signature
-                </Badge>
-              </div>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={() => handleCopyLink(job.shareLink)}
-                >
-                  Copy link
-                </Button>
-                <Button asChild variant="outline" className="rounded-full">
-                  <Link href={`/jobs/${job.id}`}>Open job</Link>
-                </Button>
-                <Button asChild variant="secondary" className="rounded-full">
-                  <Link href={job.shareLink ?? '#'} target="_blank">
-                    Open signing link
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-muted-foreground/70">No PDFs are currently awaiting remote signature.</p>
-        )}
-      </CardContent>
-    </Card>
+          <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[10px] bg-[var(--color-amber-bg)] px-1.5 text-[11px] font-medium text-[var(--color-amber)]">
+            {jobs.length}
+          </span>
+        ) : null}
+      </div>
+
+      {jobs.length ? (
+        <div className="space-y-2">
+          {jobs.map((job) => (
+            <AwaitingJobCard key={job.id} job={job} onCopy={handleCopyLink} />
+          ))}
+        </div>
+      ) : (
+        <p className="px-0.5 text-[13px] font-normal text-[var(--color-text-tertiary)]">
+          No PDFs are currently awaiting remote signature.
+        </p>
+      )}
+    </div>
   );
 }
 
-function formatDateTime(dateString: string) {
-  if (!dateString) return 'Unknown';
-  return new Date(dateString).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-  });
+function AwaitingJobCard({
+  job,
+  onCopy,
+}: {
+  job: AwaitingSignatureJobCard;
+  onCopy: (shareLink: string | null) => void | Promise<void>;
+}) {
+  const title = job.client_name ?? job.title ?? 'Job';
+  const createdRelative = formatRelative(job.created_at);
+  const expiresIn = formatDaysUntil(job.expiresAt);
+  const metaParts = [
+    createdRelative ? `Sent ${createdRelative}` : null,
+    expiresIn ? `expires ${expiresIn}` : null,
+  ].filter(Boolean);
+
+  return (
+    <article className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+      <div className="h-[3px] w-full bg-[var(--color-amber)]" aria-hidden="true" />
+      <div className="px-4 py-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-medium leading-tight text-[var(--color-text-primary)]">
+              {title}
+            </p>
+            <p className="mt-0.5 truncate text-[12px] font-normal text-[var(--color-text-tertiary)]">
+              Link sent to {title} · {job.address}
+            </p>
+          </div>
+          <span className="inline-flex shrink-0 items-center rounded-[10px] bg-[var(--color-amber-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-amber)]">
+            Awaiting
+          </span>
+        </div>
+
+        {metaParts.length ? (
+          <div className="mt-3 flex items-center gap-[7px] text-[13px] font-normal text-[var(--color-text-secondary)]">
+            <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center">
+              <ClockIcon />
+            </span>
+            <span className="truncate">{metaParts.join(' · ')}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-2 border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3 pt-2.5">
+        <Link
+          href={job.shareLink ?? '#'}
+          target="_blank"
+          className="inline-flex h-9 flex-[2] items-center justify-center rounded-[18px] bg-[var(--color-cta)] text-[13px] font-medium text-[var(--color-cta-fg)] transition-colors hover:bg-[var(--color-text-primary)]"
+        >
+          Open signing link
+        </Link>
+        <button
+          type="button"
+          onClick={() => onCopy(job.shareLink)}
+          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[18px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[13px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-background-tertiary)]"
+        >
+          <SendIcon />
+          Copy link
+        </button>
+        <Link
+          href={`/jobs/${job.id}`}
+          aria-label="Open job"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[18px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)] hover:text-[var(--color-text-primary)]"
+        >
+          <ExternalLinkIcon />
+        </Link>
+      </div>
+    </article>
+  );
 }
 
-function formatDate(dateString: string) {
-  if (!dateString) return 'Unknown';
-  return new Date(dateString).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+function formatRelative(dateString: string | null | undefined) {
+  if (!dateString) return null;
+  const target = new Date(dateString).getTime();
+  if (Number.isNaN(target)) return null;
+  const diffMs = Date.now() - target;
+  const diffMins = Math.round(diffMs / 60000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.round(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.round(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
+function formatDaysUntil(dateString: string | null | undefined) {
+  if (!dateString) return null;
+  const target = new Date(dateString).getTime();
+  if (Number.isNaN(target)) return null;
+  const diffDays = Math.ceil((target - Date.now()) / 86400000);
+  if (diffDays <= 0) return 'today';
+  if (diffDays === 1) return 'in 1 day';
+  return `in ${diffDays} days`;
+}
+
+function ClockIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m22 2-7 20-4-9-9-4Z" />
+      <path d="M22 2 11 13" />
+    </svg>
+  );
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </svg>
+  );
 }

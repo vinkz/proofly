@@ -4,7 +4,6 @@ import { useDeferredValue, useEffect, useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { submitStandaloneLandlordJobRequest } from '@/server/job-requests';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
 
@@ -50,26 +49,60 @@ const composeAddress = (...parts: Array<string | null | undefined>) =>
     .filter(Boolean)
     .join(', ');
 
+const JOB_TYPES = [
+  { value: 'cp12' as const, label: 'Annual gas safety check' },
+  { value: 'service' as const, label: 'Boiler service' },
+  { value: 'both' as const, label: 'Gas safety + service' },
+  { value: 'other' as const, label: 'Other' },
+];
+
 export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: ScopedRequestEngineer | null }) {
+  const totalSteps = scopedEngineer ? 2 : 3;
+  const [step, setStep] = useState(1);
+
   const [isSubmitting, startSubmitTransition] = useTransition();
+
+  // Address autocomplete
   const [isAddressLookupPending, setIsAddressLookupPending] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedAddressMatchId, setSelectedAddressMatchId] = useState<string | null>(null);
   const [addressSearchError, setAddressSearchError] = useState<string | null>(null);
-  const [propertyReference, setPropertyReference] = useState('');
+
+  // Job address
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
   const [city, setCity] = useState('');
   const [postcode, setPostcode] = useState('');
+
+  // Landlord
+  const [landlordName, setLandlordName] = useState('');
+  const [landlordCompany, setLandlordCompany] = useState('');
+  const [landlordEmail, setLandlordEmail] = useState('');
+  const [landlordPhone, setLandlordPhone] = useState('');
   const [landlordAddressLine1, setLandlordAddressLine1] = useState('');
   const [landlordAddressLine2, setLandlordAddressLine2] = useState('');
   const [landlordCity, setLandlordCity] = useState('');
   const [landlordPostcode, setLandlordPostcode] = useState('');
+
+  // Engineer (only when no scopedEngineer)
+  const [engineerName, setEngineerName] = useState('');
+  const [engineerEmail, setEngineerEmail] = useState('');
+  const [engineerPhone, setEngineerPhone] = useState('');
+
+  // Job details
+  const [tenantName, setTenantName] = useState('');
+  const [sitePhone, setSitePhone] = useState('');
+  const [accessNotes, setAccessNotes] = useState('');
+  const [jobType, setJobType] = useState<'cp12' | 'service' | 'both' | 'other'>('cp12');
   const [preferredDate, setPreferredDate] = useState('');
+
+  // Result
   const [message, setMessage] = useState<string | null>(null);
   const [engineerShareUrl, setEngineerShareUrl] = useState<string | null>(null);
   const [engineerShareText, setEngineerShareText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stepError, setStepError] = useState<string | null>(null);
+
   const deferredAddressSearchQuery = useDeferredValue(addressLine1.trim());
 
   useEffect(() => {
@@ -151,238 +184,409 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
     setAddressSuggestions([]);
   };
 
-  return (
-    <form
-      className="grid gap-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        setError(null);
-        setMessage(null);
-        setEngineerShareUrl(null);
-        setEngineerShareText(null);
-        startSubmitTransition(async () => {
-          try {
-            const propertyAddress = composeAddress(propertyReference, addressLine1, addressLine2, city, postcode);
-            const result = await submitStandaloneLandlordJobRequest({
-              landlordName: String(form.get('landlordName') ?? ''),
-              landlordEmail: String(form.get('landlordEmail') ?? ''),
-              landlordPhone: String(form.get('landlordPhone') ?? ''),
-              landlordAddressLine1,
-              landlordAddressLine2,
-              landlordCity,
-              landlordPostcode,
-              propertyAddress,
-              propertyPostcode: postcode,
-              jobType: String(form.get('jobType') ?? 'cp12') as 'cp12' | 'service' | 'both' | 'other',
-              tenantName: '',
-              tenantPhone: String(form.get('sitePhone') ?? ''),
-              accessNotes: '',
-              preferredDates: preferredDate,
-              engineerName: scopedEngineer
-                ? scopedEngineer.engineerName ?? scopedEngineer.companyName ?? 'Selected engineer'
-                : String(form.get('engineerName') ?? ''),
-              engineerEmail: scopedEngineer?.email ?? String(form.get('engineerEmail') ?? ''),
-              engineerPhone: scopedEngineer?.phone ?? String(form.get('engineerPhone') ?? ''),
-              engineerGasSafeNumber: scopedEngineer?.gasSafeNumber ?? '',
-              engineerRequestSlug: scopedEngineer?.requestLinkSlug ?? '',
-            });
-            const confirmation =
-              result.landlordConfirmationStatus === 'sent'
-                ? 'A confirmation email has been sent to you.'
-                : 'Your request is saved; email delivery is not configured yet.';
-            const engineerNotice =
-              result.engineerNotificationStatus === 'sent'
-                ? ' The engineer contact has also been emailed.'
-                : result.engineerNotificationStatus === 'not_configured'
-                  ? ' The engineer email was not sent because email delivery is not configured or no engineer email was supplied.'
-                  : ' The engineer email could not be sent, but the request details were saved.';
-            setMessage(`${confirmation}${engineerNotice}`);
-            if (result.engineerActionUrl) {
-              setEngineerShareUrl(result.engineerActionUrl);
-              setEngineerShareText(
-                `I sent you a CertNow job request for ${propertyAddress}. Open it here: ${result.engineerActionUrl}`,
-              );
-            }
-          } catch (submitError) {
-            setError(submitError instanceof Error ? submitError.message : 'Could not submit request.');
-          }
+  const stepLabels = scopedEngineer
+    ? ['Your details', 'Property']
+    : ['Engineer', 'Your details', 'Property'];
+
+  const progressPct = Math.round((step / totalSteps) * 100);
+
+  const validateCurrentStep = (): boolean => {
+    if (!scopedEngineer && step === 1) {
+      if (!engineerName.trim()) {
+        setStepError('Engineer name is required.');
+        return false;
+      }
+    }
+    const landlordStep = scopedEngineer ? 1 : 2;
+    if (step === landlordStep) {
+      if (!landlordName.trim()) { setStepError('Your name is required.'); return false; }
+      if (!landlordEmail.trim()) { setStepError('Email address is required.'); return false; }
+      if (!landlordPhone.trim()) { setStepError('Phone number is required.'); return false; }
+    }
+    return true;
+  };
+
+  const handleNext = () => {
+    setStepError(null);
+    if (!validateCurrentStep()) return;
+    setStep((s) => s + 1);
+  };
+
+  const handleBack = () => {
+    setStepError(null);
+    setStep((s) => s - 1);
+  };
+
+  const handleSubmit = () => {
+    setStepError(null);
+    if (!addressLine1.trim() || !city.trim() || !postcode.trim()) {
+      setStepError('Address line 1, city, and postcode are required.');
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    setEngineerShareUrl(null);
+    setEngineerShareText(null);
+    startSubmitTransition(async () => {
+      try {
+        const propertyAddress = composeAddress(addressLine1, addressLine2, city, postcode);
+        const result = await submitStandaloneLandlordJobRequest({
+          landlordName,
+          landlordEmail,
+          landlordPhone,
+          landlordAddressLine1,
+          landlordAddressLine2,
+          landlordCity,
+          landlordPostcode,
+          propertyAddress,
+          propertyPostcode: postcode,
+          jobType,
+          tenantName,
+          tenantPhone: sitePhone,
+          accessNotes,
+          preferredDates: preferredDate,
+          engineerName: scopedEngineer
+            ? scopedEngineer.engineerName ?? scopedEngineer.companyName ?? 'Selected engineer'
+            : engineerName,
+          engineerEmail: scopedEngineer?.email ?? engineerEmail,
+          engineerPhone: scopedEngineer?.phone ?? engineerPhone,
+          engineerGasSafeNumber: scopedEngineer?.gasSafeNumber ?? '',
+          engineerRequestSlug: scopedEngineer?.requestLinkSlug ?? '',
         });
-      }}
-    >
-      <div className="rounded-3xl bg-white/70 p-4">
-        <p className="text-sm font-semibold">Your details</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input name="landlordName" required placeholder="Your name" className="rounded-2xl bg-white" />
-          <Input name="landlordCompany" placeholder="Company (optional)" className="rounded-2xl bg-white" />
-          <Input name="landlordEmail" required type="email" placeholder="Email address" className="rounded-2xl bg-white" />
-          <Input name="landlordPhone" required type="tel" placeholder="Phone number" className="rounded-2xl bg-white" />
-          <Input
-            value={landlordAddressLine1}
-            onChange={(event) => setLandlordAddressLine1(event.target.value)}
-            placeholder="Address line 1"
-            className="rounded-2xl bg-white sm:col-span-2"
-          />
-          <Input
-            value={landlordAddressLine2}
-            onChange={(event) => setLandlordAddressLine2(event.target.value)}
-            placeholder="Address line 2"
-            className="rounded-2xl bg-white sm:col-span-2"
-          />
-          <Input
-            value={landlordCity}
-            onChange={(event) => setLandlordCity(event.target.value)}
-            placeholder="City"
-            className="rounded-2xl bg-white"
-          />
-          <Input
-            value={landlordPostcode}
-            onChange={(event) => setLandlordPostcode(event.target.value)}
-            placeholder="Postcode"
-            className="rounded-2xl bg-white"
-          />
-        </div>
-      </div>
+        const confirmation =
+          result.landlordConfirmationStatus === 'sent'
+            ? 'A confirmation email has been sent to you.'
+            : 'Your request is saved; email delivery is not configured yet.';
+        const engineerNotice =
+          result.engineerNotificationStatus === 'sent'
+            ? ' The engineer contact has also been emailed.'
+            : result.engineerNotificationStatus === 'not_configured'
+              ? ' The engineer email was not sent because email delivery is not configured or no engineer email was supplied.'
+              : ' The engineer email could not be sent, but the request details were saved.';
+        setMessage(`${confirmation}${engineerNotice}`);
+        if (result.engineerActionUrl) {
+          setEngineerShareUrl(result.engineerActionUrl);
+          setEngineerShareText(
+            `I sent you a CertNow job request for ${propertyAddress}. Open it here: ${result.engineerActionUrl}`,
+          );
+        }
+      } catch (submitError) {
+        setError(submitError instanceof Error ? submitError.message : 'Could not submit request.');
+      }
+    });
+  };
 
-      <div className="rounded-3xl bg-white/70 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-semibold">Property details</p>
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full text-xs"
-            onClick={copyLandlordAddressToJobAddress}
-            disabled={!landlordAddressLine1 && !landlordCity && !landlordPostcode}
-          >
-            Same as landlord address
-          </Button>
+  if (message) {
+    return (
+      <div className="grid gap-3">
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
+          <p className="text-[15px] font-medium text-[var(--color-text-primary)]">Request sent</p>
+          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">{message}</p>
         </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input
-            value={propertyReference}
-            onChange={(event) => setPropertyReference(event.target.value)}
-            placeholder="Property name / reference"
-            className="rounded-2xl bg-white sm:col-span-2"
-          />
-          <div className="relative sm:col-span-2">
-            <Input
-              required
-              value={addressLine1}
-              onChange={(event) => {
-                setAddressLine1(event.target.value);
-                setAddressSearchError(null);
-                setSelectedAddressMatchId(null);
-              }}
-              placeholder="Address line 1"
-              className="rounded-2xl bg-white"
-            />
-            {isAddressLookupPending && !addressSuggestions.length ? (
-              <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-lg">
-                Searching addresses…
-              </div>
-            ) : null}
-            {addressSuggestions.length ? (
-              <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
-                <div className="max-h-72 overflow-y-auto p-2">
-                  {addressSuggestions.map((suggestion) => {
-                    const isSelected = selectedAddressMatchId === suggestion.id;
-                    return (
-                      <button
-                        key={suggestion.id}
-                        type="button"
-                        onClick={() => void handleAddressSelect(suggestion)}
-                        className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
-                          isSelected ? 'bg-emerald-50 text-slate-950' : 'hover:bg-slate-50'
-                        }`}
-                      >
-                        {suggestion.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-            {addressSearchError ? <p className="mt-2 text-xs text-red-700">{addressSearchError}</p> : null}
-          </div>
-          <Input value={addressLine2} onChange={(event) => setAddressLine2(event.target.value)} placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-2" />
-          <Input required value={city} onChange={(event) => setCity(event.target.value)} placeholder="City" className="rounded-2xl bg-white" />
-          <Input required value={postcode} onChange={(event) => setPostcode(event.target.value)} placeholder="Postcode" className="rounded-2xl bg-white" />
-          <Input name="sitePhone" placeholder="Site telephone" className="rounded-2xl bg-white" />
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Preferred date</label>
-            <Input
-              type="date"
-              value={preferredDate}
-              onChange={(event) => setPreferredDate(event.target.value)}
-              className="mt-1 rounded-2xl bg-white"
-            />
-          </div>
-          <Select name="jobType" defaultValue="cp12" className="rounded-2xl bg-white">
-            <option value="cp12">Annual gas safety check</option>
-            <option value="service">Boiler service</option>
-            <option value="both">Gas safety check + boiler service</option>
-            <option value="other">Other</option>
-          </Select>
-        </div>
-      </div>
-
-      <div className="rounded-3xl bg-white/70 p-4">
-        <p className="text-sm font-semibold">{scopedEngineer ? 'Engineer' : 'Engineer you want to contact'}</p>
-        {scopedEngineer ? (
-          <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-            <p className="font-semibold text-slate-950">
-              {scopedEngineer.companyName ?? scopedEngineer.engineerName ?? 'Your selected engineer'}
+        {engineerShareUrl && engineerShareText ? (
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
+            <p className="text-[15px] font-medium text-[var(--color-text-primary)]">Share with the engineer</p>
+            <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+              If you only have their mobile number, send this request link by WhatsApp so they can open or claim it.
             </p>
-            <p className="mt-1">
-              {[scopedEngineer.engineerName, scopedEngineer.gasSafeNumber ? `Gas Safe ${scopedEngineer.gasSafeNumber}` : null]
-                .filter(Boolean)
-                .join(' / ')}
-            </p>
-            <p className="mt-1">{[scopedEngineer.email, scopedEngineer.phone].filter(Boolean).join(' / ')}</p>
-          </div>
-        ) : (
-          <>
-            <p className="mt-1 text-xs text-slate-600">
-              Enter your engineer&apos;s email or phone and CertNow will send them the request.
-            </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <Input name="engineerName" required placeholder="Engineer name" className="rounded-2xl bg-white" />
-              <Input name="engineerEmail" type="email" placeholder="Engineer email" className="rounded-2xl bg-white" />
-              <Input name="engineerPhone" type="tel" placeholder="Engineer phone" className="rounded-2xl bg-white" />
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <Button asChild variant="action">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(engineerShareText)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Share on WhatsApp
+                </a>
+              </Button>
+              <Button asChild variant="secondary">
+                <a href={engineerShareUrl} target="_blank" rel="noreferrer">
+                  Open request link
+                </a>
+              </Button>
             </div>
-          </>
-        )}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4">
+      {/* Progress bar */}
+      <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--color-border-tertiary)]">
+        <div
+          className="h-full rounded-full bg-[var(--color-action)] transition-all duration-300"
+          style={{ width: `${progressPct}%` }}
+        />
       </div>
 
-      <Button type="submit" disabled={isSubmitting} className="rounded-full">
-        {isSubmitting ? 'Submitting…' : 'Send job request'}
-      </Button>
-      {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p> : null}
-      {engineerShareUrl && engineerShareText ? (
-        <div className="rounded-2xl border border-emerald-100 bg-white p-4 text-sm text-slate-700">
-          <p className="font-semibold text-slate-950">Share with the engineer</p>
-          <p className="mt-1">
-            If you only have their mobile number, send this request link by WhatsApp so they can open or claim it.
+      {/* Step label */}
+      <div className="flex items-center justify-between px-0.5">
+        <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+          {stepLabels[step - 1]}
+        </p>
+        <p className="text-[13px] text-[var(--color-text-tertiary)]">
+          Step {step} of {totalSteps}
+        </p>
+      </div>
+
+      {/* Step 1 (unscoped only): Engineer details */}
+      {!scopedEngineer && step === 1 ? (
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
+          <p className="mb-4 text-[13px] text-[var(--color-text-secondary)]">
+            Enter your engineer&apos;s details. CertNow will send them this job request.
           </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Button asChild className="rounded-full">
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(engineerShareText)}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Share on WhatsApp
-              </a>
-            </Button>
-            <Button asChild variant="secondary" className="rounded-full">
-              <a href={engineerShareUrl} target="_blank" rel="noreferrer">
-                Open request link
-              </a>
-            </Button>
+          <div className="grid gap-3">
+            <Input
+              value={engineerName}
+              onChange={(e) => setEngineerName(e.target.value)}
+              placeholder="Engineer name"
+            />
+            <Input
+              type="email"
+              value={engineerEmail}
+              onChange={(e) => setEngineerEmail(e.target.value)}
+              placeholder="Engineer email"
+            />
+            <Input
+              type="tel"
+              value={engineerPhone}
+              onChange={(e) => setEngineerPhone(e.target.value)}
+              placeholder="Engineer phone"
+            />
           </div>
         </div>
       ) : null}
-      {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
-    </form>
+
+      {/* Step 2 (unscoped) / Step 1 (scoped): Landlord details */}
+      {((!scopedEngineer && step === 2) || (scopedEngineer && step === 1)) ? (
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
+          {scopedEngineer ? (
+            <div className="mb-4 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-4 py-3">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+                {scopedEngineer.companyName ?? scopedEngineer.engineerName ?? 'Your selected engineer'}
+              </p>
+              {[
+                scopedEngineer.engineerName,
+                scopedEngineer.gasSafeNumber ? `Gas Safe ${scopedEngineer.gasSafeNumber}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') ? (
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                  {[
+                    scopedEngineer.engineerName,
+                    scopedEngineer.gasSafeNumber ? `Gas Safe ${scopedEngineer.gasSafeNumber}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              ) : null}
+              {[scopedEngineer.email, scopedEngineer.phone].filter(Boolean).join(' · ') ? (
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">
+                  {[scopedEngineer.email, scopedEngineer.phone].filter(Boolean).join(' · ')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="grid gap-3">
+            <Input
+              value={landlordName}
+              onChange={(e) => setLandlordName(e.target.value)}
+              placeholder="Your name"
+            />
+            <Input
+              value={landlordCompany}
+              onChange={(e) => setLandlordCompany(e.target.value)}
+              placeholder="Company (optional)"
+            />
+            <Input
+              type="email"
+              value={landlordEmail}
+              onChange={(e) => setLandlordEmail(e.target.value)}
+              placeholder="Email address"
+            />
+            <Input
+              type="tel"
+              value={landlordPhone}
+              onChange={(e) => setLandlordPhone(e.target.value)}
+              placeholder="Phone number"
+            />
+            <Input
+              value={landlordAddressLine1}
+              onChange={(e) => setLandlordAddressLine1(e.target.value)}
+              placeholder="Your address line 1"
+            />
+            <Input
+              value={landlordAddressLine2}
+              onChange={(e) => setLandlordAddressLine2(e.target.value)}
+              placeholder="Your address line 2"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                value={landlordCity}
+                onChange={(e) => setLandlordCity(e.target.value)}
+                placeholder="City"
+              />
+              <Input
+                value={landlordPostcode}
+                onChange={(e) => setLandlordPostcode(e.target.value)}
+                placeholder="Postcode"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Step 3 (unscoped) / Step 2 (scoped): Property + job details */}
+      {((!scopedEngineer && step === 3) || (scopedEngineer && step === 2)) ? (
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
+          <div className="grid gap-3">
+            <Input
+              value={tenantName}
+              onChange={(e) => setTenantName(e.target.value)}
+              placeholder="Tenant name"
+            />
+            {/* Address autocomplete */}
+            <div className="relative">
+              <Input
+                value={addressLine1}
+                onChange={(e) => {
+                  setAddressLine1(e.target.value);
+                  setAddressSearchError(null);
+                  setSelectedAddressMatchId(null);
+                }}
+                placeholder="Address line 1"
+              />
+              {isAddressLookupPending && !addressSuggestions.length ? (
+                <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-sm">
+                  Searching addresses…
+                </div>
+              ) : null}
+              {addressSuggestions.length ? (
+                <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] shadow-sm">
+                  <div className="max-h-60 overflow-y-auto p-1.5">
+                    {addressSuggestions.map((suggestion) => {
+                      const isSelected = selectedAddressMatchId === suggestion.id;
+                      return (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          onClick={() => void handleAddressSelect(suggestion)}
+                          className={`w-full rounded-[8px] px-3 py-2 text-left text-[13px] transition-colors ${
+                            isSelected
+                              ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                              : 'text-[var(--color-text-primary)] hover:bg-[var(--color-background-tertiary)]'
+                          }`}
+                        >
+                          {suggestion.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {addressSearchError ? (
+                <p className="mt-1.5 text-[12px] text-[var(--color-red)]">{addressSearchError}</p>
+              ) : null}
+            </div>
+            <Input
+              value={addressLine2}
+              onChange={(e) => setAddressLine2(e.target.value)}
+              placeholder="Address line 2"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="City"
+              />
+              <Input
+                value={postcode}
+                onChange={(e) => setPostcode(e.target.value)}
+                placeholder="Postcode"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={copyLandlordAddressToJobAddress}
+              disabled={!landlordAddressLine1 && !landlordCity && !landlordPostcode}
+              className="self-start text-[13px] font-medium text-[var(--color-action)] disabled:opacity-40"
+            >
+              Same as your address
+            </button>
+            <Input
+              type="tel"
+              value={sitePhone}
+              onChange={(e) => setSitePhone(e.target.value)}
+              placeholder="Tenant / site phone"
+            />
+            <Input
+              value={accessNotes}
+              onChange={(e) => setAccessNotes(e.target.value)}
+              placeholder="Access notes (optional)"
+            />
+            {/* Job type chip group */}
+            <div className="grid grid-cols-2 gap-2">
+              {JOB_TYPES.map((type) => (
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={() => setJobType(type.value)}
+                  className={`rounded-full px-4 py-2 text-[13px] font-medium transition-colors ${
+                    jobType === type.value
+                      ? 'bg-[var(--color-action)] text-white'
+                      : 'border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-background-tertiary)]'
+                  }`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--color-text-tertiary)]">
+                Preferred date
+              </label>
+              <Input
+                type="date"
+                value={preferredDate}
+                onChange={(e) => setPreferredDate(e.target.value)}
+                className="mt-1.5"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {stepError ? (
+        <p className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] text-[var(--color-red)]">
+          {stepError}
+        </p>
+      ) : null}
+
+      {error ? (
+        <p className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] text-[var(--color-red)]">
+          {error}
+        </p>
+      ) : null}
+
+      {/* Navigation */}
+      <div className="flex items-center gap-3">
+        {step > 1 ? (
+          <Button type="button" variant="outline" onClick={handleBack} className="flex-1">
+            Back
+          </Button>
+        ) : null}
+        {step < totalSteps ? (
+          <Button type="button" variant="action" onClick={handleNext} className="flex-1">
+            Continue
+          </Button>
+        ) : (
+          <Button type="button" variant="action" onClick={handleSubmit} disabled={isSubmitting} className="flex-1">
+            {isSubmitting ? 'Sending…' : 'Send job request'}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

@@ -79,71 +79,79 @@ export default function SignupStep1Page() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-[var(--brand)]">Create your account</h1>
-        <p className="text-sm text-muted-foreground/80">
-          Create your login first. You&apos;ll complete company and engineer details after authentication.
-        </p>
+    <div className="pt-10">
+      <h1 className="text-[24px] font-medium text-[var(--color-text-primary)]">Create your account</h1>
+      <p className="mb-8 mt-2 text-[14px] text-[var(--color-text-secondary)]">
+        Start your free trial — no card required
+      </p>
+
+      <GoogleAuthButton label="Continue with Google" nextPath="/signup/step2" />
+
+      <div className="my-5 flex items-center gap-3">
+        <span className="h-px flex-1 bg-[var(--color-border-tertiary)]" />
+        <span className="text-[12px] text-[var(--color-text-tertiary)]">or continue with email</span>
+        <span className="h-px flex-1 bg-[var(--color-border-tertiary)]" />
       </div>
 
-      <div className="space-y-4 rounded-2xl border border-white/60 bg-white/90 p-6 shadow-xl">
-        <GoogleAuthButton label="Continue with Google" nextPath="/signup/step2" />
-
-        <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
-          <span className="h-px flex-1 bg-slate-200" />
-          <span>Or continue with email</span>
-          <span className="h-px flex-1 bg-slate-200" />
-        </div>
-
-        <div className="space-y-3">
-          <label className="block text-sm font-semibold text-muted">
-            Email
+      <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              Email
+            </p>
             <Input
               type="email"
               value={form.email}
               onChange={update('email')}
               placeholder="you@example.com"
-              className="mt-2"
+              className="mt-1.5"
               disabled={isPending}
             />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Password
+          </div>
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              Password
+            </p>
             <Input
               type="password"
               value={form.password}
               onChange={update('password')}
               placeholder="••••••••"
-              className="mt-2"
+              className="mt-1.5"
               disabled={isPending}
             />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Confirm password
+          </div>
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              Confirm password
+            </p>
             <Input
               type="password"
               value={form.confirm}
               onChange={update('confirm')}
               placeholder="••••••••"
-              className="mt-2"
+              className="mt-1.5"
               disabled={isPending}
             />
-          </label>
+          </div>
         </div>
-
-        <Button onClick={handleCreateAccount} disabled={isPending} className="w-full rounded-full">
-          {isPending ? 'Creating…' : 'Create account'}
-        </Button>
-
-        <p className="text-xs text-muted-foreground/70">
-          Already have an account?{' '}
-          <Link href="/login" className="font-semibold text-[var(--accent)] underline underline-offset-4">
-            Log in
-          </Link>
-          .
-        </p>
       </div>
+
+      <Button
+        variant="primary"
+        onClick={handleCreateAccount}
+        disabled={isPending}
+        className="mt-5 h-11 w-full"
+      >
+        {isPending ? 'Creating…' : 'Create account'}
+      </Button>
+
+      <p className="mt-5 text-center text-[13px] text-[var(--color-text-secondary)]">
+        Already have an account?{' '}
+        <Link href="/login" className="font-medium text-[var(--color-action)]">
+          Sign in
+        </Link>
+      </p>
     </div>
   );
 }

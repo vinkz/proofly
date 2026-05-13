@@ -22,14 +22,18 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
 
   return createPortal(
     open ? (
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-8 pt-16 backdrop-blur-sm sm:items-center">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-8 pt-16 sm:items-center">
         <div className="absolute inset-0" onClick={onClose} aria-hidden />
-        <div className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-surface-elevated/95 p-6 text-muted-foreground shadow-brand">
-          <div className="flex items-center justify-between">
-            {title ? <h2 className="text-lg font-semibold text-muted">{title}</h2> : null}
+        <div className="relative z-10 w-full max-w-lg rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px] text-[var(--color-text-primary)]">
+          <div className="flex items-center justify-between gap-3">
+            {title ? (
+              <h2 className="text-base font-medium text-[var(--color-text-primary)]">{title}</h2>
+            ) : (
+              <span aria-hidden />
+            )}
             <button
               type="button"
-              className="rounded-2xl px-3 py-1 text-xs text-muted-foreground hover:bg-white/10"
+              className="rounded-full px-3 py-1 text-xs font-medium text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-background-tertiary)] hover:text-[var(--color-text-primary)]"
               onClick={onClose}
             >
               Close

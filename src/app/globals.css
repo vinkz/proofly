@@ -2,6 +2,47 @@
 
 @layer base {
   :root {
+    /* === Design system tokens === */
+
+    /* Action / primary (green) */
+    --color-action: #1a7a52;
+    --color-action-bg: #edf7f2;
+    --color-action-fg: #ffffff;
+    --color-action-ring: rgba(26, 122, 82, 0.12);
+
+    /* Dark CTA */
+    --color-cta: #111111;
+    --color-cta-fg: #ffffff;
+
+    /* Status: amber (warning, awaiting landlord) */
+    --color-amber: #ba7517;
+    --color-amber-bg: #faeeda;
+
+    /* Status: red (error, danger, overdue) */
+    --color-red: #a32d2d;
+    --color-red-bg: #fcebeb;
+
+    /* Status: blue (delivered, info) */
+    --color-blue: #185fa5;
+    --color-blue-bg: #e6f1fb;
+
+    /* Backgrounds */
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #fafafa;
+    --color-background-tertiary: #f5f5f5;
+
+    /* Text */
+    --color-text-primary: #111111;
+    --color-text-secondary: #555555;
+    --color-text-tertiary: #8a8a8a;
+    --color-text-inverse: #ffffff;
+
+    /* Borders */
+    --color-border-primary: #d4d4d4;
+    --color-border-secondary: #e5e5e5;
+    --color-border-tertiary: #ededed;
+
+    /* === Legacy tokens — kept for non-overhauled pages === */
     --brand: #111827;
     --accent: #111827;
     --action: #111827;

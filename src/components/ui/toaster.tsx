@@ -3,9 +3,14 @@
 import { useToast } from './use-toast';
 
 const variants = {
-  default: 'border-gray-200 bg-white text-gray-900',
-  success: 'border-green-300 bg-green-50 text-green-900',
-  error: 'border-red-300 bg-red-50 text-red-900',
+  default:
+    'bg-[var(--color-background-primary)] text-[var(--color-text-primary)] border-[var(--color-border-tertiary)]',
+  success:
+    'bg-[var(--color-action-bg)] text-[var(--color-action)] border-[var(--color-action-bg)]',
+  warning:
+    'bg-[var(--color-amber-bg)] text-[var(--color-amber)] border-[var(--color-amber-bg)]',
+  error:
+    'bg-[var(--color-red-bg)] text-[var(--color-red)] border-[var(--color-red-bg)]',
 } as const;
 
 export function Toaster() {
@@ -16,18 +21,20 @@ export function Toaster() {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className={`pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-md border px-4 py-3 shadow ${
+          className={`pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-[16px] border-[0.5px] px-4 py-3 ${
             variants[toast.variant ?? 'default']
           }`}
         >
           <div className="flex-1">
-            <p className="text-sm font-medium">{toast.title}</p>
-            {toast.description ? <div className="mt-1 text-xs text-gray-600">{toast.description}</div> : null}
+            <p className="text-sm font-medium leading-tight">{toast.title}</p>
+            {toast.description ? (
+              <div className="mt-1 text-xs font-normal opacity-80">{toast.description}</div>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={() => dismissToast(toast.id)}
-            className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
+            className="rounded-full px-2 py-1 text-xs font-medium opacity-70 transition-opacity hover:opacity-100"
           >
             Close
           </button>

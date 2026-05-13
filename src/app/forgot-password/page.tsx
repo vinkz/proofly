@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { z } from 'zod';
 
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
@@ -45,38 +45,58 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[var(--muted)] to-white">
-      <div className="mx-auto flex max-w-xl flex-col gap-6 px-4 py-10">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Password reset</p>
-          <h1 className="text-3xl font-bold text-[var(--brand)]">Forgot password</h1>
-          <p className="text-sm text-muted-foreground/80">Enter your email to receive a reset link.</p>
-        </div>
-        <Card className="space-y-4 border border-white/50 bg-white/90 p-6 shadow">
-          <label className="block text-sm font-semibold text-muted">
+    <div className="min-h-screen bg-[var(--color-background-secondary)]">
+      <div className="mx-auto max-w-md px-4 pt-12">
+        <Link
+          href="/login"
+          className="mb-6 inline-flex items-center gap-1.5 text-[13px] text-[var(--color-text-tertiary)]"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          Back to sign in
+        </Link>
+
+        <h1 className="text-[24px] font-medium text-[var(--color-text-primary)]">Reset your password</h1>
+        <p className="mb-8 mt-2 text-[14px] text-[var(--color-text-secondary)]">
+          We&apos;ll send a reset link to your email
+        </p>
+
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
             Email
-            <Input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              required
-              placeholder="you@example.com"
-              className="mt-2"
-              disabled={isPending}
-            />
-          </label>
+          </p>
+          <Input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            required
+            placeholder="you@example.com"
+            className="mt-1.5"
+            disabled={isPending || sent}
+          />
+        </div>
+
+        {sent ? (
+          <div className="mt-5 flex items-center gap-3 rounded-[12px] bg-[var(--color-action-bg)] px-4 py-3">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--color-action)]" aria-hidden="true">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            <p className="text-[13px] font-medium text-[var(--color-action)]">
+              Check your email for a reset link
+            </p>
+          </div>
+        ) : (
           <Button
             type="button"
+            variant="primary"
             onClick={handleSubmit}
             disabled={isPending || !email}
-            className="w-full rounded-full bg-[var(--action)] text-white"
+            className="mt-5 h-11 w-full"
           >
             {isPending ? 'Sending…' : 'Send reset link'}
           </Button>
-          {sent ? (
-            <p className="text-xs text-[var(--brand)]">Check your email for a reset link.</p>
-          ) : null}
-        </Card>
+        )}
       </div>
     </div>
   );

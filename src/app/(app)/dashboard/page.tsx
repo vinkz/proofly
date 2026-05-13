@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import type { ReactNode } from 'react';
 
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
@@ -12,10 +13,6 @@ import {
   listPendingJobRequestsForDashboard,
   type DashboardJobRequest,
 } from '@/server/job-requests';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { AwaitingSignaturesCard, type AwaitingSignatureJobCard } from './_components/awaiting-signatures-card';
 import { CopyRequestLinkButton } from './_components/copy-request-link-button';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import { formatDisplayAddress } from '@/lib/address';
@@ -126,42 +123,6 @@ export default async function DashboardPage({
     };
   });
   const nextUpcomingJob = upcomingJobs[0] ?? null;
-  const awaitingSignatureJobsBase = activeJobs.filter((job) => job.status === 'awaiting_signatures');
-  const awaitingSignatureJobIds = awaitingSignatureJobsBase.map((job) => job.id);
-  const { data: awaitingFieldRows, error: awaitingFieldErr } = awaitingSignatureJobIds.length
-    ? await supabase
-        .from('job_fields')
-        .select('job_id, field_key, value')
-        .in('job_id', awaitingSignatureJobIds)
-        .in('field_key', ['cp12_remote_signature_token', 'cp12_remote_signature_expires_at'])
-    : { data: [], error: null };
-  if (awaitingFieldErr) throw new Error(awaitingFieldErr.message);
-
-  const awaitingFieldMap = (awaitingFieldRows ?? []).reduce<Record<string, Record<string, string>>>((acc, row) => {
-    const jobId = row.job_id ?? '';
-    const fieldKey = row.field_key ?? '';
-    const value = row.value ?? '';
-    if (!jobId || !fieldKey || !value) return acc;
-    acc[jobId] = { ...(acc[jobId] ?? {}), [fieldKey]: value };
-    return acc;
-  }, {});
-
-  const awaitingSignatureJobs: AwaitingSignatureJobCard[] = awaitingSignatureJobsBase
-    .map((job) => {
-      const fields = awaitingFieldMap[job.id] ?? {};
-      const token = fields.cp12_remote_signature_token ?? null;
-      return {
-        ...job,
-        shareLink: token ? `/sign/cp12/${token}` : null,
-        expiresAt: fields.cp12_remote_signature_expires_at ?? null,
-      };
-    })
-    .filter((job) => job.shareLink)
-    .sort((a, b) => {
-      const left = new Date(a.scheduled_for ?? a.created_at ?? '').getTime();
-      const right = new Date(b.scheduled_for ?? b.created_at ?? '').getTime();
-      return left - right;
-    });
   const calendarJobs = [...upcomingJobs, ...completedJobs].filter((job) => getJobCalendarDate(job));
   const selectedDate = normalizeDateOnly(
     resolvedSearchParams?.date ?? getJobCalendarDate(nextUpcomingJob) ?? new Date().toISOString().slice(0, 10),
@@ -175,211 +136,145 @@ export default async function DashboardPage({
       return left - right;
     });
   const monthCompletedJobs = calendarMonth.monthJobs.filter((job) => isCompletedJob(job)).length;
-  const monthProgress = calendarMonth.monthJobs.length
-    ? Math.round((monthCompletedJobs / calendarMonth.monthJobs.length) * 100)
-    : 0;
+  const todayKey = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-8 px-4 pb-16 pt-6 font-sans text-gray-900 md:pt-10">
-      <section className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-[var(--brand)]">Welcome back, {displayName}</h1>
-            <p className="text-sm text-gray-600">Track field activity, client signatures, and certificates in one place.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="primary" asChild className="rounded-full">
-              <Link href="/jobs/new">+ New Job</Link>
-            </Button>
-            <Button variant="secondary" asChild className="rounded-full">
-              <Link href="/invoices/new?guided=1">Create invoice</Link>
-            </Button>
-          </div>
+    <div className="mx-auto w-full max-w-2xl space-y-5 px-4 pb-12 pt-2">
+      {/* Page header — slim greeting + primary CTA (full top nav is a future layout pass) */}
+      <header className="flex items-center justify-between gap-3 pt-1">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            Welcome back
+          </p>
+          <h1 className="text-[18px] font-medium text-[var(--color-text-primary)]">{displayName}</h1>
         </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/jobs/new"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--color-cta)] px-4 text-[13px] font-medium text-[var(--color-cta-fg)] transition-colors hover:bg-[var(--color-text-primary)]"
+          >
+            <PlusIcon />
+            New job
+          </Link>
+        </div>
+      </header>
+
+      {/* Inbound Requests */}
+      <section className="space-y-2">
+        <div className="flex items-center gap-2 px-0.5">
+          <h2 className="text-[13px] font-medium text-[var(--color-text-primary)]">Inbound requests</h2>
+          {jobRequests.length ? (
+            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[10px] bg-[var(--color-red-bg)] px-1.5 text-[11px] font-medium text-[var(--color-red)]">
+              {jobRequests.length}
+            </span>
+          ) : null}
+        </div>
+
+        {latestRequest ? (
+          <JobRequestCard request={latestRequest} />
+        ) : (
+          <NoRequestsEmpty url={requestLink.url} path={personalRequestPath} />
+        )}
       </section>
 
-      <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold text-slate-950">Landlord Requests</h2>
-              {jobRequests.length ? (
-                <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-2 text-xs font-semibold text-white">
-                  {jobRequests.length}
+      {/* Calendar */}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between px-0.5">
+          <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">{calendarMonth.label}</h2>
+          <div className="flex items-center gap-1.5">
+            <Link
+              href={`/dashboard?date=${calendarMonth.previousMonthDate}`}
+              aria-label="Previous month"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)] hover:text-[var(--color-text-primary)]"
+            >
+              <ChevronLeftIcon />
+            </Link>
+            <Link
+              href={`/dashboard?date=${calendarMonth.nextMonthDate}`}
+              aria-label="Next month"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)] hover:text-[var(--color-text-primary)]"
+            >
+              <ChevronRightIcon />
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 px-0.5 text-center text-[11px] font-medium text-[var(--color-text-tertiary)]">
+          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => (
+            <div key={`${day}-${idx}`} className="py-1">
+              {day}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 px-0.5">
+          {calendarMonth.days.map((day) => {
+            const isSelected = day.date === selectedDate;
+            const isToday = day.date === todayKey;
+            const hasJobs = day.jobs.length > 0;
+            const hasAmber = day.jobs.some((job) => needsPrep(job));
+            const cellTone = isToday
+              ? 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]'
+              : isSelected
+                ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                : day.isCurrentMonth
+                  ? hasJobs
+                    ? 'bg-[var(--color-background-primary)] text-[var(--color-text-primary)]'
+                    : 'bg-transparent text-[var(--color-text-secondary)]'
+                  : 'bg-transparent text-[var(--color-text-tertiary)]';
+            const dotColor = isToday
+              ? 'bg-white'
+              : hasAmber
+                ? 'bg-[var(--color-amber)]'
+                : 'bg-[var(--color-action)]';
+
+            return (
+              <Link
+                key={day.date}
+                href={`/dashboard?date=${day.date}`}
+                className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-[8px] text-[13px] font-medium transition-colors ${cellTone}`}
+              >
+                <span className={hasJobs || isToday || isSelected ? 'font-medium' : 'font-normal'}>
+                  {day.dayNumber}
                 </span>
-              ) : null}
-            </div>
+                {hasJobs ? (
+                  <span className={`h-1 w-1 rounded-full ${dotColor}`} aria-hidden="true" />
+                ) : (
+                  <span className="h-1 w-1" aria-hidden="true" />
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Selected day jobs */}
+      <section className="space-y-2">
+        <p className="px-1 text-[10px] font-medium uppercase tracking-[1px] text-[var(--color-text-tertiary)]">
+          {formatSelectedDate(selectedDate)}
+        </p>
+
+        {selectedDayJobs.length ? (
+          <div className="space-y-2">
+            {selectedDayJobs.map((job) => (
+              <DashboardJobRow key={job.id} job={job} />
+            ))}
           </div>
-        </div>
-
-        <div className="mt-4">
-          {latestRequest ? (
-            <div className="space-y-3">
-              <JobRequestCard request={latestRequest} />
-              <Button asChild variant="secondary" className="rounded-full">
-                <Link href="/requests">View all requests</Link>
-              </Button>
-            </div>
-          ) : (
-            <div className="rounded-3xl border border-dashed border-slate-300/80 bg-slate-50 p-5">
-              <p className="text-sm font-semibold text-slate-950">No requests yet.</p>
-              <p className="mt-1 text-sm text-slate-600">
-                Share your link and landlords can send you job details directly — no back-and-forth needed.
-              </p>
-              <div className="mt-3 rounded-2xl bg-white px-3 py-2 text-xs text-slate-700 break-all">
-                {requestLink.url}
-              </div>
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <CopyRequestLinkButton url={requestLink.url} />
-                <Button asChild className="rounded-full">
-                  <Link href={personalRequestPath}>Open link</Link>
-                </Button>
-                <Button asChild variant="secondary" className="rounded-full">
-                  <Link href="/requests">View all requests</Link>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#f8faf6] shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="grid lg:grid-cols-[1.35fr,0.85fr]">
-          <div className="p-4 sm:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground/70">Job calendar</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--brand)]">
-                  {calendarMonth.label}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground/75">
-                  Scheduled and completed work in one monthly view.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="secondary" asChild className="rounded-full text-xs">
-                  <Link href={`/dashboard?date=${calendarMonth.previousMonthDate}`}>Previous</Link>
-                </Button>
-                <Button variant="secondary" asChild className="rounded-full text-xs">
-                  <Link href={`/dashboard?date=${calendarMonth.nextMonthDate}`}>Next</Link>
-                </Button>
-                <Button variant="secondary" asChild className="rounded-full text-xs">
-                  <Link href="/jobs">View all jobs</Link>
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/60">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                <div key={day} className="py-2">
-                  {day}
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {calendarMonth.days.map((day) => {
-                const dayProgress = day.jobs.length
-                  ? Math.round((day.jobs.filter((job) => isCompletedJob(job)).length / day.jobs.length) * 100)
-                  : 0;
-                return (
-                  <Link
-                    key={day.date}
-                    href={`/dashboard?date=${day.date}`}
-                    className={`group min-h-20 rounded-2xl border p-2 text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-sm ${
-                      day.date === selectedDate
-                        ? 'border-[var(--action)] bg-white shadow-sm'
-                        : day.isCurrentMonth
-                          ? 'border-white/70 bg-white/55'
-                          : 'border-transparent bg-white/25 text-muted-foreground/45'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold">{day.dayNumber}</span>
-                      {day.jobs.length ? (
-                        <span className="rounded-full bg-[var(--brand)] px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                          {day.jobs.length}
-                        </span>
-                      ) : null}
-                    </div>
-                    {day.jobs.length ? (
-                      <div className="mt-3">
-                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
-                          <div
-                            className="h-full rounded-full bg-[var(--action)] transition-all duration-300"
-                            style={{ width: `${dayProgress}%` }}
-                          />
-                        </div>
-                        <p className="mt-1 text-[9px] font-medium leading-none text-muted-foreground/70">
-                          {dayProgress}% complete
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="mt-6 h-px bg-slate-200/70 opacity-0 transition group-hover:opacity-100" />
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
+        ) : (
+          <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-6 text-center">
+            <p className="text-[14px] font-normal text-[var(--color-text-secondary)]">
+              No jobs scheduled. Pick another day or create a new job.
+            </p>
           </div>
-
-          <aside className="border-t border-white/70 bg-white/70 p-4 sm:p-6 lg:border-l lg:border-t-0">
-            <div className="grid grid-cols-3 gap-2">
-              <CalendarStat label="Month jobs" value={calendarMonth.monthJobs.length} />
-              <CalendarStat label="Complete" value={monthCompletedJobs} />
-              <CalendarStat label="Progress" value={`${monthProgress}%`} />
-            </div>
-
-            <div className="mt-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground/60">
-                {formatSelectedDate(selectedDate)}
-              </p>
-              <h3 className="mt-1 text-xl font-semibold text-[var(--brand)]">
-                {selectedDayJobs.length ? `${selectedDayJobs.length} job${selectedDayJobs.length === 1 ? '' : 's'}` : 'No jobs'}
-              </h3>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {selectedDayJobs.length ? (
-                selectedDayJobs.map((job) => (
-                  <DashboardJobRow key={job.id} job={job} />
-                ))
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-4 text-sm text-muted-foreground/70">
-                  Pick another day or create a new job for this date.
-                </div>
-              )}
-            </div>
-          </aside>
-        </div>
+        )}
       </section>
 
-      <section>
-        <AwaitingSignaturesCard jobs={awaitingSignatureJobs} />
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[2fr,1fr]">
-        <Card className="border border-white/10">
-          <CardHeader>
-            <CardTitle className="text-lg text-muted">Upcoming milestones</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground/70">
-              Key signals that may need your attention this week.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <MilestoneItem
-              title="Sign-off reminders"
-              value={awaitingSignatures}
-              description="Send a link to clients awaiting signature."
-              href="/jobs"
-            />
-            <MilestoneItem
-              title="Follow-up visits"
-              value={followUpsDue}
-              description="Schedule technicians for unresolved findings."
-              href="/jobs"
-            />
-          </CardContent>
-        </Card>
+      {/* Stats row */}
+      <section className="grid grid-cols-2 gap-2.5">
+        <StatCard label="Issued this month" value={monthCompletedJobs} tone="action" />
+        <StatCard label="Renewals due" value={followUpsDue} tone="amber" />
+        <StatCard label="Awaiting signatures" value={awaitingSignatures} />
+        <StatCard label="Total this month" value={calendarMonth.monthJobs.length} />
       </section>
     </div>
   );
@@ -393,6 +288,28 @@ function formatDateTime(dateString: string) {
     hour: 'numeric',
     minute: 'numeric',
   });
+}
+
+function formatTimeShort(dateString: string) {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatRelativeTime(dateString: string | null | undefined) {
+  if (!dateString) return null;
+  const target = new Date(dateString).getTime();
+  if (Number.isNaN(target)) return null;
+  const diffMs = Date.now() - target;
+  const diffMins = Math.round(diffMs / 60000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.round(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.round(diffHours / 24);
+  return `${diffDays}d ago`;
 }
 
 function isTodayOrFuture(dateString: string | null | undefined, reference: Date) {
@@ -460,6 +377,10 @@ function isIssuedJob(job: BasicJob) {
   return String(job.status ?? '').toLowerCase() === 'issued';
 }
 
+function needsPrep(job: BasicJob & { prepComplete?: boolean }) {
+  return job.job_type === 'safety_check' && job.prepComplete === false;
+}
+
 function formatSelectedDate(dateString: string) {
   return new Date(`${dateString}T00:00:00`).toLocaleDateString(undefined, {
     weekday: 'long',
@@ -513,53 +434,133 @@ function getDashboardJobTypeLabel(jobType: string | null | undefined) {
     .join(' ');
 }
 
-function CalendarStat({ label, value }: { label: string; value: number | string }) {
+function StatCard({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string;
+  value: number | string;
+  tone?: 'default' | 'action' | 'amber';
+}) {
+  const valueColor =
+    tone === 'action'
+      ? 'text-[var(--color-action)]'
+      : tone === 'amber'
+        ? 'text-[var(--color-amber)]'
+        : 'text-[var(--color-text-primary)]';
   return (
-    <div className="rounded-2xl bg-slate-950 px-3 py-3 text-white">
-      <p className="text-lg font-semibold leading-none">{value}</p>
-      <p className="mt-1 text-[10px] font-semibold text-white/55">{label}</p>
+    <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3.5">
+      <p className={`text-[26px] font-medium leading-none ${valueColor}`}>{value}</p>
+      <p className="mt-2 text-[12px] font-normal text-[var(--color-text-secondary)]">{label}</p>
     </div>
   );
 }
 
 function JobRequestCard({ request }: { request: DashboardJobRequest }) {
-  const label = request.requestType === 'renewal' ? 'Renewal request' : 'New request';
+  const isRenewal = request.requestType === 'renewal';
+  const accentColor = isRenewal ? 'bg-[var(--color-red)]' : 'bg-[var(--color-action)]';
+  const badgeClass = isRenewal
+    ? 'bg-[var(--color-red-bg)] text-[var(--color-red)]'
+    : 'bg-[var(--color-action-bg)] text-[var(--color-action)]';
+  const badgeLabel = isRenewal ? 'Renewal' : 'New job';
+  const relative = formatRelativeTime(request.createdAt);
+  const address = formatDisplayAddress(request.propertyAddress) || 'Property address missing';
+  const landlordLine = request.landlordName ?? request.landlordEmail ?? null;
+  const tenantLine = request.tenantName ?? null;
+
   return (
-    <div className="relative rounded-3xl border border-red-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <span className="absolute right-4 top-4 h-3 w-3 rounded-full bg-red-500 ring-4 ring-red-100" aria-hidden="true" />
-      <div className="flex items-start gap-3 pr-6">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-50 text-sm font-semibold text-red-700">
-          {(request.landlordName ?? request.landlordEmail ?? 'L').trim().charAt(0).toUpperCase()}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-slate-950">{request.landlordName ?? 'New landlord request'}</p>
-            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 normal-case tracking-normal">
-              New
-            </Badge>
-            <Badge variant="brand" className="normal-case tracking-normal">
-              {label}
-            </Badge>
+    <article className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+      <div className={`h-[3px] w-full ${accentColor}`} aria-hidden="true" />
+      <div className="px-4 py-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-medium leading-tight text-[var(--color-text-primary)]">
+              {address}
+            </p>
+            {relative ? (
+              <p className="mt-0.5 text-[12px] font-normal text-[var(--color-text-tertiary)]">{relative}</p>
+            ) : null}
           </div>
-          <p className="mt-1 text-sm text-slate-700">
-            {formatDisplayAddress(request.propertyAddress) || 'Property address missing'}
-          </p>
+          <span
+            className={`inline-flex items-center rounded-[10px] px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}
+          >
+            {badgeLabel}
+          </span>
+        </div>
+
+        <div className="mt-3 space-y-[5px]">
+          {landlordLine ? (
+            <DetailRow icon={<UserIcon />} text={landlordLine} />
+          ) : null}
+          {tenantLine ? (
+            <DetailRow icon={<UsersIcon />} text={`Tenant · ${tenantLine}`} />
+          ) : null}
+          {request.preferredDates ? (
+            <DetailRow icon={<CalendarIcon />} text={request.preferredDates} />
+          ) : null}
+          {isRenewal ? (
+            <DetailRow
+              icon={<AlertTriangleIcon />}
+              text="Renewal flagged — verify expiry"
+              tone="danger"
+            />
+          ) : null}
         </div>
       </div>
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button asChild className="rounded-full">
-          <Link href={`/jobs/new?requestId=${request.id}`}>Schedule job</Link>
-        </Button>
+
+      <div className="flex items-center gap-2 border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3 pt-2.5">
+        <Link
+          href={`/jobs/new?requestId=${request.id}`}
+          className="inline-flex h-9 flex-[2] items-center justify-center rounded-[18px] bg-[var(--color-cta)] text-[13px] font-medium text-[var(--color-cta-fg)] transition-colors hover:bg-[var(--color-text-primary)]"
+        >
+          Schedule job
+        </Link>
         <form
           action={async () => {
             'use server';
             await dismissJobRequest(request.id);
           }}
         >
-          <Button type="submit" variant="outline" className="w-full rounded-full sm:w-auto">
+          <button
+            type="submit"
+            className="inline-flex h-9 items-center justify-center rounded-[18px] bg-[var(--color-red-bg)] px-3.5 text-[13px] font-medium text-[var(--color-red)] transition-opacity hover:opacity-90"
+          >
             Dismiss
-          </Button>
+          </button>
         </form>
+      </div>
+    </article>
+  );
+}
+
+function NoRequestsEmpty({ url, path }: { url: string; path: string }) {
+  return (
+    <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-5 py-8 text-center">
+      <div className="mx-auto mb-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--color-action-bg)] text-[var(--color-action)]">
+        <LinkIcon />
+      </div>
+      <h3 className="text-[16px] font-medium text-[var(--color-text-primary)]">No requests yet</h3>
+      <p className="mx-auto mt-1.5 max-w-sm text-[14px] font-normal leading-[1.6] text-[var(--color-text-secondary)]">
+        Share your link and landlords can send you job details directly — no back-and-forth needed.
+      </p>
+      <div className="mt-4 truncate rounded-[8px] bg-[var(--color-background-tertiary)] px-3 py-2 text-[12px] font-normal text-[var(--color-text-secondary)]">
+        {url}
+      </div>
+      <div className="mt-4 flex flex-col gap-2">
+        <Link
+          href={path}
+          className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[22px] bg-[var(--color-cta)] text-[15px] font-medium text-[var(--color-cta-fg)] transition-colors hover:bg-[var(--color-text-primary)]"
+        >
+          <LinkIcon /> Open link
+        </Link>
+        <CopyRequestLinkButton url={url} />
+        <Link
+          href="/requests"
+          className="inline-flex h-11 w-full items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[15px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-background-tertiary)]"
+        >
+          View all requests
+        </Link>
       </div>
     </div>
   );
@@ -570,69 +571,141 @@ function DashboardJobRow({ job }: { job: BasicJob & { prepComplete?: boolean } }
   const completed = isCompletedJob(job);
   const href = issued ? `/jobs/${job.id}/complete` : completed ? `/jobs/${job.id}/pdf` : getUpcomingJobHref(job);
   const actionLabel = issued ? 'Review & send' : completed ? 'Open PDF' : getUpcomingJobActionLabel(job);
+
+  const accent = needsPrep(job)
+    ? 'bg-[var(--color-amber)]'
+    : completed
+      ? 'bg-[var(--color-blue)]'
+      : 'bg-[var(--color-action)]';
+
+  let ctaClass: string;
+  if (actionLabel === 'Prepare' || actionLabel === 'Open') {
+    ctaClass =
+      'border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]';
+  } else if (actionLabel === 'Review & send' || actionLabel === 'Open PDF') {
+    ctaClass = 'bg-[var(--color-action-bg)] text-[var(--color-action)]';
+  } else {
+    ctaClass = 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]';
+  }
+
+  const timeLabel = job.scheduled_for ? formatTimeShort(job.scheduled_for) : '';
+
   return (
-    <div className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-[var(--brand)]">{job.client_name ?? job.title ?? 'Job'}</p>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/75">
+    <article className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+      <div className={`h-[3px] w-full ${accent}`} aria-hidden="true" />
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className="min-w-[44px] text-right text-[12px] font-normal text-[var(--color-text-tertiary)]">
+          {timeLabel || '—'}
+        </div>
+        <div className="h-9 w-px bg-[var(--color-border-tertiary)]" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
             {getDashboardJobTypeLabel(job.job_type)}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground/70">{job.address}</p>
-          <p className="mt-1 text-xs text-muted-foreground/70">
-            {formatDateTime(job.scheduled_for ?? job.created_at ?? '')}
+          <p className="mt-0.5 truncate text-[15px] font-medium text-[var(--color-text-primary)]">
+            {job.client_name ?? job.title ?? 'Job'}
           </p>
-          {job.job_type === 'safety_check' && !completed ? (
-            <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-              {job.prepComplete ? 'Ready to start' : 'Step 1 incomplete'}
-            </p>
-          ) : null}
+          <p className="truncate text-[13px] font-normal text-[var(--color-text-secondary)]">{job.address}</p>
         </div>
-        <Badge variant="brand" className="uppercase">
-          {completed ? 'Done' : job.status ?? 'draft'}
-        </Badge>
+        <Link
+          href={href}
+          className={`inline-flex h-8 shrink-0 items-center justify-center rounded-[16px] px-3 text-[13px] font-medium transition-colors ${ctaClass}`}
+        >
+          {actionLabel}
+        </Link>
       </div>
-      <div className="mt-3 flex justify-end">
-        <Button asChild variant={completed ? 'secondary' : 'primary'} className="rounded-full text-xs">
-          <Link href={href}>{actionLabel}</Link>
-        </Button>
-      </div>
+    </article>
+  );
+}
+
+function DetailRow({
+  icon,
+  text,
+  tone = 'default',
+}: {
+  icon: ReactNode;
+  text: string;
+  tone?: 'default' | 'danger';
+}) {
+  const color = tone === 'danger' ? 'text-[var(--color-red)]' : 'text-[var(--color-text-secondary)]';
+  return (
+    <div className={`flex items-center gap-[7px] text-[13px] font-normal ${color}`}>
+      <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center">{icon}</span>
+      <span className="truncate">{text}</span>
     </div>
   );
 }
 
-function MilestoneItem({
-  title,
-  value,
-  description,
-  href,
-}: {
-  title: string;
-  value: number;
-  description: string;
-  href: string;
-}) {
+/* ---------- Icons (inline SVG, currentColor) ---------- */
+
+function PlusIcon() {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-muted-foreground/80">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-muted">{title}</p>
-          <p className="text-xs text-muted-foreground/70">{description}</p>
-        </div>
-        <Badge variant="brand" className="px-2 py-1 text-xs">
-          {value}
-        </Badge>
-      </div>
-      <Link
-        href={href}
-        className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-accent transition hover:text-muted"
-      >
-        Manage
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6">
-          <path d="M5 12h14" strokeLinecap="round" />
-          <path d="m13 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </Link>
-    </div>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
   );
 }
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function UsersIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  );
+}
+
+function AlertTriangleIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      <path d="M12 9v4M12 17h.01" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+

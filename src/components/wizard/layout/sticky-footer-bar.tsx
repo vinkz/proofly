@@ -13,10 +13,10 @@ export function StickyFooterBar({
 }: StickyFooterBarProps) {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30">
-      <div className="pointer-events-auto mx-auto flex w-full max-w-6xl items-center justify-between gap-4 border-t border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_-6px_20px_rgba(15,23,42,0.08)] backdrop-blur">
-        <div className="text-xs text-slate-500">
+      <div className="pointer-events-auto mx-auto flex w-full max-w-2xl items-center justify-between gap-4 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+        <div className="text-[13px] text-[var(--color-text-secondary)]">
           {leftContent}
-          {hint ? <span className="ml-2 text-slate-400">{hint}</span> : null}
+          {hint ? <span className="ml-2 text-[var(--color-text-tertiary)]">{hint}</span> : null}
         </div>
         <div className={disabled ? 'opacity-60' : ''}>{rightAction}</div>
       </div>

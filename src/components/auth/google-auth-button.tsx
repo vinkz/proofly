@@ -62,7 +62,7 @@ export function GoogleAuthButton({
       variant="outline"
       onClick={handleGoogleAuth}
       disabled={isPending}
-      className={`w-full rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 ${className}`}
+      className={`h-11 w-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] text-sm font-medium text-[var(--color-text-primary)] ${className}`}
     >
       <span className="mr-2 text-base" aria-hidden="true">
         G

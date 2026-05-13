@@ -10,7 +10,6 @@ import { SignatureCard } from '@/components/certificates/signature-card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { CollapsibleSection } from '@/components/wizard/layout/collapsible-section';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
@@ -912,9 +911,9 @@ export function BoilerServiceWizard({
   const renderCheckToggle = (item: CheckItem) => (
     <div
       key={item.key}
-      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/30 bg-white/80 px-3 py-2 shadow-sm"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2"
     >
-      <p className="text-sm font-semibold text-muted">{item.label}</p>
+      <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{item.label}</p>
       <div className="flex gap-2">
         {['yes', 'no'].map((choice) => (
           <button
@@ -922,7 +921,7 @@ export function BoilerServiceWizard({
             type="button"
             onClick={() => setCheckValue(item.key, choice)}
             className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              checks[item.key] === choice ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-gray-700'
+              checks[item.key] === choice ? 'bg-[var(--color-action)] text-white' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
             }`}
           >
             {choice.toUpperCase()}
@@ -977,13 +976,11 @@ export function BoilerServiceWizard({
                 </Button>
               </div>
             ) : null}
-            <Card className="border border-white/10">
-              <CardHeader>
-                <CardTitle className="text-lg text-muted">Job Address</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job Address</p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Service date
                   </label>
                   <Input
@@ -994,7 +991,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Property name / reference
                   </label>
                   <Input
@@ -1005,7 +1002,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div className="relative md:col-span-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Address lookup / line 1
                   </label>
                   <Input
@@ -1030,8 +1027,8 @@ export function BoilerServiceWizard({
                     </div>
                   ) : null}
                   {addressSuggestions.length ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
-                      <div className="max-h-72 overflow-y-auto p-2">
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+                      <div className="max-h-72 overflow-y-auto">
                         {addressSuggestions.map((suggestion) => {
                           const isSelected = selectedAddressMatchId === suggestion.id;
                           return (
@@ -1039,23 +1036,23 @@ export function BoilerServiceWizard({
                               key={suggestion.id}
                               type="button"
                               onClick={() => void handleAddressMatchSelect(suggestion)}
-                              className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                              className={`w-full border-b-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2 text-left transition last:border-0 ${
                                 isSelected
-                                  ? 'bg-[color:var(--action-soft)] text-muted'
-                                  : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                                  ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                                  : 'hover:bg-[var(--color-action-bg)] text-[var(--color-text-primary)]'
                               }`}
                             >
-                              <div className="text-sm font-medium">{suggestion.label}</div>
+                              <div className="text-[13px] font-medium">{suggestion.label}</div>
                             </button>
                           );
                         })}
                       </div>
                     </div>
                   ) : null}
-                  {addressSearchError ? <p className="mt-2 text-xs text-red-600">{addressSearchError}</p> : null}
+                  {addressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-red)]">{addressSearchError}</p> : null}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Address line 2
                   </label>
                   <Input
@@ -1073,7 +1070,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">City / town</label>
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
                   <Input
                     value={jobAddress.job_address_city}
                     onChange={(e) => {
@@ -1089,7 +1086,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Postcode</label>
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
                   <Input
                     value={jobAddress.job_postcode}
                     onChange={(e) => {
@@ -1102,7 +1099,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Site telephone</label>
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
                   <Input
                     value={jobAddress.job_tel}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
@@ -1110,12 +1107,11 @@ export function BoilerServiceWizard({
                     className="mt-1"
                   />
                 </div>
-              </CardContent>
-            </Card>
-            <Card className="border border-white/10">
-              <CardHeader>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <CardTitle className="text-lg text-muted">Client / Landlord</CardTitle>
+              </div>
+            </div>
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Client / Landlord</p>
                   <Button
                     type="button"
                     variant="outline"
@@ -1131,10 +1127,9 @@ export function BoilerServiceWizard({
                     Copy job address details
                   </Button>
                 </div>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Name</label>
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
                   <Input
                     value={jobInfo.customer_name}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
@@ -1143,7 +1138,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Company</label>
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
                   <Input
                     value={jobInfo.customer_company}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_company: e.target.value }))}
@@ -1152,7 +1147,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div className="relative md:col-span-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Address lookup / line 1
                   </label>
                   <Input
@@ -1173,8 +1168,8 @@ export function BoilerServiceWizard({
                     </div>
                   ) : null}
                   {customerAddressSuggestions.length ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
-                      <div className="max-h-72 overflow-y-auto p-2">
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+                      <div className="max-h-72 overflow-y-auto">
                         {customerAddressSuggestions.map((suggestion) => {
                           const isSelected = selectedCustomerAddressMatchId === suggestion.id;
                           return (
@@ -1182,23 +1177,23 @@ export function BoilerServiceWizard({
                               key={suggestion.id}
                               type="button"
                               onClick={() => void handleCustomerAddressMatchSelect(suggestion)}
-                              className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                              className={`w-full border-b-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2 text-left transition last:border-0 ${
                                 isSelected
-                                  ? 'bg-[color:var(--action-soft)] text-muted'
-                                  : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                                  ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                                  : 'hover:bg-[var(--color-action-bg)] text-[var(--color-text-primary)]'
                               }`}
                             >
-                              <div className="text-sm font-medium">{suggestion.label}</div>
+                              <div className="text-[13px] font-medium">{suggestion.label}</div>
                             </button>
                           );
                         })}
                       </div>
                     </div>
                   ) : null}
-                  {customerAddressSearchError ? <p className="mt-2 text-xs text-red-600">{customerAddressSearchError}</p> : null}
+                  {customerAddressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-red)]">{customerAddressSearchError}</p> : null}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Address line 2
                   </label>
                   <Input
@@ -1209,7 +1204,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">City / town</label>
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
                   <Input
                     value={jobInfo.customer_city}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_city: e.target.value }))}
@@ -1218,7 +1213,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Postcode</label>
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
                   <Input
                     value={jobInfo.customer_postcode}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_postcode: e.target.value }))}
@@ -1227,7 +1222,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Tel. No.</label>
+                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
                   <Input
                     value={jobInfo.customer_phone}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_phone: e.target.value }))}
@@ -1235,8 +1230,8 @@ export function BoilerServiceWizard({
                     className="mt-1"
                   />
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
           <div className="mt-6 flex justify-end">
             <Button className="rounded-full px-6" onClick={handleJobInfoNext} disabled={isPending}>
@@ -1317,7 +1312,7 @@ export function BoilerServiceWizard({
             defaultOpen={firstIncompleteKey === 'readings'}
           >
             <div className="mb-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">FGA readings</p>
+              <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">FGA readings</p>
             </div>
             <div className="mb-3 grid gap-2 sm:grid-cols-2">
               <FgaAutofillInline
@@ -1456,7 +1451,7 @@ export function BoilerServiceWizard({
           onBack={goBackOneStep}
           actions={
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
+              <Button className="rounded-full bg-[var(--color-action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
                 {isPending ? 'Generating…' : 'Generate Boiler Service PDF'}
               </Button>
             </div>
@@ -1496,8 +1491,8 @@ export function BoilerServiceWizard({
               defaultOpen={firstIncompleteKey === 'defects'}
             >
               <div className="space-y-3">
-                <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
-                  <p className="text-sm font-semibold text-muted">Defects found?</p>
+                <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                  <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Defects found?</p>
                   <div className="mt-2 flex gap-2">
                     {['yes', 'no'].map((choice) => (
                       <button
@@ -1505,7 +1500,7 @@ export function BoilerServiceWizard({
                         type="button"
                         onClick={() => setCheckValue('defects_found', choice)}
                         className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          checks.defects_found === choice ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-gray-700'
+                          checks.defects_found === choice ? 'bg-[var(--color-action)] text-white' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
                         }`}
                       >
                         {choice.toUpperCase()}
@@ -1529,7 +1524,7 @@ export function BoilerServiceWizard({
                     />
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground/70">No defects recorded for this service.</p>
+                  <p className="text-[12px] text-[var(--color-text-tertiary)]">No defects recorded for this service.</p>
                 )}
               </div>
             </CollapsibleSection>
@@ -1551,8 +1546,8 @@ export function BoilerServiceWizard({
               <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             </div>
-            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-              <p className="text-sm font-semibold text-muted">Completion</p>
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Completion</p>
               <Input
                 type="date"
                 value={completionDate}
@@ -1560,8 +1555,8 @@ export function BoilerServiceWizard({
                 className="mt-2"
               />
             </div>
-            <details className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-              <summary className="cursor-pointer text-sm font-semibold text-muted">Internal evidence (optional)</summary>
+            <details className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <summary className="cursor-pointer text-[13px] font-medium text-[var(--color-text-primary)]">Internal evidence (optional)</summary>
               <div className="mt-3">
                 <EvidenceCard
                   title="Upload photos"
@@ -1574,7 +1569,7 @@ export function BoilerServiceWizard({
             </details>
           </div>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
+            <Button className="rounded-full bg-[var(--color-action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
               {isPending ? 'Generating…' : 'Generate Boiler Service PDF'}
             </Button>
           </div>

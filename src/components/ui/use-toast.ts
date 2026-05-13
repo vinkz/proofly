@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 
-type ToastVariant = 'default' | 'success' | 'error';
+type ToastVariant = 'default' | 'success' | 'warning' | 'error';
 
 export interface ToastOptions {
   title: string;

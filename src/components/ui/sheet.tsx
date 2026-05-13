@@ -83,7 +83,10 @@ export function SheetTrigger({ asChild, children, className, onClick, ...props }
   return (
     <button
       type="button"
-      className={clsx('transition hover:text-muted', className)}
+      className={clsx(
+        'text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]',
+        className,
+      )}
       onClick={(event: MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (!event.defaultPrevented) setOpen(true);
@@ -98,9 +101,9 @@ export function SheetTrigger({ asChild, children, className, onClick, ...props }
 type SheetSide = 'bottom' | 'left' | 'right';
 
 const sideClasses: Record<SheetSide, string> = {
-  bottom: 'left-0 right-0 bottom-0 rounded-t-[var(--radius)] border-t',
-  left: 'left-0 top-0 bottom-0 w-80 max-w-[90vw] rounded-r-[var(--radius)] border-r',
-  right: 'right-0 top-0 bottom-0 w-80 max-w-[90vw] rounded-l-[var(--radius)] border-l',
+  bottom: 'left-0 right-0 bottom-0 rounded-t-[16px] border-t-[0.5px]',
+  left: 'left-0 top-0 bottom-0 w-80 max-w-[90vw] rounded-r-[16px] border-r-[0.5px]',
+  right: 'right-0 top-0 bottom-0 w-80 max-w-[90vw] rounded-l-[16px] border-l-[0.5px]',
 };
 
 export interface SheetContentProps extends HTMLAttributes<HTMLDivElement> {
@@ -125,14 +128,14 @@ export function SheetContent({
     <div className="fixed inset-0 z-50">
       <div
         role="presentation"
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40"
         onClick={() => setOpen(false)}
       />
       <div
         role="dialog"
         aria-modal="true"
         className={clsx(
-          'absolute z-10 flex flex-col gap-4 border border-white/10 bg-surface-elevated/95 p-6 text-muted-foreground shadow-brand',
+          'absolute z-10 flex flex-col gap-4 border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px] text-[var(--color-text-primary)]',
           sideClasses[side],
           className,
         )}
@@ -140,8 +143,12 @@ export function SheetContent({
       >
         {(title || description) ? (
           <header className="space-y-1">
-            {title ? <h3 className="text-base font-semibold text-muted">{title}</h3> : null}
-            {description ? <p className="text-sm text-muted-foreground/80">{description}</p> : null}
+            {title ? (
+              <h3 className="text-base font-medium text-[var(--color-text-primary)]">{title}</h3>
+            ) : null}
+            {description ? (
+              <p className="text-sm text-[var(--color-text-secondary)]">{description}</p>
+            ) : null}
           </header>
         ) : null}
         {children}
@@ -174,7 +181,10 @@ export function SheetClose({ asChild, children, className, onClick, ...props }: 
   return (
     <button
       type="button"
-      className={clsx('transition hover:text-muted', className)}
+      className={clsx(
+        'text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]',
+        className,
+      )}
       onClick={(event: MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (!event.defaultPrevented) setOpen(false);

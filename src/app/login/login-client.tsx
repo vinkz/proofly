@@ -56,106 +56,114 @@ export function LoginClient() {
   };
 
   return (
-    <div className="w-full max-w-md space-y-4 rounded-2xl border border-white/60 bg-white/90 p-6 shadow-xl backdrop-blur">
+    <div>
       <GoogleAuthButton nextPath={nextPath} />
 
-      <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
-        <span className="h-px flex-1 bg-slate-200" />
-        <span>Or continue with email</span>
-        <span className="h-px flex-1 bg-slate-200" />
+      <div className="my-5 flex items-center gap-3">
+        <span className="h-px flex-1 bg-[var(--color-border-tertiary)]" />
+        <span className="text-[12px] text-[var(--color-text-tertiary)]">or continue with email</span>
+        <span className="h-px flex-1 bg-[var(--color-border-tertiary)]" />
       </div>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-gray-500">Auth method</p>
-          <h2 className="text-xl font-semibold text-[var(--brand)]">
-            {authMode === 'password' ? 'Email + password' : 'Magic link'}
-          </h2>
-        </div>
-        <div className="flex rounded-full bg-[var(--muted)] p-1 text-xs font-semibold text-gray-600">
-          <button
-            type="button"
-            onClick={() => setAuthMode('password')}
-            className={`rounded-full px-3 py-1 transition ${authMode === 'password' ? 'bg-white text-[var(--brand)] shadow' : ''}`}
-          >
-            Password
-          </button>
-          <button
-            type="button"
-            onClick={() => setAuthMode('magic')}
-            className={`rounded-full px-3 py-1 transition ${authMode === 'magic' ? 'bg-white text-[var(--brand)] shadow' : ''}`}
-          >
-            Magic link
-          </button>
-        </div>
+      <div className="flex rounded-[22px] bg-[var(--color-background-secondary)] p-[3px]">
+        <button
+          type="button"
+          onClick={() => setAuthMode('password')}
+          className={`flex h-9 flex-1 items-center justify-center rounded-[20px] text-[14px] transition-colors ${
+            authMode === 'password'
+              ? 'border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] font-medium text-[var(--color-text-primary)]'
+              : 'text-[var(--color-text-tertiary)]'
+          }`}
+        >
+          Password
+        </button>
+        <button
+          type="button"
+          onClick={() => setAuthMode('magic')}
+          className={`flex h-9 flex-1 items-center justify-center rounded-[20px] text-[14px] transition-colors ${
+            authMode === 'magic'
+              ? 'border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] font-medium text-[var(--color-text-primary)]'
+              : 'text-[var(--color-text-tertiary)]'
+          }`}
+        >
+          Magic link
+        </button>
       </div>
 
-      <div className="space-y-3">
-        <label className="block text-sm font-semibold text-muted">
-          Work email
-          <Input
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            type="email"
-            required
-            placeholder="you@example.com"
-            className="mt-2"
-            disabled={isPending}
-          />
-        </label>
-
-        {authMode === 'password' ? (
-          <label className="block text-sm font-semibold text-muted">
-            Password
+      <div className="mt-4 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <div className="flex flex-col gap-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              Work email
+            </p>
             <Input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              type="email"
               required
-              placeholder="••••••••"
-              className="mt-2"
+              placeholder="you@example.com"
+              className="mt-1.5"
               disabled={isPending}
             />
-          </label>
-        ) : null}
+          </div>
+
+          {authMode === 'password' ? (
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                Password
+              </p>
+              <Input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                required
+                placeholder="••••••••"
+                className="mt-1.5"
+                disabled={isPending}
+              />
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {authMode === 'password' ? (
-        <Button
-          type="button"
-          onClick={handlePasswordLogin}
-          disabled={isPending || !email || !password}
-          className="w-full rounded-full bg-[var(--action)] px-4 py-3 text-sm font-semibold text-white shadow-md"
-        >
-          {isPending ? 'Signing in…' : 'Sign in'}
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          onClick={handleMagicLink}
-          disabled={isPending || !email}
-          className="w-full rounded-full bg-[var(--action)] px-4 py-3 text-sm font-semibold text-white shadow-md"
-        >
-          {isPending ? 'Sending link…' : 'Send magic link'}
-        </Button>
-      )}
-
-      {authMode === 'password' ? (
-        <Link
-          href="/forgot-password"
-          className="text-xs font-semibold text-[var(--accent)] underline underline-offset-4"
-        >
-          Forgot password?
-        </Link>
+        <div className="mt-2 text-right">
+          <Link href="/forgot-password" className="text-[13px] text-[var(--color-text-tertiary)]">
+            Forgot password?
+          </Link>
+        </div>
       ) : null}
 
-      <p className="text-xs text-muted-foreground/70">
+      <Button
+        type="button"
+        variant="primary"
+        onClick={authMode === 'password' ? handlePasswordLogin : handleMagicLink}
+        disabled={isPending || (authMode === 'password' ? !email || !password : !email)}
+        className="mt-5 h-11 w-full"
+      >
+        {isPending
+          ? authMode === 'password'
+            ? 'Signing in…'
+            : 'Sending link…'
+          : authMode === 'password'
+            ? 'Sign in'
+            : 'Send magic link'}
+      </Button>
+
+      <p className="mt-5 text-center text-[13px] text-[var(--color-text-secondary)]">
+        Don&apos;t have an account?{' '}
+        <Link href="/signup/step1" className="font-medium text-[var(--color-action)]">
+          Sign up
+        </Link>
+      </p>
+
+      <p className="mt-4 text-center text-[11px] text-[var(--color-text-tertiary)]">
         By continuing, you agree to certnow&apos;s{' '}
-        <Link href="/legal/terms" className="font-semibold text-[var(--accent)] underline underline-offset-4">
+        <Link href="/legal/terms" className="text-[var(--color-action)]">
           Terms
         </Link>{' '}
         and{' '}
-        <Link href="/legal/privacy" className="font-semibold text-[var(--accent)] underline underline-offset-4">
+        <Link href="/legal/privacy" className="text-[var(--color-action)]">
           Privacy Policy
         </Link>
         .
