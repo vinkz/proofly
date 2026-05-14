@@ -1879,7 +1879,7 @@ export function CertificateWizard({
                 className="rounded-[8px]"
               />
               <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
-                Shown as "Name" in the Job Address section of the certificate.
+                Shown as &quot;Name&quot; in the Job Address section of the certificate.
               </p>
               <div className="relative sm:col-span-2">
                 <Input

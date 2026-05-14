@@ -280,16 +280,6 @@ export default async function DashboardPage({
   );
 }
 
-function formatDateTime(dateString: string) {
-  if (!dateString) return 'Unknown';
-  return new Date(dateString).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-  });
-}
-
 function formatTimeShort(dateString: string) {
   if (!dateString) return '';
   return new Date(dateString).toLocaleTimeString(undefined, {
