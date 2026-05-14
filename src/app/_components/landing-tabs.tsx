@@ -292,7 +292,7 @@ function EngineersContent() {
         </div>
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px]">
           <p className="mb-[14px] text-[15px] italic leading-[1.65] text-[var(--color-text-primary)]">
-            "Used to spend an hour doing paperwork after jobs. Now the CP12 is signed and sent before I'm back in the van."
+            &ldquo;Used to spend an hour doing paperwork after jobs. Now the CP12 is signed and sent before I&apos;m back in the van.&rdquo;
           </p>
           <div className="flex items-center gap-3">
             <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#edf7f2] text-[12px] font-medium text-[#1a7a52]">

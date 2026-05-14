@@ -57,7 +57,7 @@ const JOB_TYPES = [
 ];
 
 export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: ScopedRequestEngineer | null }) {
-  const totalSteps = scopedEngineer ? 2 : 3;
+  const totalSteps = 3;
   const [step, setStep] = useState(1);
 
   const [isSubmitting, startSubmitTransition] = useTransition();
@@ -184,9 +184,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
     setAddressSuggestions([]);
   };
 
-  const stepLabels = scopedEngineer
-    ? ['Your details', 'Property']
-    : ['Engineer', 'Your details', 'Property'];
+  const stepLabels = ['Engineer', 'Your details', 'Property'];
 
   const progressPct = Math.round((step / totalSteps) * 100);
 
@@ -197,8 +195,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         return false;
       }
     }
-    const landlordStep = scopedEngineer ? 1 : 2;
-    if (step === landlordStep) {
+    if (step === 2) {
       if (!landlordName.trim()) { setStepError('Your name is required.'); return false; }
       if (!landlordEmail.trim()) { setStepError('Email address is required.'); return false; }
       if (!landlordPhone.trim()) { setStepError('Phone number is required.'); return false; }
@@ -331,39 +328,11 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         </p>
       </div>
 
-      {/* Step 1 (unscoped only): Engineer details */}
-      {!scopedEngineer && step === 1 ? (
-        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
-          <p className="mb-4 text-[13px] text-[var(--color-text-secondary)]">
-            Enter your engineer&apos;s details. CertNow will send them this job request.
-          </p>
-          <div className="grid gap-3">
-            <Input
-              value={engineerName}
-              onChange={(e) => setEngineerName(e.target.value)}
-              placeholder="Engineer name"
-            />
-            <Input
-              type="email"
-              value={engineerEmail}
-              onChange={(e) => setEngineerEmail(e.target.value)}
-              placeholder="Engineer email"
-            />
-            <Input
-              type="tel"
-              value={engineerPhone}
-              onChange={(e) => setEngineerPhone(e.target.value)}
-              placeholder="Engineer phone"
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {/* Step 2 (unscoped) / Step 1 (scoped): Landlord details */}
-      {((!scopedEngineer && step === 2) || (scopedEngineer && step === 1)) ? (
+      {/* Step 1: Engineer details */}
+      {step === 1 ? (
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
           {scopedEngineer ? (
-            <div className="mb-4 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-4 py-3">
+            <div className="rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-4 py-3">
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
                 {scopedEngineer.companyName ?? scopedEngineer.engineerName ?? 'Your selected engineer'}
               </p>
@@ -388,7 +357,38 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
                 </p>
               ) : null}
             </div>
-          ) : null}
+          ) : (
+            <>
+              <p className="mb-4 text-[13px] text-[var(--color-text-secondary)]">
+                Enter your engineer&apos;s details. CertNow will send them this job request.
+              </p>
+              <div className="grid gap-3">
+                <Input
+                  value={engineerName}
+                  onChange={(e) => setEngineerName(e.target.value)}
+                  placeholder="Engineer name"
+                />
+                <Input
+                  type="email"
+                  value={engineerEmail}
+                  onChange={(e) => setEngineerEmail(e.target.value)}
+                  placeholder="Engineer email"
+                />
+                <Input
+                  type="tel"
+                  value={engineerPhone}
+                  onChange={(e) => setEngineerPhone(e.target.value)}
+                  placeholder="Engineer phone"
+                />
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {/* Step 2: Landlord details */}
+      {step === 2 ? (
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
           <div className="grid gap-3">
             <Input
               value={landlordName}
@@ -438,8 +438,8 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         </div>
       ) : null}
 
-      {/* Step 3 (unscoped) / Step 2 (scoped): Property + job details */}
-      {((!scopedEngineer && step === 3) || (scopedEngineer && step === 2)) ? (
+      {/* Step 3: Property + job address details */}
+      {step === 3 ? (
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
           <div className="grid gap-3">
             <Input
