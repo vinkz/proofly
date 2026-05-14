@@ -951,13 +951,11 @@ const AssignClientSchema = z.object({
 
 export async function assignClientToJob(payload: z.infer<typeof AssignClientSchema>) {
   const input = AssignClientSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'assignClientToJob');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const { data: job, error: jobErr } = await sb
     .from('jobs')
     .select('id, user_id, client_name, address, job_code, client_ref')
@@ -1014,13 +1012,11 @@ const SaveJobFieldsSchema = z.object({
 
 export async function saveJobInfo(payload: z.infer<typeof SaveJobInfoSchema>) {
   const input = SaveJobInfoSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveJobInfo');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const { jobId, fields } = input;
   const coreUpdates: Record<string, unknown> = {
     client_name: fields.customer_name ?? null,
@@ -1050,12 +1046,11 @@ export async function saveJobInfo(payload: z.infer<typeof SaveJobInfoSchema>) {
 
 export async function saveJobFields(payload: z.infer<typeof SaveJobFieldsSchema>) {
   const input = SaveJobFieldsSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveJobFields');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const sb = await supabaseServerServiceRole();
   const cp12SafetyKeys = [
     'emergency_control_accessible',
     'gas_tightness_satisfactory',
@@ -1094,13 +1089,11 @@ export async function uploadJobPhoto(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? 'Invalid upload payload');
   }
 
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'uploadJobPhoto');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const { jobId: id, category: cat, file: uploadFile } = parsed.data;
   const arrayBuffer = await uploadFile.arrayBuffer();
   const fileExt = uploadFile.name.split('.').pop() ?? 'jpg';
@@ -1226,13 +1219,11 @@ const UpdateFieldSchema = z.object({
 
 export async function updateField(payload: z.infer<typeof UpdateFieldSchema>) {
   const input = UpdateFieldSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'updateField');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   await sb
     .from(JOB_FIELDS_TABLE)
     .delete()
@@ -1508,13 +1499,11 @@ const GeneralWorksPhotoSchema = z.object({
 
 export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerServiceJobInfoSchema>) {
   const input = BoilerServiceJobInfoSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveBoilerServiceJobInfo');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const { jobId, data } = input;
   const certificateType: CertificateType = 'gas_service';
   const customerAddress = [data.customer_address_line1, data.customer_address_line2, data.customer_city]
@@ -1563,13 +1552,11 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
 
 export async function saveBoilerServiceDetails(payload: z.infer<typeof BoilerServiceDetailsSchema>) {
   const input = BoilerServiceDetailsSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveBoilerServiceDetails');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const certificateType: CertificateType = 'gas_service';
   const entries = Object.entries(input.data).map(([key, value]) => ({
     job_id: input.jobId,
@@ -1583,13 +1570,11 @@ export async function saveBoilerServiceDetails(payload: z.infer<typeof BoilerSer
 
 export async function saveBoilerServiceChecks(payload: z.infer<typeof BoilerServiceChecksSchema>) {
   const input = BoilerServiceChecksSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveBoilerServiceChecks');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const certificateType: CertificateType = 'gas_service';
   const entries = Object.entries(input.data).map(([key, value]) => ({
     job_id: input.jobId,
@@ -1603,13 +1588,11 @@ export async function saveBoilerServiceChecks(payload: z.infer<typeof BoilerServ
 
 export async function saveGasWarningJobInfo(payload: z.infer<typeof GasWarningJobInfoSchema>) {
   const input = GasWarningJobInfoSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveGasWarningJobInfo');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const { jobId, data } = input;
   const certificateType: CertificateType = 'gas_warning_notice';
   const customerAddress = [data.customer_address_line1, data.customer_address_line2, data.customer_city]
@@ -1662,13 +1645,11 @@ export async function saveGasWarningJobInfo(payload: z.infer<typeof GasWarningJo
 
 export async function saveGasWarningDetails(payload: z.infer<typeof GasWarningDetailsSchema>) {
   const input = GasWarningDetailsSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveGasWarningDetails');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const certificateType: CertificateType = 'gas_warning_notice';
   const updates: Record<string, unknown> = {
   };
@@ -1699,13 +1680,11 @@ export async function uploadBoilerServicePhoto(formData: FormData) {
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid upload payload');
 
   const { jobId, category, file } = parsed.data;
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'uploadBoilerServicePhoto');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const arrayBuffer = await file.arrayBuffer();
   const ext = file.name.split('.').pop() ?? 'jpg';
   const path = `${user.id}/${jobId}/${category}-${Date.now()}.${ext}`;
@@ -1727,13 +1706,11 @@ export async function uploadBoilerServicePhoto(formData: FormData) {
 
 export async function saveGeneralWorksInfo(payload: z.infer<typeof GeneralWorksInfoSchema>) {
   const input = GeneralWorksInfoSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveGeneralWorksInfo');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const { jobId, data } = input;
   const updates: Record<string, unknown> = {
     address: data.property_address ?? null,
@@ -1772,13 +1749,11 @@ export async function uploadGeneralWorksPhoto(formData: FormData) {
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid upload payload');
 
   const { jobId, category, file } = parsed.data;
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'uploadGeneralWorksPhoto');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const arrayBuffer = await file.arrayBuffer();
   const ext = file.name.split('.').pop() ?? 'jpg';
   const path = `${user.id}/${jobId}/${category}-${Date.now()}.${ext}`;
@@ -1830,13 +1805,11 @@ const Cp12JobSchema = z.object({
 
 export async function saveCp12JobInfo(payload: z.infer<typeof Cp12JobSchema>) {
   const input = Cp12JobSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveCp12JobInfo');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const { jobId, data } = input;
   console.log('saveCp12JobInfo called', { jobId });
   await sb
@@ -1920,13 +1893,11 @@ const Cp12ApplianceSchema = z.object({
 
 export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSchema>) {
   const input = Cp12ApplianceSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'saveCp12Appliances');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   console.log('saveCp12Appliances called', { jobId: input.jobId, appliances: input.appliances.length });
   await sb.from(CP12_APPLIANCES_TABLE).delete().eq('job_id', input.jobId);
 
@@ -2341,13 +2312,11 @@ export async function uploadSignature(formData: FormData) {
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid signature payload');
 
   const { jobId, role, file } = parsed.data;
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'uploadSignature');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const admin = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -2573,30 +2542,11 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
 export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasServicePdfSchema>) {
   const input = GenerateGasServicePdfSchema.parse(payload);
   const previewOnly = input.previewOnly ?? false;
-  const cookieStore = await cookies();
-  const sb = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options) {
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name: string, options) {
-          cookieStore.delete({ name, ...options });
-        },
-      },
-    },
-  );
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'generateGasServicePdf');
   if (error || !user) throw new Error(error?.message ?? 'generateGasServicePdf requires authenticated user');
 
+  const sb = await supabaseServerServiceRole();
   const jobContext = await loadJobContext(sb, input.jobId, 'generateGasServicePdf');
   if (jobContext.job.user_id && jobContext.job.user_id !== user.id) {
     throw new Error('RLS mismatch: job owner does not match auth user');
@@ -3293,31 +3243,12 @@ const GetCertificatePdfSignedUrlSchema = z.object({
 export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdfSchema>) {
   const input = GeneratePdfSchema.parse(payload);
   const previewOnly = input.previewOnly ?? false;
-  const cookieStore = await cookies();
-  const sb = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options) {
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name: string, options) {
-          cookieStore.delete({ name, ...options });
-        },
-      },
-    },
-  );
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'generateCertificatePdf');
   if (error || !user) throw new Error(error?.message ?? 'generateCertificatePdf requires authenticated user');
   console.log('CERT PDF AUTH UID:', user.id);
 
+  const sb = await supabaseServerServiceRole();
   const jobContext = await loadJobContext(sb, input.jobId, 'generateCertificatePdf');
   if (jobContext.job.user_id && jobContext.job.user_id !== user.id) {
     throw new Error('RLS mismatch: job owner does not match auth user');
@@ -3629,13 +3560,11 @@ export async function createCp12RemoteSignatureRequest(
   payload: z.infer<typeof CreateCp12RemoteSignatureRequestSchema>,
 ) {
   const input = CreateCp12RemoteSignatureRequestSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'createCp12RemoteSignatureRequest');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const jobContext = await loadJobContext(sb, input.jobId, 'createCp12RemoteSignatureRequest');
   if (jobContext.job.user_id && jobContext.job.user_id !== user.id) {
     throw new Error('RLS mismatch: job owner does not match auth user');
@@ -3918,13 +3847,11 @@ export async function getCp12RemoteSignaturePreviewUrl(token: string) {
 export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCertificatePdfSignedUrlSchema> | string) {
   const input = typeof payload === 'string' ? { jobId: payload } : payload;
   const { jobId, certificateType } = GetCertificatePdfSignedUrlSchema.parse(input);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'getCertificatePdfSignedUrl');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   const { data: job, error: jobErr } = await sb.from('jobs').select('user_id').eq('id', jobId).maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
   if (!job) throw new Error('Job not found');
@@ -3964,13 +3891,11 @@ const SendPdfSchema = z.object({
 
 export async function sendPdfToClient(payload: z.infer<typeof SendPdfSchema>) {
   const input = SendPdfSchema.parse(payload);
-  const sb = await supabaseServerServiceRole();
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'sendPdfToClient');
   if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
 
+  const sb = await supabaseServerServiceRole();
   await sb.from('jobs').update({ status: 'completed' }).eq('id', input.jobId).eq('user_id', user.id);
 
   revalidatePath(`/jobs/${input.jobId}`);
