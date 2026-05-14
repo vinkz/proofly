@@ -54,14 +54,90 @@
     color-scheme: light;
   }
 
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+
+      /* Backgrounds */
+      --color-background-primary: #1c1c1e;
+      --color-background-secondary: #141414;
+      --color-background-tertiary: #0f0f0f;
+
+      /* Text */
+      --color-text-primary: #f5f5f5;
+      --color-text-secondary: #a1a1aa;
+      --color-text-tertiary: #71717a;
+      --color-text-inverse: #111111;
+
+      /* Borders */
+      --color-border-primary: rgba(255,255,255,0.2);
+      --color-border-secondary: rgba(255,255,255,0.12);
+      --color-border-tertiary: rgba(255,255,255,0.07);
+
+      /* Action green — slightly lighter for dark bg */
+      --color-action: #22c17a;
+      --color-action-bg: rgba(34,193,122,0.12);
+      --color-action-ring: rgba(34,193,122,0.2);
+
+      /* Semantic */
+      --color-amber: #f59e0b;
+      --color-amber-bg: rgba(245,158,11,0.12);
+      --color-red: #f87171;
+      --color-red-bg: rgba(248,113,113,0.12);
+      --color-blue: #60a5fa;
+      --color-blue-bg: rgba(96,165,250,0.12);
+
+      /* CTA inverts in dark mode */
+      --color-cta: #f5f5f5;
+      --color-cta-fg: #111111;
+    }
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+
+    /* Backgrounds */
+    --color-background-primary: #1c1c1e;
+    --color-background-secondary: #141414;
+    --color-background-tertiary: #0f0f0f;
+
+    /* Text */
+    --color-text-primary: #f5f5f5;
+    --color-text-secondary: #a1a1aa;
+    --color-text-tertiary: #71717a;
+    --color-text-inverse: #111111;
+
+    /* Borders */
+    --color-border-primary: rgba(255,255,255,0.2);
+    --color-border-secondary: rgba(255,255,255,0.12);
+    --color-border-tertiary: rgba(255,255,255,0.07);
+
+    /* Action green — slightly lighter for dark bg */
+    --color-action: #22c17a;
+    --color-action-bg: rgba(34,193,122,0.12);
+    --color-action-ring: rgba(34,193,122,0.2);
+
+    /* Semantic */
+    --color-amber: #f59e0b;
+    --color-amber-bg: rgba(245,158,11,0.12);
+    --color-red: #f87171;
+    --color-red-bg: rgba(248,113,113,0.12);
+    --color-blue: #60a5fa;
+    --color-blue-bg: rgba(96,165,250,0.12);
+
+    /* CTA inverts in dark mode */
+    --color-cta: #f5f5f5;
+    --color-cta-fg: #111111;
+  }
+
   html {
     color-scheme: light;
-    background: var(--surface);
+    background: var(--color-background-primary);
   }
 
   body {
-    background: var(--surface);
-    color: var(--text);
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
     @apply font-sans antialiased;
   }
 

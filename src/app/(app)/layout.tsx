@@ -5,6 +5,7 @@ import RequireAuth from './_components/require-auth';
 import { PageFade } from './_components/page-fade';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { listPendingJobRequestsForDashboard } from '@/server/job-requests';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   let pendingRequestsCount = 0;
@@ -19,12 +20,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <RequireAuth>
       <div className="min-h-screen bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]">
         <header className="sticky top-0 z-30 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
-          <div className="mx-auto flex h-14 max-w-2xl items-center px-4">
+          <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
             <Link href="/dashboard" className="flex items-center">
               <span className="text-xl font-extrabold tracking-tight text-[var(--brand)]">
                 certnow
               </span>
             </Link>
+            <ThemeToggle />
           </div>
         </header>
 

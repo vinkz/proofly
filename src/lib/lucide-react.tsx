@@ -60,6 +60,26 @@ export const ChevronRight = baseIcon(
   'ChevronRight',
 );
 
+export const Sun = baseIcon(
+  [
+    <circle key="center" cx="12" cy="12" r="4" />,
+    <line key="r1" x1="12" x2="12" y1="2" y2="4" />,
+    <line key="r2" x1="12" x2="12" y1="20" y2="22" />,
+    <line key="r3" x1="4.22" x2="5.64" y1="4.22" y2="5.64" />,
+    <line key="r4" x1="18.36" x2="19.78" y1="18.36" y2="19.78" />,
+    <line key="r5" x1="2" x2="4" y1="12" y2="12" />,
+    <line key="r6" x1="20" x2="22" y1="12" y2="12" />,
+    <line key="r7" x1="4.22" x2="5.64" y1="19.78" y2="18.36" />,
+    <line key="r8" x1="18.36" x2="19.78" y1="5.64" y2="4.22" />,
+  ],
+  'Sun',
+);
+
+export const Moon = baseIcon(
+  [<path key="moon" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />],
+  'Moon',
+);
+
 export const Mic = baseIcon(
   [
     <path key="body" d="M12 1a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" />,
