@@ -25,6 +25,40 @@ const cleanAddress = (value: string) => value.trim();
 const cleanRecipients = (to: string | string[]) =>
   (Array.isArray(to) ? to : [to]).map(cleanAddress).filter(Boolean);
 
+const EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+
+const stripWrappingQuotes = (value: string) => {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
+const cleanSender = (value: string | undefined) => {
+  const from = stripWrappingQuotes(value ?? '');
+  if (!from) return '';
+  if (EMAIL_PATTERN.test(from)) return from;
+
+  const nameAddressMatch = from.match(/^(.+?)\s*<([^<>]+)>$/);
+  if (nameAddressMatch) {
+    const name = stripWrappingQuotes(nameAddressMatch[1] ?? '');
+    const email = stripWrappingQuotes(nameAddressMatch[2] ?? '');
+    if (name && EMAIL_PATTERN.test(email)) return `${name} <${email}>`;
+  }
+
+  const looseEmailMatch = from.match(/([^\s@<>]+@[^\s@<>]+\.[^\s@<>]+)/);
+  if (looseEmailMatch?.[1] && EMAIL_PATTERN.test(looseEmailMatch[1])) {
+    const name = stripWrappingQuotes(from.replace(looseEmailMatch[1], '').replace(/[<>]/g, '').trim());
+    return name ? `${name} <${looseEmailMatch[1]}>` : looseEmailMatch[1];
+  }
+
+  return from;
+};
+
 const parseResendResponse = async (response: Response) => {
   try {
     return (await response.json()) as { id?: string; message?: string; error?: string };
@@ -39,7 +73,7 @@ export function isEmailConfigured() {
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = input.from?.trim() || process.env.EMAIL_FROM?.trim();
+  const from = cleanSender(input.from || process.env.EMAIL_FROM);
   const recipients = cleanRecipients(input.to);
 
   if (!apiKey || !from) return { status: 'not_configured' };
