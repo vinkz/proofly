@@ -6,6 +6,7 @@ import { Buffer } from 'node:buffer';
 import type { Database } from '@/lib/database.types';
 import { sendEmail } from '@/lib/resend';
 import { requireUser, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { persistJobFields, type JobFieldEntry } from '@/server/job-fields';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 
 export type DeliveryRecipient = 'landlord' | 'tenant' | 'both';
@@ -38,6 +39,11 @@ export type DeliveryBundle = {
 export type SendDeliveryResult = {
   ok: boolean;
   recipientsSent: string[];
+  error?: string;
+};
+
+export type UpdateDeliveryRecipientEmailsResult = {
+  ok: boolean;
   error?: string;
 };
 
@@ -110,6 +116,67 @@ const uniqueRecipients = (values: Array<string | null>) => {
 };
 
 const filenameForCertificate = (label: string) => `${label.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+
+const normalizeOptionalEmail = (value: string | null | undefined) => {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    throw new Error('Enter a valid email address.');
+  }
+  return normalized;
+};
+
+export async function updateDeliveryRecipientEmails(
+  jobId: string,
+  input: { landlordEmail?: string | null; tenantEmail?: string | null },
+): Promise<UpdateDeliveryRecipientEmailsResult> {
+  try {
+    const { sb, user } = await requireUser({ write: true });
+    const landlordEmail = normalizeOptionalEmail(input.landlordEmail);
+    const tenantEmail = normalizeOptionalEmail(input.tenantEmail);
+
+    const { data: job, error: jobErr } = await sb
+      .from('jobs')
+      .select('id, user_id, client_id')
+      .eq('id', jobId as Database['public']['Tables']['jobs']['Row']['id'])
+      .maybeSingle();
+    if (jobErr) throw new Error(jobErr.message);
+    if (!job) throw new Error('Job not found');
+    if (job.user_id !== user.id) throw new Error('Unauthorized');
+
+    const entries: JobFieldEntry[] = [];
+    if (landlordEmail) {
+      entries.push(
+        { job_id: jobId, field_key: 'landlord_email', value: landlordEmail },
+        { job_id: jobId, field_key: 'customer_email', value: landlordEmail },
+      );
+    }
+    if (tenantEmail) {
+      entries.push({ job_id: jobId, field_key: 'tenant_email', value: tenantEmail });
+    }
+
+    if (entries.length) {
+      await persistJobFields(sb, jobId, entries, 'updateDeliveryRecipientEmails');
+    }
+
+    if (landlordEmail && job.client_id) {
+      await sb
+        .from('clients')
+        .update({ email: landlordEmail })
+        .eq('id', job.client_id as Database['public']['Tables']['clients']['Row']['id'])
+        .eq('user_id', user.id);
+    }
+
+    revalidatePath(`/jobs/${jobId}/deliver`);
+    revalidatePath(`/jobs/${jobId}/complete`);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Could not save recipient email.',
+    };
+  }
+}
 
 /**
  * Assembles the delivery bundle for a job: final certificates with signed URLs,

@@ -2,7 +2,45 @@
 
 import { useState, useTransition } from 'react';
 
-import { sendDeliveryBundle, type DeliveryBundle, type DeliveryRecipient } from '@/server/delivery';
+import {
+  sendDeliveryBundle,
+  updateDeliveryRecipientEmails,
+  type DeliveryBundle,
+  type DeliveryRecipient,
+} from '@/server/delivery';
+
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
+function EmailField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const trimmed = value.trim();
+  const invalid = Boolean(trimmed) && !isValidEmail(trimmed);
+
+  return (
+    <label className="block">
+      <span className="text-[11px] font-medium uppercase tracking-[0.4px] text-white/40">{label}</span>
+      <input
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="mt-1 h-[38px] w-full rounded-[9px] border-[0.5px] border-white/10 bg-white/10 px-3 text-[13px] text-white outline-none placeholder:text-white/25 focus:border-white/30"
+      />
+      {invalid ? <span className="mt-1 block text-[11px] text-[var(--color-red)]">Enter a valid email.</span> : null}
+    </label>
+  );
+}
 
 function WhatsAppButton({ bundle, recipient }: { bundle: DeliveryBundle; recipient: DeliveryRecipient }) {
   const name =
@@ -44,6 +82,8 @@ export function SendPanel({ bundle }: { bundle: DeliveryBundle }) {
   const [recipient, setRecipient] = useState<DeliveryRecipient>(
     bundle.landlordEmail ? 'landlord' : bundle.tenantEmail ? 'tenant' : 'landlord',
   );
+  const [landlordEmail, setLandlordEmail] = useState(bundle.landlordEmail ?? '');
+  const [tenantEmail, setTenantEmail] = useState(bundle.tenantEmail ?? '');
   const [sent, setSent] = useState(false);
   const [sentTo, setSentTo] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -51,21 +91,34 @@ export function SendPanel({ bundle }: { bundle: DeliveryBundle }) {
 
   const recipientEmail =
     recipient === 'landlord'
-      ? bundle.landlordEmail
+      ? landlordEmail.trim()
       : recipient === 'tenant'
-        ? bundle.tenantEmail
-        : [bundle.landlordEmail, bundle.tenantEmail].filter(Boolean).join(' & ');
+        ? tenantEmail.trim()
+        : [landlordEmail.trim(), tenantEmail.trim()].filter(Boolean).join(' & ');
+  const landlordEmailValidOrBlank = !landlordEmail.trim() || isValidEmail(landlordEmail);
+  const tenantEmailValidOrBlank = !tenantEmail.trim() || isValidEmail(tenantEmail);
 
   const canSend = Boolean(
-    (recipient === 'landlord' && bundle.landlordEmail) ||
-      (recipient === 'tenant' && bundle.tenantEmail) ||
-      (recipient === 'both' && (bundle.landlordEmail || bundle.tenantEmail)),
+    (recipient === 'landlord' && isValidEmail(landlordEmail)) ||
+      (recipient === 'tenant' && isValidEmail(tenantEmail)) ||
+      (recipient === 'both' &&
+        landlordEmailValidOrBlank &&
+        tenantEmailValidOrBlank &&
+        (isValidEmail(landlordEmail) || isValidEmail(tenantEmail))),
   );
 
   const handleSend = () => {
     setError(null);
     startTransition(async () => {
       try {
+        const saveResult = await updateDeliveryRecipientEmails(bundle.jobId, {
+          landlordEmail,
+          tenantEmail,
+        });
+        if (!saveResult.ok) {
+          setError(saveResult.error ?? 'Could not save recipient email.');
+          return;
+        }
         const result = await sendDeliveryBundle(bundle.jobId, recipient, 'email');
         if (result.ok) {
           setSent(true);
@@ -139,16 +192,26 @@ export function SendPanel({ bundle }: { bundle: DeliveryBundle }) {
       </div>
 
       {/* Recipient detail */}
-      <div className="mt-3 rounded-[10px] border-[0.5px] border-white/10 px-3 py-2.5">
-        {recipientEmail ? (
-          <p className="text-[13px] text-white/80">{recipientEmail}</p>
-        ) : (
-          <p className="text-[13px] text-white/40">
-            No email address on file for{' '}
-            {recipient === 'landlord' ? 'landlord' : recipient === 'tenant' ? 'tenant' : 'recipients'}.
-            Add it on the job details page.
-          </p>
-        )}
+      <div className="mt-3 space-y-3 rounded-[10px] border-[0.5px] border-white/10 px-3 py-3">
+        {recipient === 'landlord' || recipient === 'both' ? (
+          <EmailField
+            label="Landlord email"
+            value={landlordEmail}
+            onChange={setLandlordEmail}
+            placeholder="landlord@example.com"
+          />
+        ) : null}
+        {recipient === 'tenant' || recipient === 'both' ? (
+          <EmailField
+            label="Tenant email"
+            value={tenantEmail}
+            onChange={setTenantEmail}
+            placeholder="tenant@example.com"
+          />
+        ) : null}
+        {!recipientEmail ? (
+          <p className="text-[12px] text-white/35">Add an email here to send without returning to Step 1.</p>
+        ) : null}
       </div>
 
       {error ? (
