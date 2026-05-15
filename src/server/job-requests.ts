@@ -304,8 +304,8 @@ function renderEmailShell(input: {
     .map(
       (row) => `
         <tr>
-          <td style="padding:10px 0;color:#64748b;font-size:13px;width:150px;">${escapeHtml(row.label)}</td>
-          <td style="padding:10px 0;color:#111111;font-size:14px;font-weight:700;">${escapeHtml(row.value)}</td>
+          <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#6b7280;font-size:13px;width:140px;vertical-align:top;">${escapeHtml(row.label)}</td>
+          <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#111111;font-size:14px;font-weight:600;">${escapeHtml(row.value)}</td>
         </tr>
       `,
     )
@@ -314,29 +314,29 @@ function renderEmailShell(input: {
   return `
 <!doctype html>
 <html>
-  <body style="margin:0;background:#f4f1ea;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#111111;">
+  <body style="margin:0;background:#f4f4f4;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#111111;">
     <div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(input.preheader)}</div>
-    <main style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:24px;overflow:hidden;border:1px solid #e8e0d5;">
-      <section style="padding:28px 28px 18px;background:#111111;color:#ffffff;">
-        <div style="font-size:22px;font-weight:800;letter-spacing:-0.04em;">certnow</div>
-        <h1 style="margin:22px 0 8px;font-size:28px;line-height:1.08;">${escapeHtml(input.title)}</h1>
-        <p style="margin:0;color:#e5e7eb;font-size:15px;line-height:1.55;">${escapeHtml(input.intro)}</p>
+    <main style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0;">
+      <section style="padding:24px 24px 20px;background:#111111;color:#ffffff;">
+        <div style="font-size:18px;font-weight:800;letter-spacing:-0.04em;">certnow</div>
+        <h1 style="margin:20px 0 6px;font-size:24px;font-weight:700;line-height:1.15;">${escapeHtml(input.title)}</h1>
+        <p style="margin:0;color:#d1d5db;font-size:14px;line-height:1.6;">${escapeHtml(input.intro)}</p>
       </section>
-      <section style="padding:24px 28px 8px;">
+      <section style="padding:20px 24px 8px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
           ${rows}
         </table>
         ${
           input.button
-            ? `<div style="padding:22px 0 10px;">
-                <a href="${escapeHtml(input.button.href)}" style="display:inline-block;border-radius:999px;background:#111111;color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;padding:14px 20px;">${escapeHtml(input.button.label)}</a>
+            ? `<div style="padding:20px 0 10px;">
+                <a href="${escapeHtml(input.button.href)}" style="display:inline-block;border-radius:8px;background:#111111;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 20px;letter-spacing:0.01em;">${escapeHtml(input.button.label)}</a>
               </div>
-              <p style="margin:4px 0 0;color:#64748b;font-size:12px;line-height:1.5;">If the button does not work, paste this link into your browser:<br><span style="color:#111111;">${escapeHtml(input.button.href)}</span></p>`
+              <p style="margin:4px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">If the button does not work, paste this link into your browser:<br><span style="color:#374151;">${escapeHtml(input.button.href)}</span></p>`
             : ''
         }
       </section>
-      <section style="padding:18px 28px 26px;">
-        <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">${escapeHtml(input.footer ?? 'Sent by CertNow.')}</p>
+      <section style="padding:16px 24px 22px;border-top:1px solid #f0f0f0;">
+        <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;">${escapeHtml(input.footer ?? 'Sent by CertNow.')}</p>
       </section>
     </main>
   </body>

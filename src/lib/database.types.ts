@@ -652,6 +652,7 @@ export type Database = {
           contact_id: string | null
           created_at: string | null
           data_collection_status: string
+          delivered_at: string | null
           engineer_signature_path: string | null
           entry_point: Database["public"]["Enums"]["job_entry_point"]
           handover_sent_at: string | null
@@ -692,6 +693,7 @@ export type Database = {
           contact_id?: string | null
           created_at?: string | null
           data_collection_status?: string
+          delivered_at?: string | null
           engineer_signature_path?: string | null
           entry_point?: Database["public"]["Enums"]["job_entry_point"]
           handover_sent_at?: string | null
@@ -732,6 +734,7 @@ export type Database = {
           contact_id?: string | null
           created_at?: string | null
           data_collection_status?: string
+          delivered_at?: string | null
           engineer_signature_path?: string | null
           entry_point?: Database["public"]["Enums"]["job_entry_point"]
           handover_sent_at?: string | null
@@ -927,6 +930,7 @@ export type Database = {
           plan_tier: string | null
           profession: string | null
           request_link_slug: string | null
+          saved_signature_url: string | null
           standard_rates: Json
           trade_type: string | null
           trade_types: string[] | null
@@ -957,6 +961,7 @@ export type Database = {
           plan_tier?: string | null
           profession?: string | null
           request_link_slug?: string | null
+          saved_signature_url?: string | null
           standard_rates?: Json
           trade_type?: string | null
           trade_types?: string[] | null
@@ -987,6 +992,7 @@ export type Database = {
           plan_tier?: string | null
           profession?: string | null
           request_link_slug?: string | null
+          saved_signature_url?: string | null
           standard_rates?: Json
           trade_type?: string | null
           trade_types?: string[] | null

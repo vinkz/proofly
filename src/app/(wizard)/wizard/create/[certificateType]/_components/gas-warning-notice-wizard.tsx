@@ -287,11 +287,28 @@ export function GasWarningNoticeWizard({
     didPrefillRef.current = true;
 
     const safeText = (value: string | null | undefined) => (typeof value === 'string' ? value.trim() : '');
-    const primaryAppliance = initialAppliances[0];
+    const isUnsafeAppliance = (appliance: (typeof initialAppliances)[number]) => {
+      const normalized = [
+        appliance?.safety_classification,
+        appliance?.classification_code,
+        appliance?.safety_rating,
+      ]
+        .map((value) => String(value ?? '').trim().toLowerCase())
+        .filter(Boolean)
+        .join(' ');
+      return (
+        /\bid\b/.test(normalized) ||
+        /\bar\b/.test(normalized) ||
+        normalized.includes('immediately dangerous') ||
+        normalized.includes('at risk')
+      );
+    };
+    const primaryAppliance = initialAppliances.find(isUnsafeAppliance) ?? initialAppliances[0];
     const cp12SafetyRating = safeText(primaryAppliance?.safety_rating);
     const cp12ClassificationCode = safeText(primaryAppliance?.classification_code);
-    const cp12DefectDescription = safeText(resolvedFields.defect_description);
-    const cp12RemedialAction = safeText(resolvedFields.remedial_action);
+    const cp12DefectDescription = safeText(primaryAppliance?.defect_notes) || safeText(resolvedFields.defect_description);
+    const cp12RemedialAction = safeText(primaryAppliance?.actions_taken) || safeText(resolvedFields.remedial_action);
+    const cp12UnderlyingCause = safeText(primaryAppliance?.actions_required);
 
     setFields((prev) => {
       const next = { ...prev };
@@ -316,6 +333,9 @@ export function GasWarningNoticeWizard({
       }
       if (!safeText(next.actions_taken) && cp12RemedialAction) {
         next.actions_taken = cp12RemedialAction;
+      }
+      if (!safeText(next.underlying_cause) && cp12UnderlyingCause) {
+        next.underlying_cause = cp12UnderlyingCause;
       }
       return next;
     });
@@ -601,7 +621,7 @@ export function GasWarningNoticeWizard({
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}/pdf?certificateType=${certificateType}`);
+        router.push(`/jobs/${resultJobId}/complete`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',

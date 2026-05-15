@@ -2,7 +2,7 @@ import { getProfile } from '@/server/profile';
 import { userHasPassword } from '@/server/auth';
 import { ProfilePreferences } from './profile-preferences';
 import { PasswordSection } from './password-section';
-import { Button } from '@/components/ui/button';
+import { SavedSignatureSection } from './saved-signature-section';
 import { normalizeStandardRates } from '@/lib/standard-rates';
 
 export default async function SettingsPage() {
@@ -22,22 +22,25 @@ export default async function SettingsPage() {
   const bankName = (profile as { bank_name?: string | null } | null)?.bank_name ?? '';
   const bankAccountName = (profile as { bank_account_name?: string | null } | null)?.bank_account_name ?? '';
   const bankSortCode = (profile as { bank_sort_code?: string | null } | null)?.bank_sort_code ?? '';
-  const bankAccountNumber =
-    (profile as { bank_account_number?: string | null } | null)?.bank_account_number ?? '';
+  const bankAccountNumber = (profile as { bank_account_number?: string | null } | null)?.bank_account_number ?? '';
   const standardRates = normalizeStandardRates(
     (profile as { standard_rates?: unknown } | null)?.standard_rates,
   );
+  const savedSignatureUrl = (profile as { saved_signature_url?: string | null } | null)?.saved_signature_url ?? null;
 
   const { hasPassword } = await userHasPassword();
 
   return (
-    <div className="space-y-6 pb-28">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold text-muted">Settings</h1>
-        <p className="text-sm text-muted-foreground/70">
-          Update installer and company details used to prefill PDF company / installer sections.
+    <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-6 sm:py-10">
+      <div>
+        <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-[var(--color-text-primary)]">
+          Settings
+        </h1>
+        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+          Manage the details used to populate certificates, invoices, and your public profile.
         </p>
       </div>
+
       <ProfilePreferences
         initialFullName={fullName}
         initialDateOfBirth={dateOfBirth}
@@ -57,11 +60,43 @@ export default async function SettingsPage() {
         initialBankAccountNumber={bankAccountNumber}
         initialStandardRates={standardRates}
       />
+
+      {/* Saved signature */}
+      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <div className="mb-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Signature</p>
+          <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Saved signature</h2>
+          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+            Stored once and pre-filled on every CP12 and boiler service certificate. You can always re-draw per job.
+          </p>
+        </div>
+        <SavedSignatureSection existingUrl={savedSignatureUrl} />
+      </section>
+
       <PasswordSection hasPassword={hasPassword} email={user.email ?? ''} />
-      <form action="/logout" method="post" className="flex justify-end">
-        <Button type="submit" variant="outline" className="rounded-full">
+
+      {/* Subscription — placeholder until Milestone 5 */}
+      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Subscription</p>
+        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Plan & billing</h2>
+        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+          Subscription management will be available here once billing is enabled.
+        </p>
+        <div
+          className="mt-3 inline-flex h-[36px] cursor-not-allowed items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] px-4 text-[13px] text-[var(--color-text-tertiary)] opacity-50"
+          aria-disabled="true"
+        >
+          Manage subscription
+        </div>
+      </section>
+
+      <form action="/logout" method="post">
+        <button
+          type="submit"
+          className="h-[38px] rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)]"
+        >
           Sign out
-        </Button>
+        </button>
       </form>
     </div>
   );

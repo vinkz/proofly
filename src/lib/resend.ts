@@ -9,6 +9,7 @@ export type SendEmailInput = {
   html?: string;
   replyTo?: string | string[];
   from?: string;
+  attachments?: Array<{ filename: string; content: string }>;
 };
 
 export type SendEmailResult = {
@@ -59,6 +60,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
         text: input.text,
         html: input.html,
         reply_to: input.replyTo,
+        attachments: input.attachments?.length ? input.attachments : undefined,
       }),
     });
     const payload = await parseResendResponse(response);

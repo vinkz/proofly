@@ -3,7 +3,6 @@
 import { useState, useTransition } from 'react';
 
 import { submitPrefillForm } from '@/server/jobs';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 export function PrefillClient({
@@ -58,47 +57,71 @@ export function PrefillClient({
         });
       }}
     >
-      <section className="rounded-3xl bg-white/70 p-4">
-        <p className="text-sm font-semibold">Job address</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input name="jobAddressName" placeholder="Property name / reference" className="rounded-2xl bg-white sm:col-span-2" />
-          <Input name="jobAddressLine1" required placeholder="Address line 1" className="rounded-2xl bg-white sm:col-span-2" />
-          <Input name="jobAddressLine2" placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-2" />
-          <Input name="jobAddressCity" required placeholder="City / town" className="rounded-2xl bg-white" />
-          <Input name="jobPostcode" required placeholder="Postcode" className="rounded-2xl bg-white" />
-          <Input name="jobTel" placeholder="Site telephone" className="rounded-2xl bg-white" />
+      <FormSection title="Job address">
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <Input name="jobAddressName" placeholder="Property name / reference" className="rounded-[10px] sm:col-span-2" />
+          <Input name="jobAddressLine1" required placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
+          <Input name="jobAddressLine2" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
+          <Input name="jobAddressCity" required placeholder="City / town" className="rounded-[10px]" />
+          <Input name="jobPostcode" required placeholder="Postcode" className="rounded-[10px]" />
+          <Input name="jobTel" placeholder="Site telephone" className="rounded-[10px]" />
         </div>
-      </section>
+      </FormSection>
 
-      <section className="rounded-3xl bg-white/70 p-4">
-        <p className="text-sm font-semibold">Landlord / property owner</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input name="landlordName" required placeholder="Name" className="rounded-2xl bg-white" />
-          <Input name="landlordCompany" placeholder="Company (optional)" className="rounded-2xl bg-white" />
-          <Input name="landlordEmail" type="email" placeholder="Email" className="rounded-2xl bg-white" />
-          <Input name="landlordTel" type="tel" placeholder="Phone" className="rounded-2xl bg-white" />
-          <Input name="landlordAddressLine1" required placeholder="Address line 1" className="rounded-2xl bg-white sm:col-span-2" />
-          <Input name="landlordAddressLine2" placeholder="Address line 2" className="rounded-2xl bg-white sm:col-span-2" />
-          <Input name="landlordCity" required placeholder="City / town" className="rounded-2xl bg-white" />
-          <Input name="landlordPostcode" required placeholder="Postcode" className="rounded-2xl bg-white" />
+      <FormSection title="Landlord / property owner">
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <Input name="landlordName" required placeholder="Name" className="rounded-[10px]" />
+          <Input name="landlordCompany" placeholder="Company (optional)" className="rounded-[10px]" />
+          <Input name="landlordEmail" type="email" placeholder="Email" className="rounded-[10px]" />
+          <Input name="landlordTel" type="tel" placeholder="Phone" className="rounded-[10px]" />
+          <Input name="landlordAddressLine1" required placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
+          <Input name="landlordAddressLine2" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
+          <Input name="landlordCity" required placeholder="City / town" className="rounded-[10px]" />
+          <Input name="landlordPostcode" required placeholder="Postcode" className="rounded-[10px]" />
         </div>
-      </section>
+      </FormSection>
 
-      <section className="rounded-3xl bg-white/70 p-4">
-        <p className="text-sm font-semibold">Access details</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input name="tenantName" placeholder="Tenant name (optional)" className="rounded-2xl bg-white" />
-          <Input name="tenantPhone" placeholder="Tenant phone (optional)" className="rounded-2xl bg-white" />
-          <Input name="preferredDates" type="date" className="rounded-2xl bg-white" />
-          <Input name="accessNotes" placeholder="Access notes" className="rounded-2xl bg-white sm:col-span-2" />
+      <FormSection title="Access details">
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          <Input name="tenantName" placeholder="Tenant name (optional)" className="rounded-[10px]" />
+          <Input name="tenantPhone" placeholder="Tenant phone (optional)" className="rounded-[10px]" />
+          <Input name="preferredDates" type="date" className="rounded-[10px]" />
+          <Input name="accessNotes" placeholder="Access notes" className="rounded-[10px] sm:col-span-2" />
         </div>
-      </section>
+      </FormSection>
 
-      <Button type="submit" disabled={isPending} className="w-full rounded-full">
-        {isPending ? 'Sending...' : 'Send details to engineer'}
-      </Button>
-      {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p> : null}
-      {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p> : null}
+      <button
+        type="submit"
+        disabled={isPending}
+        className="flex h-[44px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+      >
+        {isPending ? 'Sending…' : 'Send details to engineer'}
+        {!isPending && (
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        )}
+      </button>
+
+      {message ? (
+        <div className="rounded-[10px] bg-[var(--color-action-bg)] px-4 py-3 text-[13px] font-medium text-[var(--color-action)]">
+          {message}
+        </div>
+      ) : null}
+      {error ? (
+        <div className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] font-medium text-[var(--color-red)]">
+          {error}
+        </div>
+      ) : null}
     </form>
+  );
+}
+
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-[12px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">{title}</p>
+      {children}
+    </div>
   );
 }

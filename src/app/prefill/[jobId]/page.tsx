@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import { notFound } from 'next/navigation';
 
 import { getPrefillJobSummary } from '@/server/jobs';
@@ -21,26 +20,36 @@ export default async function PrefillJobPage({
   if (!job) notFound();
 
   return (
-    <main className="min-h-screen bg-[var(--muted)] px-4 py-6 text-gray-900 sm:px-6">
-      <section className="mx-auto max-w-4xl space-y-6">
-        <div className="rounded-2xl border border-white/10 bg-[var(--surface)]/90 p-6 shadow-md backdrop-blur">
-          <Image src="/certnow-logo.svg" alt="certnow" width={150} height={34} priority />
-          <h1 className="mt-4 text-3xl font-bold text-[var(--brand)]">Complete job details</h1>
-          <p className="mt-2 text-sm text-muted-foreground/80">
+    <main className="min-h-screen bg-[var(--color-background-secondary)] px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-xl space-y-4">
+        {/* Header */}
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-5 py-5">
+          <p className="text-[18px] font-semibold leading-tight text-[var(--color-text-primary)] tracking-[-0.02em]">
+            certnow
+          </p>
+          <h1 className="mt-3 text-[22px] font-semibold text-[var(--color-text-primary)] leading-tight">
+            Send your job details
+          </h1>
+          <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
             Your engineer needs these details to prepare the job before the visit.
           </p>
           {job.address || job.clientName || job.title ? (
-            <div className="mt-4 rounded-2xl bg-white/70 p-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-950">{job.title ?? job.clientName ?? 'Requested job'}</p>
-              {job.address ? <p className="mt-1">{job.address}</p> : null}
+            <div className="mt-4 rounded-[10px] bg-[var(--color-background-secondary)] px-3 py-3">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+                {job.title ?? job.clientName ?? 'Requested job'}
+              </p>
+              {job.address ? (
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">{job.address}</p>
+              ) : null}
             </div>
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/95 p-6 shadow">
+        {/* Form */}
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-5 py-5">
           <PrefillClient jobId={jobId} token={token} />
         </div>
-      </section>
+      </div>
     </main>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { sendEngineerRequestLinkToLandlord } from '@/server/job-requests';
 
@@ -14,23 +13,31 @@ export function RequestLandlordDetailsCard({ requestUrl }: { requestUrl: string 
   const [isPending, startTransition] = useTransition();
 
   return (
-    <section className="rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-emerald-950">Ask the landlord to fill details</p>
-          <p className="mt-1 text-sm text-emerald-900/75">
-            Send your request link so the landlord can enter property, access, and preferred visit details without entering your engineer details.
+    <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--color-action-bg)] text-[var(--color-action)]">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask the landlord to fill details</p>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+            Send your request link so the landlord can enter property and access details directly.
           </p>
-          <p className="mt-2 break-all rounded-2xl bg-white/80 px-3 py-2 text-xs text-emerald-900">{requestUrl}</p>
+          <p className="mt-2 truncate rounded-[8px] bg-[var(--color-background-secondary)] px-2.5 py-1.5 text-[12px] text-[var(--color-text-tertiary)]">
+            {requestUrl}
+          </p>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-[1fr,1fr,auto]">
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,1fr,auto]">
         <Input
           value={landlordName}
           onChange={(event) => setLandlordName(event.target.value)}
           placeholder="Landlord name"
-          className="rounded-2xl bg-white"
+          className="h-[38px] rounded-[10px]"
           disabled={isPending}
         />
         <Input
@@ -38,12 +45,12 @@ export function RequestLandlordDetailsCard({ requestUrl }: { requestUrl: string 
           onChange={(event) => setLandlordEmail(event.target.value)}
           placeholder="Landlord email"
           type="email"
-          className="rounded-2xl bg-white"
+          className="h-[38px] rounded-[10px]"
           disabled={isPending}
         />
-        <Button
+        <button
           type="button"
-          className="rounded-full"
+          className="h-[38px] rounded-[10px] bg-[#111] px-4 text-[13px] font-medium text-white disabled:opacity-50"
           disabled={isPending || !landlordEmail}
           onClick={() => {
             setMessage(null);
@@ -62,11 +69,15 @@ export function RequestLandlordDetailsCard({ requestUrl }: { requestUrl: string 
             });
           }}
         >
-          {isPending ? 'Sending...' : 'Send'}
-        </Button>
+          {isPending ? 'Sending…' : 'Send'}
+        </button>
       </div>
-      {message ? <p className="mt-3 text-sm font-medium text-emerald-800">{message}</p> : null}
-      {error ? <p className="mt-3 text-sm font-medium text-red-700">{error}</p> : null}
+      {message ? (
+        <p className="mt-2.5 text-[13px] font-medium text-[var(--color-action)]">{message}</p>
+      ) : null}
+      {error ? (
+        <p className="mt-2.5 text-[13px] font-medium text-[var(--color-red)]">{error}</p>
+      ) : null}
     </section>
   );
 }

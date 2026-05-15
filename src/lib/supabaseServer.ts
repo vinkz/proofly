@@ -121,3 +121,10 @@ export async function supabaseServerServiceRole() {
     },
   });
 }
+
+export async function requireUser(options: { write?: boolean } = {}) {
+  const sb = options.write ? await supabaseServerAction() : await supabaseServerReadOnly();
+  const user = await getSupabaseUser(sb);
+  if (!user) throw new Error('Unauthorized');
+  return { sb, user };
+}

@@ -3,14 +3,12 @@
 import { useDeferredValue, useEffect, useMemo, useState, useTransition, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { createSoloJob } from '@/server/jobs';
+import { createSoloJob, requestLandlordJobPrefill } from '@/server/jobs';
 import type { JobRequestPrefill } from '@/server/job-requests';
 import type { ClientListItem } from '@/types/client';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
 import { useToast } from '@/components/ui/use-toast';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
@@ -20,9 +18,18 @@ export type SavedPropertyOption = {
   label: string;
   job_address_name: string;
   job_address_line1: string;
+  job_address_line2: string;
   job_address_city: string;
   job_postcode: string;
   job_tel: string;
+  landlord_name: string;
+  landlord_company: string;
+  landlord_address_line1: string;
+  landlord_address_line2: string;
+  landlord_city: string;
+  landlord_postcode: string;
+  landlord_tel: string;
+  landlord_email: string;
 };
 
 type SoloJobFormProps = {
@@ -271,6 +278,8 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [landlordPostcode, setLandlordPostcode] = useState(initialRequest?.landlordPostcode ?? '');
   const [landlordTel, setLandlordTel] = useState(initialRequest?.landlordPhone ?? '');
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
+  const [landlordRequestMessage, setLandlordRequestMessage] = useState<string | null>(null);
+  const [landlordRequestError, setLandlordRequestError] = useState<string | null>(null);
   const [isJobAddressLookupPending, setIsJobAddressLookupPending] = useState(false);
   const [jobAddressSuggestions, setJobAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedJobAddressMatchId, setSelectedJobAddressMatchId] = useState<string | null>(null);
@@ -439,13 +448,6 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   });
 
   useEffect(() => {
-    if (!isCp12Upcoming) return;
-    setClientMode('new');
-    setSelectedClientId('');
-    setSelectedPropertyKey('');
-  }, [isCp12Upcoming]);
-
-  useEffect(() => {
     if (!selectedClientId || availableProperties.length === 0) {
       setSelectedPropertyKey('');
       return;
@@ -461,7 +463,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     const nextPropertyName = selectedProperty.job_address_name || selectedProperty.job_address_line1;
     setJobAddressName(nextPropertyName);
     setJobAddressLine1(selectedProperty.job_address_line1);
-    setJobAddressLine2('');
+    setJobAddressLine2(selectedProperty.job_address_line2);
     setJobAddressCity(selectedProperty.job_address_city);
     setJobAddressPostcode(selectedProperty.job_postcode);
     setJobAddressTel(selectedProperty.job_tel);
@@ -470,6 +472,15 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     setCity(selectedProperty.job_address_city);
     setPostcode(selectedProperty.job_postcode);
     setSitePhone(selectedProperty.job_tel);
+    if (selectedProperty.landlord_name) setLandlordName(selectedProperty.landlord_name);
+    if (selectedProperty.landlord_company) setLandlordCompany(selectedProperty.landlord_company);
+    if (selectedProperty.landlord_address_line1) setLandlordAddressLine1(selectedProperty.landlord_address_line1);
+    if (selectedProperty.landlord_address_line2) setLandlordAddressLine2(selectedProperty.landlord_address_line2);
+    if (selectedProperty.landlord_city) setLandlordCity(selectedProperty.landlord_city);
+    if (selectedProperty.landlord_postcode) setLandlordPostcode(selectedProperty.landlord_postcode);
+    if (selectedProperty.landlord_tel) setLandlordTel(selectedProperty.landlord_tel);
+    if (selectedProperty.landlord_email) setClientEmail(selectedProperty.landlord_email);
+    if (selectedProperty.landlord_tel) setClientPhone(selectedProperty.landlord_tel);
   }, [availableProperties, selectedPropertyKey]);
 
   useEffect(() => {
@@ -632,6 +643,33 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     setClientPhone('');
     setClientEmail('');
     setSelectedPropertyKey('');
+  };
+
+  const handleRequestLandlordPrefill = () => {
+    if (!selectedClientId) {
+      setLandlordRequestError('Select a client first.');
+      return;
+    }
+    if (!clientEmail.trim()) {
+      setLandlordRequestError('Add a landlord email first.');
+      return;
+    }
+
+    setLandlordRequestMessage(null);
+    setLandlordRequestError(null);
+    startTransition(async () => {
+      try {
+        await requestLandlordJobPrefill({
+          clientId: selectedClientId,
+          jobType,
+          landlordEmail: clientEmail,
+          scheduledFor: isCp12Upcoming && inspectionDate ? `${inspectionDate}T09:00` : scheduledFor,
+        });
+        setLandlordRequestMessage('Prefill request sent. The job is waiting on the landlord.');
+      } catch (error) {
+        setLandlordRequestError(error instanceof Error ? error.message : 'Could not send request.');
+      }
+    });
   };
 
   const handleLandlordNameInput = (value: string) => {
@@ -812,7 +850,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
         if (submitMode === 'continue') {
           const wizardRoute = WIZARD_ROUTE_BY_JOB_TYPE[jobType];
           const shouldSkipFirstWizardStep =
-            isCp12Upcoming || jobType === 'warning_notice';
+            Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice';
           const href = shouldSkipFirstWizardStep
             ? `/wizard/create/${wizardRoute}?jobId=${jobId}&startStep=2`
             : `/wizard/create/${wizardRoute}?jobId=${jobId}`;
@@ -832,76 +870,178 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   };
 
   const renderFormActions = () => (
-    <div className="flex items-center justify-end gap-3">
-      <Button type="button" variant="secondary" onClick={() => router.push('/dashboard')} disabled={isPending}>
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        className="h-[40px] rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
+        onClick={() => router.push('/dashboard')}
+        disabled={isPending}
+      >
         Cancel
-      </Button>
-      <Button
+      </button>
+      <button
         type="submit"
-        variant="secondary"
+        className="h-[40px] flex-1 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
         disabled={isPending}
         onClick={() => setSubmitMode('return')}
       >
-        {isPending && submitMode === 'return' ? 'Saving…' : 'Save & return later'}
-      </Button>
-      <Button
+        {isPending && submitMode === 'return' ? 'Saving…' : 'Save'}
+      </button>
+      <button
         type="submit"
+        className="h-[40px] flex-[2] rounded-[10px] bg-[#111] text-[13px] font-medium text-white disabled:opacity-50"
         disabled={isPending}
         onClick={() => setSubmitMode('continue')}
       >
-        {isPending && submitMode === 'continue' ? 'Saving…' : 'Save & continue now'}
-      </Button>
+        {isPending && submitMode === 'continue' ? 'Saving…' : 'Save & continue'}
+      </button>
     </div>
   );
 
   return (
-    <form className="space-y-3" onSubmit={handleSubmit}>
-      <Card className="border border-white/10">
-        <CardContent className="space-y-4">
-          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Job type</label>
-          <Select
-            value={jobType}
-            onChange={(event) => setJobType(event.target.value as JobType)}
-            className="mt-1"
-            disabled={isPending}
-          >
-            {LAUNCH_VISIBLE_JOB_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {JOB_TYPE_LABELS[type]}
-              </option>
-            ))}
-          </Select>
-          {demoEnabled ? (
-            <div className="flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleAutofill} disabled={isPending}>
-                Autofill test {JOB_TYPE_LABELS[jobType]}
-              </Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+    <form className="space-y-4" onSubmit={handleSubmit}>
+      <div>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Job type</p>
+        <div className="flex gap-2">
+          {LAUNCH_VISIBLE_JOB_TYPES.map((type) => (
+            <button
+              key={type}
+              type="button"
+              disabled={isPending}
+              onClick={() => setJobType(type)}
+              className={`flex h-[36px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
+                jobType === type
+                  ? 'bg-[#111] text-white'
+                  : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+              }`}
+            >
+              {JOB_TYPE_LABELS[type]}
+            </button>
+          ))}
+        </div>
+        {demoEnabled ? (
+          <div className="mt-2 flex justify-end">
+            <button type="button" className="rounded-[6px] text-xs text-[var(--color-text-tertiary)] underline-offset-2 hover:underline" onClick={handleAutofill} disabled={isPending}>
+              Autofill test {JOB_TYPE_LABELS[jobType]}
+            </button>
+          </div>
+        ) : null}
+      </div>
 
       {initialRequest ? (
-        <Card className="border border-[color:var(--action-soft)] bg-[color:var(--action-soft)]/35">
-          <CardContent className="space-y-2 py-4 text-sm text-muted">
-            <p className="font-semibold">Landlord request details</p>
-            <div className="grid gap-2 md:grid-cols-2">
-              <p><span className="text-muted-foreground">Tenant:</span> {initialRequest.tenantName || 'Not provided'}</p>
-              <p><span className="text-muted-foreground">Tenant phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
-              <p className="md:col-span-2"><span className="text-muted-foreground">Preferred dates:</span> {initialRequest.preferredDates || 'Not provided'}</p>
-              <p className="md:col-span-2"><span className="text-muted-foreground">Access notes:</span> {initialRequest.accessNotes || 'Not provided'}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-[12px] border-[0.5px] border-[var(--color-action)]/30 bg-[var(--color-action-bg)] px-4 py-3">
+          <p className="text-[13px] font-medium text-[var(--color-action)]">Landlord request details</p>
+          <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+            <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant:</span> {initialRequest.tenantName || 'Not provided'}</p>
+            <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
+            <p className="text-[12px] text-[var(--color-text-secondary)] md:col-span-2"><span className="font-medium text-[var(--color-text-primary)]">Preferred dates:</span> {initialRequest.preferredDates || 'Not provided'}</p>
+            <p className="text-[12px] text-[var(--color-text-secondary)] md:col-span-2"><span className="font-medium text-[var(--color-text-primary)]">Access notes:</span> {initialRequest.accessNotes || 'Not provided'}</p>
+          </div>
+        </div>
       ) : null}
 
-      <Card className="border border-white/10">
-        <CardHeader className="pb-1 pt-4">
-          <CardTitle className="text-lg text-muted">Job Address</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 pt-1 md:grid-cols-2">
+      {!initialRequest ? (
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="mb-3 text-[14px] font-medium text-[var(--color-text-primary)]">Start from a landlord</p>
+          <div className="grid gap-4">
+            <div className="grid gap-2 sm:grid-cols-[1fr,auto]">
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  Search existing client
+                </label>
+                <Input
+                  value={clientName}
+                  onChange={(event) => handleClientNameInput(event.target.value)}
+                  placeholder="Start typing landlord name"
+                  className="mt-1.5 rounded-[10px]"
+                  list="job-existing-client-options"
+                  disabled={isPending}
+                />
+                <datalist id="job-existing-client-options">
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.name ?? ''} />
+                  ))}
+                </datalist>
+              </div>
+              <button
+                type="button"
+                className={`self-end rounded-[10px] px-4 py-2 text-[13px] font-medium transition ${
+                  clientMode === 'new'
+                    ? 'bg-[#111] text-white'
+                    : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+                }`}
+                onClick={() => {
+                  setClientMode('new');
+                  setSelectedClientId('');
+                  setSelectedPropertyKey('');
+                  setClientName('');
+                  setClientPhone('');
+                  setClientEmail('');
+                }}
+                disabled={isPending}
+              >
+                New client
+              </button>
+            </div>
+
+            {selectedClientId ? (
+              <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{clientName}</p>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                  {availableProperties.length
+                    ? 'Choose a saved property to prefill Step 1, or leave manual for a new address.'
+                    : 'No saved properties yet. Fill in the address below manually.'}
+                </p>
+                {availableProperties.length ? (
+                  <Select
+                    value={selectedPropertyKey}
+                    onChange={(event) => setSelectedPropertyKey(event.target.value)}
+                    className="mt-2.5 rounded-[10px]"
+                    disabled={isPending}
+                  >
+                    <option value="">Manual / new property</option>
+                    {availableProperties.map((property) => (
+                      <option key={property.key} value={property.key}>
+                        {property.label}
+                      </option>
+                    ))}
+                  </Select>
+                ) : null}
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,auto]">
+                  <Input
+                    value={clientEmail}
+                    onChange={(event) => setClientEmail(event.target.value)}
+                    placeholder="Landlord email for prefill request"
+                    type="email"
+                    className="rounded-[10px]"
+                    disabled={isPending}
+                  />
+                  <button
+                    type="button"
+                    className="rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
+                    onClick={handleRequestLandlordPrefill}
+                    disabled={isPending || !clientEmail.trim()}
+                  >
+                    Ask landlord
+                  </button>
+                </div>
+                {landlordRequestMessage ? (
+                  <p className="mt-2 text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
+                ) : null}
+                {landlordRequestError ? (
+                  <p className="mt-2 text-[12px] font-medium text-[var(--color-red)]">{landlordRequestError}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+        <p className="mb-3 text-[14px] font-medium text-[var(--color-text-primary)]">Job Address</p>
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
               {scheduleFieldLabel}
             </label>
             <Input
@@ -910,13 +1050,13 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
               onChange={(event) =>
                 isCp12Upcoming ? setInspectionDate(event.target.value) : setScheduledFor(event.target.value)
               }
-              className="mt-1"
+              className="mt-1.5 rounded-[10px]"
               required
               disabled={isPending}
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Property name / reference
             </label>
             <Input
@@ -941,10 +1081,10 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             ) : null}
           </div>
           <div className="md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Address line 1
             </label>
-            <div className="relative mt-1">
+            <div className="relative mt-1.5">
               <Input
                 value={jobAddressLine1}
                 onChange={(event) => {
@@ -959,13 +1099,13 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                 disabled={isPending}
               />
               {isJobAddressLookupPending && !jobAddressSuggestions.length ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-lg">
                   Searching addresses…
                 </div>
               ) : null}
               {jobAddressSuggestions.length ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
-                  <div className="max-h-72 overflow-y-auto p-2">
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] shadow-lg">
+                  <div className="max-h-72 overflow-y-auto p-1.5">
                     {jobAddressSuggestions.map((suggestion) => {
                       const isSelected = selectedJobAddressMatchId === suggestion.id;
                       return (
@@ -973,10 +1113,10 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                           key={suggestion.id}
                           type="button"
                           onClick={() => void handleJobAddressMatchSelect(suggestion)}
-                          className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                          className={`w-full rounded-[8px] px-3 py-2 text-left transition ${
                             isSelected
-                              ? 'bg-[color:var(--action-soft)] text-muted'
-                              : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                              ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                              : 'hover:bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]'
                           }`}
                         >
                           <div className="text-sm font-medium">{suggestion.label}</div>
@@ -990,7 +1130,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             </div>
           </div>
           <div className="md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Address line 2
             </label>
             <Input
@@ -1002,7 +1142,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">City / town</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
             <Input
               value={jobAddressCity}
               onChange={(event) => setJobAddressCity(event.target.value)}
@@ -1013,7 +1153,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Postcode</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
             <Input
               value={jobAddressPostcode}
               onChange={(event) => setJobAddressPostcode(event.target.value)}
@@ -1024,7 +1164,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             />
           </div>
           <div className="md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Site telephone</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
             <Input
               value={jobAddressTel}
               onChange={(event) => setJobAddressTel(event.target.value)}
@@ -1034,16 +1174,14 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
               required={isCp12Upcoming}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card className="border border-white/10">
-        <CardHeader>
-          <CardTitle className="text-lg text-muted">{partyCardTitle}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+        <p className="mb-3 text-[14px] font-medium text-[var(--color-text-primary)]">{partyCardTitle}</p>
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Name</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
             <Input
               value={partyNameValue}
               onChange={(event) =>
@@ -1067,7 +1205,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             ) : null}
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Company</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
             <Input
               value={landlordCompany}
               onChange={(event) => setLandlordCompany(event.target.value)}
@@ -1077,10 +1215,10 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             />
           </div>
           <div className="md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Address line 1
             </label>
-            <div className="relative mt-1">
+            <div className="relative mt-1.5">
               <Input
                 value={landlordAddressLine1}
                 onChange={(event) => {
@@ -1094,13 +1232,13 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                 disabled={isPending}
               />
               {isPartyAddressLookupPending && !partyAddressSuggestions.length ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-lg">
                   Searching addresses…
                 </div>
               ) : null}
               {partyAddressSuggestions.length ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-lg">
-                  <div className="max-h-72 overflow-y-auto p-2">
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] shadow-lg">
+                  <div className="max-h-72 overflow-y-auto p-1.5">
                     {partyAddressSuggestions.map((suggestion) => {
                       const isSelected = selectedPartyAddressMatchId === suggestion.id;
                       return (
@@ -1108,10 +1246,10 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                           key={suggestion.id}
                           type="button"
                           onClick={() => void handlePartyAddressMatchSelect(suggestion)}
-                          className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                          className={`w-full rounded-[8px] px-3 py-2 text-left transition ${
                             isSelected
-                              ? 'bg-[color:var(--action-soft)] text-muted'
-                              : 'hover:bg-[color:var(--brand-soft)] text-muted'
+                              ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                              : 'hover:bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]'
                           }`}
                         >
                           <div className="text-sm font-medium">{suggestion.label}</div>
@@ -1125,7 +1263,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             </div>
           </div>
           <div className="md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Address line 2
             </label>
             <Input
@@ -1137,7 +1275,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">City / town</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
             <Input
               value={landlordCity}
               onChange={(event) => setLandlordCity(event.target.value)}
@@ -1148,7 +1286,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Postcode</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
             <Input
               value={landlordPostcode}
               onChange={(event) => setLandlordPostcode(event.target.value)}
@@ -1159,7 +1297,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             />
           </div>
           <div className="md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Tel. No.</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
             <Input
               value={landlordTel}
               onChange={(event) => setLandlordTel(event.target.value)}
@@ -1169,7 +1307,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             />
           </div>
           <div className="md:col-span-2">
-            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Email</label>
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</label>
             <Input
               value={clientEmail}
               onChange={(event) => setClientEmail(event.target.value)}
@@ -1179,8 +1317,8 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
               disabled={isPending}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {renderFormActions()}
     </form>

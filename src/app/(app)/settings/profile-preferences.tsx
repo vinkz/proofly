@@ -3,7 +3,6 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -56,6 +55,20 @@ const parseRateInputState = (rates: Record<StandardRateKey, string>): StandardRa
     }
     return parsed;
   }, {});
+
+function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+        {children}
+      </span>
+      {hint ? <span className="ml-1.5 text-[11px] text-[var(--color-text-tertiary)]">{hint}</span> : null}
+    </label>
+  );
+}
+
+const inputClass =
+  'mt-1.5 h-[38px] w-full rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-action)] disabled:opacity-50';
 
 export function ProfilePreferences({
   mode = 'settings',
@@ -125,20 +138,12 @@ export function ProfilePreferences({
     }
 
     if (!GAS_SAFE_NUMBER_PATTERN.test(gasSafeNumber.trim())) {
-      pushToast({
-        title: 'Check Gas Safe number',
-        description: GAS_SAFE_NUMBER_MESSAGE,
-        variant: 'error',
-      });
+      pushToast({ title: 'Check Gas Safe number', description: GAS_SAFE_NUMBER_MESSAGE, variant: 'error' });
       return;
     }
 
     if (!ENGINEER_ID_CARD_NUMBER_PATTERN.test(engineerId.trim())) {
-      pushToast({
-        title: 'Check ID card number',
-        description: ENGINEER_ID_CARD_NUMBER_MESSAGE,
-        variant: 'error',
-      });
+      pushToast({ title: 'Check ID card number', description: ENGINEER_ID_CARD_NUMBER_MESSAGE, variant: 'error' });
       return;
     }
 
@@ -179,7 +184,7 @@ export function ProfilePreferences({
           description:
             mode === 'onboarding'
               ? 'Your account is ready to use.'
-              : 'Company, installer, and invoice payment details saved.',
+              : 'Company, installer, and invoice details saved.',
           variant: 'success',
         });
         if (mode === 'onboarding' || mode === 'settings') {
@@ -215,289 +220,217 @@ export function ProfilePreferences({
     bankAccountNumber !== initialBankAccountNumber ||
     STANDARD_RATE_KEYS.some((key) => standardRates[key] !== initialRateInputs[key]);
 
-  const saveLabel = isPending
-    ? 'Saving…'
-    : mode === 'onboarding'
-      ? 'Complete setup'
-      : dirty
-        ? 'Save changes'
-        : 'Saved';
+  const saveLabel = isPending ? 'Saving…' : mode === 'onboarding' ? 'Complete setup' : dirty ? 'Save changes' : 'Saved';
 
   return (
-    <section className="rounded-3xl border border-white/20 bg-white/80 p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">
-            {mode === 'onboarding' ? 'Complete profile' : 'Account details'}
-          </p>
-          <h2 className="text-lg font-semibold text-muted">
-            {mode === 'onboarding' ? 'Finish your account setup' : 'Company / installer'}
-          </h2>
-          <p className="text-sm text-muted-foreground/70">
-            {mode === 'onboarding'
-              ? 'Save your required profile, company, and engineer details before using the app.'
-              : 'These values prefill PDF company / installer sections.'}
-          </p>
-        </div>
-        {mode === 'onboarding' ? (
-          <Button onClick={handleSave} disabled={isPending || !dirty}>
-            {saveLabel}
-          </Button>
-        ) : null}
-      </div>
+    <>
+      {/* Personal details */}
+      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Personal details</p>
+        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">
+          {mode === 'onboarding' ? 'Complete your profile' : 'Personal & engineer details'}
+        </h2>
+        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+          {mode === 'onboarding'
+            ? 'Required before creating any certificate.'
+            : 'These values populate the installer section of certificate PDFs.'}
+        </p>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <label className="block text-sm font-semibold text-muted">
-          Full name
-          <input
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted">
-          Date of birth
-          <input
-            type="date"
-            value={dateOfBirth}
-            onChange={(e) => setDateOfBirth(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted">
-          Profession
-          <Select
-            value={professionChoice}
-            onChange={(event) => {
-              const value = event.target.value;
-              setProfessionChoice(value);
-              if (value && value !== 'Other') {
-                setProfession(value);
-              } else if (value !== 'Other') {
-                setProfession('');
-              }
-            }}
-            className="mt-2"
-            disabled={isPending}
-          >
-            <option value="">Select profession</option>
-            {TRADE_TYPES.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-            <option value="Other">Other</option>
-          </Select>
-        </label>
-        {professionChoice === 'Other' ? (
-          <label className="block text-sm font-semibold text-muted">
-            Profession (manual)
-            <input
-              value={profession}
-              onChange={(e) => setProfession(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <FieldLabel>Full name</FieldLabel>
+            <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div>
+            <FieldLabel>Date of birth</FieldLabel>
+            <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div>
+            <FieldLabel>Profession</FieldLabel>
+            <Select
+              value={professionChoice}
+              onChange={(event) => {
+                const value = event.target.value;
+                setProfessionChoice(value);
+                if (value && value !== 'Other') {
+                  setProfession(value);
+                } else if (value !== 'Other') {
+                  setProfession('');
+                }
+              }}
+              className="mt-1.5 h-[38px] rounded-[10px] text-[13px]"
               disabled={isPending}
+            >
+              <option value="">Select profession</option>
+              {TRADE_TYPES.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+              <option value="Other">Other</option>
+            </Select>
+          </div>
+          {professionChoice === 'Other' ? (
+            <div>
+              <FieldLabel>Profession (specify)</FieldLabel>
+              <input value={profession} onChange={(e) => setProfession(e.target.value)} className={inputClass} disabled={isPending} />
+            </div>
+          ) : (
+            <div />
+          )}
+          <div>
+            <FieldLabel>Engineer name</FieldLabel>
+            <input value={engineerName} onChange={(e) => setEngineerName(e.target.value)} className={inputClass} disabled={isPending} placeholder="As it appears on certificates" />
+          </div>
+          <div>
+            <FieldLabel hint="6 digits">Gas Safe registration no.</FieldLabel>
+            <input
+              value={gasSafeNumber}
+              onChange={(e) => setGasSafeNumber(e.target.value)}
+              className={inputClass}
+              disabled={isPending}
+              inputMode="numeric"
+              maxLength={6}
+              pattern="[0-9]{6}"
+              placeholder="123456"
             />
-          </label>
-        ) : (
-          <div />
-        )}
-        <label className="block text-sm font-semibold text-muted">
-          Engineer name
-          <input
-            value={engineerName}
-            onChange={(e) => setEngineerName(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted">
-          Company
-          <input
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted md:col-span-2">
-          Address line 1
-          <input
-            value={companyAddressLine1}
-            onChange={(e) => setCompanyAddressLine1(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted md:col-span-2">
-          Address line 2
-          <input
-            value={companyAddressLine2}
-            onChange={(e) => setCompanyAddressLine2(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted md:col-span-2">
-          Address line 3
-          <input
-            value={companyAddressLine3}
-            onChange={(e) => setCompanyAddressLine3(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted">
-          Postcode
-          <input
-            value={companyPostcode}
-            onChange={(e) => setCompanyPostcode(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted">
-          Tel No.
-          <input
-            value={companyPhone}
-            onChange={(e) => setCompanyPhone(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-          />
-        </label>
-        <label className="block text-sm font-semibold text-muted">
-          Gas Safe registration number
-          <input
-            value={gasSafeNumber}
-            onChange={(e) => setGasSafeNumber(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-            inputMode="numeric"
-            maxLength={6}
-            pattern="[0-9]{6}"
-            placeholder="123456"
-          />
-          <span className="mt-1 block text-xs font-normal text-muted-foreground/70">6 digits</span>
-        </label>
-        <label className="block text-sm font-semibold text-muted">
-          Engineer ID card number
-          <input
-            value={engineerId}
-            onChange={(e) => setEngineerId(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-            disabled={isPending}
-            inputMode="numeric"
-            maxLength={7}
-            pattern="[0-9]{7}"
-            placeholder="1234567"
-          />
-          <span className="mt-1 block text-xs font-normal text-muted-foreground/70">7 digits</span>
-        </label>
-      </div>
+          </div>
+          <div>
+            <FieldLabel hint="7 digits">Engineer ID card no.</FieldLabel>
+            <input
+              value={engineerId}
+              onChange={(e) => setEngineerId(e.target.value)}
+              className={inputClass}
+              disabled={isPending}
+              inputMode="numeric"
+              maxLength={7}
+              pattern="[0-9]{7}"
+              placeholder="1234567"
+            />
+          </div>
+        </div>
+      </section>
 
-      <div className="mt-8 border-t border-slate-200/70 pt-6">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-[var(--accent)]">Invoices</p>
-          <h3 className="text-base font-semibold text-muted">Bank transfer details</h3>
-          <p className="text-sm text-muted-foreground/70">
-            These details appear in the payment section on invoice PDFs.
-          </p>
+      {/* Company details */}
+      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</p>
+        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Company details</h2>
+        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">Appears in the company section on certificate and invoice PDFs.</p>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <FieldLabel>Company name</FieldLabel>
+            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div className="sm:col-span-2">
+            <FieldLabel>Address line 1</FieldLabel>
+            <input value={companyAddressLine1} onChange={(e) => setCompanyAddressLine1(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div className="sm:col-span-2">
+            <FieldLabel>Address line 2</FieldLabel>
+            <input value={companyAddressLine2} onChange={(e) => setCompanyAddressLine2(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div className="sm:col-span-2">
+            <FieldLabel>Town / City</FieldLabel>
+            <input value={companyAddressLine3} onChange={(e) => setCompanyAddressLine3(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div>
+            <FieldLabel>Postcode</FieldLabel>
+            <input value={companyPostcode} onChange={(e) => setCompanyPostcode(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div>
+            <FieldLabel>Phone</FieldLabel>
+            <input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} className={inputClass} disabled={isPending} type="tel" />
+          </div>
+        </div>
+      </section>
+
+      {/* Invoices */}
+      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Invoices</p>
+        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Bank transfer &amp; rates</h2>
+        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">Bank details appear on invoice PDFs. Rates pre-fill draft invoices after a certificate is issued.</p>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <FieldLabel>Bank name</FieldLabel>
+            <input value={bankName} onChange={(e) => setBankName(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div>
+            <FieldLabel>Account name</FieldLabel>
+            <input value={bankAccountName} onChange={(e) => setBankAccountName(e.target.value)} className={inputClass} disabled={isPending} />
+          </div>
+          <div>
+            <FieldLabel>Sort code</FieldLabel>
+            <input value={bankSortCode} onChange={(e) => setBankSortCode(e.target.value)} className={inputClass} disabled={isPending} placeholder="12-34-56" />
+          </div>
+          <div>
+            <FieldLabel>Account number</FieldLabel>
+            <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className={inputClass} disabled={isPending} placeholder="12345678" />
+          </div>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="block text-sm font-semibold text-muted">
-            Bank name
-            <input
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              disabled={isPending}
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Account name
-            <input
-              value={bankAccountName}
-              onChange={(e) => setBankAccountName(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              disabled={isPending}
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Sort code
-            <input
-              value={bankSortCode}
-              onChange={(e) => setBankSortCode(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              disabled={isPending}
-              placeholder="12-34-56"
-            />
-          </label>
-          <label className="block text-sm font-semibold text-muted">
-            Account number
-            <input
-              value={bankAccountNumber}
-              onChange={(e) => setBankAccountNumber(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm"
-              disabled={isPending}
-              placeholder="12345678"
-            />
-          </label>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-[var(--line)] bg-white/70 p-4">
-          <p className="text-sm font-semibold text-muted">Standard rates</p>
-          <p className="mt-1 text-xs text-muted-foreground/70">
-            Optional. These prices prefill draft invoices after a certificate is issued. Certificates can still be issued without them.
+        <div className="mt-5 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
+          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Standard rates</p>
+          <p className="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
+            Optional. Pre-fills invoice line items after a certificate is issued.
           </p>
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
             {STANDARD_RATE_KEYS.map((key) => (
-              <label key={key} className="block text-sm font-semibold text-muted">
-                {STANDARD_RATE_LABELS[key]}
-                <div className="mt-2 flex overflow-hidden rounded-xl border border-white/50 bg-white/80">
-                  <span className="grid place-items-center border-r border-slate-200 px-3 text-sm text-muted-foreground/70">£</span>
+              <div key={key}>
+                <FieldLabel>{STANDARD_RATE_LABELS[key]}</FieldLabel>
+                <div className="mt-1.5 flex h-[38px] overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]">
+                  <span className="grid place-items-center border-r-[0.5px] border-[var(--color-border-secondary)] px-2.5 text-[13px] text-[var(--color-text-tertiary)]">£</span>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={standardRates[key]}
                     onChange={(event) =>
-                      setStandardRates((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
+                      setStandardRates((current) => ({ ...current, [key]: event.target.value }))
                     }
-                    className="w-full bg-transparent px-3 py-2 text-sm outline-none"
+                    className="w-full bg-transparent px-3 text-[13px] text-[var(--color-text-primary)] outline-none disabled:opacity-50"
                     disabled={isPending}
                   />
                 </div>
-              </label>
+              </div>
             ))}
           </div>
         </div>
-      </div>
+      </section>
 
+      {/* Sticky save footer (settings mode) */}
       {mode === 'settings' ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-          <div className="pointer-events-auto mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-2xl border border-white/30 bg-white/95 p-3 shadow-2xl backdrop-blur">
+          <div className="pointer-events-auto mx-auto flex max-w-2xl items-center justify-between gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]/95 p-3 shadow-lg backdrop-blur-sm">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-muted">
-                {dirty ? 'Unsaved settings' : 'Settings saved'}
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+                {dirty ? 'Unsaved changes' : 'All saved'}
               </p>
-              <p className="text-xs text-muted-foreground/70">
-                {dirty
-                  ? 'Company, installer, and invoice details have changes.'
-                  : 'Make a change to enable saving.'}
+              <p className="text-[11px] text-[var(--color-text-tertiary)]">
+                {dirty ? 'Personal, company, and invoice details' : 'Make a change to enable saving.'}
               </p>
             </div>
-            <Button onClick={handleSave} disabled={isPending || !dirty} className="shrink-0 rounded-full">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isPending || !dirty}
+              className="h-[38px] shrink-0 rounded-[10px] bg-[#111] px-5 text-[13px] font-medium text-white disabled:opacity-40"
+            >
               {saveLabel}
-            </Button>
+            </button>
           </div>
         </div>
-      ) : null}
-    </section>
+      ) : (
+        <div className="flex justify-end pt-2">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isPending || !dirty}
+            className="h-[40px] rounded-[10px] bg-[#111] px-6 text-[13px] font-medium text-white disabled:opacity-40"
+          >
+            {saveLabel}
+          </button>
+        </div>
+      )}
+    </>
   );
 }

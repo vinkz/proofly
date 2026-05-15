@@ -5,6 +5,7 @@ import { unstable_noStore as noStore } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
+import { createClient } from '@supabase/supabase-js';
 import { getSupabaseUser, supabaseServerAction, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import {
   ENGINEER_ID_CARD_NUMBER_MESSAGE,
@@ -46,6 +47,7 @@ async function upsertProfile(
     'bank_sort_code',
     'bank_account_number',
     'standard_rates',
+    'saved_signature_url',
   ]);
   const workingPatch = { ...patch } as Record<string, unknown>;
 
@@ -73,6 +75,7 @@ export async function getProfile() {
   noStore();
   const { sb, user } = await requireUser();
   const selectVariants = [
+    'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates, request_link_slug, saved_signature_url',
     'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates, request_link_slug',
     'id, full_name, profession, trade_types, certifications, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, bank_name, bank_account_name, bank_sort_code, bank_account_number, standard_rates, request_link_slug',
     'id, full_name, date_of_birth, profession, trade_types, certifications, onboarding_complete, company_name, company_address, company_address_line2, company_town, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number',
@@ -290,4 +293,63 @@ export async function updateProfileBasics(payload: {
   revalidatePath('/wizard/create/commissioning');
 
   return { profileComplete, missingFields };
+}
+
+const SaveProfileSignatureSchema = z.object({
+  file: z.instanceof(Blob).refine((f) => f.size > 0, 'Signature file is empty'),
+});
+
+export async function saveProfileSignature(formData: FormData): Promise<{ url: string }> {
+  const raw = { file: formData.get('file') };
+  const parsed = SaveProfileSignatureSchema.safeParse(raw);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'Invalid signature file');
+
+  const { user } = await requireUser({ write: true });
+  const { file } = parsed.data;
+
+  const admin = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  );
+
+  const arrayBuffer = await file.arrayBuffer();
+  const path = `signatures/${user.id}/profile-signature.png`;
+  const { error: uploadErr } = await admin.storage.from('signatures').upload(path, arrayBuffer, {
+    contentType: 'image/png',
+    upsert: true,
+  });
+  if (uploadErr) throw new Error(uploadErr.message);
+
+  // Long-lived signed URL (10 years) — regenerated on each save
+  const { data: signed, error: signedErr } = await admin.storage
+    .from('signatures')
+    .createSignedUrl(path, 365 * 24 * 3600 * 10);
+  if (signedErr) throw new Error(signedErr.message);
+  const url = signed.signedUrl;
+
+  const sb = await supabaseServerServiceRole();
+  await upsertProfile(sb, user.id, { saved_signature_url: url });
+
+  revalidatePath('/settings');
+  return { url };
+}
+
+export async function deleteProfileSignature(): Promise<void> {
+  const { user } = await requireUser({ write: true });
+
+  const admin = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  );
+
+  const path = `signatures/${user.id}/profile-signature.png`;
+  // Best-effort delete — ignore errors if file doesn't exist
+  await admin.storage.from('signatures').remove([path]).catch(() => null);
+
+  const sb = await supabaseServerServiceRole();
+  await upsertProfile(sb, user.id, { saved_signature_url: null });
+
+  revalidatePath('/settings');
 }

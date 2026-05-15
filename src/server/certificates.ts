@@ -48,7 +48,19 @@ type JobInsertPayload = {
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
 type JobContext = {
-  job: Pick<JobRow, 'id' | 'user_id' | 'client_id' | 'client_name' | 'address' | 'scheduled_for' | 'title' | 'job_type'> & {
+  job: Pick<
+    JobRow,
+    | 'id'
+    | 'user_id'
+    | 'client_id'
+    | 'client_name'
+    | 'address'
+    | 'scheduled_for'
+    | 'title'
+    | 'job_type'
+    | 'certificate_type'
+    | 'property_id'
+  > & {
     job_code?: string | null;
   };
   customer: Customer | null;
@@ -65,7 +77,7 @@ const CP12_REMOTE_SIGNATURE_COMPLETED_AT_FIELD = 'cp12_remote_signature_complete
 type JobFieldRow = { field_key: string; value: string | null };
 type CertificateRecord = Pick<
   Database['public']['Tables']['certificates']['Row'],
-  'id' | 'job_id' | 'cert_type' | 'pdf_path' | 'pdf_url' | 'created_at'
+  'id' | 'job_id' | 'cert_type' | 'pdf_path' | 'pdf_url' | 'created_at' | 'issued_at' | 'status'
 >;
 
 const pickText = (...values: Array<string | null | undefined>) => {
@@ -84,7 +96,7 @@ async function loadJobContext(
 ): Promise<JobContext> {
   const { data: job, error: jobErr } = await sb
     .from('jobs')
-    .select('id, user_id, client_id, client_name, address, scheduled_for, title, job_type, job_code')
+    .select('id, user_id, client_id, client_name, address, scheduled_for, title, job_type, certificate_type, property_id, job_code')
     .eq('id', jobId as JobRow['id'])
     .maybeSingle();
   if (jobErr || !job) throw new Error(jobErr?.message ?? `${label}: job not found`);
@@ -324,16 +336,6 @@ async function ensureCp12FollowUpJob(params: {
   return { jobId: followUpJobId, created };
 }
 
-type GasWarningNoticeFollowUpJob = {
-  jobId: string;
-  created: boolean;
-  sourceJobId: string;
-  sourceApplianceId: string | null;
-  sourceApplianceKey: string;
-  classification: 'ar' | 'id';
-  href: string;
-};
-
 function getGasWarningClassification(appliance: Cp12Appliance): 'ar' | 'id' | null {
   const normalized = [
     appliance.safety_classification,
@@ -397,189 +399,10 @@ function buildCp12ApplianceUnsafePdfSummary(appliance: Cp12Appliance) {
   return parts.join('; ');
 }
 
-async function findGasWarningNoticeFollowUpJob(params: {
-  sb: SupabaseClient<Database>;
-  userId: string;
-  sourceJobId: string;
-  sourceApplianceKey: string;
-}) {
-  const { sb, userId, sourceJobId, sourceApplianceKey } = params;
-  const { data, error } = await sb
-    .from('jobs')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('certificate_type', 'gas_warning_notice')
-    .eq('parent_job_id', sourceJobId)
-    .eq('source_appliance_key', sourceApplianceKey)
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as { id?: string } | null)?.id ?? null;
-}
-
-async function ensureGasWarningNoticeFollowUpJobs(params: {
-  sb: SupabaseClient<Database>;
-  jobCodeClient: SupabaseClient<Database>;
-  userId: string;
-  sourceJobId: string;
-  sourceJob: JobContext['job'];
-  customer: ReturnType<typeof resolveJobCustomer>;
-  propertyAddress: ReturnType<typeof resolveJobPropertyAddress>;
-  fields: Record<string, unknown>;
-  appliances: Cp12Appliance[];
-}): Promise<GasWarningNoticeFollowUpJob[]> {
-  const { sb, jobCodeClient, userId, sourceJobId, sourceJob, customer, propertyAddress, fields, appliances } = params;
-  const text = (value: unknown) => (value === undefined || value === null ? '' : String(value));
-  const boolText = (value: unknown) => (value === true ? 'true' : 'false');
-  const childJobs: GasWarningNoticeFollowUpJob[] = [];
-  const unsafeAppliances = appliances
-    .map((appliance, index) => ({ appliance, index, classification: getGasWarningClassification(appliance) }))
-    .filter((entry): entry is { appliance: Cp12Appliance; index: number; classification: 'ar' | 'id' } =>
-      Boolean(entry.classification),
-    );
-
-  if (!unsafeAppliances.length) return childJobs;
-
-  const jobAddressName = pickText(text(fields.job_address_name), text(fields.property_name));
-  const jobAddressLine1 = pickText(text(fields.job_address_line1), propertyAddress.line1, text(fields.property_address_line1), propertyAddress.summary);
-  const jobAddressLine2 = pickText(text(fields.job_address_line2), propertyAddress.line2, text(fields.property_address_line2));
-  const jobAddressCity = pickText(text(fields.job_address_city), propertyAddress.town, text(fields.property_town));
-  const jobAddressPostcode = pickText(text(fields.job_postcode), propertyAddress.postcode, text(fields.property_postcode), text(fields.postcode));
-  const jobAddressTel = pickText(text(fields.job_tel), text(fields.customer_phone), customer.phone);
-  const customerName = pickText(text(fields.landlord_name), text(fields.customer_name), customer.name, sourceJob.client_name ?? null);
-  const customerContact = pickText(text(fields.landlord_tel), jobAddressTel, customer.phone, customer.email);
-  const propertySummary = [jobAddressLine1, jobAddressLine2, jobAddressCity].filter(Boolean).join(', ');
-
-  for (const { appliance, classification, index } of unsafeAppliances) {
-    const sourceApplianceId = appliance.id ?? null;
-    const sourceApplianceKey = `appliance_${index + 1}`;
-    const existingJobId = await findGasWarningNoticeFollowUpJob({
-      sb,
-      userId,
-      sourceJobId,
-      sourceApplianceKey,
-    });
-
-    if (existingJobId) {
-      childJobs.push({
-        jobId: existingJobId,
-        created: false,
-        sourceJobId,
-        sourceApplianceId,
-        sourceApplianceKey,
-        classification,
-        href: `/wizard/create/gas_warning_notice?jobId=${existingJobId}`,
-      });
-      continue;
-    }
-
-    const jobCode = await getNextJobCode(jobCodeClient, userId);
-    const childInsert = {
-      certificate_type: 'gas_warning_notice',
-      parent_job_id: sourceJobId,
-      source_appliance_id: sourceApplianceId,
-      source_appliance_key: sourceApplianceKey,
-      client_id: sourceJob.client_id ?? null,
-      client_name: customerName || sourceJob.client_name || null,
-      address: propertySummary || propertyAddress.summary || sourceJob.address || null,
-      status: 'draft',
-      user_id: userId,
-      job_type: DEFAULT_JOB_TYPE,
-      title: `Gas Warning Notice for ${customerName || 'CP12 appliance'}`,
-      scheduled_for: text(fields.inspection_date) || sourceJob.scheduled_for || null,
-      job_code: jobCode,
-      client_ref: buildClientRef(jobCode),
-    } as Record<string, unknown>;
-
-    const { data: childJob, error: insertErr } = await sb
-      .from('jobs')
-      .insert(childInsert as unknown as Database['public']['Tables']['jobs']['Insert'])
-      .select('id')
-      .single();
-    if (insertErr || !childJob) {
-      if (insertErr?.code === '23505') {
-        const duplicateJobId = await findGasWarningNoticeFollowUpJob({ sb, userId, sourceJobId, sourceApplianceKey });
-        if (duplicateJobId) {
-          childJobs.push({
-            jobId: duplicateJobId,
-            created: false,
-            sourceJobId,
-            sourceApplianceId,
-            sourceApplianceKey,
-            classification,
-            href: `/wizard/create/gas_warning_notice?jobId=${duplicateJobId}`,
-          });
-          continue;
-        }
-      }
-      throw new Error(insertErr?.message ?? 'Failed to create Gas Warning Notice follow-up job');
-    }
-
-    const childJobId = (childJob as { id: string }).id;
-    await upsertJobAddressForJob({
-      jobId: childJobId,
-      fields: {
-        line1: jobAddressLine1 || undefined,
-        line2: jobAddressLine2 || undefined,
-        town: jobAddressCity || undefined,
-        postcode: jobAddressPostcode || undefined,
-      },
-      sb,
-      userId,
-    });
-
-    const applianceRecord = appliance as Cp12Appliance & Record<string, unknown>;
-    const warningClassification = classification === 'id' ? 'IMMEDIATELY_DANGEROUS' : 'AT_RISK';
-    const classificationCode = classification === 'id' ? 'ID' : 'AR';
-    const childFieldRows: JobFieldEntry[] = [
-      { job_id: childJobId, field_key: 'source_cp12_job_id', value: sourceJobId },
-      { job_id: childJobId, field_key: 'source_cp12_appliance_id', value: sourceApplianceId },
-      { job_id: childJobId, field_key: 'source_cp12_appliance_key', value: sourceApplianceKey },
-      { job_id: childJobId, field_key: 'source_certificate_type', value: 'cp12' },
-      { job_id: childJobId, field_key: 'property_address', value: jobAddressLine1 || propertyAddress.summary || null },
-      { job_id: childJobId, field_key: 'postcode', value: jobAddressPostcode || null },
-      { job_id: childJobId, field_key: 'customer_name', value: customerName || null },
-      { job_id: childJobId, field_key: 'customer_contact', value: customerContact || null },
-      { job_id: childJobId, field_key: 'job_reference', value: text(fields.job_reference) || text(fields.record_id) || null },
-      { job_id: childJobId, field_key: 'job_address_name', value: jobAddressName || null },
-      { job_id: childJobId, field_key: 'job_address_line1', value: jobAddressLine1 || null },
-      { job_id: childJobId, field_key: 'job_address_line2', value: jobAddressLine2 || null },
-      { job_id: childJobId, field_key: 'job_address_city', value: jobAddressCity || null },
-      { job_id: childJobId, field_key: 'job_postcode', value: jobAddressPostcode || null },
-      { job_id: childJobId, field_key: 'job_tel', value: jobAddressTel || null },
-      { job_id: childJobId, field_key: 'appliance_location', value: appliance.location || null },
-      { job_id: childJobId, field_key: 'appliance_type', value: appliance.appliance_type || null },
-      { job_id: childJobId, field_key: 'make_model', value: pickText(appliance.make_model, text(applianceRecord.appliance_make_model)) || null },
-      { job_id: childJobId, field_key: 'serial_number', value: text(applianceRecord.serial_number) || null },
-      { job_id: childJobId, field_key: 'classification', value: warningClassification },
-      { job_id: childJobId, field_key: 'classification_code', value: classificationCode },
-      { job_id: childJobId, field_key: 'unsafe_situation_description', value: pickText(appliance.defect_notes, text(fields.defect_description)) || null },
-      { job_id: childJobId, field_key: 'underlying_cause', value: appliance.actions_required || null },
-      { job_id: childJobId, field_key: 'actions_taken', value: pickText(appliance.actions_taken, text(fields.remedial_action)) || null },
-      { job_id: childJobId, field_key: 'appliance_capped_off', value: boolText(appliance.appliance_disconnected) },
-      { job_id: childJobId, field_key: 'danger_do_not_use_label_fitted', value: boolText(appliance.danger_do_not_use_attached) },
-      { job_id: childJobId, field_key: 'customer_informed', value: boolText(appliance.warning_notice_issued) },
-      { job_id: childJobId, field_key: 'customer_understands_risks', value: boolText(appliance.warning_notice_issued) },
-      { job_id: childJobId, field_key: 'engineer_name', value: text(fields.engineer_name) || null },
-      { job_id: childJobId, field_key: 'engineer_company', value: pickText(text(fields.company_name), text(fields.engineer_company)) || null },
-      { job_id: childJobId, field_key: 'gas_safe_number', value: text(fields.gas_safe_number) || null },
-      { job_id: childJobId, field_key: 'engineer_id_card_number', value: pickText(text(fields.engineer_id_card_number), text(fields.engineer_id)) || null },
-      { job_id: childJobId, field_key: 'issued_at', value: text(fields.inspection_date) || new Date().toISOString().slice(0, 10) },
-    ];
-
-    await persistJobFields(sb, childJobId, childFieldRows, 'ensureGasWarningNoticeFollowUpJobs');
-    childJobs.push({
-      jobId: childJobId,
-      created: true,
-      sourceJobId,
-      sourceApplianceId,
-      sourceApplianceKey,
-      classification,
-      href: `/wizard/create/gas_warning_notice?jobId=${childJobId}`,
-    });
-  }
-
-  return childJobs;
+function isIssuedCertificateRecord(certificate: CertificateRecord | null) {
+  if (!certificate) return false;
+  const status = String(certificate.status ?? 'final').trim().toLowerCase();
+  return Boolean(certificate.pdf_path || certificate.pdf_url) && status !== 'draft';
 }
 
 async function applyCp12SourceDefaultsForGasWarningNotice(params: {
@@ -821,6 +644,119 @@ async function ensureBoilerServiceFollowUpJob(params: {
 
   await persistJobFields(sb, followUpJobId, fieldRows, 'ensureBoilerServiceFollowUpJob');
   return { jobId: followUpJobId, created, skipped: null };
+}
+
+async function createFollowUpJob(params: {
+  sb: SupabaseClient<Database>;
+  userId: string;
+  sourceJobId: string;
+  sourceJob: JobContext['job'];
+  customer: ReturnType<typeof resolveJobCustomer>;
+  propertyAddress: ReturnType<typeof resolveJobPropertyAddress>;
+  fields: Record<string, unknown>;
+}) {
+  const { sb, userId, sourceJobId, sourceJob, customer, propertyAddress, fields } = params;
+  const text = (value: unknown) => (value === undefined || value === null ? '' : String(value).trim());
+  const existingFollowUp = await sb
+    .from(JOB_FIELDS_TABLE)
+    .select('job_id')
+    .eq('field_key', 'gas_warning_follow_up_source_job_id')
+    .eq('value', sourceJobId)
+    .limit(1)
+    .maybeSingle();
+  if (existingFollowUp.error) throw new Error(existingFollowUp.error.message);
+
+  const existingFollowUpJobId = ((existingFollowUp.data ?? null) as { job_id?: string | null } | null)?.job_id ?? null;
+  if (existingFollowUpJobId) {
+    return { jobId: existingFollowUpJobId, created: false };
+  }
+
+  const jobAddressLine1 = pickText(text(fields.job_address_line1), text(fields.property_address), propertyAddress.line1, propertyAddress.summary);
+  const jobAddressLine2 = pickText(text(fields.job_address_line2), propertyAddress.line2);
+  const jobAddressCity = pickText(text(fields.job_address_city), propertyAddress.town);
+  const jobAddressPostcode = pickText(text(fields.job_postcode), text(fields.postcode), propertyAddress.postcode);
+  const propertySummary = [jobAddressLine1, jobAddressLine2, jobAddressCity].filter(Boolean).join(', ');
+  const customerName = pickText(text(fields.customer_name), customer.name, sourceJob.client_name ?? null);
+  const customerContact = pickText(text(fields.customer_contact), customer.phone, customer.email);
+  const defectDescription = pickText(
+    text(fields.unsafe_situation_description),
+    text(fields.other_issue_details),
+    text(fields.defect_description),
+    'Gas warning notice remedial follow-up',
+  );
+  const remedialAction = pickText(text(fields.actions_taken), text(fields.remedial_action), text(fields.underlying_cause));
+  const title = `Remedial follow-up for ${customerName || propertySummary || propertyAddress.summary || 'Gas Warning Notice'}`;
+
+  const insertPayload = {
+    certificate_type: 'general_works',
+    cert_types: ['general_works'],
+    parent_job_id: sourceJobId,
+    property_id: sourceJob.property_id ?? null,
+    client_id: sourceJob.client_id ?? null,
+    client_name: customerName || sourceJob.client_name || null,
+    address: propertySummary || propertyAddress.summary || sourceJob.address || null,
+    status: 'draft',
+    user_id: userId,
+    job_type: DEFAULT_JOB_TYPE,
+    title,
+    notes: defectDescription,
+    entry_point: 'engineer_created',
+  } as Record<string, unknown>;
+
+  const { data: followUpJob, error: insertErr } = await sb
+    .from('jobs')
+    .insert(insertPayload as unknown as Database['public']['Tables']['jobs']['Insert'])
+    .select('id')
+    .single();
+  if (insertErr || !followUpJob) throw new Error(insertErr?.message ?? 'Failed to create remedial follow-up job');
+
+  const followUpJobId = (followUpJob as { id: string }).id;
+  try {
+    await ensureJobCode(sb, followUpJobId, userId, null);
+  } catch (error) {
+    console.warn('createFollowUpJob: failed to assign job code', {
+      followUpJobId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  await upsertJobAddressForJob({
+    jobId: followUpJobId,
+    fields: {
+      line1: jobAddressLine1 || undefined,
+      line2: jobAddressLine2 || undefined,
+      town: jobAddressCity || undefined,
+      postcode: jobAddressPostcode || undefined,
+    },
+    sb,
+    userId,
+  });
+
+  const fieldRows: JobFieldEntry[] = [
+    { job_id: followUpJobId, field_key: 'gas_warning_follow_up_source_job_id', value: sourceJobId },
+    { job_id: followUpJobId, field_key: 'follow_up_source_certificate_type', value: 'gas_warning_notice' },
+    { job_id: followUpJobId, field_key: 'customer_name', value: customerName || null },
+    { job_id: followUpJobId, field_key: 'customer_contact', value: customerContact || null },
+    { job_id: followUpJobId, field_key: 'customer_phone', value: customer.phone || null },
+    { job_id: followUpJobId, field_key: 'customer_email', value: customer.email || null },
+    { job_id: followUpJobId, field_key: 'job_address_line1', value: jobAddressLine1 || null },
+    { job_id: followUpJobId, field_key: 'job_address_line2', value: jobAddressLine2 || null },
+    { job_id: followUpJobId, field_key: 'job_address_city', value: jobAddressCity || null },
+    { job_id: followUpJobId, field_key: 'job_postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJobId, field_key: 'property_address', value: jobAddressLine1 || propertyAddress.summary || null },
+    { job_id: followUpJobId, field_key: 'property_address_line1', value: jobAddressLine1 || null },
+    { job_id: followUpJobId, field_key: 'property_address_line2', value: jobAddressLine2 || null },
+    { job_id: followUpJobId, field_key: 'property_town', value: jobAddressCity || null },
+    { job_id: followUpJobId, field_key: 'property_postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJobId, field_key: 'postcode', value: jobAddressPostcode || null },
+    { job_id: followUpJobId, field_key: 'defect_description', value: defectDescription || null },
+    { job_id: followUpJobId, field_key: 'remedial_action_required', value: remedialAction || null },
+    { job_id: followUpJobId, field_key: 'work_required', value: defectDescription || null },
+    { job_id: followUpJobId, field_key: 'source_job_reference', value: text(fields.record_id) || null },
+  ];
+
+  await persistJobFields(sb, followUpJobId, fieldRows, 'createFollowUpJob');
+  return { jobId: followUpJobId, created: true };
 }
 
 async function saveCertificateRecord(
@@ -1140,7 +1076,7 @@ export async function getCertificateWizardState(jobId: string) {
   const { data: profileRow, error: profileErr } = await sb
     .from('profiles')
     .select(
-      'company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, full_name',
+      'company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, full_name, saved_signature_url',
     )
     .eq('id', user.id)
     .maybeSingle();
@@ -1166,6 +1102,7 @@ export async function getCertificateWizardState(jobId: string) {
     applyDefault('engineer_phone', profileRow.company_phone ?? null);
     applyDefault('gas_safe_number', profileRow.gas_safe_number ?? null);
     applyDefault('engineer_id_card_number', profileRow.default_engineer_id ?? null);
+    applyDefault('engineer_signature', profileRow.saved_signature_url ?? null);
   }
   await applyCp12SourceDefaultsForGasWarningNotice({
     sb,
@@ -3191,17 +3128,6 @@ async function generateCp12CertificateForJob(params: {
     fields: mergedFieldMap,
     issuedAt: issuedAt.toISOString(),
   });
-  const gasWarningNoticeJobs = await ensureGasWarningNoticeFollowUpJobs({
-    sb: admin,
-    jobCodeClient: sb,
-    userId,
-    sourceJobId: jobId,
-    sourceJob: jobContext.job,
-    customer,
-    propertyAddress,
-    fields: mergedFieldMap,
-    appliances,
-  });
   await scheduleGasWarningReminderRows({
     sb: admin,
     userId,
@@ -3213,11 +3139,7 @@ async function generateCp12CertificateForJob(params: {
   revalidatePath(`/jobs/${jobId}/complete`);
   revalidatePath('/jobs');
   revalidatePath('/dashboard');
-  gasWarningNoticeJobs.forEach((job) => {
-    revalidatePath(`/jobs/${job.jobId}`);
-    revalidatePath(`/wizard/create/gas_warning_notice?jobId=${job.jobId}`);
-  });
-  return { pdfUrl: finalSignedUrl, jobId, gasWarningNoticeJobs };
+  return { pdfUrl: finalSignedUrl, jobId, gasWarningNoticeJobs: [] };
 }
 
 const GeneratePdfSchema = z.object({
@@ -3275,6 +3197,15 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
   }
 
   if (input.certificateType === 'gas_warning_notice') {
+    const issuedCertificate = await findCertificateRecord(sb, {
+      jobId: input.jobId,
+      certificateType: input.certificateType,
+      columns: 'id, job_id, cert_type, pdf_path, pdf_url, issued_at, status, created_at',
+    });
+    if (!previewOnly && isIssuedCertificateRecord(issuedCertificate)) {
+      throw new Error('Gas Warning Notice has already been issued for this job.');
+    }
+
     const { data: fields, error: fieldsErr } = await sb
       .from(JOB_FIELDS_TABLE)
       .select('field_key, value')
@@ -3473,6 +3404,9 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       cert_type: input.certificateType,
       public_id: publicId,
       user_id: user.id,
+      issued_at: issuedAtIso,
+      status: 'final',
+      fields: gasWarningFields,
     };
     const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
     const writeCertificate = (payload: Record<string, unknown>) =>
@@ -3487,10 +3421,24 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       .from('jobs')
       .update({ status: 'issued' } as Record<string, unknown>)
       .eq('id', input.jobId);
+    const followUpJob = await createFollowUpJob({
+      sb: admin,
+      userId: user.id,
+      sourceJobId: input.jobId,
+      sourceJob: jobContext.job,
+      customer,
+      propertyAddress,
+      fields: gasWarningFields as unknown as Record<string, unknown>,
+    });
     revalidatePath(`/jobs/${input.jobId}`);
     revalidatePath(`/jobs/${input.jobId}/complete`);
+    revalidatePath(`/jobs/${followUpJob.jobId}`);
     revalidatePath('/dashboard');
-    return { pdfUrl: admin.storage.from('certificates').getPublicUrl(path).data.publicUrl, jobId: input.jobId };
+    return {
+      pdfUrl: admin.storage.from('certificates').getPublicUrl(path).data.publicUrl,
+      jobId: input.jobId,
+      followUpJob,
+    };
   }
 
   if (input.certificateType !== 'cp12') {

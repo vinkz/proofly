@@ -811,7 +811,7 @@ export function BoilerServiceWizard({
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}/pdf?certificateType=gas_service`);
+        router.push(`/jobs/${resultJobId}/complete`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',

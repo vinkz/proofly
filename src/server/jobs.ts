@@ -46,6 +46,12 @@ const JobDetailsSchema = z.object({
   notes: z.string().optional(),
 });
 const SoloJobClientModeSchema = z.enum(['existing', 'new']);
+const LandlordPrefillRequestSchema = z.object({
+  clientId: z.string().uuid(),
+  jobType: JobTypeSchema,
+  landlordEmail: z.string().email(),
+  scheduledFor: z.string().optional().default(''),
+});
 const SoloJobSchema = z
   .object({
     clientMode: SoloJobClientModeSchema,
@@ -268,6 +274,24 @@ const certTypesForJobType = (jobType: JobType) => {
   return [];
 };
 
+const getSiteUrl = () =>
+  (
+    process.env.NEXT_PUBLIC_SHARE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    'https://certnow.uk'
+  ).replace(/\/$/, '');
+
+const addDaysIso = (days: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString();
+};
+
+const firstDateFromText = (value: string | null | undefined) => {
+  const match = String(value ?? '').match(/\d{4}-\d{2}-\d{2}/);
+  return match?.[0] ?? null;
+};
+
 async function requireUser(options: { write?: boolean } = {}) {
   const sb = options.write ? await supabaseServerAction() : await supabaseServerReadOnly();
   const {
@@ -359,7 +383,7 @@ export async function listAwaitingLandlordJobsForDashboard(): Promise<AwaitingLa
     throw new Error(error.message);
   }
 
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(/\/$/, '');
+  const siteUrl = getSiteUrl();
   return ((data ?? []) as Array<Record<string, unknown>>).map((job) => {
     const id = typeof job.id === 'string' ? job.id : '';
     const token = typeof job.prefill_token === 'string' ? job.prefill_token : '';
@@ -415,6 +439,84 @@ export async function fillAwaitingLandlordJobMyself(jobId: string) {
   revalidatePath('/dashboard');
   revalidatePath(`/jobs/${jobId}`);
   return { ok: true, jobId };
+}
+
+export async function requestLandlordJobPrefill(payload: z.infer<typeof LandlordPrefillRequestSchema>) {
+  const input = LandlordPrefillRequestSchema.parse(payload);
+  const readClient = await supabaseServerReadOnly();
+  const user = await getSupabaseUser(readClient);
+  if (!user) throw new Error('Unauthorized');
+
+  const sb = await supabaseServerServiceRole();
+  const { data: client, error: clientErr } = await sb
+    .from('clients')
+    .select('id, name, phone, email, organization, address, postcode, landlord_name, landlord_address, user_id')
+    .eq('id', input.clientId as ClientRow['id'])
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (clientErr) throw new Error(clientErr.message);
+  if (!client) throw new Error('Client not found');
+
+  const token = randomUUID();
+  const now = new Date().toISOString();
+  const jobCode = await getNextJobCode(sb, user.id);
+  const title = `${JOB_TYPE_LABELS[input.jobType]} details from landlord`;
+  const insertPayload = {
+    client_id: client.id,
+    client_name: client.name,
+    address: client.address,
+    status: 'awaiting_landlord',
+    user_id: user.id,
+    title,
+    scheduled_for: normalizeOptionalText(input.scheduledFor),
+    job_type: input.jobType,
+    entry_point: 'engineer_created',
+    cert_types: certTypesForJobType(input.jobType),
+    data_collection_status: 'awaiting_landlord',
+    landlord_input_requested_at: now,
+    prefill_token: token,
+    prefill_token_expires_at: addDaysIso(14),
+    job_code: jobCode,
+    client_ref: buildClientRef(jobCode),
+  } as Database['public']['Tables']['jobs']['Insert'];
+
+  const { data: job, error: jobErr } = await sb
+    .from('jobs')
+    .insert(insertPayload)
+    .select('id')
+    .single();
+  if (jobErr || !job) throw new Error(jobErr?.message ?? 'Could not create prefill job');
+
+  const jobId = job.id as string;
+  const prefillUrl = `${getSiteUrl()}/prefill/${jobId}?token=${token}`;
+  const engineerName = user.email ?? 'your engineer';
+  const notificationStatus = (await sendEmail({
+    to: input.landlordEmail,
+    subject: 'Please send your job details to CertNow',
+    text: [
+      'Hi,',
+      '',
+      `${engineerName} has asked you to send the property and access details for an upcoming job through CertNow.`,
+      '',
+      `Open the prefill form: ${prefillUrl}`,
+      '',
+      'No account is needed.',
+    ].join('\n'),
+  })).status;
+
+  await persistJobFields(
+    sb,
+    jobId,
+    [
+      { job_id: jobId, field_key: 'landlord_email', value: input.landlordEmail },
+      { job_id: jobId, field_key: 'customer_email', value: input.landlordEmail },
+    ],
+    'requestLandlordJobPrefill',
+  );
+
+  revalidatePath('/dashboard');
+  revalidatePath('/jobs');
+  return { ok: true, jobId, prefillUrl, notificationStatus };
 }
 
 export async function createJob(form: FormData | Record<string, unknown>) {
@@ -613,6 +715,8 @@ export async function submitPrefillForm(payload: z.infer<typeof PrefillFormSchem
     postcode: normalizeOptionalText(input.landlordPostcode),
   });
   const now = new Date().toISOString();
+  const preferredDate = firstDateFromText(input.preferredDates);
+  const scheduledFor = preferredDate ? `${preferredDate}T09:00` : null;
 
   await persistJobFields(
     sb,
@@ -648,18 +752,21 @@ export async function submitPrefillForm(payload: z.infer<typeof PrefillFormSchem
     'submitPrefillForm',
   );
 
+  const updatePayload = {
+    address: jobAddress || job.address || null,
+    client_name: normalizeOptionalText(input.landlordName) ?? job.client_name ?? null,
+    status: 'prepared',
+    data_collection_status: 'submitted',
+    landlord_input_submitted_at: now,
+    prefill_token: null,
+    prefill_token_expires_at: null,
+    updated_at: now,
+    ...(scheduledFor ? { scheduled_for: scheduledFor } : {}),
+  };
+
   const { error: updateErr } = await (sb as unknown as UntypedTableClient)
     .from('jobs')
-    .update({
-      address: jobAddress || job.address || null,
-      client_name: normalizeOptionalText(input.landlordName) ?? job.client_name ?? null,
-      status: 'prepared',
-      data_collection_status: 'submitted',
-      landlord_input_submitted_at: now,
-      prefill_token: null,
-      prefill_token_expires_at: null,
-      updated_at: now,
-    })
+    .update(updatePayload)
     .eq('id', input.jobId);
   if (updateErr) throw new Error(updateErr.message);
 
@@ -671,7 +778,11 @@ export async function submitPrefillForm(payload: z.infer<typeof PrefillFormSchem
       .eq('id', job.user_id)
       .maybeSingle();
     const profileRow = (profile ?? {}) as Record<string, unknown>;
-    const recipient = normalizeOptionalText(profileRow.company_email as string | null);
+    let recipient = normalizeOptionalText(profileRow.company_email as string | null);
+    if (!recipient) {
+      const { data: authUser } = await sb.auth.admin.getUserById(job.user_id);
+      recipient = normalizeOptionalText(authUser.user?.email ?? null);
+    }
     if (recipient) {
       notificationStatus = (await sendEmail({
         to: recipient,
@@ -681,7 +792,7 @@ export async function submitPrefillForm(payload: z.infer<typeof PrefillFormSchem
           '',
           `Property: ${jobAddress || job.address || 'Not provided'}`,
           `Landlord: ${input.landlordName || 'Not provided'}`,
-          `Open dashboard: ${(process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(/\/$/, '')}/dashboard`,
+          `Open dashboard: ${getSiteUrl()}/dashboard`,
         ].join('\n'),
       })).status;
     }
@@ -832,7 +943,7 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
     client_id: client?.id ?? null,
     client_name: client?.name ?? landlordName ?? null,
     address: propertyAddress,
-    status: input.requestId ? 'prepared' : 'active',
+    status: 'prepared',
     user_id: user.id,
     title: isSafetyCheck ? `CP12 for ${landlordName ?? 'upcoming job'}` : jobTypeLabel,
     scheduled_for: input.scheduledFor,
@@ -1283,7 +1394,14 @@ const isFinalCertificate = (certificate: Record<string, unknown>) => {
 const hasUnsafeClassification = (value: unknown) => {
   if (typeof value !== 'string') return false;
   const normalized = value.trim().toUpperCase();
-  return normalized === 'AR' || normalized === 'ID';
+  return (
+    normalized === 'AR' ||
+    normalized === 'ID' ||
+    normalized === 'AT RISK' ||
+    normalized === 'AT_RISK' ||
+    normalized === 'IMMEDIATELY DANGEROUS' ||
+    normalized === 'IMMEDIATELY_DANGEROUS'
+  );
 };
 
 const isUnsafeField = (field: Record<string, unknown>) => {

@@ -350,7 +350,7 @@ export function CertificateWizard({
   const [step, setStep] = useState(() => Math.max(startStep, 1));
   const [isPending, startTransition] = useTransition();
   const resolvedInitialInfo = mergeJobContextFields(initialInfo, initialJobContext);
-  const [issuedJobId, setIssuedJobId] = useState<string | null>(null);
+  const [issuedJobId] = useState<string | null>(null);
   const [boilerServiceDecision, setBoilerServiceDecision] = useState<'yes' | 'no' | null>(null);
   const [isPostcodeLookupPending, setIsPostcodeLookupPending] = useState(false);
   const [postcodeSuggestions, setPostcodeSuggestions] = useState<AddressLookupSuggestion[]>([]);
@@ -1205,10 +1205,6 @@ export function CertificateWizard({
         });
         const { jobId: resultJobId } = result;
         clearDraft();
-        const gasWarningNoticeJobs =
-          certificateType === 'cp12' && 'gasWarningNoticeJobs' in result && Array.isArray(result.gasWarningNoticeJobs)
-            ? result.gasWarningNoticeJobs
-            : [];
         pushToast({
           title: `${certificateLabel} generated successfully`,
           description: (
@@ -1218,28 +1214,11 @@ export function CertificateWizard({
           ),
           variant: 'success',
         });
-        if (gasWarningNoticeJobs.length) {
-          const firstWarningJob = gasWarningNoticeJobs[0] as { href?: string; jobId?: string };
-          const href = firstWarningJob.href ?? (firstWarningJob.jobId ? `/wizard/create/gas_warning_notice?jobId=${firstWarningJob.jobId}` : null);
-          if (href) {
-            pushToast({
-              title: 'Gas Warning Notice draft created',
-              description: (
-                <Link href={href} className="text-[var(--action)] underline">
-                  Issue Gas Warning Notice
-                </Link>
-              ),
-              variant: 'success',
-            });
-          }
-        }
         if (certificateType === 'cp12') {
-          setIssuedJobId(resultJobId);
-          setBoilerServiceDecision(null);
-          setStep(4);
+          router.push(`/jobs/${resultJobId}/complete`);
           return;
         }
-        router.push(`/jobs/${resultJobId}/pdf?certificateType=${certificateType}`);
+        router.push(`/jobs/${resultJobId}/complete`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',

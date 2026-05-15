@@ -42,7 +42,7 @@ export function SendRequestLinkCard({ requestUrl }: { requestUrl: string }) {
         value={landlordName}
         onChange={(event) => setLandlordName(event.target.value)}
         placeholder="Landlord name"
-        className="h-11 rounded-[12px] bg-[var(--color-background-primary)]"
+        className="h-10 rounded-[10px]"
         disabled={isPending}
       />
       <Input
@@ -50,7 +50,7 @@ export function SendRequestLinkCard({ requestUrl }: { requestUrl: string }) {
         onChange={(event) => setLandlordEmail(event.target.value)}
         placeholder="Landlord email"
         type="email"
-        className="h-11 rounded-[12px] bg-[var(--color-background-primary)]"
+        className="h-10 rounded-[10px]"
         disabled={isPending}
       />
       <Input
@@ -58,12 +58,12 @@ export function SendRequestLinkCard({ requestUrl }: { requestUrl: string }) {
         onChange={(event) => setLandlordPhone(event.target.value)}
         placeholder="Mobile number"
         type="tel"
-        className="h-11 rounded-[12px] bg-[var(--color-background-primary)]"
+        className="h-10 rounded-[10px]"
         disabled={isPending}
       />
       <Button
         type="button"
-        className="h-11 w-full rounded-[22px]"
+        className="h-10 w-full rounded-[10px]"
         disabled={isPending || !canSend}
         onClick={() => {
           setMessage(null);

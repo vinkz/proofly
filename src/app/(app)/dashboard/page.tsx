@@ -5,6 +5,8 @@ import type { ReactNode } from 'react';
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import {
+  fillAwaitingLandlordJobMyself,
+  listAwaitingLandlordJobsForDashboard,
   listJobs,
 } from '@/server/jobs';
 import {
@@ -58,10 +60,11 @@ export default async function DashboardPage({
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups, jobRequests, requestLink] = await Promise.all([
+  const [{ profile }, jobGroups, jobRequests, awaitingLandlordJobs, requestLink] = await Promise.all([
     getProfile(),
     listJobs(),
     listPendingJobRequestsForDashboard(),
+    listAwaitingLandlordJobsForDashboard(),
     getOrCreateEngineerRequestLink(),
   ]);
   const activeJobs = jobGroups.active as BasicJob[];
@@ -175,6 +178,77 @@ export default async function DashboardPage({
           <NoRequestsEmpty url={requestLink.url} />
         )}
       </section>
+
+      {awaitingLandlordJobs.length ? (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 px-0.5">
+            <h2 className="text-[13px] font-medium text-[var(--color-text-primary)]">Waiting for landlord</h2>
+            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[10px] bg-[var(--color-action-bg)] px-1.5 text-[11px] font-medium text-[var(--color-action)]">
+              {awaitingLandlordJobs.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {awaitingLandlordJobs.map((job) => (
+              <article
+                key={job.id}
+                className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]"
+              >
+                <div className="px-4 pt-4 pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">
+                        {job.clientName ?? job.title ?? 'Awaiting landlord details'}
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                        {getDashboardJobTypeLabel(job.jobType)} · Waiting for landlord details
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-[8px] bg-[var(--color-action-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-action)]">
+                      Awaiting
+                    </span>
+                  </div>
+                  {job.prefillUrl ? (
+                    <p className="mt-2 truncate rounded-[8px] bg-[var(--color-background-tertiary)] px-2.5 py-1.5 text-[11px] text-[var(--color-text-tertiary)]">
+                      {job.prefillUrl}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2 border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3 pt-2.5">
+                  {job.prefillUrl ? (
+                    <a
+                      href={`mailto:?subject=CertNow job details&body=${encodeURIComponent(job.prefillUrl)}`}
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-[18px] border-[0.5px] border-[var(--color-border-secondary)] text-[13px] font-medium text-[var(--color-text-primary)]"
+                    >
+                      Share link
+                    </a>
+                  ) : null}
+                  <form
+                    action={async () => {
+                      'use server';
+                      await fillAwaitingLandlordJobMyself(job.id);
+                      const route =
+                        job.jobType === 'service'
+                          ? 'boiler_service'
+                          : job.jobType === 'warning_notice'
+                            ? 'gas_warning_notice'
+                            : 'cp12';
+                      redirect(`/wizard/create/${route}?jobId=${job.id}&startStep=1`);
+                    }}
+                    className={job.prefillUrl ? 'flex-[2]' : 'flex-1'}
+                  >
+                    <button
+                      type="submit"
+                      className="inline-flex h-9 w-full items-center justify-center rounded-[18px] bg-[var(--color-cta)] text-[13px] font-medium text-[var(--color-cta-fg)]"
+                    >
+                      Fill in myself
+                    </button>
+                  </form>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Calendar */}
       <section className="space-y-2">
@@ -551,11 +625,13 @@ function DashboardJobRow({ job }: { job: BasicJob & { prepComplete?: boolean } }
       : 'bg-[var(--color-action)]';
 
   let ctaClass: string;
-  if (actionLabel === 'Prepare' || actionLabel === 'Open') {
+  if (actionLabel === 'Review & send') {
+    ctaClass = 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]';
+  } else if (actionLabel === 'Open PDF') {
+    ctaClass = 'bg-[var(--color-action-bg)] text-[var(--color-action)]';
+  } else if (actionLabel === 'Prepare' || actionLabel === 'Open') {
     ctaClass =
       'border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]';
-  } else if (actionLabel === 'Review & send' || actionLabel === 'Open PDF') {
-    ctaClass = 'bg-[var(--color-action-bg)] text-[var(--color-action)]';
   } else {
     ctaClass = 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]';
   }

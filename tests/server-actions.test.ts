@@ -3,19 +3,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
+vi.mock('server-only', () => ({}));
 
 const supabaseServerActionMock = vi.hoisted(() => vi.fn());
 const supabaseServerReadOnlyMock = vi.hoisted(() => vi.fn());
 const supabaseServerServiceRoleMock = vi.hoisted(() => vi.fn());
+const getSupabaseUserMock = vi.hoisted(() => vi.fn());
 const getNextJobCodeMock = vi.hoisted(() => vi.fn());
 const upsertJobAddressForJobMock = vi.hoisted(() => vi.fn());
 const upsertCustomerFromJobFieldsMock = vi.hoisted(() => vi.fn());
 const persistJobFieldsMock = vi.hoisted(() => vi.fn());
+const sendEmailMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/supabaseServer', () => ({
   supabaseServerAction: supabaseServerActionMock,
   supabaseServerReadOnly: supabaseServerReadOnlyMock,
   supabaseServerServiceRole: supabaseServerServiceRoleMock,
+  getSupabaseUser: getSupabaseUserMock,
 }));
 
 vi.mock('@/server/id-chain', () => ({
@@ -37,6 +41,10 @@ vi.mock('@/server/job-fields', () => ({
   persistJobFields: persistJobFieldsMock,
 }));
 
+vi.mock('@/lib/resend', () => ({
+  sendEmail: sendEmailMock,
+}));
+
 const openaiMock = {
   responses: {
     create: vi.fn().mockResolvedValue({ output_text: 'Mock summary' }),
@@ -47,7 +55,7 @@ vi.mock('@/lib/openai', () => ({
   getOpenAIClient: vi.fn(() => openaiMock),
 }));
 
-import { createJob, createSoloJob, updateChecklistItem, createReportSignedUrl } from '@/server/jobs';
+import { createJob, createSoloJob, requestLandlordJobPrefill, updateChecklistItem, createReportSignedUrl } from '@/server/jobs';
 
 const baseSupabase = () => ({
   auth: {
@@ -63,10 +71,16 @@ const baseSupabase = () => ({
 describe('server actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getSupabaseUserMock.mockImplementation(async (sb) => {
+      const result = await sb.auth.getUser();
+      return result.data.user;
+    });
+    supabaseServerReadOnlyMock.mockImplementation(() => supabaseServerServiceRoleMock());
     getNextJobCodeMock.mockResolvedValue('CN-000001');
     upsertJobAddressForJobMock.mockResolvedValue({ ok: true });
     upsertCustomerFromJobFieldsMock.mockResolvedValue({ ok: true });
     persistJobFieldsMock.mockResolvedValue(undefined);
+    sendEmailMock.mockResolvedValue({ status: 'sent' });
   });
 
   it('createJob throws when unauthorized', async () => {
@@ -233,7 +247,7 @@ describe('server actions', () => {
       expect.objectContaining({
         client_id: 'client-1',
         client_name: 'Client One',
-        status: 'active',
+        status: 'prepared',
         title: 'Service',
         scheduled_for: '2026-04-01T09:00',
         job_type: 'service',
@@ -468,6 +482,90 @@ describe('server actions', () => {
         expect.objectContaining({ field_key: 'landlord_tel', value: '07700 900123' }),
       ]),
       'createSoloJob',
+    );
+  });
+
+  it('requestLandlordJobPrefill creates awaiting-landlord shell job and emails scoped link', async () => {
+    const supabase = baseSupabase();
+    const user = { id: 'user-123', email: 'engineer@example.com' };
+    supabase.auth.getUser.mockResolvedValue({ data: { user }, error: null });
+
+    const clientMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: '123e4567-e89b-12d3-a456-426614174000',
+        name: 'Sam Patel',
+        phone: '07700 900123',
+        email: 'sam@example.com',
+        organization: 'Patel Properties',
+        address: '7 Owner Road, London',
+        postcode: 'N1 1AA',
+        user_id: user.id,
+      },
+      error: null,
+    });
+    const clientEqUser = vi.fn().mockReturnValue({ maybeSingle: clientMaybeSingle });
+    const clientEqId = vi.fn().mockReturnValue({ eq: clientEqUser });
+
+    const jobSingle = vi.fn().mockResolvedValue({ data: { id: 'job-prefill-1' }, error: null });
+    const jobSelect = vi.fn().mockReturnValue({ single: jobSingle });
+    const jobInsert = vi.fn().mockReturnValue({ select: jobSelect });
+
+    supabase.from.mockImplementation((table: string) => {
+      if (table === 'clients') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: clientEqId,
+          }),
+        };
+      }
+      if (table === 'jobs') {
+        return {
+          insert: jobInsert,
+        };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    supabaseServerServiceRoleMock.mockResolvedValue(supabase);
+
+    await expect(
+      requestLandlordJobPrefill({
+        clientId: '123e4567-e89b-12d3-a456-426614174000',
+        jobType: 'safety_check',
+        landlordEmail: 'landlord@example.com',
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        jobId: 'job-prefill-1',
+        notificationStatus: 'sent',
+      }),
+    );
+
+    expect(jobInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client_id: '123e4567-e89b-12d3-a456-426614174000',
+        client_name: 'Sam Patel',
+        status: 'awaiting_landlord',
+        job_type: 'safety_check',
+        cert_types: ['cp12'],
+        data_collection_status: 'awaiting_landlord',
+      }),
+    );
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'landlord@example.com',
+        subject: 'Please send your job details to CertNow',
+        text: expect.stringContaining('/prefill/job-prefill-1?token='),
+      }),
+    );
+    expect(persistJobFieldsMock).toHaveBeenCalledWith(
+      supabase,
+      'job-prefill-1',
+      expect.arrayContaining([
+        expect.objectContaining({ field_key: 'landlord_email', value: 'landlord@example.com' }),
+      ]),
+      'requestLandlordJobPrefill',
     );
   });
 

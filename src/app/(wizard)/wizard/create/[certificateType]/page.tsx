@@ -2,6 +2,7 @@
 import { notFound, redirect } from 'next/navigation';
 
 import { createJob, getCertificateWizardState } from '@/server/certificates';
+import { getJobCompletionState } from '@/server/jobs';
 import { listClients } from '@/server/clients';
 import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
 import { CERTIFICATE_TYPES, CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
@@ -219,6 +220,21 @@ export default async function CertificateWizardPage({
         This job could not be loaded.
       </div>
     );
+  }
+
+  if (normalizedType === 'gas_warning_notice') {
+    try {
+      const completionState = await getJobCompletionState(jobId);
+      const warningNoticeRow = completionState.required.find((item) => item.id === 'gas_warning_notice');
+      if (warningNoticeRow?.status === 'completed') {
+        redirect(`/jobs/${jobId}/complete`);
+      }
+    } catch (error) {
+      if (isAuthError(error)) {
+        redirect('/login');
+      }
+      throw error;
+    }
   }
 
   const job = wizardState.job as Database['public']['Tables']['jobs']['Row'] | null;
