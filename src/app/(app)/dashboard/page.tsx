@@ -13,7 +13,7 @@ import {
   listPendingJobRequestsForDashboard,
   type DashboardJobRequest,
 } from '@/server/job-requests';
-import { CopyRequestLinkButton } from './_components/copy-request-link-button';
+import { SendRequestLinkCard } from './_components/send-request-link-card';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import { formatDisplayAddress } from '@/lib/address';
 
@@ -89,7 +89,6 @@ export default async function DashboardPage({
     profile?.full_name && profile.full_name.trim().length
       ? profile.full_name.trim().split(/\s+/)[0]
       : user.email;
-  const personalRequestPath = requestLink.path;
   const latestRequest = jobRequests[0] ?? null;
 
   const upcomingJobsBase = activeJobs
@@ -173,7 +172,7 @@ export default async function DashboardPage({
         {latestRequest ? (
           <JobRequestCard request={latestRequest} />
         ) : (
-          <NoRequestsEmpty url={requestLink.url} path={personalRequestPath} />
+          <NoRequestsEmpty url={requestLink.url} />
         )}
       </section>
 
@@ -524,34 +523,17 @@ function JobRequestCard({ request }: { request: DashboardJobRequest }) {
   );
 }
 
-function NoRequestsEmpty({ url, path }: { url: string; path: string }) {
+function NoRequestsEmpty({ url }: { url: string }) {
   return (
-    <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-5 py-8 text-center">
+    <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-5 py-6 text-center">
       <div className="mx-auto mb-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--color-action-bg)] text-[var(--color-action)]">
         <LinkIcon />
       </div>
       <h3 className="text-[16px] font-medium text-[var(--color-text-primary)]">No requests yet</h3>
       <p className="mx-auto mt-1.5 max-w-sm text-[14px] font-normal leading-[1.6] text-[var(--color-text-secondary)]">
-        Share your link and landlords can send you job details directly — no back-and-forth needed.
+        Send your request link to a landlord so they can return the job details directly.
       </p>
-      <div className="mt-4 truncate rounded-[8px] bg-[var(--color-background-tertiary)] px-3 py-2 text-[12px] font-normal text-[var(--color-text-secondary)]">
-        {url}
-      </div>
-      <div className="mt-4 flex flex-col gap-2">
-        <Link
-          href={path}
-          className="inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-[22px] bg-[var(--color-cta)] text-[15px] font-medium text-[var(--color-cta-fg)] transition-colors hover:bg-[var(--color-text-primary)]"
-        >
-          <LinkIcon /> Open link
-        </Link>
-        <CopyRequestLinkButton url={url} />
-        <Link
-          href="/requests"
-          className="inline-flex h-11 w-full items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[15px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-background-tertiary)]"
-        >
-          View all requests
-        </Link>
-      </div>
+      <SendRequestLinkCard requestUrl={url} />
     </div>
   );
 }
@@ -698,4 +680,3 @@ function LinkIcon() {
     </svg>
   );
 }
-
