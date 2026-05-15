@@ -458,7 +458,7 @@ export function BreakdownWizard({
               </Button>
             </div>
           ) : null}
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-sm font-semibold text-muted">Job address</p>
             <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -542,7 +542,7 @@ export function BreakdownWizard({
               </Button>
             </div>
           ) : null}
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-sm font-semibold text-muted">Appliance</p>
             <p className="mt-1 text-xs text-muted-foreground/70">Capture appliance details and combustion readings.</p>
             <div className="mt-4 space-y-4">
@@ -647,7 +647,7 @@ export function BreakdownWizard({
               </Button>
             </div>
           ) : null}
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-sm font-semibold text-muted">Safety + breakdown</p>
             <p className="mt-1 text-xs text-muted-foreground/70">Record safety checks and breakdown details.</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -685,7 +685,7 @@ export function BreakdownWizard({
                 placeholder="Actions taken"
                 className="min-h-[90px] rounded-2xl sm:col-span-2"
               />
-              <div className="sm:col-span-2 grid gap-3 rounded-2xl border border-white/40 bg-white/70 p-4 sm:grid-cols-2">
+              <div className="sm:col-span-2 grid gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 sm:grid-cols-2">
                 {safetyChecksLeft.map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-3 text-sm text-muted">
                     <input
@@ -776,11 +776,11 @@ export function BreakdownWizard({
               </Button>
             </div>
           ) : null}
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-sm font-semibold text-muted">Advice + sign-off</p>
             <p className="mt-1 text-xs text-muted-foreground/70">Capture advice, recommendations, and printed names.</p>
             <div className="mt-4 grid gap-3">
-              <div className="grid gap-3 rounded-2xl border border-white/40 bg-white/70 p-4 sm:grid-cols-2">
+              <div className="grid gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 sm:grid-cols-2">
                 {adviceChecks.map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-3 text-sm text-muted">
                     <input
@@ -805,7 +805,7 @@ export function BreakdownWizard({
                 placeholder="Engineer comments (optional)"
                 className="min-h-[90px] rounded-2xl"
               />
-              <div className="rounded-2xl border border-white/40 bg-white/70 p-4">
+              <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
                 <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
                 <div className="mt-3">
                   <EvidenceCard

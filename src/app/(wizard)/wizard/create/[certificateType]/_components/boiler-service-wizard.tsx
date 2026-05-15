@@ -920,7 +920,7 @@ export function BoilerServiceWizard({
             key={choice}
             type="button"
             onClick={() => setCheckValue(item.key, choice)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            className={`rounded-[6px] px-3 py-1 text-xs font-semibold ${
               checks[item.key] === choice ? 'bg-[var(--color-action)] text-white' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
             }`}
           >
@@ -960,18 +960,25 @@ export function BoilerServiceWizard({
           total={totalSteps}
           title="Job Address & Client"
           status="Visit details"
+          actionsHideWhenVisibleId="boiler-step1-footer-actions"
           actions={
-            <div className="flex justify-end">
-              <Button className="rounded-full px-6" onClick={handleJobInfoNext} disabled={isPending}>
-                Next → Appliance details
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={handleJobInfoNext}
+              disabled={isPending}
+              className="flex items-center gap-[5px] rounded-[8px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
+            >
+              Next
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           }
         >
           <div className="space-y-4">
             {demoEnabled ? (
               <div className="flex justify-end">
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
                   Autofill test Boiler Service
                 </Button>
               </div>
@@ -1022,7 +1029,7 @@ export function BoilerServiceWizard({
                     className="mt-1"
                   />
                   {isAddressLookupPending && !addressSuggestions.length ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]">
                       Searching addresses…
                     </div>
                   ) : null}
@@ -1115,7 +1122,7 @@ export function BoilerServiceWizard({
                   <Button
                     type="button"
                     variant="outline"
-                    className="rounded-full text-xs"
+                    className="rounded-[6px] text-xs"
                     onClick={copyJobAddressToCustomerAddress}
                     disabled={
                       !jobAddress.job_address_line1 &&
@@ -1163,7 +1170,7 @@ export function BoilerServiceWizard({
                     className="mt-1"
                   />
                   {isCustomerAddressLookupPending && !customerAddressSuggestions.length ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-[var(--line)] bg-white px-3 py-2 text-sm text-muted shadow-lg">
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]">
                       Searching addresses…
                     </div>
                   ) : null}
@@ -1233,10 +1240,18 @@ export function BoilerServiceWizard({
               </div>
             </div>
           </div>
-          <div className="mt-6 flex justify-end">
-            <Button className="rounded-full px-6" onClick={handleJobInfoNext} disabled={isPending}>
+          <div id="boiler-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <button
+              type="button"
+              onClick={handleJobInfoNext}
+              disabled={isPending}
+              className="flex h-[44px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            >
               Next → Appliance details
-            </Button>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </WizardLayout>
       ) : null}
@@ -1248,18 +1263,25 @@ export function BoilerServiceWizard({
           title="Appliance details"
           status="Appliance profile"
           onBack={goBackOneStep}
+          actionsHideWhenVisibleId="boiler-step2-footer-actions"
           actions={
-            <div className="flex justify-end">
-              <Button className="rounded-full px-6" onClick={handleDetailsNext} disabled={isPending}>
-                Next → Checks
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={handleDetailsNext}
+              disabled={isPending}
+              className="flex items-center gap-[5px] rounded-[8px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
+            >
+              Next
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           }
         >
           <div className="space-y-4">
             {demoEnabled ? (
               <div className="flex justify-end">
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
                   Autofill test Boiler Service
                 </Button>
               </div>
@@ -1275,10 +1297,26 @@ export function BoilerServiceWizard({
               inlineEditor
             />
           </div>
-          <div className="mt-6 flex justify-end">
-            <Button className="rounded-full px-6" onClick={handleDetailsNext} disabled={isPending}>
+          <div id="boiler-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <button
+              type="button"
+              onClick={goBackOneStep}
+              disabled={isPending}
+              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleDetailsNext}
+              disabled={isPending}
+              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            >
               Next → Checks
-            </Button>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </WizardLayout>
       ) : null}
@@ -1290,18 +1328,25 @@ export function BoilerServiceWizard({
           title="Checks & Readings"
           status="On-site checks"
           onBack={goBackOneStep}
+          actionsHideWhenVisibleId="boiler-step3-footer-actions"
           actions={
-            <div className="flex justify-end">
-              <Button className="rounded-full px-6" onClick={handleChecksNext} disabled={isPending}>
-                Next → Summary & Signatures
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={handleChecksNext}
+              disabled={isPending}
+              className="flex items-center gap-[5px] rounded-[8px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
+            >
+              Next
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           }
         >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+              <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
                 Autofill test Boiler Service
               </Button>
             </div>
@@ -1347,7 +1392,9 @@ export function BoilerServiceWizard({
                 labelAction={
                   <Cp12VoiceReadings
                     jobId={jobId}
-                    buttonClassName="h-7 rounded-full px-3 text-[11px]"
+                    scope="high"
+                    buttonLabel="Speak high"
+                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
                     onApply={applyVoiceReadings}
                   />
                 }
@@ -1369,6 +1416,15 @@ export function BoilerServiceWizard({
                 value={checks.low_combustion_co_ppm}
                 onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
                 unit="ppm"
+                labelAction={
+                  <Cp12VoiceReadings
+                    jobId={jobId}
+                    scope="low"
+                    buttonLabel="Speak low"
+                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
+                    onApply={applyVoiceReadings}
+                  />
+                }
               />
               <UnitNumberInput
                 label="Low CO2"
@@ -1401,7 +1457,9 @@ export function BoilerServiceWizard({
                   labelAction={
                     <Cp12VoiceReadings
                       jobId={jobId}
-                      buttonClassName="h-7 rounded-full px-3 text-[11px]"
+                      scope="pressure"
+                      buttonLabel="Speak pressure"
+                      buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
                       onApply={applyVoiceReadings}
                     />
                   }
@@ -1434,10 +1492,26 @@ export function BoilerServiceWizard({
           </CollapsibleSection>
 
           </div>
-          <div className="mt-6 flex justify-end">
-            <Button className="rounded-full px-6" onClick={handleChecksNext} disabled={isPending}>
-              Next → Summary & Signatures
-            </Button>
+          <div id="boiler-step3-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <button
+              type="button"
+              onClick={goBackOneStep}
+              disabled={isPending}
+              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleChecksNext}
+              disabled={isPending}
+              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            >
+              Next → Summary
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </WizardLayout>
       ) : null}
@@ -1449,18 +1523,21 @@ export function BoilerServiceWizard({
           title="Summary, Next Service & Signatures"
           status="Finish"
           onBack={goBackOneStep}
+          actionsHideWhenVisibleId="boiler-step4-footer-actions"
           actions={
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button className="rounded-full bg-[var(--color-action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
-                {isPending ? 'Generating…' : 'Generate Boiler Service PDF'}
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="flex h-[30px] items-center rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[14px] text-[13px] text-[var(--color-text-secondary)]"
+            >
+              Edit
+            </button>
           }
         >
           <div className="space-y-4">
             {demoEnabled ? (
               <div className="flex justify-end">
-                <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+                <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
                   Autofill test Boiler Service
                 </Button>
               </div>
@@ -1499,7 +1576,7 @@ export function BoilerServiceWizard({
                         key={choice}
                         type="button"
                         onClick={() => setCheckValue('defects_found', choice)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        className={`rounded-[6px] px-3 py-1 text-xs font-semibold ${
                           checks.defects_found === choice ? 'bg-[var(--color-action)] text-white' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
                         }`}
                       >
@@ -1568,10 +1645,26 @@ export function BoilerServiceWizard({
               </div>
             </details>
           </div>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button className="rounded-full bg-[var(--color-action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
-              {isPending ? 'Generating…' : 'Generate Boiler Service PDF'}
-            </Button>
+          <div id="boiler-step4-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <button
+              type="button"
+              onClick={goBackOneStep}
+              disabled={isPending}
+              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={isPending}
+              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-action)] text-[14px] font-medium text-white disabled:opacity-50"
+            >
+              {isPending ? 'Generating…' : 'Generate Boiler Service'}
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </WizardLayout>
       ) : null}

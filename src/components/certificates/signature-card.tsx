@@ -43,17 +43,17 @@ export function SignatureCard({ label, existingUrl, onUpload }: SignatureCardPro
   };
 
   return (
-    <div className="rounded-3xl border border-white/30 bg-white/90 p-4 shadow-sm">
+    <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-muted">{label} signature</p>
-        <span className="rounded-full bg-[var(--muted)] px-3 py-1 text-[11px] font-semibold uppercase text-[var(--brand)]">
+        <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{label} signature</p>
+        <span className="rounded-full bg-[var(--color-background-secondary)] px-3 py-1 text-[11px] font-medium uppercase text-[var(--color-text-secondary)]">
           Draw
         </span>
       </div>
-      <p className="mt-1 text-xs text-muted-foreground/60">Draw a signature below.</p>
-      <div className="mt-3 touch-none rounded-2xl border border-dashed border-white/40 bg-[var(--muted)]/60 p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Draw signature</p>
-        <div className="mt-2 h-28 w-full touch-none overscroll-contain rounded-2xl border border-white/30 bg-white/80">
+      <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">Draw a signature below.</p>
+      <div className="mt-3 touch-none rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-3">
+        <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Draw signature</p>
+        <div className="mt-2 h-28 w-full touch-none overscroll-contain rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]">
           <canvas
             ref={pad.canvasRef}
             className="h-full w-full touch-none rounded-2xl"
@@ -76,8 +76,8 @@ export function SignatureCard({ label, existingUrl, onUpload }: SignatureCardPro
         </div>
       </div>
       {existingUrl ? (
-        <div className="mt-3 rounded-2xl border border-dashed border-white/40 bg-[var(--muted)]/60 p-3">
-          <p className="text-xs text-muted-foreground/70">Signature on file</p>
+        <div className="mt-3 rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-3">
+          <p className="text-[12px] text-[var(--color-text-tertiary)]">Signature on file</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={existingUrl} alt={`${label} signature`} className="mt-2 h-16 w-16 rounded-lg object-cover" />
         </div>

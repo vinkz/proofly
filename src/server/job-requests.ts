@@ -80,6 +80,7 @@ const formatJobType = (jobType: string) => {
 };
 
 const cleanText = (value: string | null | undefined) => String(value ?? '').trim();
+const normalizeEmailKey = (value: string | null | undefined) => cleanText(value).toLowerCase();
 const normalizePhoneDigits = (value: string | null | undefined) => cleanText(value).replace(/\D/g, '');
 
 const getPhoneMatchKeys = (value: string | null | undefined) => {
@@ -203,7 +204,7 @@ async function findEngineerProfileByColumn(
 }
 
 async function findEngineerProfileByAuthEmail(sb: unknown, email: string) {
-  const normalizedEmail = cleanText(email).toLowerCase();
+  const normalizedEmail = normalizeEmailKey(email);
   if (!normalizedEmail) return null;
   const admin = sb as Awaited<ReturnType<typeof supabaseServerServiceRole>>;
   const { data: users, error: usersError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -221,6 +222,25 @@ async function findEngineerProfileByAuthEmail(sb: unknown, email: string) {
   }
   const profile = normalizeProfileMatch(data as Record<string, unknown> | null);
   return profile ? { ...profile, email: profile.email ?? authUser.email ?? null } : null;
+}
+
+async function getEngineerAuthEmail(sb: unknown, userId: string) {
+  const admin = sb as Awaited<ReturnType<typeof supabaseServerServiceRole>>;
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error) return null;
+  return data.user?.email ?? null;
+}
+
+async function getEngineerNotificationRecipient(
+  sb: unknown,
+  engineerProfile: EngineerProfileMatch | null,
+  fallbackEmail: string,
+) {
+  if (!engineerProfile) return cleanText(fallbackEmail);
+  const profileEmail = cleanText(engineerProfile.email);
+  if (profileEmail) return profileEmail;
+  const authEmail = cleanText(await getEngineerAuthEmail(sb, engineerProfile.id));
+  return authEmail || cleanText(fallbackEmail);
 }
 
 async function findEngineerProfileByPhone(sb: unknown, phone: string) {
@@ -255,7 +275,7 @@ async function findEngineerProfileForRequest(
   const slugMatch = await findEngineerProfileByColumn(sb, 'request_link_slug', cleanText(request.engineerRequestSlug));
   if (slugMatch) return slugMatch;
 
-  const emailMatch = await findEngineerProfileByColumn(sb, 'company_email', request.engineerEmail.toLowerCase());
+  const emailMatch = await findEngineerProfileByColumn(sb, 'company_email', normalizeEmailKey(request.engineerEmail));
   if (emailMatch) return emailMatch;
 
   const authEmailMatch = await findEngineerProfileByAuthEmail(sb, request.engineerEmail);
@@ -404,7 +424,7 @@ export async function listPendingJobRequestsForDashboard() {
   if (!user) throw new Error('Unauthorized');
 
   const admin = await supabaseServerServiceRole();
-  const userEmail = cleanText(user.email).toLowerCase();
+  const userEmail = normalizeEmailKey(user.email);
   const ownershipFilter = [
     `user_id.eq.${user.id}`,
     `assigned_engineer_id.eq.${user.id}`,
@@ -430,7 +450,7 @@ export async function dismissJobRequest(requestId: string) {
   if (!user) throw new Error('Unauthorized');
 
   const admin = await supabaseServerServiceRole();
-  const userEmail = cleanText(user.email).toLowerCase();
+  const userEmail = normalizeEmailKey(user.email);
   const ownershipFilter = [
     `user_id.eq.${user.id}`,
     `assigned_engineer_id.eq.${user.id}`,
@@ -591,11 +611,13 @@ export async function sendJobRequestNotification(requestId: string) {
   if (assignedEngineerId !== user.id && ownerId !== user.id) throw new Error('Unauthorized');
 
   const request = normalizeRequest(row);
-  if (!request.engineerEmail) return { ok: true, status: 'not_configured' as const };
+  const engineerEmail = normalizeEmailKey(request.engineerEmail);
+  const landlordEmail = normalizeEmailKey(request.landlordEmail);
+  if (!engineerEmail || engineerEmail === landlordEmail) return { ok: true, status: 'not_configured' as const };
 
   const href = `${getSiteUrl()}/jobs/new?requestId=${request.id}`;
   const status = (await sendEmail({
-    to: request.engineerEmail,
+    to: engineerEmail,
     subject: 'New landlord job request from CertNow',
     text: [
       `${request.landlordName ?? 'A landlord'} submitted a gas compliance job request.`,
@@ -651,11 +673,11 @@ export async function getJobRequestPrefill(requestId: string): Promise<JobReques
   }
   if (!data) return null;
   const row = data as Record<string, unknown>;
-  const userEmail = cleanText(user.email).toLowerCase();
+  const userEmail = normalizeEmailKey(user.email);
   const ownerId = typeof row.user_id === 'string' ? row.user_id : null;
   const assignedEngineerId = typeof row.assigned_engineer_id === 'string' ? row.assigned_engineer_id : null;
-  const pendingEngineerEmail = typeof row.pending_engineer_email === 'string' ? row.pending_engineer_email.toLowerCase() : '';
-  const engineerEmail = typeof row.engineer_email === 'string' ? row.engineer_email.toLowerCase() : '';
+  const pendingEngineerEmail = typeof row.pending_engineer_email === 'string' ? normalizeEmailKey(row.pending_engineer_email) : '';
+  const engineerEmail = typeof row.engineer_email === 'string' ? normalizeEmailKey(row.engineer_email) : '';
   const canAccess =
     ownerId === user.id ||
     assignedEngineerId === user.id ||
@@ -700,7 +722,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
     accessNotes: cleanText(parsedRequest.accessNotes),
     preferredDates: cleanText(parsedRequest.preferredDates),
     engineerName: cleanText(parsedRequest.engineerName),
-    engineerEmail: cleanText(parsedRequest.engineerEmail).toLowerCase(),
+    engineerEmail: normalizeEmailKey(parsedRequest.engineerEmail),
     engineerPhone: cleanText(parsedRequest.engineerPhone),
     engineerGasSafeNumber: cleanText(parsedRequest.engineerGasSafeNumber),
     engineerRequestSlug: cleanText(parsedRequest.engineerRequestSlug),
@@ -785,12 +807,12 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
       `Engineer contact supplied: ${engineerContact}`,
       `Preferred dates: ${request.preferredDates || 'Not provided'}`,
       '',
-      'The engineer contact you supplied has also been sent the request details if an email address was provided.',
+      'Your engineer will contact you directly to arrange the visit.',
     ].join('\n'),
     html: renderEmailShell({
       preheader: `Your CertNow request for ${request.propertyAddress} has been submitted.`,
       title: 'Your job request has been submitted',
-      intro: 'We have recorded your request and sent the details to the engineer contact you provided if an email address was supplied.',
+      intro: 'We have recorded your request. Your engineer will contact you directly to arrange the visit.',
       rows: [
         { label: 'Property', value: request.propertyAddress },
         { label: 'Work needed', value: formatJobType(request.jobType) },
@@ -802,13 +824,16 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
       footer: 'The engineer will contact you directly to arrange the visit.',
     }),
   })).status;
-  const engineerNotificationRecipient = engineerProfile
-    ? engineerProfile.email ?? request.engineerEmail
-    : request.engineerEmail;
-  const engineerNotificationStatus = engineerNotificationRecipient
+  const engineerNotificationRecipient = await getEngineerNotificationRecipient(admin, engineerProfile, request.engineerEmail);
+  const engineerNotificationTarget =
+    normalizeEmailKey(engineerNotificationRecipient) &&
+    normalizeEmailKey(engineerNotificationRecipient) !== normalizeEmailKey(request.landlordEmail)
+      ? engineerNotificationRecipient
+      : '';
+  const engineerNotificationStatus = engineerNotificationTarget
     ? engineerProfile
       ? (await sendEmail({
-          to: engineerNotificationRecipient,
+          to: engineerNotificationTarget,
           subject: 'New landlord job request from CertNow',
           text: [
             `Hi ${engineerDisplayName},`,
@@ -849,7 +874,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
           }),
         })).status
       : (await sendEmail({
-          to: engineerNotificationRecipient,
+          to: engineerNotificationTarget,
           subject: 'A landlord requested you through CertNow',
           text: [
             `Hi ${engineerDisplayName},`,

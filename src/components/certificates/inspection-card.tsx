@@ -15,9 +15,9 @@ export function InspectionCard({ label, value, note, onChange, onVoiceRequest }:
   const setNote = (text: string) => onChange?.({ result: value, note: text });
 
   return (
-    <div className="rounded-3xl border border-white/30 bg-white/90 p-4 shadow-sm">
+    <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-muted">{label}</p>
+        <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{label}</p>
         <div className="flex gap-2">
           {(['pass', 'fail', 'na'] as const).map((status) => (
             <button
@@ -27,8 +27,8 @@ export function InspectionCard({ label, value, note, onChange, onVoiceRequest }:
               className={clsx(
                 'rounded-full px-3 py-1 text-xs font-semibold transition',
                 value === status
-                  ? 'bg-[var(--accent)] text-white shadow'
-                  : 'bg-[var(--muted)] text-gray-700 hover:bg-white',
+                  ? 'bg-[var(--color-action)] text-white'
+                  : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-background-tertiary)]',
               )}
             >
               {status.toUpperCase()}

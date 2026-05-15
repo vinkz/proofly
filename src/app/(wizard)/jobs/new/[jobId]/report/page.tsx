@@ -32,7 +32,7 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/20 bg-white/80 p-4 shadow-inner">
+        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-muted">PDF preview</p>
@@ -70,7 +70,7 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
-          <div className="rounded-2xl border border-white/20 bg-white/70 p-4">
+          <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
               Findings summary
           </h2>
@@ -88,7 +88,7 @@ export default async function WizardReportPage({ params }: { params: Promise<{ j
               ) : null}
             </ul>
           </div>
-          <div className="rounded-2xl border border-white/20 bg-white/80 p-4">
+          <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
               Send via email
             </h2>

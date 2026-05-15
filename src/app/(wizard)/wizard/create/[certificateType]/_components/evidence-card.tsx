@@ -31,7 +31,7 @@ export function EvidenceCard({
   const triggerFile = () => fileRef.current?.click();
 
   return (
-    <div className="flex flex-col rounded-md border border-white/30 bg-white/85 p-4 shadow-sm">
+    <div className="flex flex-col rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-muted">{title}</p>
         {photoPreview ? <span className="text-[10px] text-gray-500">Photo uploaded</span> : null}
@@ -44,7 +44,7 @@ export function EvidenceCard({
               <div key={field.key} className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{field.label}</p>
                 <select
-                  className="w-full rounded-md border border-white/15 bg-white/80 px-3 py-2 text-sm text-muted shadow-sm"
+                  className="w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]"
                   value={value}
                   onChange={(e) => onChange(field.key, e.target.value)}
                 >
@@ -74,7 +74,7 @@ export function EvidenceCard({
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/20 pt-3 text-xs font-semibold text-muted">
         <button
           type="button"
-          className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 shadow-sm transition hover:border-[var(--accent)]"
+          className="flex items-center gap-1 rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-1 transition hover:border-[var(--color-action)]"
           onClick={triggerFile}
         >
           <span role="img" aria-label="Photo">
@@ -85,7 +85,7 @@ export function EvidenceCard({
         {onVoice ? (
           <button
             type="button"
-            className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 shadow-sm transition hover:border-[var(--accent)]"
+            className="flex items-center gap-1 rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-1 transition hover:border-[var(--color-action)]"
             onClick={onVoice}
           >
             <span role="img" aria-label="Voice">
@@ -97,7 +97,7 @@ export function EvidenceCard({
         {onText ? (
           <button
             type="button"
-            className="flex items-center gap-1 rounded-md border border-white/30 bg-white/80 px-3 py-1 shadow-sm transition hover:border-[var(--accent)]"
+            className="flex items-center gap-1 rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-1 transition hover:border-[var(--color-action)]"
             onClick={onText}
           >
             <span role="img" aria-label="Text">

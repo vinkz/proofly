@@ -178,7 +178,7 @@ export function CommissioningClientStep({ clients, totalSteps }: CommissioningCl
       </div>
 
       <div className="grid gap-6">
-        <div className="rounded-2xl border border-white/20 bg-white/70 p-4 shadow-inner">
+        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Select
@@ -248,7 +248,7 @@ export function CommissioningClientStep({ clients, totalSteps }: CommissioningCl
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-white/20 bg-white/70 p-4 shadow-inner">
+        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={commissioningInfo.customer_name}

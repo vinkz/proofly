@@ -51,29 +51,29 @@ export function PhotoUploadCard({
   return (
     <div
       className={clsx(
-        'flex flex-1 cursor-pointer flex-col rounded-md border border-white/30 bg-white/85 p-3 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-white',
+        'flex flex-1 cursor-pointer flex-col rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3 text-left transition hover:border-[var(--color-action)] hover:bg-[var(--color-background-secondary)]',
       )}
     >
       <div className="space-y-1">
-        <p className="text-sm font-semibold text-muted">{label}</p>
-        {hint ? <p className="text-[11px] text-muted-foreground/60">{hint}</p> : null}
+        <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{label}</p>
+        {hint ? <p className="text-[11px] text-[var(--color-text-tertiary)]">{hint}</p> : null}
       </div>
       <button
         type="button"
         onClick={triggerFile}
-        className="mt-2 flex min-h-[88px] items-center justify-between gap-3 rounded-md border border-dashed border-white/50 bg-[var(--muted)]/50 px-3 py-2 text-left transition hover:border-[var(--accent)] hover:bg-white"
+        className="mt-2 flex min-h-[88px] items-center justify-between gap-3 rounded-[8px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-2 text-left transition hover:border-[var(--color-action)]"
       >
         <div className="flex items-center gap-3">
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={preview} alt={label} className="h-12 w-12 rounded-lg object-cover" />
           ) : null}
-          <div className="leading-tight text-[12px] text-muted-foreground/70">
+          <div className="leading-tight text-[12px] text-[var(--color-text-secondary)]">
             {preview ? 'Replace photo' : 'Capture or upload photo'}
-            <div className="text-[10px] text-muted-foreground/60">Auto-fill from photo; edit anytime.</div>
+            <div className="text-[10px] text-[var(--color-text-tertiary)]">Auto-fill from photo; edit anytime.</div>
           </div>
         </div>
-        <span className="rounded-md border border-white/40 bg-white/85 px-3 py-1 text-[11px] font-semibold text-[var(--brand)]">
+        <span className="rounded-[6px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-primary)]">
           Upload
         </span>
       </button>
@@ -81,7 +81,7 @@ export function PhotoUploadCard({
       <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded-md border border-white/40 bg-white/85 px-3 py-1 text-[11px] font-semibold text-[var(--brand)] hover:border-[var(--accent)]"
+          className="rounded-[6px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-primary)] hover:border-[var(--color-action)]"
           onClick={(event) => {
             event.preventDefault();
             onVoiceRequest?.();
@@ -91,7 +91,7 @@ export function PhotoUploadCard({
         </button>
         <button
           type="button"
-          className="rounded-md border border-white/40 bg-white/85 px-3 py-1 text-[11px] font-semibold text-[var(--brand)] hover:border-[var(--accent)]"
+          className="rounded-[6px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-primary)] hover:border-[var(--color-action)]"
           onClick={(event) => {
             event.preventDefault();
             setShowNote((prev) => !prev);

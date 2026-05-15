@@ -7,11 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import {
   CP12_VOICE_READING_FIELDS,
+  type Cp12VoiceReadingScope,
   type Cp12VoiceReadingsParsed,
 } from '@/lib/cp12/voice-readings';
 
 type Props = {
   jobId: string;
+  scope?: Cp12VoiceReadingScope;
   disabled?: boolean;
   buttonLabel?: string;
   buttonClassName?: string;
@@ -62,8 +64,9 @@ function buildApplyPayload(values: Record<keyof Cp12VoiceReadingsParsed, string>
 
 export function Cp12VoiceReadings({
   jobId,
+  scope = 'all',
   disabled = false,
-  buttonLabel = 'Speak readings',
+  buttonLabel,
   buttonClassName = 'rounded-full text-xs',
   onApply,
 }: Props) {
@@ -82,6 +85,16 @@ export function Cp12VoiceReadings({
 
   const applyPayload = useMemo(() => buildApplyPayload(editableValues), [editableValues]);
   const canApply = Object.keys(applyPayload).length > 0;
+  const isInlineScoped = scope !== 'all';
+  const resolvedButtonLabel =
+    buttonLabel ??
+    (scope === 'pressure'
+      ? 'Speak pressure'
+      : scope === 'high'
+        ? 'Speak high'
+        : scope === 'low'
+          ? 'Speak low'
+          : 'Speak readings');
 
   const resetState = () => {
     setState('idle');
@@ -135,6 +148,7 @@ export function Cp12VoiceReadings({
       const formData = new FormData();
       const extension = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
       formData.append('jobId', jobId);
+      formData.append('scope', scope);
       formData.append('audio', new File([blob], `cp12-readings.${extension}`, { type: blob.type || 'audio/webm' }));
 
       const response = await fetch('/api/cp12/voice-readings', {
@@ -156,9 +170,26 @@ export function Cp12VoiceReadings({
         throw new Error(payload?.error || 'Voice transcription failed');
       }
 
-      setTranscript(payload?.transcript ?? '');
-      setWarnings(Array.isArray(payload?.warnings) ? payload.warnings : []);
-      setEditableValues(toEditableState(payload?.parsed ?? { ...EMPTY_EDITABLE }));
+      const nextTranscript = payload?.transcript ?? '';
+      const nextWarnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+      const nextValues = toEditableState(payload?.parsed ?? { ...EMPTY_EDITABLE });
+      const nextApplyPayload = buildApplyPayload(nextValues);
+
+      setTranscript(nextTranscript);
+      setWarnings(nextWarnings);
+
+      if (isInlineScoped) {
+        if (!Object.keys(nextApplyPayload).length) {
+          setState('error');
+          setErrorMessage(nextWarnings[0] ?? 'No confident readings were parsed. Try again or enter the values manually.');
+          return;
+        }
+        onApply(nextApplyPayload);
+        setState('idle');
+        return;
+      }
+
+      setEditableValues(nextValues);
       setState('review');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -172,7 +203,7 @@ export function Cp12VoiceReadings({
   };
 
   const startRecording = async () => {
-    setOpen(true);
+    setOpen(!isInlineScoped);
     resetState();
     setState('starting');
 
@@ -248,25 +279,76 @@ export function Cp12VoiceReadings({
     closeModal();
   };
 
+  const handleButtonClick = () => {
+    if (state === 'recording') {
+      stopRecording();
+      return;
+    }
+    void startRecording();
+  };
+
+  if (isInlineScoped) {
+    const busy = state === 'starting' || state === 'transcribing';
+    const active = state === 'recording';
+    const idleHint =
+      scope === 'pressure'
+        ? 'Say: pressure 20, input 24'
+        : 'Say: CO 8, CO2 9.2, ratio 0.0008';
+    return (
+      <span className="inline-flex flex-col items-start gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          className={`${buttonClassName}${active ? ' border-[var(--color-action)] text-[var(--color-action)]' : ''}`}
+          onClick={handleButtonClick}
+          disabled={disabled || busy}
+        >
+          {state === 'starting'
+            ? 'Starting...'
+            : state === 'transcribing'
+              ? 'Reading...'
+              : active
+                ? 'Stop'
+                : resolvedButtonLabel}
+        </Button>
+        {state === 'idle' && !warnings.length ? (
+          <span className="text-[11px] text-[var(--color-text-tertiary)]">{idleHint}</span>
+        ) : null}
+        {active ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-action)]">
+            <span className="size-1.5 animate-pulse rounded-full bg-[var(--color-action)]" />
+            Listening…
+          </span>
+        ) : null}
+        {state === 'error' && errorMessage ? (
+          <span className="max-w-56 text-[11px] font-medium text-[var(--color-red)]">{errorMessage}</span>
+        ) : null}
+        {warnings.length && state === 'idle' ? (
+          <span className="max-w-56 text-[11px] text-[var(--color-amber)]">{warnings[0]}</span>
+        ) : null}
+      </span>
+    );
+  }
+
   return (
     <>
-      <Button type="button" variant="outline" className={buttonClassName} onClick={startRecording} disabled={disabled}>
-        {buttonLabel}
+      <Button type="button" variant="outline" className={buttonClassName} onClick={handleButtonClick} disabled={disabled}>
+        {resolvedButtonLabel}
       </Button>
 
       <Modal open={open} onClose={closeModal} title="Speak readings">
         <div className="space-y-4">
           {state === 'starting' ? (
-            <div className="rounded-2xl border border-white/10 bg-white/40 p-4 text-sm text-muted">
+            <div className="rounded-[16px] border border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4 text-sm text-[var(--color-text-secondary)]">
               Starting microphone…
             </div>
           ) : null}
 
           {state === 'recording' ? (
-            <div className="rounded-2xl border border-[var(--action)]/30 bg-[var(--action)]/10 p-4">
-              <p className="text-sm font-semibold text-muted">Listening…</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">
-                Say readings like “working pressure 20”, “high CO2 9 point 2”, or “low ratio 0 point 0006”.
+            <div className="rounded-[16px] border border-[var(--color-action)]/30 bg-[var(--color-action-bg)] p-4">
+              <p className="text-sm font-medium text-[var(--color-text-secondary)]">Listening…</p>
+              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                Say readings like working pressure 20, high CO2 9 point 2, or low ratio 0 point 0006.
               </p>
               <div className="mt-4 flex gap-2">
                 <Button type="button" className="rounded-full" onClick={stopRecording}>
@@ -280,7 +362,7 @@ export function Cp12VoiceReadings({
           ) : null}
 
           {state === 'transcribing' ? (
-            <div className="rounded-2xl border border-white/10 bg-white/40 p-4 text-sm text-muted">
+            <div className="rounded-[16px] border border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4 text-sm text-[var(--color-text-secondary)]">
               Transcribing and parsing readings…
             </div>
           ) : null}
@@ -288,25 +370,25 @@ export function Cp12VoiceReadings({
           {state === 'review' ? (
             <div className="space-y-4">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Transcript</p>
-                <div className="rounded-2xl border border-white/10 bg-white/40 p-3 text-sm text-muted">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-tertiary)]">Transcript</p>
+                <div className="rounded-[16px] border border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3 text-sm text-[var(--color-text-secondary)]">
                   {transcript || 'No transcript returned.'}
                 </div>
               </div>
 
               {warnings.length ? (
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-muted">
+                <div className="rounded-[16px] border border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-3 text-sm text-[var(--color-text-secondary)]">
                   {warnings.map((warning) => (
                     <p key={warning}>{warning}</p>
                   ))}
                 </div>
               ) : null}
 
-              <div className="rounded-2xl border border-white/10 bg-white/40 p-3">
+              <div className="rounded-[16px] border border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   {CP12_VOICE_READING_FIELDS.map((field) => (
                     <div key={field.key} className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-tertiary)]">
                         {field.label}
                       </p>
                       <div className="flex items-center gap-2">
@@ -317,7 +399,7 @@ export function Cp12VoiceReadings({
                           }
                           placeholder="--"
                         />
-                        {field.unit ? <span className="text-xs text-muted-foreground/70">{field.unit}</span> : null}
+                        {field.unit ? <span className="text-xs text-[var(--color-text-tertiary)]">{field.unit}</span> : null}
                       </div>
                     </div>
                   ))}
@@ -325,7 +407,7 @@ export function Cp12VoiceReadings({
               </div>
 
               {!canApply ? (
-                <div className="rounded-2xl border border-white/10 bg-white/30 p-3 text-sm text-muted-foreground/70">
+                <div className="rounded-[16px] border border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3 text-sm text-[var(--color-text-tertiary)]">
                   No confident readings were parsed. Close this and enter the values manually.
                 </div>
               ) : null}
@@ -343,7 +425,7 @@ export function Cp12VoiceReadings({
 
           {state === 'error' ? (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700">
+              <div className="rounded-[16px] border border-[var(--color-red)]/30 bg-[var(--color-red-bg)] p-4 text-sm text-[var(--color-red)]">
                 {errorMessage || 'Voice capture failed.'}
               </div>
               <div className="flex flex-wrap justify-end gap-2">

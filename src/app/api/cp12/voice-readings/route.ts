@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { parseCp12VoiceReadings } from '@/lib/cp12/voice-readings';
+import { parseCp12VoiceReadings, type Cp12VoiceReadingScope } from '@/lib/cp12/voice-readings';
 import { getOpenAIClient } from '@/lib/openai';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 
@@ -10,6 +10,10 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const jobId = formData.get('jobId');
   const audio = formData.get('audio');
+  const rawScope = formData.get('scope');
+  const scope = typeof rawScope === 'string' && ['pressure', 'high', 'low'].includes(rawScope)
+    ? rawScope as Cp12VoiceReadingScope
+    : 'all';
 
   if (typeof jobId !== 'string' || !jobId.trim()) {
     return NextResponse.json({ error: 'Missing jobId' }, { status: 400 });
@@ -43,11 +47,11 @@ export async function POST(request: Request) {
   try {
     const transcription = await getOpenAIClient().audio.transcriptions.create({
       file: audio,
-      model: 'gpt-4o-mini-transcribe',
+      model: process.env.OPENAI_TRANSCRIBE_MODEL ?? 'gpt-4o-mini-transcribe',
       response_format: 'json',
     });
 
-    const result = parseCp12VoiceReadings(transcription.text ?? '');
+    const result = parseCp12VoiceReadings(transcription.text ?? '', { scope });
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Voice transcription failed';

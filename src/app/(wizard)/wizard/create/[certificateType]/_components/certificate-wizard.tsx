@@ -491,6 +491,7 @@ export function CertificateWizard({
       : '',
   );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
   const prefillAppliedRef = useRef(false);
   const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prevApplianceCountRef = useRef(appliances.length);
@@ -1520,11 +1521,16 @@ export function CertificateWizard({
     }
   };
 
-  const renderReadingsVoiceButton = (index: number) => (
+  const renderReadingsVoiceButton = (
+    index: number,
+    scope: 'pressure' | 'high' | 'low',
+    buttonLabel: string,
+  ) => (
     <Cp12VoiceReadings
       jobId={jobId}
-      buttonLabel="Speak"
-      buttonClassName="h-7 rounded-full px-2.5 py-1 text-[11px]"
+      scope={scope}
+      buttonLabel={buttonLabel}
+      buttonClassName="h-7 rounded-[6px] px-2.5 py-1 text-[11px]"
       onApply={(values) => applyVoiceReadings(index, values)}
     />
   );
@@ -1832,34 +1838,22 @@ export function CertificateWizard({
       status={certificateLabel}
       actionsHideWhenVisibleId="cp12-step1-footer-actions"
       actions={
-        <div className="flex justify-end">
-          <Button
-            onClick={handleInfoNext}
-            disabled={isPending}
-            className="rounded-full px-6"
-            data-testid="cp12-step1-next"
-          >
-            {isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next → Appliances'}
-          </Button>
-        </div>
+        <button
+          type="button"
+          onClick={handleInfoNext}
+          disabled={isPending}
+          className="flex items-center gap-[5px] rounded-[20px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
+          data-testid="cp12-step1-next"
+        >
+          {isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next'}
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
       }
     >
       {isCp12 ? (
         <div className="space-y-3">
-          {demoEnabled ? (
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full text-xs"
-                onClick={handleDemoFill}
-                disabled={isPending}
-                data-testid="cp12-demo-fill"
-              >
-                Fill demo CP12
-              </Button>
-            </div>
-          ) : null}
           <p className="text-[13px] text-[var(--color-text-secondary)]">Engineer and company details are pulled from account settings.</p>
           <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job location</p>
@@ -2099,15 +2093,19 @@ export function CertificateWizard({
       ) : (
         <p className="text-[13px] text-[var(--color-text-tertiary)]">Non-CP12 certificates currently use the simplified flow.</p>
       )}
-      <div id="cp12-step1-footer-actions" className="mt-6 flex justify-end">
-        <Button
+      <div id="cp12-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+        <button
+          type="button"
           onClick={handleInfoNext}
           disabled={isPending}
-          className="rounded-full px-6"
+          className="flex h-[44px] w-full items-center justify-center gap-[6px] rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
           data-testid="cp12-step1-next"
         >
-          {isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next → Appliances'}
-        </Button>
+          {isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next'}
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
     </WizardLayout>
   );
@@ -2121,20 +2119,19 @@ export function CertificateWizard({
       onBack={goBackOneStep}
       actionsHideWhenVisibleId="cp12-step2-footer-actions"
       actions={
-        <div className="flex justify-end">
-          <Button onClick={() => setStep(3)} disabled={isPending} className="rounded-full px-6">
-            Next → Checks
-          </Button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setStep(3)}
+          disabled={isPending}
+          className="flex items-center gap-[5px] rounded-[20px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
+        >
+          Next
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
       }
     >
-      {demoEnabled ? (
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
-            Fill demo CP12
-          </Button>
-        </div>
-      ) : null}
       <div className="space-y-2">
         <ApplianceStep
           appliances={applianceProfiles}
@@ -2151,7 +2148,7 @@ export function CertificateWizard({
               <Button
                 type="button"
                 variant="outline"
-                className="h-8 rounded-full px-3 text-xs"
+                className="h-8 rounded-[6px] px-3 text-xs"
                 onClick={addAppliance}
                 disabled={appliances.length >= MAX_APPLIANCES}
               >
@@ -2219,13 +2216,45 @@ export function CertificateWizard({
           />
         ))}
       </div>
-      <div id="cp12-step2-footer-actions" className="mt-6 flex justify-end">
-        <Button onClick={() => setStep(3)} disabled={isPending} className="rounded-full px-6">
-          Next → Checks
-        </Button>
+      <div id="cp12-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+        <button
+          type="button"
+          onClick={goBackOneStep}
+          className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)]"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={() => setStep(3)}
+          disabled={isPending}
+          className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+        >
+          Next
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
     </WizardLayout>
   );
+
+  const inspectionComplete = appliances.every(
+    (a) => !!a.flue_type && !!a.appliance_inspected,
+  );
+  const readingsComplete = appliances.every((a) => !!a.operating_pressure);
+  const safetyComplete = appliances.every(
+    (a) =>
+      !!a.safety_devices_correct &&
+      !!a.ventilation_satisfactory &&
+      !!a.flue_condition &&
+      !!a.flue_performance_test,
+  );
+  const houseComplete =
+    booleanFromField(evidenceFields.emergency_control_accessible) &&
+    booleanFromField(evidenceFields.gas_tightness_satisfactory) &&
+    booleanFromField(evidenceFields.pipework_visual_satisfactory) &&
+    booleanFromField(evidenceFields.equipotential_bonding_satisfactory);
 
   const StepThree = (
     <WizardLayout
@@ -2234,29 +2263,31 @@ export function CertificateWizard({
       title="Appliance checks"
       status="On-site checks"
       onBack={goBackOneStep}
-      actionsHideWhenVisibleId="cp12-step3-footer-actions"
-      actions={
-        <div className="mt-6 flex justify-end">
-          <Button onClick={handleChecksNext} disabled={isPending} className="rounded-full px-6">
-            Next → Sign
-          </Button>
-        </div>
-      }
     >
-      <div className="space-y-4">
-        {demoEnabled && (
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full text-xs"
-              onClick={handleDemoFill}
-              disabled={isPending}
-            >
-              Fill demo CP12
-            </Button>
-          </div>
-        )}
+      <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
+        {(
+          [
+            { id: 'inspection', label: 'Inspection', done: inspectionComplete },
+            { id: 'readings', label: 'Readings', done: readingsComplete },
+            { id: 'safety', label: 'Safety', done: safetyComplete },
+            { id: 'house', label: 'Property', done: houseComplete },
+          ] as { id: 'inspection' | 'readings' | 'safety' | 'house'; label: string; done: boolean }[]
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setChecksTab(tab.id)}
+            className={`flex flex-1 flex-col items-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
+          >
+            <span>{tab.label}</span>
+            <span
+              className={`h-[6px] w-[6px] rounded-full ${tab.done ? 'bg-[var(--color-action)]' : 'bg-[var(--color-border-secondary)]'}`}
+            />
+          </button>
+        ))}
+      </div>
+
+      {checksTab === 'inspection' && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => (
             <div
@@ -2266,351 +2297,408 @@ export function CertificateWizard({
               }}
               className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} checks</p>
-              </div>
-              <div className="mt-4">
-                <div className="mb-4">
-                  <SearchableSelect
-                    label={`Appliance ${index + 1} flue type`}
-                    value={appliance.flue_type ?? ''}
-                    options={[...CP12_FLUE_TYPES]}
-                    placeholder="Select or type"
-                    onChange={(val) => setApplianceField(index, 'flue_type', val)}
-                  />
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1}</p>
+              <div className="mt-4 space-y-3">
+                <SearchableSelect
+                  label={`Appliance ${index + 1} flue type`}
+                  value={appliance.flue_type ?? ''}
+                  options={[...CP12_FLUE_TYPES]}
+                  placeholder="Select or type"
+                  onChange={(val) => setApplianceField(index, 'flue_type', val)}
+                />
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <EnumChips
+                      label="Landlord's appliance"
+                      value={normalizeYesNoValue(appliance.landlords_appliance)}
+                      options={CP12_YES_NO_OPTIONS}
+                      onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
+                    />
+                  </div>
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <EnumChips
+                      label="Appliance inspected"
+                      value={normalizeYesNoValue(appliance.appliance_inspected)}
+                      options={CP12_YES_NO_OPTIONS}
+                      onChange={(val) => setApplianceField(index, 'appliance_inspected', yesNoLabel(val as YesNoValue))}
+                    />
+                  </div>
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <EnumChips
+                      label="Appliance serviced"
+                      value={normalizeYesNoValue(appliance.appliance_serviced)}
+                      options={CP12_YES_NO_OPTIONS}
+                      onChange={(val) => setApplianceField(index, 'appliance_serviced', yesNoLabel(val as YesNoValue))}
+                    />
+                  </div>
                 </div>
-                {(() => {
-                  const classification = getApplianceSafetyClassification(appliance);
-                  const safeToUse = getApplianceSafeToUse(appliance);
-                  const showUnsafeFields = classification === 'ar' || classification === 'id';
-                  return (
-                    <div className="space-y-4">
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                          <EnumChips
-                            label="Landlord's appliance"
-                            value={normalizeYesNoValue(appliance.landlords_appliance)}
-                            options={CP12_YES_NO_OPTIONS}
-                            onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
-                          />
-                        </div>
-                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                          <EnumChips
-                            label="Appliance inspected"
-                            value={normalizeYesNoValue(appliance.appliance_inspected)}
-                            options={CP12_YES_NO_OPTIONS}
-                            onChange={(val) => setApplianceField(index, 'appliance_inspected', yesNoLabel(val as YesNoValue))}
-                          />
-                        </div>
-                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                          <UnitNumberInput
-                            label="Operating pressure"
-                            unit="mbar"
-                            value={appliance.operating_pressure ?? ''}
-                            onChange={(val) => setApplianceField(index, 'operating_pressure', val)}
-                            labelAction={renderReadingsVoiceButton(index)}
-                          />
-                        </div>
-                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                          <UnitNumberInput
-                            label="Heat input"
-                            unit="kW"
-                            value={appliance.heat_input ?? ''}
-                            onChange={(val) => setApplianceField(index, 'heat_input', val)}
-                            labelAction={renderReadingsVoiceButton(index)}
-                          />
-                        </div>
-                      </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-                      <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                        <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Combustion readings</p>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                            <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">High combustion reading</p>
-                            <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                              <UnitNumberInput
-                                label="CO ppm"
-                                unit="ppm"
-                                value={appliance.high_co_ppm ?? ''}
-                                onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
-                                labelAction={renderReadingsVoiceButton(index)}
-                              />
-                              <UnitNumberInput
-                                label="CO2 %"
-                                unit="%"
-                                value={appliance.high_co2 ?? ''}
-                                onChange={(val) => setApplianceField(index, 'high_co2', val)}
-                                labelAction={renderReadingsVoiceButton(index)}
-                              />
-                              <UnitNumberInput
-                                label="Ratio"
-                                unit="ratio"
-                                value={appliance.high_ratio ?? ''}
-                                onChange={(val) => setApplianceField(index, 'high_ratio', val)}
-                                labelAction={renderReadingsVoiceButton(index)}
-                              />
-                            </div>
-                          </div>
-                          <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                            <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Low combustion reading</p>
-                            <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                              <UnitNumberInput
-                                label="CO ppm"
-                                unit="ppm"
-                                value={appliance.low_co_ppm ?? ''}
-                                onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
-                                labelAction={renderReadingsVoiceButton(index)}
-                              />
-                              <UnitNumberInput
-                                label="CO2 %"
-                                unit="%"
-                                value={appliance.low_co2 ?? ''}
-                                onChange={(val) => setApplianceField(index, 'low_co2', val)}
-                                labelAction={renderReadingsVoiceButton(index)}
-                              />
-                              <UnitNumberInput
-                                label="Ratio"
-                                unit="ratio"
-                                value={appliance.low_ratio ?? ''}
-                                onChange={(val) => setApplianceField(index, 'low_ratio', val)}
-                                labelAction={renderReadingsVoiceButton(index)}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="mt-3 space-y-2">
-                          <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                            <span>Combustion notes (optional)</span>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
-                                onClick={() =>
-                                  pushToast({
-                                    title: 'Photo',
-                                    description: 'Attach FGA screenshots via Photos on the next step.',
-                                    variant: 'default',
-                                  })
-                                }
-                              >
-                                📷 Photo
-                              </button>
-                              <button
-                                type="button"
-                                className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
-                                onClick={() =>
-                                  pushToast({
-                                    title: 'Text',
-                                    description: 'Add any notes below.',
-                                    variant: 'default',
-                                  })
-                                }
-                              >
-                                ⌨️ Text
-                              </button>
-                            </div>
-                          </div>
-                          <Textarea
-                            value={appliance.combustion_notes ?? ''}
-                            onChange={(e) => setApplianceField(index, 'combustion_notes', e.target.value)}
-                            placeholder="Any combustion notes or analyser references"
-                            className="min-h-[90px]"
-                          />
-                        </div>
+      {checksTab === 'readings' && (
+        <div className="space-y-4">
+          {appliances.map((appliance, index) => (
+            <div
+              key={`checks-${index}`}
+              ref={(el) => {
+                applianceRefs.current[index] = el;
+              }}
+              className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
+            >
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} readings</p>
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <UnitNumberInput
+                      label="Operating pressure"
+                      unit="mbar"
+                      value={appliance.operating_pressure ?? ''}
+                      onChange={(val) => setApplianceField(index, 'operating_pressure', val)}
+                      labelAction={renderReadingsVoiceButton(index, 'pressure', 'Speak pressure')}
+                    />
+                  </div>
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <UnitNumberInput
+                      label="Heat input"
+                      unit="kW"
+                      value={appliance.heat_input ?? ''}
+                      onChange={(val) => setApplianceField(index, 'heat_input', val)}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                  <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Combustion readings</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
+                      <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">High combustion reading</p>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                        <UnitNumberInput
+                          label="CO ppm"
+                          unit="ppm"
+                          value={appliance.high_co_ppm ?? ''}
+                          onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
+                          labelAction={renderReadingsVoiceButton(index, 'high', 'Speak high')}
+                        />
+                        <UnitNumberInput
+                          label="CO2 %"
+                          unit="%"
+                          value={appliance.high_co2 ?? ''}
+                          onChange={(val) => setApplianceField(index, 'high_co2', val)}
+                        />
+                        <UnitNumberInput
+                          label="Ratio"
+                          unit="ratio"
+                          value={appliance.high_ratio ?? ''}
+                          onChange={(val) => setApplianceField(index, 'high_ratio', val)}
+                        />
                       </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <PassFailToggle
-                          label="Safety device(s) correct operation"
-                          value={(appliance.safety_devices_correct ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.safety_devices_correct ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                          onChange={(val) => setApplianceField(index, 'safety_devices_correct', val ?? '')}
+                    </div>
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
+                      <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Low combustion reading</p>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                        <UnitNumberInput
+                          label="CO ppm"
+                          unit="ppm"
+                          value={appliance.low_co_ppm ?? ''}
+                          onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
+                          labelAction={renderReadingsVoiceButton(index, 'low', 'Speak low')}
                         />
-                        <PassFailToggle
-                          label="Ventilation provision satisfactory"
-                          value={(appliance.ventilation_satisfactory ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.ventilation_satisfactory ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                          onChange={(val) => setApplianceField(index, 'ventilation_satisfactory', val ?? '')}
+                        <UnitNumberInput
+                          label="CO2 %"
+                          unit="%"
+                          value={appliance.low_co2 ?? ''}
+                          onChange={(val) => setApplianceField(index, 'low_co2', val)}
                         />
-                        <PassFailToggle
-                          label="Visual condition of flue and termination satisfactory"
-                          value={(appliance.flue_condition ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_condition ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                          onChange={(val) => setApplianceField(index, 'flue_condition', val ?? '')}
+                        <UnitNumberInput
+                          label="Ratio"
+                          unit="ratio"
+                          value={appliance.low_ratio ?? ''}
+                          onChange={(val) => setApplianceField(index, 'low_ratio', val)}
                         />
-                        <PassFailToggle
-                          label="Flue performance test"
-                          value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                          onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
-                        />
-                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                          <EnumChips
-                            label="Appliance serviced"
-                            value={normalizeYesNoValue(appliance.appliance_serviced)}
-                            options={CP12_YES_NO_OPTIONS}
-                            onChange={(val) => setApplianceField(index, 'appliance_serviced', yesNoLabel(val as YesNoValue))}
-                          />
-                        </div>
-                        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                          <EnumChips
-                            label="Appliance safe to use"
-                            value={safeToUse}
-                            options={CP12_YES_NO_OPTIONS}
-                            onChange={(val) => setApplianceSafeToUse(index, (val as YesNoValue) ?? '')}
-                          />
-                        </div>
                       </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                      <span>Combustion notes (optional)</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                          onClick={() =>
+                            pushToast({
+                              title: 'Photo',
+                              description: 'Attach FGA screenshots via Photos on the next step.',
+                              variant: 'default',
+                            })
+                          }
+                        >
+                          📷 Photo
+                        </button>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                          onClick={() =>
+                            pushToast({
+                              title: 'Text',
+                              description: 'Add any notes below.',
+                              variant: 'default',
+                            })
+                          }
+                        >
+                          ⌨️ Text
+                        </button>
+                      </div>
+                    </div>
+                    <Textarea
+                      value={appliance.combustion_notes ?? ''}
+                      onChange={(e) => setApplianceField(index, 'combustion_notes', e.target.value)}
+                      placeholder="Any combustion notes or analyser references"
+                      className="min-h-[90px]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-                      <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+      {checksTab === 'safety' && (
+        <div className="space-y-4">
+          {appliances.map((appliance, index) => {
+            const classification = getApplianceSafetyClassification(appliance);
+            const safeToUse = getApplianceSafeToUse(appliance);
+            const showUnsafeFields = classification === 'ar' || classification === 'id';
+            return (
+              <div
+                key={`checks-${index}`}
+                ref={(el) => {
+                  applianceRefs.current[index] = el;
+                }}
+                className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
+              >
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} safety</p>
+                <div className="mt-4 space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <PassFailToggle
+                      label="Safety device(s) correct operation"
+                      value={(appliance.safety_devices_correct ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.safety_devices_correct ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                      onChange={(val) => setApplianceField(index, 'safety_devices_correct', val ?? '')}
+                    />
+                    <PassFailToggle
+                      label="Ventilation provision satisfactory"
+                      value={(appliance.ventilation_satisfactory ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.ventilation_satisfactory ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                      onChange={(val) => setApplianceField(index, 'ventilation_satisfactory', val ?? '')}
+                    />
+                    <PassFailToggle
+                      label="Visual condition of flue and termination satisfactory"
+                      value={(appliance.flue_condition ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_condition ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                      onChange={(val) => setApplianceField(index, 'flue_condition', val ?? '')}
+                    />
+                    <PassFailToggle
+                      label="Flue performance test"
+                      value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                      onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
+                    />
+                    <PassFailToggle
+                      label="Stability test"
+                      value={(appliance.stability_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.stability_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                      onChange={(val) => setApplianceField(index, 'stability_test', val ?? '')}
+                    />
+                    <PassFailToggle
+                      label="Gas tightness test"
+                      value={(appliance.gas_tightness_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.gas_tightness_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                      onChange={(val) => setApplianceField(index, 'gas_tightness_test', val ?? '')}
+                    />
+                  </div>
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <EnumChips
+                          label="Appliance safe to use"
+                          value={safeToUse}
+                          options={CP12_YES_NO_OPTIONS}
+                          onChange={(val) => setApplianceSafeToUse(index, (val as YesNoValue) ?? '')}
+                        />
+                      </div>
+                      <div>
                         <EnumChips
                           label="Condition classification"
                           value={classification}
                           options={getCp12ClassificationOptions(safeToUse)}
                           onChange={(val) => setApplianceSafetyClassification(index, val as Cp12SafetyClassification)}
                         />
-                        {showUnsafeFields ? (
-                          <div className="mt-4 space-y-3">
-                            <Textarea
-                              value={appliance.defect_notes ?? ''}
-                              onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
-                              placeholder="Defect notes"
-                              className="min-h-[80px]"
-                            />
-                            <Textarea
-                              value={appliance.actions_taken ?? ''}
-                              onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
-                              placeholder="Actions taken"
-                              className="min-h-[80px]"
-                            />
-                            <Textarea
-                              value={appliance.actions_required ?? ''}
-                              onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
-                              placeholder="Actions required"
-                              className="min-h-[80px]"
-                            />
-                            <div className="grid gap-2 text-[13px] text-[var(--color-text-primary)] sm:grid-cols-3">
-                              <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 h-4 w-4 accent-[var(--color-action)]"
-                                  checked={appliance.warning_notice_issued ?? false}
-                                  onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
-                                />
-                                <span>Warning notice issued</span>
-                              </label>
-                              <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 h-4 w-4 accent-[var(--color-action)]"
-                                  checked={appliance.appliance_disconnected ?? false}
-                                  onChange={(e) => setApplianceBooleanField(index, 'appliance_disconnected', e.target.checked)}
-                                />
-                                <span>Appliance disconnected</span>
-                              </label>
-                              <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
-                                <input
-                                  type="checkbox"
-                                  className="mt-1 h-4 w-4 accent-[var(--color-action)]"
-                                  checked={appliance.danger_do_not_use_attached ?? false}
-                                  onChange={(e) => setApplianceBooleanField(index, 'danger_do_not_use_attached', e.target.checked)}
-                                />
-                                <span>Danger Do Not Use attached</span>
-                              </label>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
-                            Use Safe or NCS when the appliance remains safe to use. Switch Appliance safe to use to No for AR or ID.
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                        <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Additional checks</p>
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <PassFailToggle
-                            label="Stability test"
-                            value={(appliance.stability_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.stability_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                            onChange={(val) => setApplianceField(index, 'stability_test', val ?? '')}
-                          />
-                          <PassFailToggle
-                            label="Gas tightness test"
-                            value={(appliance.gas_tightness_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.gas_tightness_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                            onChange={(val) => setApplianceField(index, 'gas_tightness_test', val ?? '')}
-                          />
-                        </div>
                       </div>
                     </div>
-                  );
-                })()}
+                    {showUnsafeFields ? (
+                      <div className="mt-4 space-y-3">
+                        <Textarea
+                          value={appliance.defect_notes ?? ''}
+                          onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
+                          placeholder="Defect notes"
+                          className="min-h-[80px]"
+                        />
+                        <Textarea
+                          value={appliance.actions_taken ?? ''}
+                          onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
+                          placeholder="Actions taken"
+                          className="min-h-[80px]"
+                        />
+                        <Textarea
+                          value={appliance.actions_required ?? ''}
+                          onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
+                          placeholder="Actions required"
+                          className="min-h-[80px]"
+                        />
+                        <div className="grid gap-2 text-[13px] text-[var(--color-text-primary)] sm:grid-cols-3">
+                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
+                              checked={appliance.warning_notice_issued ?? false}
+                              onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
+                            />
+                            <span>Warning notice issued</span>
+                          </label>
+                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
+                              checked={appliance.appliance_disconnected ?? false}
+                              onChange={(e) => setApplianceBooleanField(index, 'appliance_disconnected', e.target.checked)}
+                            />
+                            <span>Appliance disconnected</span>
+                          </label>
+                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
+                              checked={appliance.danger_do_not_use_attached ?? false}
+                              onChange={(e) => setApplianceBooleanField(index, 'danger_do_not_use_attached', e.target.checked)}
+                            />
+                            <span>Danger Do Not Use attached</span>
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
+                        Use Safe or NCS when the appliance remains safe to use. Switch Appliance safe to use to No for AR or ID.
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {checksTab === 'house' && (
+        <div className="space-y-4">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Whole-house safety</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <PassFailToggle
+                label="Emergency control accessible"
+                value={booleanFromField(evidenceFields.emergency_control_accessible) ? 'pass' : null}
+                onChange={(val) => handleSafetyFieldUpdate('emergency_control_accessible', val ?? '')}
+              />
+              <PassFailToggle
+                label="Gas tightness satisfactory"
+                value={booleanFromField(evidenceFields.gas_tightness_satisfactory) ? 'pass' : null}
+                onChange={(val) => handleSafetyFieldUpdate('gas_tightness_satisfactory', val ?? '')}
+              />
+              <PassFailToggle
+                label="Pipework visual inspection satisfactory"
+                value={booleanFromField(evidenceFields.pipework_visual_satisfactory) ? 'pass' : null}
+                onChange={(val) => handleSafetyFieldUpdate('pipework_visual_satisfactory', val ?? '')}
+              />
+              <PassFailToggle
+                label="Equipotential bonding satisfactory"
+                value={booleanFromField(evidenceFields.equipotential_bonding_satisfactory) ? 'pass' : null}
+                onChange={(val) => handleSafetyFieldUpdate('equipotential_bonding_satisfactory', val ?? '')}
+              />
             </div>
-          ))}
-        </div>
-
-        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Whole-house safety</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <PassFailToggle
-              label="Emergency control accessible"
-              value={booleanFromField(evidenceFields.emergency_control_accessible) ? 'pass' : null}
-              onChange={(val) => handleSafetyFieldUpdate('emergency_control_accessible', val ?? '')}
-            />
-            <PassFailToggle
-              label="Gas tightness satisfactory"
-              value={booleanFromField(evidenceFields.gas_tightness_satisfactory) ? 'pass' : null}
-              onChange={(val) => handleSafetyFieldUpdate('gas_tightness_satisfactory', val ?? '')}
-            />
-            <PassFailToggle
-              label="Pipework visual inspection satisfactory"
-              value={booleanFromField(evidenceFields.pipework_visual_satisfactory) ? 'pass' : null}
-              onChange={(val) => handleSafetyFieldUpdate('pipework_visual_satisfactory', val ?? '')}
-            />
-            <PassFailToggle
-              label="Equipotential bonding satisfactory"
-              value={booleanFromField(evidenceFields.equipotential_bonding_satisfactory) ? 'pass' : null}
-              onChange={(val) => handleSafetyFieldUpdate('equipotential_bonding_satisfactory', val ?? '')}
+          </div>
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">CO alarms</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <PassFailToggle
+                label="CO alarm fitted"
+                value={booleanFromField(evidenceFields.co_alarm_fitted) ? 'pass' : null}
+                onChange={(val) => handleSafetyFieldUpdate('co_alarm_fitted', val ?? '')}
+              />
+              <PassFailToggle
+                label="CO alarm tested"
+                value={booleanFromField(evidenceFields.co_alarm_tested) ? 'pass' : null}
+                onChange={(val) => handleSafetyFieldUpdate('co_alarm_tested', val ?? '')}
+              />
+              <PassFailToggle
+                label="CO alarm satisfactory"
+                value={booleanFromField(evidenceFields.co_alarm_satisfactory) ? 'pass' : null}
+                onChange={(val) => handleSafetyFieldUpdate('co_alarm_satisfactory', val ?? '')}
+              />
+            </div>
+          </div>
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Comments (optional)</p>
+            <Textarea
+              className="mt-3 min-h-[90px]"
+              value={evidenceFields.comments ?? ''}
+              onChange={(e) => handleEvidenceFieldsUpdate({ comments: e.target.value })}
+              placeholder="Site notes or comments that appear on the CP12"
             />
           </div>
         </div>
+      )}
 
-        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">CO alarms</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <PassFailToggle
-              label="CO alarm fitted"
-              value={booleanFromField(evidenceFields.co_alarm_fitted) ? 'pass' : null}
-              onChange={(val) => handleSafetyFieldUpdate('co_alarm_fitted', val ?? '')}
-            />
-            <PassFailToggle
-              label="CO alarm tested"
-              value={booleanFromField(evidenceFields.co_alarm_tested) ? 'pass' : null}
-              onChange={(val) => handleSafetyFieldUpdate('co_alarm_tested', val ?? '')}
-            />
-            <PassFailToggle
-              label="CO alarm satisfactory"
-              value={booleanFromField(evidenceFields.co_alarm_satisfactory) ? 'pass' : null}
-              onChange={(val) => handleSafetyFieldUpdate('co_alarm_satisfactory', val ?? '')}
-            />
-          </div>
-        </div>
-
-        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Comments (optional)</p>
-          <Textarea
-            className="mt-3 min-h-[90px]"
-            value={evidenceFields.comments ?? ''}
-            onChange={(e) => handleEvidenceFieldsUpdate({ comments: e.target.value })}
-            placeholder="Site notes or comments that appear on the CP12"
-          />
-        </div>
-
-        
-      </div>
-      <div id="cp12-step3-footer-actions" className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button variant="outline" className="rounded-full" onClick={goBackOneStep} disabled={isPending}>
+      <div id="cp12-step3-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+        <button
+          type="button"
+          onClick={() => {
+            if (checksTab === 'inspection') goBackOneStep();
+            else if (checksTab === 'readings') setChecksTab('inspection');
+            else if (checksTab === 'safety') setChecksTab('readings');
+            else setChecksTab('safety');
+          }}
+          disabled={isPending}
+          className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
+        >
           Back
-        </Button>
-        <Button onClick={handleChecksNext} disabled={isPending} className="rounded-full px-6">
-          Next → Sign
-        </Button>
+        </button>
+        {checksTab === 'house' ? (
+          <button
+            type="button"
+            onClick={handleChecksNext}
+            disabled={isPending}
+            className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#1a7a52] text-[14px] font-medium text-white disabled:opacity-50"
+          >
+            Save & Continue
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              if (checksTab === 'inspection') setChecksTab('readings');
+              else if (checksTab === 'readings') setChecksTab('safety');
+              else setChecksTab('house');
+            }}
+            disabled={isPending}
+            className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+          >
+            Next
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
       </div>
     </WizardLayout>
   );
@@ -2623,27 +2711,21 @@ export function CertificateWizard({
       status="Finish"
       onBack={goBackOneStep}
       actionsHideWhenVisibleId="cp12-step4-footer-actions"
-          actions={
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
-            Edit before send
-          </Button>
-          <Button
-            className="rounded-full bg-[var(--color-action)] px-6 text-white"
-            disabled={isBusy || checklist.blockingMissing > 0}
-            onClick={handleGenerate}
-            data-testid="cp12-issue"
-          >
-            {isGeneratingPdf ? 'Issuing…' : 'Issue Certificate'}
-          </Button>
-        </div>
+      actions={
+        <button
+          type="button"
+          onClick={() => setStep(1)}
+          className="flex h-[30px] items-center rounded-[20px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[14px] text-[13px] text-[var(--color-text-secondary)]"
+        >
+          Edit
+        </button>
       }
     >
       <div className="space-y-3">
         {!info.landlord_email.trim() ? (
-          <div className="rounded-[16px] border-[0.5px] border-amber-200 bg-amber-50 p-4 text-[13px] text-amber-950">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-4 text-[13px] text-[var(--color-text-primary)]">
             <p className="font-medium">Landlord email is missing</p>
-            <p className="mt-1 text-amber-900/80">
+            <p className="mt-1 text-[var(--color-text-secondary)]">
               You can still issue this CP12, but adding an email enables renewal reminders and landlord portal links later.
             </p>
             <Button type="button" variant="outline" className="mt-3 rounded-full" onClick={() => setStep(1)}>
@@ -2658,15 +2740,35 @@ export function CertificateWizard({
               {checklist.blockingMissing > 0 ? `${checklist.blockingMissing} required item(s) missing` : 'All required items complete'}
             </p>
           </div>
+          {checklist.blockingMissing === 0 ? (
+            <div className="mt-3 flex items-center gap-2 rounded-[8px] bg-[var(--color-action-bg)] px-3 py-2">
+              <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-action)]">
+                <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+              </span>
+              <p className="text-[13px] font-medium text-[var(--color-action)]">Ready to issue</p>
+            </div>
+          ) : null}
           <div className="mt-3 space-y-2">
             {checklist.items.map((item) => (
               <div
                 key={item.id}
                 className={`flex items-start gap-2 rounded-[8px] px-3 py-2 text-[13px] ${
-                  item.ok ? 'bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]' : item.blocking !== false ? 'bg-amber-50 text-amber-900' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
+                  item.ok ? 'bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]' : item.blocking !== false ? 'bg-[var(--color-amber-bg)] text-[var(--color-text-primary)]' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
                 }`}
               >
-                <span className="mt-1 text-base">{item.ok ? '✅' : item.blocking === false ? 'ℹ️' : '⚠️'}</span>
+                {item.ok ? (
+          <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-action)]">
+            <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+          </span>
+        ) : item.blocking === false ? (
+          <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-text-tertiary)]">
+            <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M12 16v-4M12 8h.01" /></svg>
+          </span>
+        ) : (
+          <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-amber)]">
+            <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01" /></svg>
+          </span>
+        )}
                 <div className="flex-1">
                   <p className="font-medium">{item.label}</p>
                   {!item.ok && item.hint ? <p className="text-[12px] text-[var(--color-text-tertiary)]">{item.hint}</p> : null}
@@ -2793,27 +2895,31 @@ export function CertificateWizard({
           </div>
         </div>
       </div>
-      <div id="cp12-step4-footer-actions" className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button variant="outline" className="rounded-full" onClick={() => setStep(1)}>
-          Edit before send
-        </Button>
-        <Button
+      <div id="cp12-step4-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+        <button
           type="button"
-          variant="outline"
-          className="rounded-full"
+          onClick={() => setStep(1)}
+          className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)]"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
           disabled={isBusy}
           onClick={handleCreateRemoteSignatureLink}
+          className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
         >
-          {isPending ? 'Preparing link…' : 'Send to landlord for signature'}
-        </Button>
-        <Button
-          className="rounded-full bg-[var(--color-action)] px-6 text-white"
+          {isPending ? 'Preparing…' : 'Send to landlord'}
+        </button>
+        <button
+          type="button"
           disabled={isBusy || checklist.blockingMissing > 0}
           onClick={handleGenerate}
           data-testid="cp12-issue"
+          className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#1a7a52] text-[14px] font-medium text-white disabled:opacity-50"
         >
-          {isGeneratingPdf ? 'Issuing…' : 'Issue Certificate'}
-        </Button>
+          {isGeneratingPdf ? 'Issuing…' : 'Issue CP12'}
+        </button>
       </div>
     </WizardLayout>
   );

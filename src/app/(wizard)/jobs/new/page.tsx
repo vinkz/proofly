@@ -154,7 +154,7 @@ export default async function NewJobPage({
 
       {!requestIdParam && requestLink ? <RequestLandlordDetailsCard requestUrl={requestLink.url} /> : null}
 
-      <Card className="border border-white/10 bg-white/95 p-6 shadow">
+      <Card className="border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-6">
         <SoloJobForm
           key={requestPrefill?.id ?? 'manual-job'}
           clients={clients}

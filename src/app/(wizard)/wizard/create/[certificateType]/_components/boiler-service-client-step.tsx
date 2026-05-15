@@ -184,7 +184,7 @@ export function BoilerServiceClientStep({ clients, totalSteps }: BoilerServiceCl
       </div>
 
       <div className="grid gap-6">
-        <div className="rounded-2xl border border-white/20 bg-white/70 p-4 shadow-inner">
+        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground/70">
               Engineer and company details are pulled from account settings.
@@ -257,7 +257,7 @@ export function BoilerServiceClientStep({ clients, totalSteps }: BoilerServiceCl
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-white/20 bg-white/70 p-4 shadow-inner">
+        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Input
               value={boilerInfo.customer_name}

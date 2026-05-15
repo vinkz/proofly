@@ -51,41 +51,45 @@ export function WizardLayout({
 
   return (
     <div className="min-h-screen bg-[var(--color-background-secondary)]">
-      <header className="sticky top-14 z-20 h-14 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
-        <div className="mx-auto flex h-full max-w-2xl items-center gap-3 px-4">
-          {onBack ? (
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex items-center gap-1 text-[13px] text-[var(--color-text-secondary)]"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-              Back
-            </button>
-          ) : (
-            <Link
-              href="/jobs"
-              className="flex items-center gap-1 text-[13px] text-[var(--color-text-secondary)]"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-              Jobs
-            </Link>
-          )}
-          <div className="flex flex-col">
-            <p className="text-[11px] text-[var(--color-text-tertiary)]">Step {step} of {total}</p>
-            <p className="text-[16px] font-medium text-[var(--color-text-primary)]">{title}</p>
+      <header className="sticky top-14 z-20 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 pt-3">
+        <div className="mx-auto flex max-w-2xl items-center">
+          <div className="flex flex-1 items-center">
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className="flex items-center gap-1 text-[13px] text-[var(--color-text-secondary)]"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+                Back
+              </button>
+            ) : (
+              <Link
+                href="/jobs"
+                className="flex items-center gap-1 text-[13px] text-[var(--color-text-secondary)]"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+                Back
+              </Link>
+            )}
           </div>
-          {actions && !hideActions ? <div className="ml-auto">{actions}</div> : null}
+          <span className="text-[11px] text-[var(--color-text-tertiary)]">Step {step} of {total}</span>
+          <div className="flex flex-1 justify-end">
+            {actions && !hideActions ? <div>{actions}</div> : null}
+          </div>
+        </div>
+        <div className="mx-auto mb-[10px] mt-[10px] max-w-2xl">
+          <p className="text-[18px] font-medium text-[var(--color-text-primary)]">{title}</p>
         </div>
       </header>
 
-      <div className="h-[4px] w-full bg-[var(--color-background-secondary)]">
+      <div className="h-[3px] w-full bg-[var(--color-border-tertiary)]">
         <div
-          className="h-full bg-[var(--color-action)] transition-all duration-300"
+          className="h-full bg-[#1a7a52] transition-all duration-300"
           style={{ width: `${percent}%` }}
         />
       </div>

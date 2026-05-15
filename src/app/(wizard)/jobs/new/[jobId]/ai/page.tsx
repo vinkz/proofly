@@ -33,7 +33,7 @@ export default async function AiStepPage({ params }: { params: Promise<{ jobId: 
         </div>
 
         {signedReportUrl ? (
-          <div className="rounded-2xl border border-white/20 bg-white/70 p-4 text-sm text-muted-foreground/80">
+          <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 text-[13px] text-[var(--color-text-secondary)]">
             <p className="font-semibold text-emerald-700">Report ready</p>
             <p>Your AI summary and PDF have been generated. Review below or continue to delivery.</p>
             <div className="mt-3 flex gap-3">
@@ -47,7 +47,7 @@ export default async function AiStepPage({ params }: { params: Promise<{ jobId: 
               <ShareReportLinkButton jobId={jobId} />
             </div>
             {state.job.notes ? (
-              <div className="mt-4 rounded-xl border border-white/20 bg-white/80 p-3 text-sm text-muted-foreground/90">
+              <div className="mt-4 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3 text-[13px] text-[var(--color-text-secondary)]">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/60">
                   AI summary
                 </p>

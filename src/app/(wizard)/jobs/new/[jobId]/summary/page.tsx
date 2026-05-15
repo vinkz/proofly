@@ -46,7 +46,7 @@ export default async function SummaryStep({ params }: { params: Promise<{ jobId:
           <StatCard label="Pending" value={pendingCount} tone="neutral" />
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-white/20 bg-white/60 p-4">
+        <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground/80">Checklist</h2>
           <ul className="divide-y divide-white/30 text-sm">
             {state.items.map((item) => (

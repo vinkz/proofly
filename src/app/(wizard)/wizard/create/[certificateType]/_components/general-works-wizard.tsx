@@ -380,7 +380,7 @@ export function GeneralWorksWizard({
               </Button>
             </div>
           ) : null}
-          <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-sm font-semibold text-muted">Job address</p>
             <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -579,7 +579,7 @@ export function GeneralWorksWizard({
               placeholder="Payment status (optional)"
               className="rounded-2xl"
             />
-            <div className="rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+            <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
               <p className="text-sm font-semibold text-muted">Follow up required?</p>
               <div className="mt-2 flex gap-2">
                 {['yes', 'no'].map((choice) => (
@@ -605,7 +605,7 @@ export function GeneralWorksWizard({
             />
           </div>
 
-          <div className="mt-6 rounded-2xl border border-white/30 bg-white/70 p-4 shadow-sm">
+          <div className="mt-6 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-sm font-semibold text-muted">Quick review</p>
             <div className="mt-2 grid gap-2 text-sm text-muted-foreground/80">
               <p><span className="font-semibold text-muted">Summary:</span> {evidence.work_summary || 'Not provided'}</p>
@@ -651,7 +651,7 @@ export function GeneralWorksWizard({
               </Button>
             </div>
           ) : null}
-          <div className="mb-4 rounded-2xl border border-white/30 bg-white/80 p-3 shadow-sm">
+          <div className="mb-4 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
             <p className="text-sm font-semibold text-muted">Evidence photos (optional)</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {FINAL_EVIDENCE_CATEGORIES.map((item) => (

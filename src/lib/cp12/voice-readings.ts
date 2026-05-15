@@ -16,6 +16,8 @@ export type Cp12VoiceReadingsResult = {
   warnings: string[];
 };
 
+export type Cp12VoiceReadingScope = 'all' | 'pressure' | 'high' | 'low';
+
 export const CP12_VOICE_READING_FIELDS: Array<{ key: keyof Cp12VoiceReadingsParsed; label: string; unit?: string }> = [
   { key: 'workingPressure', label: 'Working pressure', unit: 'mbar' },
   { key: 'heatInput', label: 'Heat input', unit: 'kW' },
@@ -99,59 +101,73 @@ const FIELD_PATTERNS: Array<{ key: keyof Cp12VoiceReadingsParsed; patterns: RegE
   {
     key: 'highCoPpm',
     patterns: [
-      new RegExp(`\\b(?:high|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+co(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'highCo2Percent',
     patterns: [
-      new RegExp(`\\b(?:high|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+co2\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'highRatio',
     patterns: [
-      new RegExp(`\\b(?:high|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+(?:co\\s+co2\\s+)?ratio\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'lowCoPpm',
     patterns: [
-      new RegExp(`\\b(?:low|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+co(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:low|minimum|min|low\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'lowCo2Percent',
     patterns: [
-      new RegExp(`\\b(?:low|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+co2\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:low|minimum|min|low\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'lowRatio',
     patterns: [
-      new RegExp(`\\b(?:low|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+(?:co\\s+co2\\s+)?ratio\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:low|minimum|min|low\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'workingPressure',
     patterns: [
-      new RegExp(`\\b(?:working|operating)\\s+pressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:working|operating|burner|gas|dynamic)\\s+pressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
       new RegExp(`\\bpressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'heatInput',
     patterns: [
-      new RegExp(`\\bheat\\s+input\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\bheat\\s+(?:input|in\\s+put|imput|inlet|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\bgas\\s+rate\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'coPpm',
     patterns: [
-      new RegExp(`(?<!high\\s)(?<!low\\s)\\bco(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`(?<!high\\s)(?<!hi\\s)(?<!low\\s)(?<!max\\s)(?<!min\\s)\\b(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
 ];
+
+const SCOPED_COMBUSTION_PATTERNS = {
+  coPpm: [new RegExp(`\\b(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i')],
+  co2Percent: [new RegExp(`\\b(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i')],
+  ratio: [new RegExp(`\\b(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i')],
+};
+
+const SCOPED_PRESSURE_PATTERNS = {
+  heatInput: [
+    new RegExp(`\\bheat\\s+(?:input|in\\s+put|imput|inlet)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+    new RegExp(`\\binput\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+  ],
+};
 
 function normalizeTranscript(text: string) {
   return text
@@ -159,6 +175,8 @@ function normalizeTranscript(text: string) {
     .replace(/co₂/g, 'co2')
     .replace(/\bc\s*o\s*2\b/g, 'co2')
     .replace(/\bco[\s-]*two\b/g, 'co2')
+    .replace(/\bcarbon\s+dioxide\b/g, 'co2')
+    .replace(/\bcarbon\s+monoxide\b/g, 'co')
     .replace(/\bco\s*\/\s*co2\b/g, 'co co2')
     .replace(/\bm\s*bar\b/g, 'mbar')
     .replace(/\bkilowatts?\b/g, 'kw')
@@ -298,10 +316,41 @@ export function hasParsedCp12VoiceReadings(parsed: Cp12VoiceReadingsParsed) {
   return Object.values(parsed).some((value) => Boolean(value && value.trim()));
 }
 
-export function parseCp12VoiceReadings(transcript: string): Cp12VoiceReadingsResult {
+function applyScope(parsed: Cp12VoiceReadingsParsed, normalized: string, scope: Cp12VoiceReadingScope) {
+  if (scope === 'all') return parsed;
+
+  const scoped: Cp12VoiceReadingsParsed = { ...EMPTY_PARSED };
+  if (scope === 'pressure') {
+    scoped.workingPressure = parsed.workingPressure;
+    scoped.heatInput = parsed.heatInput ?? extractFieldValue(normalized, SCOPED_PRESSURE_PATTERNS.heatInput);
+    return scoped;
+  }
+
+  const coPpm = parsed.coPpm ?? extractFieldValue(normalized, SCOPED_COMBUSTION_PATTERNS.coPpm);
+  const co2Percent = extractFieldValue(normalized, SCOPED_COMBUSTION_PATTERNS.co2Percent);
+  const ratio = extractFieldValue(normalized, SCOPED_COMBUSTION_PATTERNS.ratio);
+
+  if (scope === 'high') {
+    scoped.highCoPpm = parsed.highCoPpm ?? coPpm;
+    scoped.highCo2Percent = parsed.highCo2Percent ?? co2Percent;
+    scoped.highRatio = parsed.highRatio ?? ratio;
+    return scoped;
+  }
+
+  scoped.lowCoPpm = parsed.lowCoPpm ?? coPpm;
+  scoped.lowCo2Percent = parsed.lowCo2Percent ?? co2Percent;
+  scoped.lowRatio = parsed.lowRatio ?? ratio;
+  return scoped;
+}
+
+export function parseCp12VoiceReadings(
+  transcript: string,
+  options: { scope?: Cp12VoiceReadingScope } = {},
+): Cp12VoiceReadingsResult {
   const normalized = normalizeTranscript(transcript);
-  const parsed: Cp12VoiceReadingsParsed = { ...EMPTY_PARSED };
+  let parsed: Cp12VoiceReadingsParsed = { ...EMPTY_PARSED };
   const warnings: string[] = [];
+  const scope = options.scope ?? 'all';
 
   if (!normalized) {
     return {
@@ -315,11 +364,13 @@ export function parseCp12VoiceReadings(transcript: string): Cp12VoiceReadingsRes
     parsed[field.key] = extractFieldValue(normalized, field.patterns);
   }
 
-  if (/(?<!high\s)(?<!low\s)\bco2\b/.test(normalized) && !parsed.highCo2Percent && !parsed.lowCo2Percent) {
+  parsed = applyScope(parsed, normalized, scope);
+
+  if (scope === 'all' && /(?<!high\s)(?<!low\s)\bco2\b/.test(normalized) && !parsed.highCo2Percent && !parsed.lowCo2Percent) {
     warnings.push('Ignored CO2 value because CP12 combustion readings need high or low context.');
   }
 
-  if (/(?<!high\s)(?<!low\s)\bratio\b/.test(normalized) && !parsed.highRatio && !parsed.lowRatio) {
+  if (scope === 'all' && /(?<!high\s)(?<!low\s)\bratio\b/.test(normalized) && !parsed.highRatio && !parsed.lowRatio) {
     warnings.push('Ignored ratio value because CP12 combustion readings need high or low context.');
   }
 

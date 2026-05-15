@@ -148,7 +148,7 @@ const buildAddressText = (...parts: Array<string | null | undefined>) =>
 function LabeledField({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
   return (
     <label className={`space-y-1 ${className}`}>
-      <span className="block text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground/80">{label}</span>
+      <span className="block text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">{label}</span>
       {children}
     </label>
   );
@@ -647,34 +647,41 @@ export function GasWarningNoticeWizard({
           total={totalSteps}
           title="People & location"
           status="Gas Warning Notice"
+          actionsHideWhenVisibleId="gw-step1-footer-actions"
           actions={
-            <div className="flex justify-end">
-              <Button className="rounded-full px-6" onClick={handleJobNext} disabled={isPending}>
-                Next → Appliance
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={handleJobNext}
+              disabled={isPending}
+              className="flex items-center gap-[5px] rounded-[8px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
+            >
+              Next
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           }
         >
           <div className="space-y-3">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+              <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
                 Fill demo Gas Warning
               </Button>
             </div>
           ) : null}
-          <p className="text-sm text-muted">Engineer and company details are pulled from account settings.</p>
+          <p className="text-[13px] text-[var(--color-text-secondary)]">Engineer and company details are pulled from account settings.</p>
           <div className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-              <p className="text-sm font-semibold text-muted">Job address</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">Confirm the job address and visit details.</p>
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job address</p>
+              <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">Confirm the job address and visit details.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <LabeledField label="Job reference" className="sm:col-span-2">
                   <Input
                     value={jobAddress.job_reference}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_reference: e.target.value }))}
                     placeholder="Optional internal reference"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Name" className="sm:col-span-2">
@@ -682,7 +689,7 @@ export function GasWarningNoticeWizard({
                     value={jobAddress.job_address_name}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
                     placeholder="Property name / reference"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Address line 1" className="sm:col-span-2">
@@ -694,7 +701,7 @@ export function GasWarningNoticeWizard({
                       setFields((prev) => ({ ...prev, property_address: value }));
                     }}
                     placeholder="Job address line 1"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Address line 2">
@@ -702,7 +709,7 @@ export function GasWarningNoticeWizard({
                     value={jobAddress.job_address_line2}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
                     placeholder="Optional"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Town / city">
@@ -710,7 +717,7 @@ export function GasWarningNoticeWizard({
                     value={jobAddress.job_address_city}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
                     placeholder="Optional"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Postcode">
@@ -722,7 +729,7 @@ export function GasWarningNoticeWizard({
                       setFields((prev) => ({ ...prev, postcode: value }));
                     }}
                     placeholder="Postcode"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Tel. No">
@@ -730,21 +737,21 @@ export function GasWarningNoticeWizard({
                     value={jobAddress.job_tel}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
                     placeholder="Site telephone number"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
               </div>
             </div>
-            <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
-              <p className="text-sm font-semibold text-muted">Client / Landlord</p>
-              <p className="mt-1 text-xs text-muted-foreground/70">Capture the person or organisation receiving the notice.</p>
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Client / Landlord</p>
+              <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">Capture the person or organisation receiving the notice.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <LabeledField label="Name">
                   <Input
                     value={fields.customer_name}
                     onChange={(e) => setFields((prev) => ({ ...prev, customer_name: e.target.value }))}
                     placeholder="Client / landlord name"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Company">
@@ -752,7 +759,7 @@ export function GasWarningNoticeWizard({
                     value={fields.customer_company}
                     onChange={(e) => setFields((prev) => ({ ...prev, customer_company: e.target.value }))}
                     placeholder="Optional"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Address line 1" className="sm:col-span-2">
@@ -767,7 +774,7 @@ export function GasWarningNoticeWizard({
                       }));
                     }}
                     placeholder="Client / landlord address line 1"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Address line 2">
@@ -782,7 +789,7 @@ export function GasWarningNoticeWizard({
                       }));
                     }}
                     placeholder="Optional"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Town / city">
@@ -797,7 +804,7 @@ export function GasWarningNoticeWizard({
                       }));
                     }}
                     placeholder="Optional"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Postcode">
@@ -805,7 +812,7 @@ export function GasWarningNoticeWizard({
                     value={fields.customer_postcode}
                     onChange={(e) => setFields((prev) => ({ ...prev, customer_postcode: e.target.value }))}
                     placeholder="Postcode"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Tel. No">
@@ -813,17 +820,25 @@ export function GasWarningNoticeWizard({
                     value={fields.customer_contact}
                     onChange={(e) => setFields((prev) => ({ ...prev, customer_contact: e.target.value }))}
                     placeholder="Client / landlord contact number"
-                    className="rounded-2xl"
+                    className="rounded-[8px]"
                   />
                 </LabeledField>
               </div>
             </div>
           </div>
           </div>
-          <div className="mt-6 flex justify-end">
-            <Button className="rounded-full px-6" onClick={handleJobNext} disabled={isPending}>
+          <div id="gw-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <button
+              type="button"
+              onClick={handleJobNext}
+              disabled={isPending}
+              className="flex h-[44px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            >
               Next → Appliance
-            </Button>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </WizardLayout>
       ) : null}
@@ -835,18 +850,25 @@ export function GasWarningNoticeWizard({
           title="Appliance + classification"
           status="Gas Warning"
           onBack={goBackOneStep}
+          actionsHideWhenVisibleId="gw-step2-footer-actions"
           actions={
-            <div className="flex justify-end">
-              <Button className="rounded-full px-6" onClick={handleApplianceNext} disabled={isPending}>
-                Next → Sign-off
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={handleApplianceNext}
+              disabled={isPending}
+              className="flex items-center gap-[5px] rounded-[8px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
+            >
+              Next
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           }
         >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+              <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
                 Fill demo Gas Warning
               </Button>
             </div>
@@ -857,25 +879,25 @@ export function GasWarningNoticeWizard({
                 value={fields.appliance_location}
                 onChange={(e) => setFields((prev) => ({ ...prev, appliance_location: e.target.value }))}
                 placeholder="Appliance location"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <Input
                 value={fields.appliance_type}
                 onChange={(e) => setFields((prev) => ({ ...prev, appliance_type: e.target.value }))}
                 placeholder="Appliance type"
-                className="rounded-2xl"
+                className="rounded-[8px]"
               />
               <Input
                 value={fields.make_model}
                 onChange={(e) => setFields((prev) => ({ ...prev, make_model: e.target.value }))}
                 placeholder="Make / model (optional)"
-                className="rounded-2xl sm:col-span-2"
+                className="rounded-[8px] sm:col-span-2"
               />
               <Input
                 value={fields.serial_number}
                 onChange={(e) => setFields((prev) => ({ ...prev, serial_number: e.target.value }))}
                 placeholder="Serial number"
-                className="rounded-2xl sm:col-span-2"
+                className="rounded-[8px] sm:col-span-2"
               />
               <LabeledField label="Classification" className="sm:col-span-2">
                 <Select
@@ -894,30 +916,30 @@ export function GasWarningNoticeWizard({
                 value={fields.unsafe_situation_description}
                 onChange={(e) => setFields((prev) => ({ ...prev, unsafe_situation_description: e.target.value }))}
                 placeholder="Unsafe situation description"
-                className="min-h-[90px] rounded-2xl sm:col-span-2"
+                className="min-h-[90px] rounded-[8px] sm:col-span-2"
               />
               <Textarea
                 value={fields.underlying_cause}
                 onChange={(e) => setFields((prev) => ({ ...prev, underlying_cause: e.target.value }))}
                 placeholder="Underlying cause (optional)"
-                className="min-h-[90px] rounded-2xl sm:col-span-2"
+                className="min-h-[90px] rounded-[8px] sm:col-span-2"
               />
               <Textarea
                 value={fields.actions_taken}
                 onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
                 placeholder="Actions taken"
-                className="min-h-[90px] rounded-2xl sm:col-span-2"
+                className="min-h-[90px] rounded-[8px] sm:col-span-2"
               />
               <Input
                 value={fields.emergency_reference}
                 onChange={(e) => setFields((prev) => ({ ...prev, emergency_reference: e.target.value }))}
                 placeholder="Emergency reference (optional)"
-                className="rounded-2xl sm:col-span-2"
+                className="rounded-[8px] sm:col-span-2"
               />
             </div>
           </CollapsibleSection>
           <CollapsibleSection title="Safety actions" subtitle="Isolation, tagging, and emergency actions">
-            <div className="space-y-2 rounded-2xl border border-white/40 bg-white/70 p-4">
+            <div className="space-y-2 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
               {[
                 ['gas_supply_isolated', 'Gas supply isolated'],
                 ['appliance_capped_off', 'Appliance capped off'],
@@ -926,10 +948,10 @@ export function GasWarningNoticeWizard({
                 ['danger_do_not_use_label_fitted', "Danger: Do Not Use label fitted"],
                 ['meter_or_appliance_tagged', 'Meter or appliance tagged'],
               ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                <label key={key} className="flex items-center gap-3 text-[13px] text-[var(--color-text-secondary)]">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 accent-[var(--accent)]"
+                    className="h-4 w-4 accent-[var(--color-action)]"
                     checked={fields[key as keyof GasWarningFormState] as boolean}
                     onChange={(e) =>
                       setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
@@ -941,15 +963,15 @@ export function GasWarningNoticeWizard({
             </div>
           </CollapsibleSection>
           <CollapsibleSection title="RIDDOR reporting" subtitle="Record whether the incident was reported to HSE">
-            <div className="space-y-2 rounded-2xl border border-white/40 bg-white/70 p-4">
+            <div className="space-y-2 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
               {[
                 ['riddor_11_1_reported', 'Reported to HSE under RIDDOR 11(1) (Gas Incident)'],
                 ['riddor_11_2_reported', 'Reported to HSE under RIDDOR 11(2) (Dangerous Gas Fitting)'],
               ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                <label key={key} className="flex items-center gap-3 text-[13px] text-[var(--color-text-secondary)]">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 accent-[var(--accent)]"
+                    className="h-4 w-4 accent-[var(--color-action)]"
                     checked={fields[key as keyof GasWarningFormState] as boolean}
                     onChange={(e) =>
                       setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
@@ -961,7 +983,7 @@ export function GasWarningNoticeWizard({
             </div>
           </CollapsibleSection>
           <CollapsibleSection title="Issue categories" subtitle="Match the notice to the identified issue">
-            <div className="space-y-3 rounded-2xl border border-white/40 bg-white/70 p-4">
+            <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
               {[
                 ['gas_escape_issue', 'Gas escape'],
                 ['pipework_issue', 'Pipework issue'],
@@ -970,10 +992,10 @@ export function GasWarningNoticeWizard({
                 ['chimney_flue_issue', 'Chimney / flue issue'],
                 ['other_issue', 'Other issue'],
               ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                <label key={key} className="flex items-center gap-3 text-[13px] text-[var(--color-text-secondary)]">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 accent-[var(--accent)]"
+                    className="h-4 w-4 accent-[var(--color-action)]"
                     checked={fields[key as keyof GasWarningFormState] as boolean}
                     onChange={(e) =>
                       setFields((prev) =>
@@ -993,16 +1015,32 @@ export function GasWarningNoticeWizard({
                   value={fields.other_issue_details}
                   onChange={(e) => setFields((prev) => ({ ...prev, other_issue_details: e.target.value }))}
                   placeholder="Other issue details"
-                  className="rounded-2xl"
+                  className="rounded-[8px]"
                 />
               ) : null}
             </div>
           </CollapsibleSection>
           </div>
-          <div className="mt-6 flex justify-end">
-            <Button className="rounded-full px-6" onClick={handleApplianceNext} disabled={isPending}>
+          <div id="gw-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <button
+              type="button"
+              onClick={goBackOneStep}
+              disabled={isPending}
+              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleApplianceNext}
+              disabled={isPending}
+              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            >
               Next → Sign-off
-            </Button>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </WizardLayout>
       ) : null}
@@ -1014,21 +1052,21 @@ export function GasWarningNoticeWizard({
           title="Handover + signatures"
           status="Gas Warning"
           onBack={goBackOneStep}
+          actionsHideWhenVisibleId="gw-step3-footer-actions"
           actions={
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
-                Generate PDF
-              </Button>
-              <Button variant="ghost" className="rounded-full px-6" onClick={handleAcknowledgementNext} disabled={isPending}>
-                Save draft
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="flex h-[30px] items-center rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[14px] text-[13px] text-[var(--color-text-secondary)]"
+            >
+              Edit
+            </button>
           }
         >
           <div className="space-y-4">
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
-              <Button type="button" variant="outline" className="rounded-full text-xs" onClick={handleDemoFill} disabled={isPending}>
+              <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
                 Fill demo Gas Warning
               </Button>
             </div>
@@ -1048,11 +1086,11 @@ export function GasWarningNoticeWizard({
             </div>
           </CollapsibleSection>
           <CollapsibleSection title="Attendance & handover" subtitle="Record whether the customer was present" defaultOpen>
-            <div className="space-y-3 rounded-2xl border border-white/40 bg-white/70 p-4">
-              <label className="flex items-center gap-3 text-sm text-muted">
+            <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <label className="flex items-center gap-3 text-[13px] text-[var(--color-text-secondary)]">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 accent-[var(--accent)]"
+                  className="h-4 w-4 accent-[var(--color-action)]"
                   checked={fields.customer_present}
                   onChange={(e) =>
                     setFields((prev) => ({
@@ -1067,15 +1105,15 @@ export function GasWarningNoticeWizard({
 
               {showCustomerAcknowledgement ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2 rounded-2xl border border-white/40 bg-white/80 p-4 sm:col-span-2">
+                  <div className="space-y-2 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 sm:col-span-2">
                     {[
                       ['customer_informed', 'Customer informed'],
                       ['customer_understands_risks', 'Customer understands risks'],
                     ].map(([key, label]) => (
-                      <label key={key} className="flex items-center gap-3 text-sm text-muted">
+                      <label key={key} className="flex items-center gap-3 text-[13px] text-[var(--color-text-secondary)]">
                         <input
                           type="checkbox"
-                          className="h-4 w-4 accent-[var(--accent)]"
+                          className="h-4 w-4 accent-[var(--color-action)]"
                           checked={fields[key as keyof GasWarningFormState] as boolean}
                           onChange={(e) =>
                             setFields((prev) => ({ ...prev, [key]: e.target.checked } as GasWarningFormState))
@@ -1090,17 +1128,17 @@ export function GasWarningNoticeWizard({
                       type="date"
                       value={fields.customer_signed_at}
                       onChange={(e) => setFields((prev) => ({ ...prev, customer_signed_at: e.target.value }))}
-                      className="rounded-2xl"
+                      className="rounded-[8px]"
                     />
                   </LabeledField>
                 </div>
               ) : null}
 
               {showNoticeLeftOnPremises ? (
-                <label className="flex items-center gap-3 text-sm text-muted">
+                <label className="flex items-center gap-3 text-[13px] text-[var(--color-text-secondary)]">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 accent-[var(--accent)]"
+                    className="h-4 w-4 accent-[var(--color-action)]"
                     checked={fields.notice_left_on_premises}
                     onChange={(e) => setFields((prev) => ({ ...prev, notice_left_on_premises: e.target.checked }))}
                   />
@@ -1116,7 +1154,7 @@ export function GasWarningNoticeWizard({
                   type="date"
                   value={fields.issued_at}
                   onChange={(e) => setFields((prev) => ({ ...prev, issued_at: e.target.value }))}
-                  className="rounded-2xl"
+                  className="rounded-[8px]"
                 />
               </LabeledField>
             </div>
@@ -1126,7 +1164,7 @@ export function GasWarningNoticeWizard({
               {showCustomerAcknowledgement ? (
                 <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
               ) : (
-                <div className="rounded-2xl border border-dashed border-white/30 bg-white/40 p-4 text-sm text-muted-foreground/80">
+                <div className="rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4 text-[13px] text-[var(--color-text-secondary)]">
                   Customer signature hidden because the customer was marked as not present.
                 </div>
               )}
@@ -1134,13 +1172,34 @@ export function GasWarningNoticeWizard({
             </div>
           </CollapsibleSection>
           </div>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button className="rounded-full bg-[var(--action)] px-6 text-white" onClick={handleGenerate} disabled={isPending}>
-              Generate PDF
-            </Button>
-            <Button variant="ghost" className="rounded-full px-6" onClick={handleAcknowledgementNext} disabled={isPending}>
+          <div id="gw-step3-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <button
+              type="button"
+              onClick={goBackOneStep}
+              disabled={isPending}
+              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleAcknowledgementNext}
+              disabled={isPending}
+              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
               Save draft
-            </Button>
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={isPending}
+              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-red)] text-[14px] font-medium text-white disabled:opacity-50"
+            >
+              Generate PDF
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         </WizardLayout>
       ) : null}

@@ -136,7 +136,7 @@ export default async function CertificateWizardPage({
           redirect('/login');
         }
         return (
-          <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/70 p-6 text-sm text-muted-foreground/80">
+          <div className="mx-auto max-w-3xl rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-6 text-[13px] text-[var(--color-text-secondary)]">
             This job could not be started.
           </div>
         );
@@ -168,7 +168,7 @@ export default async function CertificateWizardPage({
         redirect('/login');
       }
       return (
-        <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/70 p-6 text-sm text-muted-foreground/80">
+        <div className="mx-auto max-w-3xl rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-6 text-[13px] text-[var(--color-text-secondary)]">
           This step could not be loaded.
         </div>
       );
@@ -188,7 +188,7 @@ export default async function CertificateWizardPage({
         redirect('/login');
       }
       return (
-        <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/70 p-6 text-sm text-muted-foreground/80">
+        <div className="mx-auto max-w-3xl rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-6 text-[13px] text-[var(--color-text-secondary)]">
           This job could not be loaded.
         </div>
       );
@@ -206,7 +206,7 @@ export default async function CertificateWizardPage({
         redirect('/login');
       }
       return (
-        <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/70 p-6 text-sm text-muted-foreground/80">
+        <div className="mx-auto max-w-3xl rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-6 text-[13px] text-[var(--color-text-secondary)]">
           This job could not be loaded.
         </div>
       );
@@ -215,7 +215,7 @@ export default async function CertificateWizardPage({
 
   if (!wizardState) {
     return (
-      <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/70 p-6 text-sm text-muted-foreground/80">
+      <div className="mx-auto max-w-3xl rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-6 text-[13px] text-[var(--color-text-secondary)]">
         This job could not be loaded.
       </div>
     );

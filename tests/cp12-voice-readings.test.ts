@@ -50,6 +50,76 @@ describe('parseCp12VoiceReadings', () => {
     expect(result.warnings).toContain('Ignored ratio value because CP12 combustion readings need high or low context.');
   });
 
+  it('maps bare combustion readings into high fields when scoped high', () => {
+    const result = parseCp12VoiceReadings('co 8 co2 9 point 2 ratio 0 point 0008', { scope: 'high' });
+
+    expect(result.parsed).toMatchObject({
+      highCoPpm: '8',
+      highCo2Percent: '9.2',
+      highRatio: '0.0008',
+      lowCoPpm: null,
+      lowCo2Percent: null,
+      lowRatio: null,
+    });
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('maps bare combustion readings into low fields when scoped low', () => {
+    const result = parseCp12VoiceReadings('co 6 co2 8 point 8 ratio 0 point 0006', { scope: 'low' });
+
+    expect(result.parsed).toMatchObject({
+      highCoPpm: null,
+      highCo2Percent: null,
+      highRatio: null,
+      lowCoPpm: '6',
+      lowCo2Percent: '8.8',
+      lowRatio: '0.0006',
+    });
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('limits scoped pressure parsing to pressure and heat input', () => {
+    const result = parseCp12VoiceReadings('pressure 20 heat input 24 co 8', { scope: 'pressure' });
+
+    expect(result.parsed).toMatchObject({
+      workingPressure: '20',
+      heatInput: '24',
+      coPpm: null,
+      highCoPpm: null,
+      lowCoPpm: null,
+    });
+  });
+
+  it('accepts compact heat input phrases in scoped pressure mode', () => {
+    const result = parseCp12VoiceReadings('operating pressure 20 input 24', { scope: 'pressure' });
+
+    expect(result.parsed).toMatchObject({
+      workingPressure: '20',
+      heatInput: '24',
+    });
+  });
+
+  it('accepts common spoken variations for pressure and heat input', () => {
+    const result = parseCp12VoiceReadings('dynamic pressure 19 gas rate 22', { scope: 'pressure' });
+
+    expect(result.parsed).toMatchObject({
+      workingPressure: '19',
+      heatInput: '22',
+    });
+  });
+
+  it('accepts common spoken variations for scoped combustion readings', () => {
+    const result = parseCp12VoiceReadings('carbon monoxide 7 carbon dioxide 9 point 1 combustion ratio 0 point 0007', {
+      scope: 'high',
+    });
+
+    expect(result.parsed).toMatchObject({
+      highCoPpm: '7',
+      highCo2Percent: '9.1',
+      highRatio: '0.0007',
+    });
+  });
+
   it('returns a clear warning when nothing can be parsed confidently', () => {
     const result = parseCp12VoiceReadings('everything looked normal');
 

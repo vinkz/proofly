@@ -15,10 +15,10 @@ export function ReadingCard({ label, value, note, onChange, onVoiceRequest }: Re
   const setNote = (next: string) => onChange?.({ value, note: next });
 
   return (
-    <div className="rounded-3xl border border-white/30 bg-white/90 p-4 shadow-sm">
+    <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-muted">{label}</p>
-        <span className="rounded-full bg-[var(--muted)] px-3 py-1 text-[11px] font-semibold uppercase text-[var(--brand)]">
+        <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{label}</p>
+        <span className="rounded-full bg-[var(--color-background-secondary)] px-3 py-1 text-[11px] font-medium uppercase text-[var(--color-text-secondary)]">
           Reading
         </span>
       </div>
@@ -28,7 +28,7 @@ export function ReadingCard({ label, value, note, onChange, onVoiceRequest }: Re
           value={value ?? ''}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Enter value"
-          className="rounded-2xl"
+          className="rounded-[8px]"
         />
         <Button type="button" variant="outline" className="rounded-full">
           OCR placeholder
