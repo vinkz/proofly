@@ -94,7 +94,24 @@ export default async function CertificateWizardPage({
     notFound();
   }
 
-  const { profile } = await getProfile();
+  let profile: Awaited<ReturnType<typeof getProfile>>['profile'] = null;
+  try {
+    const profileResult = await getProfile();
+    profile = profileResult.profile;
+  } catch (error) {
+    if (isAuthError(error)) {
+      redirect('/login');
+    }
+    console.error('CertificateWizardPage: failed to load profile', {
+      certificateType: normalizedType,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return (
+      <div className="mx-auto max-w-3xl rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-6 text-[13px] text-[var(--color-text-secondary)]">
+        This wizard could not load your profile. Refresh and try again.
+      </div>
+    );
+  }
   const invoiceReadiness = getInvoiceReadiness(profile as Parameters<typeof getInvoiceReadiness>[0]);
   if (!isOnboardingProfileComplete(profile)) {
     return (
