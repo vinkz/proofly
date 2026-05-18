@@ -77,6 +77,16 @@ const buildSearchIndex = (job: JobSummary) => {
     .toLowerCase();
 };
 
+const getJobHref = (job: JobSummary) => {
+  const status = String(job.status ?? '').toLowerCase();
+  if (status === 'issued') return `/jobs/${job.id}/complete`;
+  if (['completed', 'closed', 'delivered'].includes(status)) return `/jobs/${job.id}/pdf`;
+  return buildCertificateResumeHref({
+    jobId: job.id,
+    jobType: job.job_type as JobType | null | undefined,
+  });
+};
+
 export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<FilterView>('upcoming');
@@ -145,14 +155,7 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
         {filtered.map((job) => (
           <JobCard
             key={job.id}
-            href={
-              job.status === 'completed'
-                ? `/jobs/${job.id}/pdf`
-                : buildCertificateResumeHref({
-                    jobId: job.id,
-                    jobType: job.job_type as JobType | null | undefined,
-                  })
-            }
+            href={getJobHref(job)}
             title={job.title ?? 'Untitled job'}
             address={job.address}
             status={job.status}

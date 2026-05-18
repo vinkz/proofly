@@ -100,6 +100,9 @@ export default async function JobDetailPage({
 
   const { job, items, photos, signatures, report } = data;
   const wizardRoute = getCertificateWizardRouteForJobType(job.job_type ?? null);
+  if (String(job.status ?? '').toLowerCase() === 'issued') {
+    redirect(`/jobs/${jobId}/complete`);
+  }
   if (job.status !== 'completed' && wizardRoute) {
     let jobRecordRow: { record: unknown } | null = null;
     try {

@@ -80,6 +80,7 @@ const SoloJobSchema = z
     landlordCity: z.string().optional(),
     landlordPostcode: z.string().optional(),
     landlordTel: z.string().optional(),
+    selectedPropertyJobId: z.string().uuid().optional().or(z.literal('')),
     requestId: z.string().uuid().optional(),
   })
   .superRefine((value, ctx) => {
@@ -273,6 +274,57 @@ const certTypesForJobType = (jobType: JobType) => {
   if (jobType === 'safety_check') return ['cp12'];
   return [];
 };
+
+async function copyCp12ApplianceIdentityFromPreviousJob(params: {
+  sb: Awaited<ReturnType<typeof supabaseServerServiceRole>>;
+  sourceJobId: string | null | undefined;
+  targetJobId: string;
+  userId: string;
+}) {
+  const sourceJobId = normalizeOptionalText(params.sourceJobId);
+  if (!sourceJobId || sourceJobId === params.targetJobId) return;
+
+  const { data: sourceJob, error: sourceJobErr } = await params.sb
+    .from('jobs')
+    .select('id, user_id')
+    .eq('id', sourceJobId as JobRow['id'])
+    .eq('user_id', params.userId)
+    .maybeSingle();
+  if (sourceJobErr) throw new Error(sourceJobErr.message);
+  if (!sourceJob) return;
+
+  const { data: applianceRows, error: appliancesErr } = await params.sb
+    .from('cp12_appliances')
+    .select('appliance_type, landlords_appliance, location, make_model, flue_type')
+    .eq('job_id', sourceJobId as JobRow['id']);
+  if (appliancesErr) {
+    if (appliancesErr.code === '42P01') return;
+    throw new Error(appliancesErr.message);
+  }
+
+  const rows = (applianceRows ?? [])
+    .filter((appliance) =>
+      Boolean(
+        appliance.appliance_type?.trim() ||
+          appliance.location?.trim() ||
+          appliance.make_model?.trim() ||
+          appliance.flue_type?.trim(),
+      ),
+    )
+    .map((appliance) => ({
+      job_id: params.targetJobId,
+      user_id: params.userId,
+      appliance_type: normalizeOptionalText(appliance.appliance_type),
+      landlords_appliance: normalizeOptionalText(appliance.landlords_appliance),
+      location: normalizeOptionalText(appliance.location),
+      make_model: normalizeOptionalText(appliance.make_model),
+      flue_type: normalizeOptionalText(appliance.flue_type),
+    }));
+
+  if (!rows.length) return;
+  const { error: insertErr } = await params.sb.from('cp12_appliances').insert(rows);
+  if (insertErr) throw new Error(insertErr.message);
+}
 
 const getSiteUrl = () =>
   (
@@ -1033,6 +1085,15 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
     fieldRows,
     'createSoloJob',
   );
+
+  if (isSafetyCheck && input.selectedPropertyJobId) {
+    await copyCp12ApplianceIdentityFromPreviousJob({
+      sb,
+      sourceJobId: input.selectedPropertyJobId,
+      targetJobId: job.id as string,
+      userId: user.id,
+    });
+  }
 
   if (input.requestId) {
     const { data: requestRow, error: requestReadErr } = await (sb as unknown as UntypedTableClient)

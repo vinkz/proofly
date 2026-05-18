@@ -277,6 +277,8 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [landlordCity, setLandlordCity] = useState(initialRequest?.landlordCity ?? '');
   const [landlordPostcode, setLandlordPostcode] = useState(initialRequest?.landlordPostcode ?? '');
   const [landlordTel, setLandlordTel] = useState(initialRequest?.landlordPhone ?? '');
+  const [step, setStep] = useState<1 | 2 | 3>(initialRequest ? 2 : 1);
+  const [path, setPath] = useState<'self' | 'landlord' | null>(initialRequest ? 'self' : null);
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
   const [landlordRequestMessage, setLandlordRequestMessage] = useState<string | null>(null);
   const [landlordRequestError, setLandlordRequestError] = useState<string | null>(null);
@@ -804,6 +806,30 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     });
   };
 
+  const handleCopyLandlordToJob = () => {
+    if (landlordAddressLine1) {
+      setJobAddressLine1(landlordAddressLine1);
+      setAddressLine1(landlordAddressLine1);
+    }
+    if (landlordAddressLine2) setJobAddressLine2(landlordAddressLine2);
+    if (landlordCity) {
+      setJobAddressCity(landlordCity);
+      setCity(landlordCity);
+    }
+    if (landlordPostcode) {
+      setJobAddressPostcode(landlordPostcode);
+      setPostcode(landlordPostcode);
+    }
+    if (landlordTel) {
+      setJobAddressTel(landlordTel);
+      setSitePhone(landlordTel);
+    }
+    if (landlordName && !jobAddressName) {
+      setJobAddressName(landlordName);
+      setPropertyName(landlordName);
+    }
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const derivedScheduledFor =
@@ -840,6 +866,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
           landlordCity,
           landlordPostcode,
           landlordTel,
+          selectedPropertyJobId: selectedPropertyKey,
           requestId: initialRequest?.id,
         });
         clearDraft();
@@ -869,458 +896,563 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     });
   };
 
-  const renderFormActions = () => (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        className="h-[40px] rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
-        onClick={() => router.push('/dashboard')}
-        disabled={isPending}
-      >
-        Cancel
-      </button>
-      <button
-        type="submit"
-        className="h-[40px] flex-1 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
-        disabled={isPending}
-        onClick={() => setSubmitMode('return')}
-      >
-        {isPending && submitMode === 'return' ? 'Saving…' : 'Save'}
-      </button>
-      <button
-        type="submit"
-        className="h-[40px] flex-[2] rounded-[10px] bg-[#111] text-[13px] font-medium text-white disabled:opacity-50"
-        disabled={isPending}
-        onClick={() => setSubmitMode('continue')}
-      >
-        {isPending && submitMode === 'continue' ? 'Saving…' : 'Save & continue'}
-      </button>
-    </div>
-  );
-
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
-      <div>
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Job type</p>
-        <div className="flex gap-2">
-          {LAUNCH_VISIBLE_JOB_TYPES.map((type) => (
-            <button
-              key={type}
-              type="button"
-              disabled={isPending}
-              onClick={() => setJobType(type)}
-              className={`flex h-[36px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
-                jobType === type
-                  ? 'bg-[#111] text-white'
-                  : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
-              }`}
-            >
-              {JOB_TYPE_LABELS[type]}
-            </button>
-          ))}
-        </div>
-        {demoEnabled ? (
-          <div className="mt-2 flex justify-end">
-            <button type="button" className="rounded-[6px] text-xs text-[var(--color-text-tertiary)] underline-offset-2 hover:underline" onClick={handleAutofill} disabled={isPending}>
-              Autofill test {JOB_TYPE_LABELS[jobType]}
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      {initialRequest ? (
-        <div className="rounded-[12px] border-[0.5px] border-[var(--color-action)]/30 bg-[var(--color-action-bg)] px-4 py-3">
-          <p className="text-[13px] font-medium text-[var(--color-action)]">Landlord request details</p>
-          <div className="mt-2 grid gap-1.5 md:grid-cols-2">
-            <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant:</span> {initialRequest.tenantName || 'Not provided'}</p>
-            <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
-            <p className="text-[12px] text-[var(--color-text-secondary)] md:col-span-2"><span className="font-medium text-[var(--color-text-primary)]">Preferred dates:</span> {initialRequest.preferredDates || 'Not provided'}</p>
-            <p className="text-[12px] text-[var(--color-text-secondary)] md:col-span-2"><span className="font-medium text-[var(--color-text-primary)]">Access notes:</span> {initialRequest.accessNotes || 'Not provided'}</p>
+      {/* Step header for steps 2 & 3 */}
+      {step > 1 ? (
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            className="flex items-center gap-1 text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
+            onClick={() => setStep(step === 3 ? 2 : 1)}
+            disabled={isPending}
+          >
+            <span aria-hidden="true">←</span> Back
+          </button>
+          <div className="flex items-center gap-1.5">
+            {[1, 2, 3].map((s) => (
+              <span
+                key={s}
+                className={`h-[5px] w-[5px] rounded-full transition-colors ${
+                  s === step
+                    ? 'bg-[var(--color-action)]'
+                    : s < step
+                      ? 'bg-[var(--color-action)]/40'
+                      : 'bg-[var(--color-border-secondary)]'
+                }`}
+              />
+            ))}
           </div>
         </div>
       ) : null}
 
-      {!initialRequest ? (
-        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <p className="mb-3 text-[14px] font-medium text-[var(--color-text-primary)]">Start from a landlord</p>
-          <div className="grid gap-4">
-            <div className="grid gap-2 sm:grid-cols-[1fr,auto]">
-              <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                  Search existing client
-                </label>
-                <Input
-                  value={clientName}
-                  onChange={(event) => handleClientNameInput(event.target.value)}
-                  placeholder="Start typing landlord name"
-                  className="mt-1.5 rounded-[10px]"
-                  list="job-existing-client-options"
+      {/* ===== STEP 1: Job type + path choice ===== */}
+      {step === 1 ? (
+        <>
+          <div>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Job type</p>
+            <div className="flex gap-2">
+              {LAUNCH_VISIBLE_JOB_TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
                   disabled={isPending}
-                />
-                <datalist id="job-existing-client-options">
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.name ?? ''} />
-                  ))}
-                </datalist>
+                  onClick={() => setJobType(type)}
+                  className={`flex h-[36px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
+                    jobType === type
+                      ? 'bg-[#111] text-white'
+                      : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+                  }`}
+                >
+                  {JOB_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+            {demoEnabled ? (
+              <div className="mt-2 flex justify-end">
+                <button type="button" className="rounded-[6px] text-xs text-[var(--color-text-tertiary)] underline-offset-2 hover:underline" onClick={handleAutofill} disabled={isPending}>
+                  Autofill test {JOB_TYPE_LABELS[jobType]}
+                </button>
               </div>
+            ) : null}
+          </div>
+
+          <div>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+            <div className="grid gap-2.5 sm:grid-cols-2">
               <button
                 type="button"
-                className={`self-end rounded-[10px] px-4 py-2 text-[13px] font-medium transition ${
-                  clientMode === 'new'
-                    ? 'bg-[#111] text-white'
-                    : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
-                }`}
-                onClick={() => {
-                  setClientMode('new');
-                  setSelectedClientId('');
-                  setSelectedPropertyKey('');
-                  setClientName('');
-                  setClientPhone('');
-                  setClientEmail('');
-                }}
                 disabled={isPending}
+                onClick={() => { setPath('self'); setStep(2); }}
+                className="flex items-start gap-3 rounded-[14px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-4 text-left transition hover:border-[var(--color-action)]"
               >
-                New client
+                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--color-background-secondary)] text-[17px]">📋</span>
+                <div>
+                  <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">Fill details myself</p>
+                  <p className="mt-0.5 text-[12px] leading-[1.5] text-[var(--color-text-secondary)]">Enter landlord and property details now. Pick a saved property to carry appliance history forward.</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => { setPath('landlord'); setStep(2); }}
+                className="flex items-start gap-3 rounded-[14px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-4 text-left transition hover:border-[var(--color-action)]"
+              >
+                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--color-background-secondary)] text-[17px]">📤</span>
+                <div>
+                  <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">Ask landlord</p>
+                  <p className="mt-0.5 text-[12px] leading-[1.5] text-[var(--color-text-secondary)]">Send them a link to fill in property and access details.</p>
+                </div>
               </button>
             </div>
-
-            {selectedClientId ? (
-              <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{clientName}</p>
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
-                  {availableProperties.length
-                    ? 'Choose a saved property to prefill Step 1, or leave manual for a new address.'
-                    : 'No saved properties yet. Fill in the address below manually.'}
-                </p>
-                {availableProperties.length ? (
-                  <Select
-                    value={selectedPropertyKey}
-                    onChange={(event) => setSelectedPropertyKey(event.target.value)}
-                    className="mt-2.5 rounded-[10px]"
-                    disabled={isPending}
-                  >
-                    <option value="">Manual / new property</option>
-                    {availableProperties.map((property) => (
-                      <option key={property.key} value={property.key}>
-                        {property.label}
-                      </option>
-                    ))}
-                  </Select>
-                ) : null}
-                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,auto]">
-                  <Input
-                    value={clientEmail}
-                    onChange={(event) => setClientEmail(event.target.value)}
-                    placeholder="Landlord email for prefill request"
-                    type="email"
-                    className="rounded-[10px]"
-                    disabled={isPending}
-                  />
-                  <button
-                    type="button"
-                    className="rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
-                    onClick={handleRequestLandlordPrefill}
-                    disabled={isPending || !clientEmail.trim()}
-                  >
-                    Ask landlord
-                  </button>
-                </div>
-                {landlordRequestMessage ? (
-                  <p className="mt-2 text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
-                ) : null}
-                {landlordRequestError ? (
-                  <p className="mt-2 text-[12px] font-medium text-[var(--color-red)]">{landlordRequestError}</p>
-                ) : null}
-              </div>
-            ) : null}
           </div>
-        </div>
+        </>
       ) : null}
 
-      <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-        <p className="mb-3 text-[14px] font-medium text-[var(--color-text-primary)]">Job Address</p>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-              {scheduleFieldLabel}
-            </label>
-            <Input
-              type={isCp12Upcoming ? 'date' : 'datetime-local'}
-              value={isCp12Upcoming ? inspectionDate : scheduledFor}
-              onChange={(event) =>
-                isCp12Upcoming ? setInspectionDate(event.target.value) : setScheduledFor(event.target.value)
-              }
-              className="mt-1.5 rounded-[10px]"
-              required
-              disabled={isPending}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-              Property name / reference
-            </label>
-            <Input
-              value={jobAddressName}
-              onChange={(event) =>
-                isCp12Upcoming
-                  ? handleCp12PropertyReferenceInput(event.target.value)
-                  : handlePropertyReferenceInput(event.target.value)
-              }
-              placeholder="Flat 2 - Tenant entrance"
-              className="mt-1"
-              list={isCp12Upcoming ? undefined : 'job-property-reference-options'}
-              required
-              disabled={isPending}
-            />
-            {!isCp12Upcoming && propertySuggestions.length ? (
-              <datalist id="job-property-reference-options">
-                {propertySuggestions.map((property) => (
-                  <option key={property.key} value={property.value} label={property.label} />
-                ))}
-              </datalist>
-            ) : null}
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-              Address line 1
-            </label>
-            <div className="relative mt-1.5">
-              <Input
-                value={jobAddressLine1}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setJobAddressLine1(value);
-                  setAddressLine1(value);
-                  setJobAddressSearchError(null);
-                  setSelectedJobAddressMatchId(null);
-                }}
-                placeholder="Start typing address or postcode"
-                required={!initialRequest}
-                disabled={isPending}
-              />
-              {isJobAddressLookupPending && !jobAddressSuggestions.length ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-lg">
-                  Searching addresses…
-                </div>
-              ) : null}
-              {jobAddressSuggestions.length ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] shadow-lg">
-                  <div className="max-h-72 overflow-y-auto p-1.5">
-                    {jobAddressSuggestions.map((suggestion) => {
-                      const isSelected = selectedJobAddressMatchId === suggestion.id;
-                      return (
-                        <button
-                          key={suggestion.id}
-                          type="button"
-                          onClick={() => void handleJobAddressMatchSelect(suggestion)}
-                          className={`w-full rounded-[8px] px-3 py-2 text-left transition ${
-                            isSelected
-                              ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
-                              : 'hover:bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]'
-                          }`}
-                        >
-                          <div className="text-sm font-medium">{suggestion.label}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-              {jobAddressSearchError ? <p className="mt-2 text-xs text-red-600">{jobAddressSearchError}</p> : null}
+      {/* ===== STEP 2: Landlord / client details ===== */}
+      {step === 2 ? (
+        <>
+          {initialRequest ? (
+            <div className="rounded-[12px] border-[0.5px] border-[var(--color-action)]/30 bg-[var(--color-action-bg)] px-4 py-3">
+              <p className="text-[13px] font-medium text-[var(--color-action)]">Landlord request details</p>
+              <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant:</span> {initialRequest.tenantName || 'Not provided'}</p>
+                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
+                <p className="text-[12px] text-[var(--color-text-secondary)] md:col-span-2"><span className="font-medium text-[var(--color-text-primary)]">Preferred dates:</span> {initialRequest.preferredDates || 'Not provided'}</p>
+                <p className="text-[12px] text-[var(--color-text-secondary)] md:col-span-2"><span className="font-medium text-[var(--color-text-primary)]">Access notes:</span> {initialRequest.accessNotes || 'Not provided'}</p>
+              </div>
             </div>
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-              Address line 2
-            </label>
-            <Input
-              value={jobAddressLine2}
-              onChange={(event) => setJobAddressLine2(event.target.value)}
-              placeholder="Optional"
-              className="mt-1"
-              disabled={isPending}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
-            <Input
-              value={jobAddressCity}
-              onChange={(event) => setJobAddressCity(event.target.value)}
-              placeholder="London"
-              className="mt-1"
-              required={!initialRequest}
-              disabled={isPending}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
-            <Input
-              value={jobAddressPostcode}
-              onChange={(event) => setJobAddressPostcode(event.target.value)}
-              placeholder="SW1A 1AA"
-              className="mt-1"
-              required={!initialRequest}
-              disabled={isPending}
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
-            <Input
-              value={jobAddressTel}
-              onChange={(event) => setJobAddressTel(event.target.value)}
-              placeholder="020 7946 0958"
-              className="mt-1"
-              disabled={isPending}
-              required={isCp12Upcoming}
-            />
-          </div>
-        </div>
-      </div>
+          ) : null}
 
-      <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-        <p className="mb-3 text-[14px] font-medium text-[var(--color-text-primary)]">{partyCardTitle}</p>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
-            <Input
-              value={partyNameValue}
-              onChange={(event) =>
-                isCp12Upcoming ? handleLandlordNameInput(event.target.value) : handleClientNameInput(event.target.value)
-              }
-              placeholder={isCp12Upcoming ? 'Landlord / Owner name' : 'Client name'}
-              className="mt-1"
-              list={isCp12Upcoming ? undefined : 'job-client-options'}
-              required
-              disabled={isPending}
-            />
-            {!isCp12Upcoming ? (
-              <datalist id="job-client-options">
-                {clients.map((client) => (
-                  <option
-                    key={client.id}
-                    value={client.name ?? ''}
+          {/* Client search + property selection */}
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Start from a landlord</p>
+              {path === 'landlord' ? (
+                <span className="inline-flex items-center rounded-[6px] bg-[var(--color-action-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-action)]">Ask landlord mode</span>
+              ) : null}
+            </div>
+            <div className="grid gap-4">
+              <div className="grid gap-2 sm:grid-cols-[1fr,auto]">
+                <div>
+                  <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                    Search existing client
+                  </label>
+                  <Input
+                    value={clientName}
+                    onChange={(event) => handleClientNameInput(event.target.value)}
+                    placeholder="Start typing landlord name"
+                    className="mt-1.5 rounded-[10px]"
+                    list="job-existing-client-options"
+                    disabled={isPending}
                   />
-                ))}
-              </datalist>
-            ) : null}
-          </div>
-          <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
-            <Input
-              value={landlordCompany}
-              onChange={(event) => setLandlordCompany(event.target.value)}
-              placeholder="Optional"
-              className="mt-1"
-              disabled={isPending}
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-              Address line 1
-            </label>
-            <div className="relative mt-1.5">
-              <Input
-                value={landlordAddressLine1}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setLandlordAddressLine1(value);
-                  setPartyAddressSearchError(null);
-                  setSelectedPartyAddressMatchId(null);
-                }}
-                placeholder="Start typing address or postcode"
-                required
-                disabled={isPending}
-              />
-              {isPartyAddressLookupPending && !partyAddressSuggestions.length ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-lg">
-                  Searching addresses…
+                  <datalist id="job-existing-client-options">
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.name ?? ''} />
+                    ))}
+                  </datalist>
                 </div>
-              ) : null}
-              {partyAddressSuggestions.length ? (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] shadow-lg">
-                  <div className="max-h-72 overflow-y-auto p-1.5">
-                    {partyAddressSuggestions.map((suggestion) => {
-                      const isSelected = selectedPartyAddressMatchId === suggestion.id;
-                      return (
-                        <button
-                          key={suggestion.id}
-                          type="button"
-                          onClick={() => void handlePartyAddressMatchSelect(suggestion)}
-                          className={`w-full rounded-[8px] px-3 py-2 text-left transition ${
-                            isSelected
-                              ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
-                              : 'hover:bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]'
-                          }`}
-                        >
-                          <div className="text-sm font-medium">{suggestion.label}</div>
-                        </button>
-                      );
-                    })}
+                <button
+                  type="button"
+                  className={`self-end rounded-[10px] px-4 py-2 text-[13px] font-medium transition ${
+                    clientMode === 'new'
+                      ? 'bg-[#111] text-white'
+                      : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+                  }`}
+                  onClick={() => {
+                    setClientMode('new');
+                    setSelectedClientId('');
+                    setSelectedPropertyKey('');
+                    setClientName('');
+                    setClientPhone('');
+                    setClientEmail('');
+                  }}
+                  disabled={isPending}
+                >
+                  New client
+                </button>
+              </div>
+
+              {selectedClientId ? (
+                <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
+                  <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{clientName}</p>
+                  {availableProperties.length ? (
+                    <>
+                      <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                        Choose a saved property to prefill all details.
+                      </p>
+                      <Select
+                        value={selectedPropertyKey}
+                        onChange={(event) => setSelectedPropertyKey(event.target.value)}
+                        className="mt-2.5 rounded-[10px]"
+                        disabled={isPending}
+                      >
+                        <option value="">Manual / new property</option>
+                        {availableProperties.map((property) => (
+                          <option key={property.key} value={property.key}>
+                            {property.label}
+                          </option>
+                        ))}
+                      </Select>
+                      {selectedPropertyKey ? (
+                        <p className="mt-1.5 text-[11px] font-medium text-[var(--color-action)]">
+                          ✓ Previous appliance records will carry forward to this job.
+                        </p>
+                      ) : (
+                        <p className="mt-1.5 text-[11px] text-[var(--color-text-tertiary)]">
+                          Select a saved property above — this is the fastest path and carries appliance history forward.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                      No saved properties yet. Fill in the address manually below.
+                    </p>
+                  )}
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,auto]">
+                    <Input
+                      value={clientEmail}
+                      onChange={(event) => setClientEmail(event.target.value)}
+                      placeholder="Landlord email for prefill request"
+                      type="email"
+                      className="rounded-[10px]"
+                      disabled={isPending}
+                    />
+                    <button
+                      type="button"
+                      className="rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
+                      onClick={handleRequestLandlordPrefill}
+                      disabled={isPending || !clientEmail.trim()}
+                    >
+                      Ask landlord
+                    </button>
                   </div>
+                  {landlordRequestMessage ? (
+                    <p className="mt-2 text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
+                  ) : null}
+                  {landlordRequestError ? (
+                    <p className="mt-2 text-[12px] font-medium text-[var(--color-red)]">{landlordRequestError}</p>
+                  ) : null}
                 </div>
               ) : null}
-              {partyAddressSearchError ? <p className="mt-2 text-xs text-red-600">{partyAddressSearchError}</p> : null}
             </div>
           </div>
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-              Address line 2
-            </label>
-            <Input
-              value={landlordAddressLine2}
-              onChange={(event) => setLandlordAddressLine2(event.target.value)}
-              placeholder="Optional"
-              className="mt-1"
-              disabled={isPending}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
-            <Input
-              value={landlordCity}
-              onChange={(event) => setLandlordCity(event.target.value)}
-              placeholder="London"
-              className="mt-1"
-              required
-              disabled={isPending}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
-            <Input
-              value={landlordPostcode}
-              onChange={(event) => setLandlordPostcode(event.target.value)}
-              placeholder="SW1A 1AA"
-              className="mt-1"
-              required
-              disabled={isPending}
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
-            <Input
-              value={landlordTel}
-              onChange={(event) => setLandlordTel(event.target.value)}
-              placeholder="Optional"
-              className="mt-1"
-              disabled={isPending}
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</label>
-            <Input
-              value={clientEmail}
-              onChange={(event) => setClientEmail(event.target.value)}
-              type="email"
-              placeholder="landlord@example.com"
-              className="mt-1"
-              disabled={isPending}
-            />
-          </div>
-        </div>
-      </div>
 
-      {renderFormActions()}
+          {/* Landlord / party details */}
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <p className="mb-3 text-[14px] font-medium text-[var(--color-text-primary)]">{partyCardTitle}</p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
+                <Input
+                  value={partyNameValue}
+                  onChange={(event) =>
+                    isCp12Upcoming ? handleLandlordNameInput(event.target.value) : handleClientNameInput(event.target.value)
+                  }
+                  placeholder={isCp12Upcoming ? 'Landlord / Owner name' : 'Client name'}
+                  className="mt-1"
+                  list={isCp12Upcoming ? undefined : 'job-client-options'}
+                  required
+                  disabled={isPending}
+                />
+                {!isCp12Upcoming ? (
+                  <datalist id="job-client-options">
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.name ?? ''} />
+                    ))}
+                  </datalist>
+                ) : null}
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
+                <Input
+                  value={landlordCompany}
+                  onChange={(event) => setLandlordCompany(event.target.value)}
+                  placeholder="Optional"
+                  className="mt-1"
+                  disabled={isPending}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  Address line 1
+                </label>
+                <div className="relative mt-1.5">
+                  <Input
+                    value={landlordAddressLine1}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setLandlordAddressLine1(value);
+                      setPartyAddressSearchError(null);
+                      setSelectedPartyAddressMatchId(null);
+                    }}
+                    placeholder="Start typing address or postcode"
+                    disabled={isPending}
+                  />
+                  {isPartyAddressLookupPending && !partyAddressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-lg">
+                      Searching addresses…
+                    </div>
+                  ) : null}
+                  {partyAddressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] shadow-lg">
+                      <div className="max-h-72 overflow-y-auto p-1.5">
+                        {partyAddressSuggestions.map((suggestion) => {
+                          const isSelected = selectedPartyAddressMatchId === suggestion.id;
+                          return (
+                            <button
+                              key={suggestion.id}
+                              type="button"
+                              onClick={() => void handlePartyAddressMatchSelect(suggestion)}
+                              className={`w-full rounded-[8px] px-3 py-2 text-left transition ${
+                                isSelected
+                                  ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                                  : 'hover:bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]'
+                              }`}
+                            >
+                              <div className="text-sm font-medium">{suggestion.label}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  {partyAddressSearchError ? <p className="mt-2 text-xs text-red-600">{partyAddressSearchError}</p> : null}
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  Address line 2
+                </label>
+                <Input
+                  value={landlordAddressLine2}
+                  onChange={(event) => setLandlordAddressLine2(event.target.value)}
+                  placeholder="Optional"
+                  className="mt-1"
+                  disabled={isPending}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                <Input
+                  value={landlordCity}
+                  onChange={(event) => setLandlordCity(event.target.value)}
+                  placeholder="London"
+                  className="mt-1"
+                  disabled={isPending}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                <Input
+                  value={landlordPostcode}
+                  onChange={(event) => setLandlordPostcode(event.target.value)}
+                  placeholder="SW1A 1AA"
+                  className="mt-1"
+                  disabled={isPending}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
+                <Input
+                  value={landlordTel}
+                  onChange={(event) => setLandlordTel(event.target.value)}
+                  placeholder="Optional"
+                  className="mt-1"
+                  disabled={isPending}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</label>
+                <Input
+                  value={clientEmail}
+                  onChange={(event) => setClientEmail(event.target.value)}
+                  type="email"
+                  placeholder="landlord@example.com"
+                  className="mt-1"
+                  disabled={isPending}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              disabled={isPending}
+              className="inline-flex h-[40px] items-center justify-center rounded-[10px] bg-[#111] px-5 text-[13px] font-medium text-white disabled:opacity-50"
+            >
+              Next →
+            </button>
+          </div>
+        </>
+      ) : null}
+
+      {/* ===== STEP 3: Job address ===== */}
+      {step === 3 ? (
+        <>
+          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Job address</p>
+              {landlordAddressLine1 || landlordName ? (
+                <button
+                  type="button"
+                  onClick={handleCopyLandlordToJob}
+                  disabled={isPending}
+                  className="text-[11px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-action)] hover:underline underline-offset-2"
+                >
+                  ← Copy landlord address
+                </button>
+              ) : null}
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  {scheduleFieldLabel}
+                </label>
+                <Input
+                  type={isCp12Upcoming ? 'date' : 'datetime-local'}
+                  value={isCp12Upcoming ? inspectionDate : scheduledFor}
+                  onChange={(event) =>
+                    isCp12Upcoming ? setInspectionDate(event.target.value) : setScheduledFor(event.target.value)
+                  }
+                  className="mt-1.5 rounded-[10px]"
+                  required
+                  disabled={isPending}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  Property name / reference
+                </label>
+                <Input
+                  value={jobAddressName}
+                  onChange={(event) =>
+                    isCp12Upcoming
+                      ? handleCp12PropertyReferenceInput(event.target.value)
+                      : handlePropertyReferenceInput(event.target.value)
+                  }
+                  placeholder="Flat 2 - Tenant entrance"
+                  className="mt-1"
+                  list={isCp12Upcoming ? undefined : 'job-property-reference-options'}
+                  required
+                  disabled={isPending}
+                />
+                {!isCp12Upcoming && propertySuggestions.length ? (
+                  <datalist id="job-property-reference-options">
+                    {propertySuggestions.map((property) => (
+                      <option key={property.key} value={property.value} label={property.label} />
+                    ))}
+                  </datalist>
+                ) : null}
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  Address line 1
+                </label>
+                <div className="relative mt-1.5">
+                  <Input
+                    value={jobAddressLine1}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setJobAddressLine1(value);
+                      setAddressLine1(value);
+                      setJobAddressSearchError(null);
+                      setSelectedJobAddressMatchId(null);
+                    }}
+                    placeholder="Start typing address or postcode"
+                    required={!initialRequest}
+                    disabled={isPending}
+                  />
+                  {isJobAddressLookupPending && !jobAddressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-lg">
+                      Searching addresses…
+                    </div>
+                  ) : null}
+                  {jobAddressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] shadow-lg">
+                      <div className="max-h-72 overflow-y-auto p-1.5">
+                        {jobAddressSuggestions.map((suggestion) => {
+                          const isSelected = selectedJobAddressMatchId === suggestion.id;
+                          return (
+                            <button
+                              key={suggestion.id}
+                              type="button"
+                              onClick={() => void handleJobAddressMatchSelect(suggestion)}
+                              className={`w-full rounded-[8px] px-3 py-2 text-left transition ${
+                                isSelected
+                                  ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                                  : 'hover:bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]'
+                              }`}
+                            >
+                              <div className="text-sm font-medium">{suggestion.label}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  {jobAddressSearchError ? <p className="mt-2 text-xs text-red-600">{jobAddressSearchError}</p> : null}
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  Address line 2
+                </label>
+                <Input
+                  value={jobAddressLine2}
+                  onChange={(event) => setJobAddressLine2(event.target.value)}
+                  placeholder="Optional"
+                  className="mt-1"
+                  disabled={isPending}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                <Input
+                  value={jobAddressCity}
+                  onChange={(event) => setJobAddressCity(event.target.value)}
+                  placeholder="London"
+                  className="mt-1"
+                  required={!initialRequest}
+                  disabled={isPending}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                <Input
+                  value={jobAddressPostcode}
+                  onChange={(event) => setJobAddressPostcode(event.target.value)}
+                  placeholder="SW1A 1AA"
+                  className="mt-1"
+                  required={!initialRequest}
+                  disabled={isPending}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
+                <Input
+                  value={jobAddressTel}
+                  onChange={(event) => setJobAddressTel(event.target.value)}
+                  placeholder="020 7946 0958"
+                  className="mt-1"
+                  disabled={isPending}
+                  required={isCp12Upcoming}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="h-[40px] rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
+              onClick={() => router.push('/dashboard')}
+              disabled={isPending}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="h-[40px] flex-1 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
+              disabled={isPending}
+              onClick={() => setSubmitMode('return')}
+            >
+              {isPending && submitMode === 'return' ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="submit"
+              className="h-[40px] flex-[2] rounded-[10px] bg-[#111] text-[13px] font-medium text-white disabled:opacity-50"
+              disabled={isPending}
+              onClick={() => setSubmitMode('continue')}
+            >
+              {isPending && submitMode === 'continue' ? 'Saving…' : 'Save & continue'}
+            </button>
+          </div>
+        </>
+      ) : null}
     </form>
   );
 }

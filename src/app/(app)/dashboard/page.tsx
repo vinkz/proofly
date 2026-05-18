@@ -603,9 +603,9 @@ function NoRequestsEmpty({ url }: { url: string }) {
       <div className="mx-auto mb-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--color-action-bg)] text-[var(--color-action)]">
         <LinkIcon />
       </div>
-      <h3 className="text-[16px] font-medium text-[var(--color-text-primary)]">No requests yet</h3>
-      <p className="mx-auto mt-1.5 max-w-sm text-[14px] font-normal leading-[1.6] text-[var(--color-text-secondary)]">
-        Send your request link to a landlord so they can return the job details directly.
+      <h3 className="text-[16px] font-medium text-[var(--color-text-primary)]">Ask landlord for job details</h3>
+      <p className="mx-auto mt-1.5 max-w-xs text-[13px] font-normal leading-[1.6] text-[var(--color-text-secondary)]">
+        Share your request link. The landlord fills in property and access details directly.
       </p>
       <SendRequestLinkCard requestUrl={url} />
     </div>

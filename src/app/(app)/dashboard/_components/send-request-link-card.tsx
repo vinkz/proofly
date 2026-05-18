@@ -8,56 +8,42 @@ import { sendEngineerRequestLinkToLandlord } from '@/server/job-requests';
 
 function normalizePhoneForWhatsapp(value: string) {
   const digits = value.replace(/\D/g, '');
-  if (!digits) return '';
+  if (digits.length < 7) return '';
   if (digits.startsWith('44')) return digits;
   if (digits.startsWith('0')) return `44${digits.slice(1)}`;
   return digits;
 }
 
 export function SendRequestLinkCard({ requestUrl }: { requestUrl: string }) {
-  const [landlordName, setLandlordName] = useState('');
-  const [landlordEmail, setLandlordEmail] = useState('');
-  const [landlordPhone, setLandlordPhone] = useState('');
+  const [contact, setContact] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const trimmedContact = contact.trim();
+  const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedContact);
+  const whatsappPhone = normalizePhoneForWhatsapp(trimmedContact);
 
   const whatsappUrl = useMemo(() => {
-    const phone = normalizePhoneForWhatsapp(landlordPhone);
-    if (!phone) return '';
+    if (!whatsappPhone || looksLikeEmail) return '';
     const text = [
-      landlordName.trim() ? `Hi ${landlordName.trim()},` : 'Hi,',
+      'Hi,',
       '',
       'Please send your property and access details through my CertNow request link:',
       requestUrl,
     ].join('\n');
-    return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
-  }, [landlordName, landlordPhone, requestUrl]);
+    return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(text)}`;
+  }, [looksLikeEmail, requestUrl, whatsappPhone]);
 
-  const canSend = Boolean(landlordEmail.trim() || whatsappUrl);
+  const canSend = looksLikeEmail || Boolean(whatsappUrl);
+  const actionLabel = looksLikeEmail ? 'Send to email' : whatsappUrl ? 'Send via WhatsApp' : 'Enter email or mobile';
 
   return (
     <div className="mt-4 space-y-2 text-left">
       <Input
-        value={landlordName}
-        onChange={(event) => setLandlordName(event.target.value)}
-        placeholder="Landlord name"
-        className="h-10 rounded-[10px]"
-        disabled={isPending}
-      />
-      <Input
-        value={landlordEmail}
-        onChange={(event) => setLandlordEmail(event.target.value)}
-        placeholder="Landlord email"
-        type="email"
-        className="h-10 rounded-[10px]"
-        disabled={isPending}
-      />
-      <Input
-        value={landlordPhone}
-        onChange={(event) => setLandlordPhone(event.target.value)}
-        placeholder="Mobile number"
-        type="tel"
+        value={contact}
+        onChange={(event) => setContact(event.target.value)}
+        placeholder="Landlord email or mobile number"
+        inputMode="email"
         className="h-10 rounded-[10px]"
         disabled={isPending}
       />
@@ -69,12 +55,11 @@ export function SendRequestLinkCard({ requestUrl }: { requestUrl: string }) {
           setMessage(null);
           setError(null);
 
-          if (landlordEmail.trim()) {
+          if (looksLikeEmail) {
             startTransition(async () => {
               try {
                 const result = await sendEngineerRequestLinkToLandlord({
-                  landlordName,
-                  landlordEmail,
+                  landlordEmail: trimmedContact,
                 });
                 setMessage(
                   result.status === 'sent'
@@ -94,7 +79,7 @@ export function SendRequestLinkCard({ requestUrl }: { requestUrl: string }) {
           }
         }}
       >
-        {isPending ? 'Sending...' : landlordEmail.trim() ? 'Send email' : 'Send by WhatsApp'}
+        {isPending ? 'Sending...' : actionLabel}
       </Button>
       {message ? <p className="text-center text-[13px] font-medium text-[var(--color-action)]">{message}</p> : null}
       {error ? <p className="text-center text-[13px] font-medium text-[var(--color-red)]">{error}</p> : null}
