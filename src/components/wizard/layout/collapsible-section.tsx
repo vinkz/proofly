@@ -17,7 +17,7 @@ export function CollapsibleSection({
   const contentId = useId();
 
   return (
-    <section className="rounded-3xl border border-white/20 bg-white/85 shadow-sm">
+    <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] shadow-sm">
       <button
         type="button"
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
@@ -26,13 +26,13 @@ export function CollapsibleSection({
         onClick={() => setIsOpen((prev) => !prev)}
       >
         <div>
-          <p className="text-sm font-semibold text-slate-900">{title}</p>
+          <p className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</p>
           {subtitle ? (
-            <p className="text-xs text-slate-500">{subtitle}</p>
+            <p className="text-xs text-[var(--color-text-secondary)]">{subtitle}</p>
           ) : null}
         </div>
         <span
-          className={`flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-transform ${
+          className={`flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)] transition-transform ${
             isOpen ? 'rotate-180' : ''
           }`}
           aria-hidden="true"

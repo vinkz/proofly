@@ -270,9 +270,9 @@ export function ApplianceStep({
             const modelOptionsForMake = [...modelsForMake, 'Not listed'].map((model) => ({ label: model, value: model }));
 
             return (
-              <div key={`appliance-inline-${index}`} className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm space-y-3">
+              <div key={`appliance-inline-${index}`} className="space-y-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-muted">Appliance {index + 1} identity</p>
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">Appliance {index + 1} identity</p>
                   <div className="flex shrink-0 items-center gap-2">
                     {renderInlineHeaderAction?.(index)}
                     {allowMultiple && activeAppliances.length > 1 ? (
@@ -338,8 +338,8 @@ export function ApplianceStep({
                   />
                   {showExtendedFields ? (
                     <div className="sm:col-span-2 space-y-2">
-                      <div className="flex items-center justify-between rounded-2xl border border-white/30 bg-white/60 px-3 py-2">
-                        <p className="text-sm font-semibold text-muted">Optional manufacturer details</p>
+                      <div className="flex items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-2">
+                        <p className="text-sm font-semibold text-[var(--color-text-primary)]">Optional manufacturer details</p>
                         <Button type="button" variant="ghost" className="h-8 rounded-full px-3 text-xs" onClick={() => setShowOptional((v) => !v)}>
                           {showOptional ? 'Hide' : 'Show'}
                         </Button>
@@ -489,8 +489,8 @@ export function ApplianceStep({
               />
               {showExtendedFields ? (
                 <div className="sm:col-span-2 space-y-2">
-                  <div className="flex items-center justify-between rounded-2xl border border-white/30 bg-white/60 px-3 py-2">
-                    <p className="text-sm font-semibold text-muted">Optional manufacturer details</p>
+                  <div className="flex items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-2">
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">Optional manufacturer details</p>
                     <Button type="button" variant="ghost" className="h-8 rounded-full px-3 text-xs" onClick={() => setShowOptional((v) => !v)}>
                       {showOptional ? 'Hide' : 'Show'}
                     </Button>

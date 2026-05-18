@@ -26,14 +26,14 @@ export function ApplianceProfileCard({ appliance, onEdit, onRemove }: ApplianceP
   const subtitle = [formatValue(appliance.type), formatValue(appliance.location)].filter(Boolean).join(' • ').trim();
   const serial = formatValue(appliance.serial);
   return (
-    <div className="rounded-3xl border border-white/20 bg-white/85 p-4 shadow-sm">
+    <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          {title ? <p className="text-sm font-semibold text-muted">{title}</p> : null}
-          {subtitle ? <p className="text-xs text-muted-foreground/70">{subtitle}</p> : null}
-          {serial ? <p className="mt-1 text-xs text-muted-foreground/70">Serial: {serial}</p> : null}
+          {title ? <p className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</p> : null}
+          {subtitle ? <p className="text-xs text-[var(--color-text-secondary)]">{subtitle}</p> : null}
+          {serial ? <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Serial: {serial}</p> : null}
           {!title && !subtitle && !serial ? (
-            <p className="text-xs text-muted-foreground/60">Tap edit to add appliance details</p>
+            <p className="text-xs text-[var(--color-text-secondary)]">Tap edit to add appliance details</p>
           ) : null}
         </div>
         <div className="flex items-center gap-2">

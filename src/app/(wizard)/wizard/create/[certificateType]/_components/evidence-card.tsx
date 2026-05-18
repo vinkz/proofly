@@ -33,8 +33,8 @@ export function EvidenceCard({
   return (
     <div className="flex flex-col rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-muted">{title}</p>
-        {photoPreview ? <span className="text-[10px] text-gray-500">Photo uploaded</span> : null}
+        <p className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</p>
+        {photoPreview ? <span className="text-[10px] text-[var(--color-text-secondary)]">Photo uploaded</span> : null}
       </div>
       <div className="mt-3 grid gap-2">
         {fields.map((field) => {
@@ -71,7 +71,7 @@ export function EvidenceCard({
           );
         })}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/20 pt-3 text-xs font-semibold text-muted">
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--color-border-secondary)] pt-3 text-xs font-semibold text-[var(--color-text-primary)]">
         <button
           type="button"
           className="flex items-center gap-1 rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-1 transition hover:border-[var(--color-action)]"
