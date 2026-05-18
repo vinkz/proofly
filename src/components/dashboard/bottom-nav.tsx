@@ -17,7 +17,7 @@ const items: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', Icon: HomeIcon },
   { href: '/properties', label: 'Properties', Icon: BriefcaseIcon, notificationKey: 'jobs' },
   { href: '/clients', label: 'Clients', Icon: UsersIcon },
-  { href: '/documents', label: 'Docs', Icon: FileTextIcon },
+  { href: '/jobs', label: 'Jobs', Icon: FileTextIcon },
   { href: '/settings', label: 'Settings', Icon: SettingsIcon },
 ];
 

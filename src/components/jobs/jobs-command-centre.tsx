@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 
-import { buildCertificateResumeHref } from '@/lib/certificate-resume';
 import { JobCard } from './job-card';
 import { Input } from '@/components/ui/input';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
@@ -77,15 +76,7 @@ const buildSearchIndex = (job: JobSummary) => {
     .toLowerCase();
 };
 
-const getJobHref = (job: JobSummary) => {
-  const status = String(job.status ?? '').toLowerCase();
-  if (status === 'issued') return `/jobs/${job.id}/complete`;
-  if (['completed', 'closed', 'delivered'].includes(status)) return `/jobs/${job.id}/pdf`;
-  return buildCertificateResumeHref({
-    jobId: job.id,
-    jobType: job.job_type as JobType | null | undefined,
-  });
-};
+const getJobHref = (job: JobSummary) => `/jobs/${job.id}/complete`;
 
 export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
   const [query, setQuery] = useState('');
