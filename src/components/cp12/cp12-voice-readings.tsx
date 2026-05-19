@@ -99,7 +99,7 @@ export function Cp12VoiceReadings({
     (scope === 'pressure'
       ? 'Speak pressure'
       : scope === 'combustion'
-        ? 'Speak FGA readings'
+        ? 'Speak combustion'
       : scope === 'high'
         ? 'Speak high'
         : scope === 'low'

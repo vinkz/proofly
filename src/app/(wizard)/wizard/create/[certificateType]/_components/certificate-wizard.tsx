@@ -1,10 +1,11 @@
 'use client';
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
+import { OfflineDraftBanner } from '@/components/certificates/offline-draft-banner';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -498,6 +499,9 @@ export function CertificateWizard({
 
   const isCp12 = useMemo(() => certificateType === 'cp12', [certificateType]);
   const isBusy = isPending || isGeneratingPdf;
+  const [isOfflineDraftSyncing, setIsOfflineDraftSyncing] = useState(false);
+  const [offlineDraftSyncError, setOfflineDraftSyncError] = useState<string | null>(null);
+  const wasOfflineRef = useRef(false);
   const totalSteps = (isCp12 ? 4 : 4) + stepOffset;
   const baseOffset = stepOffset;
   const firstStep = 1;
@@ -612,10 +616,44 @@ export function CertificateWizard({
       step,
     ],
   );
+  const cp12DraftSyncState = useMemo(
+    () => ({
+      info,
+      jobAddress,
+      evidenceFields,
+      appliances,
+      defects,
+      completionDate,
+      engineerSignature,
+      engineerSignaturePath,
+      customerSignature,
+      customerSignaturePath,
+    }),
+    [
+      appliances,
+      completionDate,
+      customerSignature,
+      customerSignaturePath,
+      defects,
+      engineerSignature,
+      engineerSignaturePath,
+      evidenceFields,
+      info,
+      jobAddress,
+    ],
+  );
 
-  const { clearDraft } = useWizardDraft<Cp12DraftState>({
+  const {
+    clearDraft,
+    hasUnsyncedChanges,
+    isOnline,
+    isReady: isDraftReady,
+    localUpdatedAt,
+    markSynced,
+  } = useWizardDraft<Cp12DraftState>({
     storageKey: draftStorageKey,
     state: cp12Draft,
+    syncState: cp12DraftSyncState,
     onRestore: (draft) => {
       setStep(Math.min(4, Math.max(1, draft.step || startStep)));
       setInfo((prev) => ({ ...prev, ...(draft.info ?? {}) }));
@@ -634,6 +672,98 @@ export function CertificateWizard({
       setLandlordAddressSearchQuery(draft.landlordAddressSearchQuery ?? '');
     },
   });
+
+  const buildCp12DraftPersistencePayload = useCallback(() => {
+    const nextJobAddress = { ...jobAddress };
+    const derivedAddress = deriveJobAddressFromFields(nextJobAddress, info);
+    if (!nextJobAddress.job_address_line1.trim()) nextJobAddress.job_address_line1 = derivedAddress.line1;
+    if (!nextJobAddress.job_address_line2.trim() && derivedAddress.line2) nextJobAddress.job_address_line2 = derivedAddress.line2;
+    if (!nextJobAddress.job_address_city.trim() && derivedAddress.city) nextJobAddress.job_address_city = derivedAddress.city;
+    if (!nextJobAddress.job_postcode.trim()) nextJobAddress.job_postcode = info.postcode.trim();
+    if (!nextJobAddress.job_tel.trim()) nextJobAddress.job_tel = info.customer_phone.trim();
+
+    const data = {
+      ...info,
+      inspection_date: info.inspection_date || completionDate,
+      property_address: buildPropertyAddressFromJobAddress(nextJobAddress),
+      postcode: nextJobAddress.job_postcode || info.postcode,
+      landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
+    };
+
+    const jobPayload = {
+      ...data,
+      engineer_name: resolvedInitialInfo.engineer_name ?? '',
+      gas_safe_number: resolvedInitialInfo.gas_safe_number ?? '',
+      company_name: resolvedInitialInfo.company_name ?? '',
+      company_address: resolvedInitialInfo.company_address ?? '',
+      company_postcode: resolvedInitialInfo.company_postcode ?? '',
+      company_phone: resolvedInitialInfo.company_phone ?? '',
+      engineer_phone: resolvedInitialInfo.engineer_phone ?? '',
+      job_tel: nextJobAddress.job_tel ?? '',
+    };
+
+    return {
+      data,
+      jobAddress: nextJobAddress,
+      jobFields: {
+        job_reference: nextJobAddress.job_reference,
+        job_address_name: nextJobAddress.job_address_name,
+        job_address_line1: nextJobAddress.job_address_line1,
+        job_address_line2: nextJobAddress.job_address_line2,
+        job_address_city: nextJobAddress.job_address_city,
+        job_postcode: nextJobAddress.job_postcode,
+        job_tel: nextJobAddress.job_tel,
+        emergency_control_accessible: evidenceFields.emergency_control_accessible ?? '',
+        gas_tightness_satisfactory: evidenceFields.gas_tightness_satisfactory ?? '',
+        pipework_visual_satisfactory: evidenceFields.pipework_visual_satisfactory ?? '',
+        equipotential_bonding_satisfactory: evidenceFields.equipotential_bonding_satisfactory ?? '',
+        next_inspection_due: evidenceFields.next_inspection_due ?? '',
+        completion_date: completionDate,
+      },
+      jobPayload,
+    };
+  }, [completionDate, evidenceFields, info, jobAddress, resolvedInitialInfo]);
+
+  const syncCp12OfflineDraft = useCallback(async () => {
+    if (!isCp12 || isOfflineDraftSyncing) return;
+    setIsOfflineDraftSyncing(true);
+    setOfflineDraftSyncError(null);
+
+    try {
+      const payload = buildCp12DraftPersistencePayload();
+      await saveCp12JobInfo({ jobId, data: payload.jobPayload });
+      await saveJobFields({ jobId, fields: payload.jobFields });
+      await saveCp12Appliances({ jobId, appliances, defects });
+      setJobAddress(payload.jobAddress);
+      setInfo(payload.data);
+      window.setTimeout(markSynced, 0);
+      pushToast({ title: 'Offline draft synced', variant: 'success' });
+    } catch (error) {
+      setOfflineDraftSyncError(error instanceof Error ? error.message : 'Could not sync offline draft.');
+    } finally {
+      setIsOfflineDraftSyncing(false);
+    }
+  }, [
+    appliances,
+    buildCp12DraftPersistencePayload,
+    defects,
+    isCp12,
+    isOfflineDraftSyncing,
+    jobId,
+    markSynced,
+    pushToast,
+  ]);
+
+  useEffect(() => {
+    if (!isOnline) {
+      wasOfflineRef.current = true;
+      return;
+    }
+
+    if (!wasOfflineRef.current || !hasUnsyncedChanges || !isDraftReady || isOfflineDraftSyncing) return;
+    wasOfflineRef.current = false;
+    void syncCp12OfflineDraft();
+  }, [hasUnsyncedChanges, isDraftReady, isOfflineDraftSyncing, isOnline, syncCp12OfflineDraft]);
 
   useEffect(() => {
     if (!isCp12) return;
@@ -993,24 +1123,8 @@ export function CertificateWizard({
     }
     startTransition(async () => {
       try {
-        const derivedAddress = deriveJobAddressFromFields(jobAddress, info);
-        const nextJobAddress = { ...jobAddress };
-        if (!nextJobAddress.job_address_line1.trim()) {
-          nextJobAddress.job_address_line1 = derivedAddress.line1;
-        }
-        if (!nextJobAddress.job_address_line2.trim() && derivedAddress.line2) {
-          nextJobAddress.job_address_line2 = derivedAddress.line2;
-        }
-        if (!nextJobAddress.job_address_city.trim() && derivedAddress.city) {
-          nextJobAddress.job_address_city = derivedAddress.city;
-        }
-        if (!nextJobAddress.job_postcode.trim()) {
-          nextJobAddress.job_postcode = info.postcode.trim();
-        }
-        if (!nextJobAddress.job_tel.trim()) {
-          nextJobAddress.job_tel = info.customer_phone.trim();
-        }
-        if (!nextJobAddress.job_address_name.trim()) {
+        const payload = buildCp12DraftPersistencePayload();
+        if (!payload.jobAddress.job_address_name.trim()) {
           throw new Error('Property name / reference is required');
         }
         if (!info.landlord_name.trim()) {
@@ -1026,45 +1140,23 @@ export function CertificateWizard({
           throw new Error('Landlord postcode is required');
         }
 
-        const combinedPropertyAddress = buildPropertyAddressFromJobAddress(nextJobAddress);
-        const combinedLandlordAddress = buildLandlordAddress(
-          info.landlord_address_line1,
-          info.landlord_address_line2,
-          info.landlord_city,
-        );
-        const data = {
-          ...info,
-          inspection_date: info.inspection_date || completionDate,
-          property_address: combinedPropertyAddress,
-          postcode: nextJobAddress.job_postcode || info.postcode,
-          landlord_address: combinedLandlordAddress,
-        };
-        const jobPayload = {
-          ...data,
-          engineer_name: resolvedInitialInfo.engineer_name ?? '',
-          gas_safe_number: resolvedInitialInfo.gas_safe_number ?? '',
-          company_name: resolvedInitialInfo.company_name ?? '',
-          company_address: resolvedInitialInfo.company_address ?? '',
-          company_postcode: resolvedInitialInfo.company_postcode ?? '',
-          company_phone: resolvedInitialInfo.company_phone ?? '',
-          engineer_phone: resolvedInitialInfo.engineer_phone ?? '',
-          job_tel: nextJobAddress.job_tel ?? '',
-        };
-        await saveCp12JobInfo({ jobId, data: jobPayload });
-        await saveJobFields({
-          jobId,
-          fields: {
-            job_reference: nextJobAddress.job_reference,
-            job_address_name: nextJobAddress.job_address_name,
-            job_address_line1: nextJobAddress.job_address_line1,
-            job_address_line2: nextJobAddress.job_address_line2,
-            job_address_city: nextJobAddress.job_address_city,
-            job_postcode: nextJobAddress.job_postcode,
-            job_tel: nextJobAddress.job_tel,
-          },
-        });
-        setJobAddress(nextJobAddress);
-        setInfo(data);
+        if (!isOnline) {
+          setJobAddress(payload.jobAddress);
+          setInfo(payload.data);
+          setStep(2);
+          pushToast({
+            title: 'Saved on this device',
+            description: 'You are offline. This job will sync when your connection returns.',
+            variant: 'default',
+          });
+          return;
+        }
+
+        await saveCp12JobInfo({ jobId, data: payload.jobPayload });
+        await saveJobFields({ jobId, fields: payload.jobFields });
+        setJobAddress(payload.jobAddress);
+        setInfo(payload.data);
+        window.setTimeout(markSynced, 0);
         if (prepareOnly) {
           clearDraft();
           router.push('/dashboard');
@@ -1084,7 +1176,17 @@ export function CertificateWizard({
   const handleChecksNext = () => {
     startTransition(async () => {
       try {
+        if (!isOnline) {
+          setStep(4);
+          pushToast({
+            title: 'Saved on this device',
+            description: 'You are offline. CP12 checks will sync when your connection returns.',
+            variant: 'default',
+          });
+          return;
+        }
         await saveCp12Appliances({ jobId, appliances, defects });
+        window.setTimeout(markSynced, 0);
         setStep(4);
       } catch (error) {
         pushToast({
@@ -1809,6 +1911,16 @@ export function CertificateWizard({
     );
   }
 
+  const offlineDraftBanner = (
+    <OfflineDraftBanner
+      hasUnsyncedChanges={hasUnsyncedChanges}
+      isOnline={isOnline}
+      isSyncing={isOfflineDraftSyncing}
+      lastSavedAt={localUpdatedAt}
+      syncError={offlineDraftSyncError}
+    />
+  );
+
   const StepOne = (
     <WizardLayout
       step={offsetStep(1)}
@@ -1833,6 +1945,7 @@ export function CertificateWizard({
     >
       {isCp12 ? (
         <div className="space-y-3">
+          {offlineDraftBanner}
           <p className="text-[13px] text-[var(--color-text-secondary)]">Engineer and company details are pulled from account settings.</p>
           <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job location</p>
@@ -2112,6 +2225,7 @@ export function CertificateWizard({
       }
     >
       <div className="space-y-2">
+        {offlineDraftBanner}
         <ApplianceStep
           appliances={applianceProfiles}
           onAppliancesChange={handleApplianceProfilesChange}
@@ -2243,6 +2357,7 @@ export function CertificateWizard({
       status="On-site checks"
       onBack={goBackOneStep}
     >
+      {offlineDraftBanner}
       <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
         {(
           [
@@ -2345,20 +2460,11 @@ export function CertificateWizard({
                       unit="kW"
                       value={appliance.heat_input ?? ''}
                       onChange={(val) => setApplianceField(index, 'heat_input', val)}
-                      labelAction={renderReadingsVoiceButton(index, 'pressure', 'Speak pressure')}
                     />
                   </div>
                 </div>
                 <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Combustion readings</p>
-                      <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
-                        Speak high and low FGA values in one go, then review the fields.
-                      </p>
-                    </div>
-                    {renderReadingsVoiceButton(index, 'combustion', 'Speak FGA readings')}
-                  </div>
+                  <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Combustion readings</p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
                       <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">High combustion reading</p>
@@ -2710,6 +2816,7 @@ export function CertificateWizard({
       }
     >
       <div className="space-y-3">
+        {offlineDraftBanner}
         {!info.landlord_email.trim() ? (
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-4 text-[13px] text-[var(--color-text-primary)]">
             <p className="font-medium">Landlord email is missing</p>
@@ -2893,20 +3000,20 @@ export function CertificateWizard({
         </button>
         <button
           type="button"
-          disabled={isBusy}
+          disabled={isBusy || !isOnline || hasUnsyncedChanges}
           onClick={handleCreateRemoteSignatureLink}
           className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
         >
-          {isPending ? 'Preparing…' : 'Send to landlord'}
+          {!isOnline || hasUnsyncedChanges ? 'Sync first' : isPending ? 'Preparing…' : 'Send to landlord'}
         </button>
         <button
           type="button"
-          disabled={isBusy || checklist.blockingMissing > 0}
+          disabled={isBusy || checklist.blockingMissing > 0 || !isOnline || hasUnsyncedChanges}
           onClick={handleGenerate}
           data-testid="cp12-issue"
           className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#1a7a52] text-[14px] font-medium text-white disabled:opacity-50"
         >
-          {isGeneratingPdf ? 'Issuing…' : 'Issue CP12'}
+          {!isOnline || hasUnsyncedChanges ? 'Ready once synced' : isGeneratingPdf ? 'Issuing…' : 'Issue CP12'}
         </button>
       </div>
     </WizardLayout>

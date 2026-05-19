@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
+import { OfflineDraftBanner } from '@/components/certificates/offline-draft-banner';
 import { EvidenceCard } from './evidence-card';
 import { SignatureCard } from '@/components/certificates/signature-card';
 import { Input } from '@/components/ui/input';
@@ -223,6 +224,9 @@ export function BoilerServiceWizard({
   const initialStep = Math.min(4, Math.max(1, startStep - stepOffset));
   const [step, setStep] = useState(initialStep);
   const [isPending, startTransition] = useTransition();
+  const [isOfflineDraftSyncing, setIsOfflineDraftSyncing] = useState(false);
+  const [offlineDraftSyncError, setOfflineDraftSyncError] = useState<string | null>(null);
+  const wasOfflineRef = useRef(false);
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const [isAddressLookupPending, setIsAddressLookupPending] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
@@ -310,7 +314,6 @@ export function BoilerServiceWizard({
 
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
-  const [combustionListening, setCombustionListening] = useState(false);
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
   const offsetStep = (step: number) => step + stepOffset;
@@ -357,10 +360,30 @@ export function BoilerServiceWizard({
       step,
     ],
   );
+  const boilerServiceDraftSyncState = useMemo(
+    () => ({
+      completionDate,
+      jobInfo,
+      jobAddress,
+      details,
+      checks,
+      engineerSignature,
+      customerSignature,
+    }),
+    [checks, completionDate, customerSignature, details, engineerSignature, jobAddress, jobInfo],
+  );
 
-  const { clearDraft } = useWizardDraft<BoilerServiceDraftState>({
+  const {
+    clearDraft,
+    hasUnsyncedChanges,
+    isOnline,
+    isReady: isDraftReady,
+    localUpdatedAt,
+    markSynced,
+  } = useWizardDraft<BoilerServiceDraftState>({
     storageKey: draftStorageKey,
     state: boilerServiceDraft,
+    syncState: boilerServiceDraftSyncState,
     onRestore: (draft) => {
       setStep(Math.min(4, Math.max(1, draft.step || initialStep)));
       setCompletionDate(draft.completionDate || completionDate);
@@ -374,6 +397,76 @@ export function BoilerServiceWizard({
       setCustomerAddressSearchQuery(draft.customerAddressSearchQuery ?? '');
     },
   });
+
+  const buildBoilerServiceDraftPersistencePayload = useCallback(() => {
+    const serviceDate = jobAddress.job_visit_date || jobInfo.service_date || completionDate;
+    const propertyAddress = composeAddress(
+      jobAddress.job_address_line1,
+      jobAddress.job_address_line2,
+      jobAddress.job_address_city,
+    );
+    const nextInfo = {
+      ...jobInfo,
+      property_address: propertyAddress || jobInfo.property_address,
+      postcode: jobAddress.job_postcode || jobInfo.postcode,
+      service_date: serviceDate,
+    };
+
+    return {
+      info: nextInfo,
+      jobFields: {
+        job_reference: jobAddress.job_reference,
+        job_address_name: jobAddress.job_address_name,
+        job_address_line1: jobAddress.job_address_line1,
+        job_address_line2: jobAddress.job_address_line2,
+        job_address_city: jobAddress.job_address_city,
+        job_postcode: jobAddress.job_postcode,
+        job_tel: jobAddress.job_tel,
+        job_visit_date: serviceDate,
+        completion_date: completionDate || serviceDate,
+      },
+    };
+  }, [completionDate, jobAddress, jobInfo]);
+
+  const syncBoilerServiceOfflineDraft = useCallback(async () => {
+    if (isOfflineDraftSyncing) return;
+    setIsOfflineDraftSyncing(true);
+    setOfflineDraftSyncError(null);
+
+    try {
+      const payload = buildBoilerServiceDraftPersistencePayload();
+      await saveBoilerServiceJobInfo({ jobId, data: payload.info });
+      await saveJobFields({ jobId, fields: payload.jobFields });
+      await saveBoilerServiceDetails({ jobId, data: details });
+      await saveBoilerServiceChecks({ jobId, data: checks });
+      setJobInfo(payload.info);
+      window.setTimeout(markSynced, 0);
+      pushToast({ title: 'Offline draft synced', variant: 'success' });
+    } catch (error) {
+      setOfflineDraftSyncError(error instanceof Error ? error.message : 'Could not sync offline draft.');
+    } finally {
+      setIsOfflineDraftSyncing(false);
+    }
+  }, [
+    buildBoilerServiceDraftPersistencePayload,
+    checks,
+    details,
+    isOfflineDraftSyncing,
+    jobId,
+    markSynced,
+    pushToast,
+  ]);
+
+  useEffect(() => {
+    if (!isOnline) {
+      wasOfflineRef.current = true;
+      return;
+    }
+
+    if (!wasOfflineRef.current || !hasUnsyncedChanges || !isDraftReady || isOfflineDraftSyncing) return;
+    wasOfflineRef.current = false;
+    void syncBoilerServiceOfflineDraft();
+  }, [hasUnsyncedChanges, isDraftReady, isOfflineDraftSyncing, isOnline, syncBoilerServiceOfflineDraft]);
 
   useEffect(() => {
     if (!deferredAddressSearchQuery) {
@@ -690,33 +783,22 @@ export function BoilerServiceWizard({
   const handleJobInfoNext = () => {
     startTransition(async () => {
       try {
-        const serviceDate = jobAddress.job_visit_date || jobInfo.service_date || completionDate;
-        const propertyAddress = composeAddress(
-          jobAddress.job_address_line1,
-          jobAddress.job_address_line2,
-          jobAddress.job_address_city,
-        );
-        const nextInfo = {
-          ...jobInfo,
-          property_address: propertyAddress || jobInfo.property_address,
-          postcode: jobAddress.job_postcode || jobInfo.postcode,
-          service_date: serviceDate,
-        };
-        await saveBoilerServiceJobInfo({ jobId, data: nextInfo });
-        await saveJobFields({
-          jobId,
-          fields: {
-            job_reference: jobAddress.job_reference,
-            job_address_name: jobAddress.job_address_name,
-            job_address_line1: jobAddress.job_address_line1,
-            job_address_line2: jobAddress.job_address_line2,
-            job_address_city: jobAddress.job_address_city,
-            job_postcode: jobAddress.job_postcode,
-            job_tel: jobAddress.job_tel,
-            job_visit_date: serviceDate,
-          },
-        });
-        setJobInfo(nextInfo);
+        const payload = buildBoilerServiceDraftPersistencePayload();
+        if (!isOnline) {
+          setJobInfo(payload.info);
+          setStep(2);
+          pushToast({
+            title: 'Saved on this device',
+            description: 'You are offline. This service will sync when your connection returns.',
+            variant: 'default',
+          });
+          return;
+        }
+
+        await saveBoilerServiceJobInfo({ jobId, data: payload.info });
+        await saveJobFields({ jobId, fields: payload.jobFields });
+        setJobInfo(payload.info);
+        window.setTimeout(markSynced, 0);
         setStep(2);
         pushToast({ title: 'Saved job and client details', variant: 'success' });
       } catch (error) {
@@ -732,7 +814,17 @@ export function BoilerServiceWizard({
   const handleDetailsNext = () => {
     startTransition(async () => {
       try {
+        if (!isOnline) {
+          setStep(3);
+          pushToast({
+            title: 'Saved on this device',
+            description: 'You are offline. Appliance details will sync when your connection returns.',
+            variant: 'default',
+          });
+          return;
+        }
         await saveBoilerServiceDetails({ jobId, data: details });
+        window.setTimeout(markSynced, 0);
         setStep(3);
         pushToast({ title: 'Saved appliance details', variant: 'success' });
       } catch (error) {
@@ -748,7 +840,17 @@ export function BoilerServiceWizard({
   const handleChecksNext = () => {
     startTransition(async () => {
       try {
+        if (!isOnline) {
+          setStep(4);
+          pushToast({
+            title: 'Saved on this device',
+            description: 'You are offline. Checks will sync when your connection returns.',
+            variant: 'default',
+          });
+          return;
+        }
         await saveBoilerServiceChecks({ jobId, data: checks });
+        window.setTimeout(markSynced, 0);
         setStep(4);
         pushToast({ title: 'Saved checks', variant: 'success' });
       } catch (error) {
@@ -952,6 +1054,15 @@ export function BoilerServiceWizard({
     { key: 'next', complete: nextServiceComplete },
   ];
   const firstIncompleteKey = sectionOrder.find((section) => !section.complete)?.key ?? 'readings';
+  const offlineDraftBanner = (
+    <OfflineDraftBanner
+      hasUnsyncedChanges={hasUnsyncedChanges}
+      isOnline={isOnline}
+      isSyncing={isOfflineDraftSyncing}
+      lastSavedAt={localUpdatedAt}
+      syncError={offlineDraftSyncError}
+    />
+  );
 
   return (
     <>
@@ -977,6 +1088,7 @@ export function BoilerServiceWizard({
           }
         >
           <div className="space-y-4">
+            {offlineDraftBanner}
             {demoEnabled ? (
               <div className="flex justify-end">
                 <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -1280,6 +1392,7 @@ export function BoilerServiceWizard({
           }
         >
           <div className="space-y-4">
+            {offlineDraftBanner}
             {demoEnabled ? (
               <div className="flex justify-end">
                 <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -1345,6 +1458,7 @@ export function BoilerServiceWizard({
           }
         >
           <div className="space-y-4">
+          {offlineDraftBanner}
           {demoEnabled ? (
             <div className="mb-3 flex justify-end">
               <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -1357,15 +1471,8 @@ export function BoilerServiceWizard({
             subtitle={`${readingsCompleted}/${combustionReadingFields.length} captured`}
             defaultOpen={firstIncompleteKey === 'readings'}
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="mb-3">
               <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">FGA readings</p>
-              <Cp12VoiceReadings
-                jobId={jobId}
-                scope="combustion"
-                buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
-                onApply={applyVoiceReadings}
-                onActiveChange={setCombustionListening}
-              />
             </div>
             <div className="mb-3 grid gap-2 sm:grid-cols-2">
               <FgaAutofillInline
@@ -1391,45 +1498,61 @@ export function BoilerServiceWizard({
                 }}
               />
             </div>
-            <div className={`rounded-[12px] transition-colors ${combustionListening ? 'bg-[var(--color-red-bg)] p-2' : ''}`}>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <UnitNumberInput
-                  label="High CO"
-                  value={checks.high_combustion_co_ppm}
-                  onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
-                  unit="ppm"
-                />
-                <UnitNumberInput
-                  label="High CO2"
-                  value={checks.high_combustion_co2}
-                  onChange={(value) => setCheckValue('high_combustion_co2', value)}
-                  unit="%"
-                />
-                <UnitNumberInput
-                  label="High ratio"
-                  value={checks.high_combustion_ratio}
-                  onChange={(value) => setCheckValue('high_combustion_ratio', value)}
-                  unit="ratio"
-                />
-                <UnitNumberInput
-                  label="Low CO"
-                  value={checks.low_combustion_co_ppm}
-                  onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
-                  unit="ppm"
-                />
-                <UnitNumberInput
-                  label="Low CO2"
-                  value={checks.low_combustion_co2}
-                  onChange={(value) => setCheckValue('low_combustion_co2', value)}
-                  unit="%"
-                />
-                <UnitNumberInput
-                  label="Low ratio"
-                  value={checks.low_combustion_ratio}
-                  onChange={(value) => setCheckValue('low_combustion_ratio', value)}
-                  unit="ratio"
-                />
-              </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <UnitNumberInput
+                label="High CO"
+                value={checks.high_combustion_co_ppm}
+                onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
+                unit="ppm"
+                labelAction={
+                  <Cp12VoiceReadings
+                    jobId={jobId}
+                    scope="high"
+                    buttonLabel="Speak high"
+                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
+                    onApply={applyVoiceReadings}
+                  />
+                }
+              />
+              <UnitNumberInput
+                label="High CO2"
+                value={checks.high_combustion_co2}
+                onChange={(value) => setCheckValue('high_combustion_co2', value)}
+                unit="%"
+              />
+              <UnitNumberInput
+                label="High ratio"
+                value={checks.high_combustion_ratio}
+                onChange={(value) => setCheckValue('high_combustion_ratio', value)}
+                unit="ratio"
+              />
+              <UnitNumberInput
+                label="Low CO"
+                value={checks.low_combustion_co_ppm}
+                onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
+                unit="ppm"
+                labelAction={
+                  <Cp12VoiceReadings
+                    jobId={jobId}
+                    scope="low"
+                    buttonLabel="Speak low"
+                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
+                    onApply={applyVoiceReadings}
+                  />
+                }
+              />
+              <UnitNumberInput
+                label="Low CO2"
+                value={checks.low_combustion_co2}
+                onChange={(value) => setCheckValue('low_combustion_co2', value)}
+                unit="%"
+              />
+              <UnitNumberInput
+                label="Low ratio"
+                value={checks.low_combustion_ratio}
+                onChange={(value) => setCheckValue('low_combustion_ratio', value)}
+                unit="ratio"
+              />
             </div>
           </CollapsibleSection>
 
@@ -1527,6 +1650,7 @@ export function BoilerServiceWizard({
           }
         >
           <div className="space-y-4">
+            {offlineDraftBanner}
             {demoEnabled ? (
               <div className="flex justify-end">
                 <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -1649,10 +1773,10 @@ export function BoilerServiceWizard({
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={isPending}
+              disabled={isPending || !isOnline || hasUnsyncedChanges}
               className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-action)] text-[14px] font-medium text-white disabled:opacity-50"
             >
-              {isPending ? 'Generating…' : 'Generate Boiler Service'}
+              {!isOnline || hasUnsyncedChanges ? 'Ready once synced' : isPending ? 'Generating…' : 'Generate Boiler Service'}
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>

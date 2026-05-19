@@ -10,7 +10,7 @@ import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { RequestLandlordDetailsCard } from '@/components/jobs/request-landlord-details-card';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
@@ -292,6 +292,12 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [partyAddressSuggestions, setPartyAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedPartyAddressMatchId, setSelectedPartyAddressMatchId] = useState<string | null>(null);
   const [partyAddressSearchError, setPartyAddressSearchError] = useState<string | null>(null);
+  const [clientSheetOpen, setClientSheetOpen] = useState(false);
+  const [propertySheetOpen, setPropertySheetOpen] = useState(false);
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [clientChosen, setClientChosen] = useState(() => !clients.length || !!initialRequest);
+  const [propertyChosen, setPropertyChosen] = useState(() => !!initialRequest);
+  const [showAskLandlord, setShowAskLandlord] = useState(false);
   const isCp12Upcoming = jobType === 'safety_check';
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const scheduleFieldLabel = isCp12Upcoming ? 'Inspection date' : 'Scheduled date and time';
@@ -314,11 +320,66 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     [availableProperties],
   );
 
+  const filteredClients = useMemo(() => {
+    const q = clientSearchQuery.toLowerCase().trim();
+    if (!q) return clients;
+    return clients.filter((c) => (c.name ?? '').toLowerCase().includes(q));
+  }, [clients, clientSearchQuery]);
+
+  const selectedProperty = useMemo(
+    () => availableProperties.find((p) => p.key === selectedPropertyKey),
+    [availableProperties, selectedPropertyKey],
+  );
+
+  const row1Display = clientChosen
+    ? selectedClientId
+      ? clientName || 'Client selected'
+      : 'New client'
+    : null;
+
+  const row2Display = propertyChosen
+    ? selectedProperty
+      ? [selectedProperty.job_address_line1, selectedProperty.job_address_city, selectedProperty.job_postcode].filter(Boolean).join(', ')
+      : 'New / manual entry'
+    : null;
+
+  const canShowContinue = clientChosen && propertyChosen;
+
+  const formatAddressError = (msg: string | null) => {
+    if (!msg) return null;
+    if (
+      msg.startsWith(`Type at least`) ||
+      msg === 'No addresses found. Try a postcode or add more detail.'
+    ) {
+      return msg;
+    }
+    return 'Address lookup unavailable — enter manually';
+  };
+
   useEffect(() => {
     if (!clients.length) {
       setClientMode('new');
+      setClientChosen(true);
+      setPropertyChosen(true);
     }
   }, [clients.length]);
+
+  useEffect(() => {
+    if (selectedClientId) setClientChosen(true);
+  }, [selectedClientId]);
+
+  useEffect(() => {
+    if (selectedPropertyKey) setPropertyChosen(true);
+  }, [selectedPropertyKey]);
+
+  useEffect(() => {
+    if (!selectedClientId) return;
+    if (availableProperties.length === 0) {
+      setPropertyChosen(true);
+    } else if (!selectedPropertyKey) {
+      setPropertyChosen(false);
+    }
+  }, [selectedClientId, availableProperties.length, selectedPropertyKey]);
 
   useEffect(() => {
     if (!initialRequest) return;
@@ -448,6 +509,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
       setLandlordCity(draft.landlordCity ?? '');
       setLandlordPostcode(draft.landlordPostcode ?? '');
       setLandlordTel(draft.landlordTel ?? '');
+      if (draft.selectedClientId || draft.clientMode === 'new') setClientChosen(true);
     },
   });
 
@@ -1011,96 +1073,81 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             </div>
           ) : null}
 
-          {/* Client search + property selection */}
-          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Start from a landlord</p>
-              {path === 'landlord' ? (
-                <span className="inline-flex items-center rounded-[6px] bg-[var(--color-action-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-action)]">Ask landlord mode</span>
-              ) : null}
-            </div>
-            <div className="grid gap-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr,auto]">
-                <div>
-                  <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                    Search existing client
-                  </label>
-                  <Input
-                    value={clientName}
-                    onChange={(event) => handleClientNameInput(event.target.value)}
-                    placeholder="Start typing landlord name"
-                    className="mt-1.5 rounded-[10px]"
-                    list="job-existing-client-options"
-                    disabled={isPending}
-                  />
-                  <datalist id="job-existing-client-options">
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.name ?? ''} />
-                    ))}
-                  </datalist>
-                </div>
+          {/* Compact client + property selector */}
+          <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+            <button
+              type="button"
+              onClick={() => setClientSheetOpen(true)}
+              disabled={isPending}
+              className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-[var(--color-background-secondary)]"
+            >
+              <span className={`truncate text-[14px] font-medium ${row1Display ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}>
+                {row1Display ?? 'Select a client'}
+              </span>
+              <span className="ml-3 shrink-0 text-[11px] text-[var(--color-text-tertiary)]">↓</span>
+            </button>
+            <div className="border-t-[0.5px] border-[var(--color-border-tertiary)]" />
+            <button
+              type="button"
+              onClick={() => setPropertySheetOpen(true)}
+              disabled={isPending}
+              className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-[var(--color-background-secondary)]"
+            >
+              <span className={`truncate text-[13px] ${row2Display ? 'text-[var(--color-text-secondary)]' : 'text-[var(--color-text-tertiary)]'}`}>
+                {row2Display ?? 'Select a property'}
+              </span>
+              <span className="ml-3 shrink-0 text-[11px] text-[var(--color-text-tertiary)]">↓</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-4 px-1">
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setClientChosen(true);
+                setClientMode('new');
+                setSelectedClientId('');
+                setSelectedPropertyKey('');
+                setPropertyChosen(true);
+                setClientName('');
+                setClientPhone('');
+                setClientEmail('');
+              }}
+              className="text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
+            >
+              + New client
+            </button>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setSelectedPropertyKey('');
+                setPropertyChosen(true);
+              }}
+              className="text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
+            >
+              + New property
+            </button>
+          </div>
+
+          {selectedClientId && path === 'self' ? (
+            <div>
+              {!showAskLandlord ? (
                 <button
                   type="button"
-                  className={`self-end rounded-[10px] px-4 py-2 text-[13px] font-medium transition ${
-                    clientMode === 'new'
-                      ? 'bg-[#111] text-white'
-                      : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
-                  }`}
-                  onClick={() => {
-                    setClientMode('new');
-                    setSelectedClientId('');
-                    setSelectedPropertyKey('');
-                    setClientName('');
-                    setClientPhone('');
-                    setClientEmail('');
-                  }}
-                  disabled={isPending}
+                  onClick={() => setShowAskLandlord(true)}
+                  className="text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
                 >
-                  New client
+                  Send prefill request to landlord →
                 </button>
-              </div>
-
-              {selectedClientId ? (
+              ) : (
                 <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                  <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{clientName}</p>
-                  {availableProperties.length ? (
-                    <>
-                      <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
-                        Choose a saved property to prefill all details.
-                      </p>
-                      <Select
-                        value={selectedPropertyKey}
-                        onChange={(event) => setSelectedPropertyKey(event.target.value)}
-                        className="mt-2.5 rounded-[10px]"
-                        disabled={isPending}
-                      >
-                        <option value="">Manual / new property</option>
-                        {availableProperties.map((property) => (
-                          <option key={property.key} value={property.key}>
-                            {property.label}
-                          </option>
-                        ))}
-                      </Select>
-                      {selectedPropertyKey ? (
-                        <p className="mt-1.5 text-[11px] font-medium text-[var(--color-action)]">
-                          ✓ Previous appliance records will carry forward to this job.
-                        </p>
-                      ) : (
-                        <p className="mt-1.5 text-[11px] text-[var(--color-text-tertiary)]">
-                          Select a saved property above — this is the fastest path and carries appliance history forward.
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
-                      No saved properties yet. Fill in the address manually below.
-                    </p>
-                  )}
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,auto]">
+                  <div className="grid gap-2 sm:grid-cols-[1fr,auto]">
                     <Input
                       value={clientEmail}
                       onChange={(event) => setClientEmail(event.target.value)}
-                      placeholder="Landlord email for prefill request"
+                      placeholder="Landlord email"
                       type="email"
                       className="rounded-[10px]"
                       disabled={isPending}
@@ -1121,9 +1168,9 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                     <p className="mt-2 text-[12px] font-medium text-[var(--color-red)]">{landlordRequestError}</p>
                   ) : null}
                 </div>
-              ) : null}
+              )}
             </div>
-          </div>
+          ) : null}
 
           {/* Landlord / party details */}
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
@@ -1204,7 +1251,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                       </div>
                     </div>
                   ) : null}
-                  {partyAddressSearchError ? <p className="mt-2 text-xs text-red-600">{partyAddressSearchError}</p> : null}
+                  {partyAddressSearchError ? <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">{formatAddressError(partyAddressSearchError)}</p> : null}
                 </div>
               </div>
               <div className="md:col-span-2">
@@ -1263,16 +1310,16 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             </div>
           </div>
 
-          <div className="flex justify-end">
+          {canShowContinue ? (
             <button
               type="button"
               onClick={() => setStep(3)}
               disabled={isPending}
-              className="inline-flex h-[40px] items-center justify-center rounded-[10px] bg-[#111] px-5 text-[13px] font-medium text-white disabled:opacity-50"
+              className="inline-flex h-[44px] w-full items-center justify-center rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
             >
-              Next →
+              Continue →
             </button>
-          </div>
+          ) : null}
         </>
       ) : null}
 
@@ -1380,7 +1427,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                       </div>
                     </div>
                   ) : null}
-                  {jobAddressSearchError ? <p className="mt-2 text-xs text-red-600">{jobAddressSearchError}</p> : null}
+                  {jobAddressSearchError ? <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">{formatAddressError(jobAddressSearchError)}</p> : null}
                 </div>
               </div>
               <div className="md:col-span-2">
@@ -1459,6 +1506,94 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
           </div>
         </>
       ) : null}
+
+      {/* Client selection bottom sheet */}
+      <Sheet open={clientSheetOpen} onOpenChange={setClientSheetOpen}>
+        <SheetContent side="bottom" title="Select client">
+          <Input
+            value={clientSearchQuery}
+            onChange={(event) => setClientSearchQuery(event.target.value)}
+            placeholder="Search clients…"
+            className="rounded-[10px]"
+            autoFocus
+          />
+          <div className="mt-2 max-h-64 overflow-y-auto">
+            {filteredClients.length === 0 ? (
+              <p className="px-3 py-4 text-center text-[13px] text-[var(--color-text-tertiary)]">No clients found</p>
+            ) : (
+              filteredClients.map((client) => (
+                <button
+                  key={client.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedClientId(client.id);
+                    setClientChosen(true);
+                    setClientSheetOpen(false);
+                    setClientSearchQuery('');
+                  }}
+                  className={`w-full rounded-[10px] px-3 py-2.5 text-left text-[14px] transition-colors hover:bg-[var(--color-background-secondary)] ${
+                    selectedClientId === client.id
+                      ? 'font-medium text-[var(--color-action)]'
+                      : 'text-[var(--color-text-primary)]'
+                  }`}
+                >
+                  {client.name ?? 'Unnamed client'}
+                </button>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Property selection bottom sheet */}
+      <Sheet open={propertySheetOpen} onOpenChange={setPropertySheetOpen}>
+        <SheetContent side="bottom" title="Select property">
+          <div className="space-y-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedPropertyKey('');
+                setPropertyChosen(true);
+                setPropertySheetOpen(false);
+              }}
+              className={`w-full rounded-[10px] px-3 py-2.5 text-left text-[14px] transition-colors hover:bg-[var(--color-background-secondary)] ${
+                propertyChosen && !selectedPropertyKey
+                  ? 'font-medium text-[var(--color-action)]'
+                  : 'text-[var(--color-text-secondary)]'
+              }`}
+            >
+              New / manual entry
+            </button>
+            {!selectedClientId ? (
+              <p className="px-3 py-3 text-center text-[13px] text-[var(--color-text-tertiary)]">Select a client first to see saved properties</p>
+            ) : availableProperties.length === 0 ? (
+              <p className="px-3 py-3 text-center text-[13px] text-[var(--color-text-tertiary)]">No saved properties for this client</p>
+            ) : (
+              availableProperties.map((property) => (
+                <button
+                  key={property.key}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPropertyKey(property.key);
+                    setPropertyChosen(true);
+                    setPropertySheetOpen(false);
+                  }}
+                  className={`w-full rounded-[10px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--color-background-secondary)] ${
+                    selectedPropertyKey === property.key
+                      ? 'text-[var(--color-action)]'
+                      : 'text-[var(--color-text-primary)]'
+                  }`}
+                >
+                  <p className="text-[14px] font-medium">{property.job_address_line1 || property.job_address_name}</p>
+                  <p className="text-[12px] text-[var(--color-text-secondary)]">
+                    {[property.job_address_city, property.job_postcode].filter(Boolean).join(', ')}
+                  </p>
+                </button>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </form>
   );
 }
