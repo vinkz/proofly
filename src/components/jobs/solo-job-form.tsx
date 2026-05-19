@@ -11,6 +11,7 @@ import type { AddressLookupSuggestion } from '@/lib/address-lookup';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { RequestLandlordDetailsCard } from '@/components/jobs/request-landlord-details-card';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
 export type SavedPropertyOption = {
@@ -36,6 +37,7 @@ type SoloJobFormProps = {
   clients: ClientListItem[];
   propertiesByClientId: Record<string, SavedPropertyOption[]>;
   initialRequest?: JobRequestPrefill | null;
+  requestUrl?: string | null;
 };
 
 type AddressLookupApiResponse = {
@@ -243,7 +245,7 @@ const JOB_DEMO_VALUES: Record<
   },
 };
 
-export function SoloJobForm({ clients, propertiesByClientId, initialRequest = null }: SoloJobFormProps) {
+export function SoloJobForm({ clients, propertiesByClientId, initialRequest = null, requestUrl = null }: SoloJobFormProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -993,6 +995,10 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
       {/* ===== STEP 2: Landlord / client details ===== */}
       {step === 2 ? (
         <>
+          {path === 'landlord' && requestUrl ? (
+            <RequestLandlordDetailsCard requestUrl={requestUrl} />
+          ) : null}
+
           {initialRequest ? (
             <div className="rounded-[12px] border-[0.5px] border-[var(--color-action)]/30 bg-[var(--color-action-bg)] px-4 py-3">
               <p className="text-[13px] font-medium text-[var(--color-action)]">Landlord request details</p>

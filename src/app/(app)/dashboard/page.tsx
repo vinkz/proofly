@@ -5,17 +5,19 @@ import type { ReactNode } from 'react';
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { getProfile } from '@/server/profile';
 import {
+  getMissingOnboardingFields,
+  isOnboardingProfileComplete,
+} from '@/lib/onboarding-profile';
+import {
   fillAwaitingLandlordJobMyself,
   listAwaitingLandlordJobsForDashboard,
   listJobs,
 } from '@/server/jobs';
 import {
   dismissJobRequest,
-  getOrCreateEngineerRequestLink,
   listPendingJobRequestsForDashboard,
   type DashboardJobRequest,
 } from '@/server/job-requests';
-import { SendRequestLinkCard } from './_components/send-request-link-card';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import { formatDisplayAddress } from '@/lib/address';
 
@@ -60,12 +62,11 @@ export default async function DashboardPage({
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups, jobRequests, awaitingLandlordJobs, requestLink] = await Promise.all([
+  const [{ profile }, jobGroups, jobRequests, awaitingLandlordJobs] = await Promise.all([
     getProfile(),
     listJobs(),
     listPendingJobRequestsForDashboard(),
     listAwaitingLandlordJobsForDashboard(),
-    getOrCreateEngineerRequestLink(),
   ]);
   const activeJobs = jobGroups.active as BasicJob[];
   const completedJobs = jobGroups.completed as BasicJob[];
@@ -93,6 +94,9 @@ export default async function DashboardPage({
       ? profile.full_name.trim().split(/\s+/)[0]
       : user.email;
   const latestRequest = jobRequests[0] ?? null;
+  const profileMissingFields = getMissingOnboardingFields(profile);
+  const certificateProfileComplete = isOnboardingProfileComplete(profile);
+  const invoiceMissingFields = getInvoiceSetupMissingFields(profile);
 
   const upcomingJobsBase = activeJobs
     .filter((job) => job.scheduled_for && isTodayOrFuture(job.scheduled_for, now))
@@ -175,7 +179,12 @@ export default async function DashboardPage({
         {latestRequest ? (
           <JobRequestCard request={latestRequest} />
         ) : (
-          <NoRequestsEmpty url={requestLink.url} />
+          <CreateFirstCertificateCard
+            profileMissingFields={profileMissingFields}
+            certificateProfileComplete={certificateProfileComplete}
+            invoiceMissingFields={invoiceMissingFields}
+            hasAnyJob={activeJobs.length + completedJobs.length > 0}
+          />
         )}
       </section>
 
@@ -597,18 +606,161 @@ function JobRequestCard({ request }: { request: DashboardJobRequest }) {
   );
 }
 
-function NoRequestsEmpty({ url }: { url: string }) {
+function getInvoiceSetupMissingFields(profile: unknown) {
+  const row =
+    profile && typeof profile === 'object' && !Array.isArray(profile)
+      ? (profile as Record<string, unknown>)
+      : null;
+  const missing: string[] = [];
+  const hasText = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
+  if (!hasText(row?.bank_account_name)) missing.push('Account name');
+  if (!hasText(row?.bank_sort_code)) missing.push('Sort code');
+  if (!hasText(row?.bank_account_number)) missing.push('Account number');
+
+  const standardRates = row?.standard_rates;
+  const cp12Rate =
+    standardRates && typeof standardRates === 'object' && !Array.isArray(standardRates)
+      ? (standardRates as Record<string, unknown>).cp12
+      : null;
+  if (cp12Rate === null || cp12Rate === undefined || String(cp12Rate).trim() === '') {
+    missing.push('CP12 standard rate');
+  }
+
+  return missing;
+}
+
+function CreateFirstCertificateCard({
+  profileMissingFields,
+  certificateProfileComplete,
+  invoiceMissingFields,
+  hasAnyJob,
+}: {
+  profileMissingFields: string[];
+  certificateProfileComplete: boolean;
+  invoiceMissingFields: string[];
+  hasAnyJob: boolean;
+}) {
+  const optionalInvoiceComplete = invoiceMissingFields.length === 0;
+  const primaryHref = certificateProfileComplete ? '/jobs/new' : '/settings';
+  const primaryLabel = certificateProfileComplete ? 'Create first certificate' : 'Complete profile';
+
   return (
-    <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-5 py-6 text-center">
-      <div className="mx-auto mb-3 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[var(--color-action-bg)] text-[var(--color-action)]">
-        <LinkIcon />
+    <div className="overflow-hidden rounded-[18px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+      <div className="px-5 pt-5 pb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              Get started with CertNow
+            </p>
+            <h3 className="mt-1 text-[19px] font-semibold tracking-[-0.01em] text-[var(--color-text-primary)]">
+              {hasAnyJob ? 'Create another certificate' : 'Create first certificate'}
+            </h3>
+          </div>
+          <span className="shrink-0 rounded-[10px] bg-[var(--color-action-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-action)]">
+            Approx. 2 mins
+          </span>
+        </div>
+        <p className="mt-2 text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
+          Start with your first CP12. Certificate details come first; invoice settings can be added now or later.
+        </p>
       </div>
-      <h3 className="text-[16px] font-medium text-[var(--color-text-primary)]">Ask landlord for job details</h3>
-      <p className="mx-auto mt-1.5 max-w-xs text-[13px] font-normal leading-[1.6] text-[var(--color-text-secondary)]">
-        Share your request link. The landlord fills in property and access details directly.
-      </p>
-      <SendRequestLinkCard requestUrl={url} />
+
+      <div className="divide-y-[0.5px] divide-[var(--color-border-tertiary)] border-t-[0.5px] border-[var(--color-border-tertiary)]">
+        <ChecklistStepLink
+          stepNumber={1}
+          done={certificateProfileComplete}
+          label="Certificate-ready profile"
+          detail={
+            certificateProfileComplete
+              ? 'Gas Safe and company details ready.'
+              : profileMissingFields.length > 0
+                ? `${profileMissingFields.slice(0, 2).join(', ')}${profileMissingFields.length > 2 ? ` +${profileMissingFields.length - 2} more` : ''}`
+                : 'Gas Safe number, licence class, and company details.'
+          }
+          statusLabel={certificateProfileComplete ? 'Done' : 'Required'}
+          statusTone={certificateProfileComplete ? 'done' : 'required'}
+          href="/settings"
+        />
+        <ChecklistStepLink
+          stepNumber={2}
+          done={optionalInvoiceComplete}
+          label="Invoice details"
+          detail={
+            optionalInvoiceComplete
+              ? 'Bank details and CP12 rate ready.'
+              : invoiceMissingFields.length > 0
+                ? `${invoiceMissingFields.slice(0, 2).join(', ')}${invoiceMissingFields.length > 2 ? ` +${invoiceMissingFields.length - 2} more` : ''}`
+                : 'Bank details and standard rates for invoice drafts.'
+          }
+          statusLabel={optionalInvoiceComplete ? 'Done' : 'Optional'}
+          statusTone={optionalInvoiceComplete ? 'done' : 'optional'}
+          href="/settings"
+        />
+        <div className={`flex items-center gap-3 px-5 py-3.5 ${!certificateProfileComplete ? 'opacity-40' : ''}`}>
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-[12px] font-semibold ${certificateProfileComplete ? 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'}`}>
+            3
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Create first CP12</p>
+            <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Open the job flow and choose CP12.</p>
+          </div>
+          <Link
+            href={primaryHref}
+            className="inline-flex h-9 shrink-0 items-center justify-center rounded-[18px] bg-[var(--color-cta)] px-3.5 text-[13px] font-medium text-[var(--color-cta-fg)]"
+            tabIndex={certificateProfileComplete ? undefined : -1}
+            aria-disabled={!certificateProfileComplete}
+          >
+            {primaryLabel}
+          </Link>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ChecklistStepLink({
+  stepNumber,
+  done,
+  label,
+  detail,
+  statusLabel,
+  statusTone,
+  href,
+}: {
+  stepNumber: number;
+  done: boolean;
+  label: string;
+  detail: string;
+  statusLabel: string;
+  statusTone: 'done' | 'required' | 'optional';
+  href: string;
+}) {
+  const statusClass =
+    statusTone === 'done'
+      ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+      : statusTone === 'required'
+        ? 'bg-[var(--color-red-bg)] text-[var(--color-red)]'
+        : 'bg-[var(--color-background-secondary)] text-[var(--color-text-tertiary)]';
+
+  return (
+    <Link href={href} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-[var(--color-background-secondary)]">
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] ${done ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'}`}>
+        {done ? (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M2.5 7.5L5.5 10.5L11.5 4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : (
+          <span className="text-[12px] font-semibold">{stepNumber}</span>
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-medium text-[var(--color-text-primary)]">{label}</p>
+        <p className="mt-0.5 line-clamp-1 text-[12px] text-[var(--color-text-secondary)]">{detail}</p>
+      </div>
+      <span className={`shrink-0 rounded-[8px] px-2 py-0.5 text-[11px] font-medium ${statusClass}`}>
+        {statusLabel}
+      </span>
+    </Link>
   );
 }
 
@@ -744,15 +896,6 @@ function AlertTriangleIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
       <path d="M12 9v4M12 17h.01" />
-    </svg>
-  );
-}
-
-function LinkIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
   );
 }

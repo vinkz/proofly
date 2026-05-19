@@ -1,4 +1,3 @@
-import { RequestLandlordDetailsCard } from '@/components/jobs/request-landlord-details-card';
 import { SoloJobForm, type SavedPropertyOption } from '@/components/jobs/solo-job-form';
 import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
 import { getMissingOnboardingFields, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
@@ -187,14 +186,13 @@ export default async function NewJobPage({
         )
       ) : null}
 
-      {!requestIdParam && requestLink ? <RequestLandlordDetailsCard requestUrl={requestLink.url} /> : null}
-
       <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
         <SoloJobForm
           key={requestPrefill?.id ?? 'manual-job'}
           clients={clients}
           propertiesByClientId={propertiesByClientId}
           initialRequest={requestPrefill}
+          requestUrl={requestLink?.url ?? null}
         />
       </div>
     </div>
