@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 import { JobCard } from './job-card';
@@ -20,6 +21,8 @@ export type JobSummary = {
 
 type FilterView = 'upcoming' | 'past' | 'all';
 
+const DONE_STATUSES = ['completed', 'closed', 'delivered'];
+
 const getJobTimestamp = (job: JobSummary) => {
   const when = job.scheduled_for ?? job.created_at ?? null;
   if (!when) return null;
@@ -31,28 +34,15 @@ const getJobTimestamp = (job: JobSummary) => {
 const formatSearchDateParts = (value: string | null | undefined) => {
   if (!value) return [];
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return [value.toLowerCase()];
-  }
+  if (Number.isNaN(parsed.getTime())) return [value.toLowerCase()];
 
   return [
     value.toLowerCase(),
     parsed.toISOString().slice(0, 10).toLowerCase(),
     parsed.toLocaleDateString('en-GB').toLowerCase(),
     parsed.toLocaleDateString('en-US').toLowerCase(),
-    parsed
-      .toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
-      .toLowerCase(),
-    parsed
-      .toLocaleDateString('en-GB', {
-        month: 'long',
-        year: 'numeric',
-      })
-      .toLowerCase(),
+    parsed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase(),
+    parsed.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }).toLowerCase(),
   ];
 };
 
@@ -76,27 +66,40 @@ const buildSearchIndex = (job: JobSummary) => {
     .toLowerCase();
 };
 
-const getJobHref = (job: JobSummary) => `/jobs/${job.id}/complete`;
+const getJobHref = (job: JobSummary) => {
+  const status = (job.status ?? '').toLowerCase();
+  if (status === 'issued') return `/jobs/${job.id}/complete`;
+  if (DONE_STATUSES.includes(status)) return `/jobs/${job.id}/pdf`;
+  return `/jobs/${job.id}`;
+};
+
+const getActionLabel = (status?: string | null) => {
+  const s = (status ?? '').toLowerCase();
+  if (s === 'issued') return 'Review & send';
+  if (DONE_STATUSES.includes(s)) return 'Open PDF';
+  return 'Open job';
+};
+
+const FILTER_LABELS: Record<FilterView, string> = {
+  upcoming: 'Upcoming',
+  past: 'Past',
+  all: 'All',
+};
 
 export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<FilterView>('upcoming');
 
   const filtered = useMemo(() => {
-    const terms = query
-      .toLowerCase()
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
+    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
 
     return jobs
       .filter((job) => {
         const haystack = buildSearchIndex(job);
         const matchesQuery = terms.every((term) => haystack.includes(term));
-
-        let matchesView = true;
-        if (view === 'upcoming') matchesView = job.status !== 'completed';
-        if (view === 'past') matchesView = job.status === 'completed';
+        const isDone = DONE_STATUSES.includes((job.status ?? '').toLowerCase());
+        const matchesView =
+          view === 'upcoming' ? !isDone : view === 'past' ? isDone : true;
         return matchesQuery && matchesView;
       })
       .sort((a, b) => {
@@ -106,39 +109,56 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
         if (left === null) return 1;
         if (right === null) return -1;
 
-        const leftUpcoming = a.status !== 'completed';
-        const rightUpcoming = b.status !== 'completed';
+        const leftDone = DONE_STATUSES.includes((a.status ?? '').toLowerCase());
+        const rightDone = DONE_STATUSES.includes((b.status ?? '').toLowerCase());
         if (view === 'past') return right - left;
-        if (view === 'upcoming') return leftUpcoming && rightUpcoming ? left - right : leftUpcoming ? -1 : 1;
-        if (leftUpcoming !== rightUpcoming) return leftUpcoming ? -1 : 1;
-        return leftUpcoming ? left - right : right - left;
+        if (view === 'upcoming') return !leftDone && !rightDone ? left - right : leftDone ? 1 : -1;
+        if (leftDone !== rightDone) return leftDone ? 1 : -1;
+        return leftDone ? right - left : left - right;
       });
   }, [jobs, query, view]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-3xl border border-white/30 bg-white/80 p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by name, address, type, status, or date"
-            className="flex-1 rounded-full"
-          />
-          <div className="flex items-center gap-2">
-            {(['upcoming', 'past', 'all'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setView(value)}
-                className={`rounded-full px-3 py-2 text-xs font-semibold uppercase ${
-                  view === value ? 'bg-[var(--accent)] text-white' : 'bg-[var(--muted)] text-gray-700'
-                }`}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
+    <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
+      <div className="flex items-center justify-between gap-3 pt-1">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            Your jobs
+          </p>
+          <h1 className="mt-0.5 text-[22px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
+            Jobs
+          </h1>
+        </div>
+        <Link
+          href="/jobs/new"
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--color-cta)] px-4 text-[13px] font-medium text-[var(--color-cta-fg)]"
+        >
+          + New job
+        </Link>
+      </div>
+
+      <div className="space-y-2">
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by name, address, type, or date"
+          className="h-10 rounded-[10px]"
+        />
+        <div className="flex gap-1.5">
+          {(['upcoming', 'past', 'all'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setView(value)}
+              className={`rounded-[8px] px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                view === value
+                  ? 'bg-[var(--color-action)] text-white'
+                  : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+              }`}
+            >
+              {FILTER_LABELS[value]}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -153,12 +173,31 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
             hasPdf={job.has_pdf}
             scheduledFor={job.scheduled_for}
             createdAt={job.created_at}
+            jobType={job.job_type}
+            actionLabel={getActionLabel(job.status)}
           />
         ))}
-        {filtered.length === 0 ? (
-          <p className="rounded-3xl border border-dashed border-white/40 p-6 text-sm text-muted-foreground/70">
-            No jobs match this filter.
-          </p>
+        {filtered.length === 0 && jobs.length > 0 ? (
+          <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-6 text-center">
+            <p className="text-[14px] font-medium text-[var(--color-text-primary)]">No jobs match this filter</p>
+            <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+              Try a different filter or clear the search.
+            </p>
+          </div>
+        ) : null}
+        {jobs.length === 0 ? (
+          <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-8 text-center">
+            <p className="text-[15px] font-medium text-[var(--color-text-primary)]">No jobs yet</p>
+            <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+              Create your first job to get started.
+            </p>
+            <Link
+              href="/jobs/new"
+              className="mt-4 inline-flex h-10 items-center justify-center rounded-[20px] bg-[var(--color-cta)] px-5 text-[13px] font-medium text-[var(--color-cta-fg)]"
+            >
+              New job
+            </Link>
+          </div>
         ) : null}
       </div>
     </div>

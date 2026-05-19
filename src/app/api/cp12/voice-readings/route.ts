@@ -6,12 +6,18 @@ import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 export const runtime = 'nodejs';
 
+const getTranscriptionModel = () =>
+  process.env.OPENAI_TRANSCRIBE_MODEL?.trim() ||
+  process.env.OPENAI_TRANSCRIBE_MODE?.trim() ||
+  process.env.OPENAI_MODEL?.trim() ||
+  'gpt-4o-mini-transcribe';
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const jobId = formData.get('jobId');
   const audio = formData.get('audio');
   const rawScope = formData.get('scope');
-  const scope = typeof rawScope === 'string' && ['pressure', 'high', 'low'].includes(rawScope)
+  const scope = typeof rawScope === 'string' && ['pressure', 'high', 'low', 'combustion'].includes(rawScope)
     ? rawScope as Cp12VoiceReadingScope
     : 'all';
 
@@ -47,7 +53,7 @@ export async function POST(request: Request) {
   try {
     const transcription = await getOpenAIClient().audio.transcriptions.create({
       file: audio,
-      model: process.env.OPENAI_TRANSCRIBE_MODEL ?? 'gpt-4o-mini-transcribe',
+      model: getTranscriptionModel(),
       response_format: 'json',
     });
 

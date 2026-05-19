@@ -1502,7 +1502,7 @@ export function CertificateWizard({
 
   const renderReadingsVoiceButton = (
     index: number,
-    scope: 'pressure' | 'high' | 'low',
+    scope: 'pressure' | 'high' | 'low' | 'combustion',
     buttonLabel: string,
   ) => (
     <Cp12VoiceReadings
@@ -2345,11 +2345,20 @@ export function CertificateWizard({
                       unit="kW"
                       value={appliance.heat_input ?? ''}
                       onChange={(val) => setApplianceField(index, 'heat_input', val)}
+                      labelAction={renderReadingsVoiceButton(index, 'pressure', 'Speak pressure')}
                     />
                   </div>
                 </div>
                 <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                  <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Combustion readings</p>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Combustion readings</p>
+                      <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">
+                        Speak high and low FGA values in one go, then review the fields.
+                      </p>
+                    </div>
+                    {renderReadingsVoiceButton(index, 'combustion', 'Speak FGA readings')}
+                  </div>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
                       <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">High combustion reading</p>

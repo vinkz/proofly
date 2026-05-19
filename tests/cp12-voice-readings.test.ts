@@ -29,6 +29,24 @@ describe('parseCp12VoiceReadings', () => {
     });
   });
 
+  it('parses natural high-rate and low-rate boiler service reading blocks', () => {
+    const result = parseCp12VoiceReadings(
+      'operating pressure 20 point 5 millibar heat input 24 kilowatts high rate co 12 ppm co2 9 point 2 ratio 0 point 0008 low rate co 8 ppm co2 8 point 9 ratio 0 point 0007',
+    );
+
+    expect(result.parsed).toMatchObject({
+      workingPressure: '20.5',
+      heatInput: '24',
+      highCoPpm: '12',
+      highCo2Percent: '9.2',
+      highRatio: '0.0008',
+      lowCoPpm: '8',
+      lowCo2Percent: '8.9',
+      lowRatio: '0.0007',
+    });
+    expect(result.warnings).toEqual([]);
+  });
+
   it('parses spoken word numbers conservatively', () => {
     const result = parseCp12VoiceReadings('pressure twenty heat input twenty four co eight');
 
@@ -105,6 +123,33 @@ describe('parseCp12VoiceReadings', () => {
     expect(result.parsed).toMatchObject({
       workingPressure: '19',
       heatInput: '22',
+    });
+  });
+
+  it('accepts compact boiler service heat input variations', () => {
+    const result = parseCp12VoiceReadings('inlet pressure 21 rated input 26 point 5', { scope: 'pressure' });
+
+    expect(result.parsed).toMatchObject({
+      workingPressure: '21',
+      heatInput: '26.5',
+    });
+  });
+
+  it('limits combustion scope to high and low combustion values', () => {
+    const result = parseCp12VoiceReadings(
+      'pressure 20 heat input 24 high fire co 9 co2 9 point 1 ratio point 0009 low fire co 7 co2 8 point 7 ratio point 0007',
+      { scope: 'combustion' },
+    );
+
+    expect(result.parsed).toMatchObject({
+      workingPressure: null,
+      heatInput: null,
+      highCoPpm: '9',
+      highCo2Percent: '9.1',
+      highRatio: '0.0009',
+      lowCoPpm: '7',
+      lowCo2Percent: '8.7',
+      lowRatio: '0.0007',
     });
   });
 

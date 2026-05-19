@@ -16,7 +16,7 @@ export type Cp12VoiceReadingsResult = {
   warnings: string[];
 };
 
-export type Cp12VoiceReadingScope = 'all' | 'pressure' | 'high' | 'low';
+export type Cp12VoiceReadingScope = 'all' | 'pressure' | 'high' | 'low' | 'combustion';
 
 export const CP12_VOICE_READING_FIELDS: Array<{ key: keyof Cp12VoiceReadingsParsed; label: string; unit?: string }> = [
   { key: 'workingPressure', label: 'Working pressure', unit: 'mbar' },
@@ -138,14 +138,15 @@ const FIELD_PATTERNS: Array<{ key: keyof Cp12VoiceReadingsParsed; patterns: RegE
     key: 'workingPressure',
     patterns: [
       new RegExp(`\\b(?:working|operating|burner|gas|dynamic)\\s+pressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:inlet|standing)\\s+pressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
       new RegExp(`\\bpressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'heatInput',
     patterns: [
-      new RegExp(`\\bheat\\s+(?:input|in\\s+put|imput|inlet|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
-      new RegExp(`\\bgas\\s+rate\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:net|gross|max|maximum)?\\s*heat\\s+(?:input|in\\s+put|imput|inlet|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:gas\\s+rate|rated\\s+input|appliance\\s+input|input\\s+rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
@@ -164,10 +165,12 @@ const SCOPED_COMBUSTION_PATTERNS = {
 
 const SCOPED_PRESSURE_PATTERNS = {
   heatInput: [
-    new RegExp(`\\bheat\\s+(?:input|in\\s+put|imput|inlet)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
-    new RegExp(`\\binput\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+    new RegExp(`\\b(?:net|gross|max|maximum)?\\s*heat\\s+(?:input|in\\s+put|imput|inlet|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+    new RegExp(`\\b(?:gas\\s+rate|rated\\s+input|appliance\\s+input|input\\s+rate|input)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
   ],
 };
+
+const COMBUSTION_BLOCK_MARKER = /\b(high|hi|maximum|max|full\s+rate|full\s+load|high\s+rate|high\s+fire|combustion\s+high|high\s+combustion|low|minimum|min|low\s+rate|low\s+fire|low\s+load|combustion\s+low|low\s+combustion)\b/gi;
 
 function normalizeTranscript(text: string) {
   return text
@@ -191,9 +194,9 @@ function normalizeNumericString(value: string) {
   const cleaned = value.replace(/,/g, '').trim();
   if (!cleaned) return null;
   const [wholeRaw, fractionRaw] = cleaned.split('.');
-  if (!wholeRaw) return null;
-  const whole = String(Number.parseInt(wholeRaw, 10));
-  if (Number.isNaN(Number.parseInt(wholeRaw, 10))) return null;
+  const normalizedWholeRaw = wholeRaw || '0';
+  const whole = String(Number.parseInt(normalizedWholeRaw, 10));
+  if (Number.isNaN(Number.parseInt(normalizedWholeRaw, 10))) return null;
   if (fractionRaw === undefined) return whole;
   const fraction = fractionRaw.replace(/[^0-9]/g, '');
   if (!fraction) return null;
@@ -203,7 +206,7 @@ function normalizeNumericString(value: string) {
 function parseWholeNumberTokens(tokens: string[]) {
   if (!tokens.length) return null;
 
-  if (tokens.length === 1 && /^[0-9]+(?:\.[0-9]+)?$/.test(tokens[0])) {
+  if (tokens.length === 1 && /^(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/.test(tokens[0])) {
     return normalizeNumericString(tokens[0]);
   }
 
@@ -275,7 +278,7 @@ function parseLeadingNumberPhrase(value: string) {
   for (; cursor < tokens.length; cursor += 1) {
     const token = tokens[cursor];
     if (UNIT_TOKENS.has(token)) break;
-    if (DECIMAL_TOKENS.has(token) || /^[0-9]+(?:\.[0-9]+)?$/.test(token) || token in DIGIT_WORDS || token in SMALL_NUMBERS || token in TENS || token === 'hundred' || token === 'thousand') {
+    if (DECIMAL_TOKENS.has(token) || /^(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/.test(token) || token in DIGIT_WORDS || token in SMALL_NUMBERS || token in TENS || token === 'hundred' || token === 'thousand') {
       relevant.push(token);
       continue;
     }
@@ -296,7 +299,7 @@ function parseLeadingNumberPhrase(value: string) {
   }
 
   const [decimalIndex] = decimalIndexes;
-  const whole = parseWholeNumberTokens(relevant.slice(0, decimalIndex));
+  const whole = decimalIndex === 0 ? '0' : parseWholeNumberTokens(relevant.slice(0, decimalIndex));
   const fraction = parseFractionTokens(relevant.slice(decimalIndex + 1));
   if (!whole || !fraction) return null;
   return `${whole}.${fraction}`;
@@ -316,6 +319,48 @@ export function hasParsedCp12VoiceReadings(parsed: Cp12VoiceReadingsParsed) {
   return Object.values(parsed).some((value) => Boolean(value && value.trim()));
 }
 
+function getCombustionMarkerKind(marker: string): 'high' | 'low' {
+  return /\b(?:low|minimum|min)\b/.test(marker) ? 'low' : 'high';
+}
+
+function extractCombustionValuesFromText(text: string) {
+  return {
+    coPpm: extractFieldValue(text, SCOPED_COMBUSTION_PATTERNS.coPpm),
+    co2Percent: extractFieldValue(text, SCOPED_COMBUSTION_PATTERNS.co2Percent),
+    ratio: extractFieldValue(text, SCOPED_COMBUSTION_PATTERNS.ratio),
+  };
+}
+
+function applyCombustionBlockParsing(parsed: Cp12VoiceReadingsParsed, normalized: string) {
+  const markers = Array.from(normalized.matchAll(COMBUSTION_BLOCK_MARKER)).map((match) => ({
+    kind: getCombustionMarkerKind(match[0]),
+    index: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+  }));
+
+  if (!markers.length) return parsed;
+
+  const nextParsed = { ...parsed };
+  markers.forEach((marker, index) => {
+    const nextMarker = markers[index + 1];
+    const segment = normalized.slice(marker.end, nextMarker?.index ?? normalized.length);
+    const values = extractCombustionValuesFromText(segment);
+
+    if (marker.kind === 'high') {
+      nextParsed.highCoPpm = nextParsed.highCoPpm ?? values.coPpm;
+      nextParsed.highCo2Percent = nextParsed.highCo2Percent ?? values.co2Percent;
+      nextParsed.highRatio = nextParsed.highRatio ?? values.ratio;
+      return;
+    }
+
+    nextParsed.lowCoPpm = nextParsed.lowCoPpm ?? values.coPpm;
+    nextParsed.lowCo2Percent = nextParsed.lowCo2Percent ?? values.co2Percent;
+    nextParsed.lowRatio = nextParsed.lowRatio ?? values.ratio;
+  });
+
+  return nextParsed;
+}
+
 function applyScope(parsed: Cp12VoiceReadingsParsed, normalized: string, scope: Cp12VoiceReadingScope) {
   if (scope === 'all') return parsed;
 
@@ -323,6 +368,16 @@ function applyScope(parsed: Cp12VoiceReadingsParsed, normalized: string, scope: 
   if (scope === 'pressure') {
     scoped.workingPressure = parsed.workingPressure;
     scoped.heatInput = parsed.heatInput ?? extractFieldValue(normalized, SCOPED_PRESSURE_PATTERNS.heatInput);
+    return scoped;
+  }
+
+  if (scope === 'combustion') {
+    scoped.highCoPpm = parsed.highCoPpm;
+    scoped.highCo2Percent = parsed.highCo2Percent;
+    scoped.highRatio = parsed.highRatio;
+    scoped.lowCoPpm = parsed.lowCoPpm;
+    scoped.lowCo2Percent = parsed.lowCo2Percent;
+    scoped.lowRatio = parsed.lowRatio;
     return scoped;
   }
 
@@ -364,13 +419,14 @@ export function parseCp12VoiceReadings(
     parsed[field.key] = extractFieldValue(normalized, field.patterns);
   }
 
+  parsed = applyCombustionBlockParsing(parsed, normalized);
   parsed = applyScope(parsed, normalized, scope);
 
-  if (scope === 'all' && /(?<!high\s)(?<!low\s)\bco2\b/.test(normalized) && !parsed.highCo2Percent && !parsed.lowCo2Percent) {
+  if ((scope === 'all' || scope === 'combustion') && /(?<!high\s)(?<!low\s)\bco2\b/.test(normalized) && !parsed.highCo2Percent && !parsed.lowCo2Percent) {
     warnings.push('Ignored CO2 value because CP12 combustion readings need high or low context.');
   }
 
-  if (scope === 'all' && /(?<!high\s)(?<!low\s)\bratio\b/.test(normalized) && !parsed.highRatio && !parsed.lowRatio) {
+  if ((scope === 'all' || scope === 'combustion') && /(?<!high\s)(?<!low\s)\bratio\b/.test(normalized) && !parsed.highRatio && !parsed.lowRatio) {
     warnings.push('Ignored ratio value because CP12 combustion readings need high or low context.');
   }
 

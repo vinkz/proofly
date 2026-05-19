@@ -18,6 +18,7 @@ type Props = {
   buttonLabel?: string;
   buttonClassName?: string;
   onApply: (values: Partial<Cp12VoiceReadingsParsed>) => void;
+  onActiveChange?: (active: boolean) => void;
 };
 
 type RecorderState = 'idle' | 'starting' | 'recording' | 'transcribing' | 'review' | 'error';
@@ -69,6 +70,7 @@ export function Cp12VoiceReadings({
   buttonLabel,
   buttonClassName = 'rounded-full text-xs',
   onApply,
+  onActiveChange,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<RecorderState>('idle');
@@ -86,10 +88,18 @@ export function Cp12VoiceReadings({
   const applyPayload = useMemo(() => buildApplyPayload(editableValues), [editableValues]);
   const canApply = Object.keys(applyPayload).length > 0;
   const isInlineScoped = scope !== 'all';
+
+  const onActiveChangeRef = useRef(onActiveChange);
+  onActiveChangeRef.current = onActiveChange;
+  useEffect(() => {
+    onActiveChangeRef.current?.(state === 'recording');
+  }, [state]);
   const resolvedButtonLabel =
     buttonLabel ??
     (scope === 'pressure'
       ? 'Speak pressure'
+      : scope === 'combustion'
+        ? 'Speak FGA readings'
       : scope === 'high'
         ? 'Speak high'
         : scope === 'low'
@@ -293,13 +303,15 @@ export function Cp12VoiceReadings({
     const idleHint =
       scope === 'pressure'
         ? 'Say: pressure 20, input 24'
-        : 'Say: CO 8, CO2 9.2, ratio 0.0008';
+        : scope === 'combustion'
+          ? 'Say: high rate CO 12, CO2 9.2, ratio 0.0008. Low rate CO 8, CO2 8.9, ratio 0.0007'
+          : 'Say: CO 8, CO2 9.2, ratio 0.0008';
     return (
       <span className="inline-flex flex-col items-start gap-1">
         <Button
           type="button"
           variant="outline"
-          className={`${buttonClassName}${active ? ' border-[var(--color-action)] text-[var(--color-action)]' : ''}`}
+          className={`${buttonClassName}${active ? ' border-[var(--color-red)] text-[var(--color-red)]' : ''}`}
           onClick={handleButtonClick}
           disabled={disabled || busy}
         >
@@ -315,9 +327,9 @@ export function Cp12VoiceReadings({
           <span className="text-[11px] text-[var(--color-text-tertiary)]">{idleHint}</span>
         ) : null}
         {active ? (
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-action)]">
-            <span className="size-1.5 animate-pulse rounded-full bg-[var(--color-action)]" />
-            Listening…
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-red)]">
+            <span className="size-1.5 animate-pulse rounded-full bg-[var(--color-red)]" />
+            {scope === 'combustion' ? 'Listening for high and low FGA readings…' : 'Listening…'}
           </span>
         ) : null}
         {state === 'error' && errorMessage ? (
