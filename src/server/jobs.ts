@@ -619,7 +619,7 @@ export async function requestLandlordJobPrefill(payload: z.infer<typeof Landlord
     job_type: input.jobType,
     entry_point: 'engineer_created',
     cert_types: certTypesForJobType(input.jobType),
-    data_collection_status: 'awaiting_landlord',
+    data_collection_status: 'awaiting_landlord_input',
     landlord_input_requested_at: now,
     prefill_token: token,
     prefill_token_expires_at: addDaysIso(14),
