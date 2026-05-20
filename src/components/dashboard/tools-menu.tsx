@@ -49,7 +49,7 @@ export function ToolsMenu() {
         onClick={() => setOpen((v) => !v)}
         className="flex h-9 w-9 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-secondary)] hover:text-[var(--color-text-primary)]"
       >
-        <WrenchIcon width={16} height={16} strokeWidth={1.5} />
+        <HamburgerIcon width={16} height={16} strokeWidth={1.75} />
       </button>
 
       {open ? (
@@ -96,10 +96,10 @@ function iconBase(props: SVGProps<SVGSVGElement>) {
   };
 }
 
-function WrenchIcon(props: SVGProps<SVGSVGElement>) {
+function HamburgerIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...iconBase(props)}>
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z" />
+      <path d="M4 6h16M4 12h16M4 18h16" />
     </svg>
   );
 }

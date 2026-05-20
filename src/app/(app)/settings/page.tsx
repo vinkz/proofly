@@ -3,6 +3,7 @@ import { userHasPassword } from '@/server/auth';
 import { ProfilePreferences } from './profile-preferences';
 import { PasswordSection } from './password-section';
 import { SavedSignatureSection } from './saved-signature-section';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { normalizeStandardRates } from '@/lib/standard-rates';
 
 export default async function SettingsPage() {
@@ -74,6 +75,16 @@ export default async function SettingsPage() {
       </section>
 
       <PasswordSection hasPassword={hasPassword} email={user.email ?? ''} />
+
+      {/* Appearance */}
+      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Appearance</p>
+        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Theme</h2>
+        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">Switch between light and dark mode.</p>
+        <div className="mt-4">
+          <ThemeToggle />
+        </div>
+      </section>
 
       {/* Subscription — placeholder until Milestone 5 */}
       <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">

@@ -6,7 +6,6 @@ import { PageFade } from './_components/page-fade';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { ToolsMenu } from '@/components/dashboard/tools-menu';
 import { listPendingJobRequestsForDashboard } from '@/server/job-requests';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   let pendingRequestsCount = 0;
@@ -27,10 +26,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 certnow
               </span>
             </Link>
-            <div className="flex items-center gap-2">
-              <ToolsMenu />
-              <ThemeToggle />
-            </div>
+            <ToolsMenu />
           </div>
         </header>
 
