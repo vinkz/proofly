@@ -240,17 +240,24 @@ export default async function CertificateWizardPage({
   }
 
   if (normalizedType === 'gas_warning_notice') {
+    let shouldRedirectToCompletion = false;
     try {
       const completionState = await getJobCompletionState(jobId);
       const warningNoticeRow = completionState.required.find((item) => item.id === 'gas_warning_notice');
       if (warningNoticeRow?.status === 'completed') {
-        redirect(`/jobs/${jobId}/complete`);
+        shouldRedirectToCompletion = true;
       }
     } catch (error) {
       if (isAuthError(error)) {
         redirect('/login');
       }
-      throw error;
+      console.warn('CertificateWizardPage: gas warning completion check failed', {
+        jobId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (shouldRedirectToCompletion) {
+      redirect(`/jobs/${jobId}/complete`);
     }
   }
 

@@ -10,7 +10,7 @@ import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Select } from '@/components/ui/select';
 import { RequestLandlordDetailsCard } from '@/components/jobs/request-landlord-details-card';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 
@@ -279,7 +279,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [landlordCity, setLandlordCity] = useState(initialRequest?.landlordCity ?? '');
   const [landlordPostcode, setLandlordPostcode] = useState(initialRequest?.landlordPostcode ?? '');
   const [landlordTel, setLandlordTel] = useState(initialRequest?.landlordPhone ?? '');
-  const [step, setStep] = useState<1 | 2 | 3>(initialRequest ? 2 : 1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialRequest ? 4 : 1);
   const [path, setPath] = useState<'self' | 'landlord' | null>(initialRequest ? 'self' : null);
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
   const [landlordRequestMessage, setLandlordRequestMessage] = useState<string | null>(null);
@@ -292,12 +292,8 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [partyAddressSuggestions, setPartyAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedPartyAddressMatchId, setSelectedPartyAddressMatchId] = useState<string | null>(null);
   const [partyAddressSearchError, setPartyAddressSearchError] = useState<string | null>(null);
-  const [clientSheetOpen, setClientSheetOpen] = useState(false);
-  const [propertySheetOpen, setPropertySheetOpen] = useState(false);
-  const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [clientChosen, setClientChosen] = useState(() => !clients.length || !!initialRequest);
   const [propertyChosen, setPropertyChosen] = useState(() => !!initialRequest);
-  const [showAskLandlord, setShowAskLandlord] = useState(false);
   const isCp12Upcoming = jobType === 'safety_check';
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const scheduleFieldLabel = isCp12Upcoming ? 'Inspection date' : 'Scheduled date and time';
@@ -320,30 +316,28 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     [availableProperties],
   );
 
-  const filteredClients = useMemo(() => {
-    const q = clientSearchQuery.toLowerCase().trim();
-    if (!q) return clients;
-    return clients.filter((c) => (c.name ?? '').toLowerCase().includes(q));
-  }, [clients, clientSearchQuery]);
-
-  const selectedProperty = useMemo(
-    () => availableProperties.find((p) => p.key === selectedPropertyKey),
-    [availableProperties, selectedPropertyKey],
-  );
-
-  const row1Display = clientChosen
-    ? selectedClientId
-      ? clientName || 'Client selected'
-      : 'New client'
-    : null;
-
-  const row2Display = propertyChosen
-    ? selectedProperty
-      ? [selectedProperty.job_address_line1, selectedProperty.job_address_city, selectedProperty.job_postcode].filter(Boolean).join(', ')
-      : 'New / manual entry'
-    : null;
-
   const canShowContinue = clientChosen && propertyChosen;
+
+  const goBack = () => {
+    if (step === 5) {
+      setStep(4);
+      return;
+    }
+    if (step === 4) {
+      setPath(null);
+      setStep(3);
+      return;
+    }
+    if (step === 3 && path) {
+      setPath(null);
+      return;
+    }
+    if (step === 3) {
+      setStep(2);
+      return;
+    }
+    setStep(1);
+  };
 
   const formatAddressError = (msg: string | null) => {
     if (!msg) return null;
@@ -711,6 +705,40 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     setSelectedPropertyKey('');
   };
 
+  const handleExistingClientSelect = (clientId: string) => {
+    setSelectedClientId(clientId);
+    setSelectedPropertyKey('');
+    if (!clientId) {
+      setClientMode('new');
+      setClientChosen(false);
+      setPropertyChosen(false);
+      setClientName('');
+      setClientPhone('');
+      setClientEmail('');
+      return;
+    }
+
+    setClientChosen(true);
+    setPropertyChosen((propertiesByClientId[clientId] ?? []).length === 0);
+  };
+
+  const handleExistingPropertySelect = (propertyKey: string) => {
+    if (!propertyKey) {
+      setSelectedPropertyKey('');
+      setPropertyChosen(false);
+      return;
+    }
+
+    if (propertyKey === '__manual__') {
+      setSelectedPropertyKey('');
+      setPropertyChosen(true);
+      return;
+    }
+
+    setSelectedPropertyKey(propertyKey);
+    setPropertyChosen(true);
+  };
+
   const handleRequestLandlordPrefill = () => {
     if (!selectedClientId) {
       setLandlordRequestError('Select a client first.');
@@ -962,19 +990,19 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
-      {/* Step header for steps 2 & 3 */}
+      {/* Step header */}
       {step > 1 ? (
         <div className="flex items-center justify-between">
           <button
             type="button"
             className="flex items-center gap-1 text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
-            onClick={() => setStep(step === 3 ? 2 : 1)}
+            onClick={goBack}
             disabled={isPending}
           >
             <span aria-hidden="true">←</span> Back
           </button>
           <div className="flex items-center gap-1.5">
-            {[1, 2, 3].map((s) => (
+            {[1, 2, 3, 4, 5].map((s) => (
               <span
                 key={s}
                 className={`h-[5px] w-[5px] rounded-full transition-colors ${
@@ -990,7 +1018,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
         </div>
       ) : null}
 
-      {/* ===== STEP 1: Job type + path choice ===== */}
+      {/* ===== STEP 1: Job type ===== */}
       {step === 1 ? (
         <>
           <div>
@@ -1002,7 +1030,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                   type="button"
                   disabled={isPending}
                   onClick={() => setJobType(type)}
-                  className={`flex h-[36px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
+                  className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                     jobType === type
                       ? 'bg-[#111] text-white'
                       : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
@@ -1014,167 +1042,218 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             </div>
             {demoEnabled ? (
               <div className="mt-2 flex justify-end">
-                <button type="button" className="rounded-[6px] text-xs text-[var(--color-text-tertiary)] underline-offset-2 hover:underline" onClick={handleAutofill} disabled={isPending}>
+                <button type="button" className="text-xs text-[var(--color-text-tertiary)] underline-offset-2 hover:underline" onClick={handleAutofill} disabled={isPending}>
                   Autofill test {JOB_TYPE_LABELS[jobType]}
                 </button>
               </div>
             ) : null}
           </div>
 
-          <div>
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => { setPath('self'); setStep(2); }}
-                className="flex items-start gap-3 rounded-[14px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-4 text-left transition hover:border-[var(--color-action)]"
-              >
-                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--color-background-secondary)] text-[17px]">📋</span>
-                <div>
-                  <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">Fill details myself</p>
-                  <p className="mt-0.5 text-[12px] leading-[1.5] text-[var(--color-text-secondary)]">Enter landlord and property details now. Pick a saved property to carry appliance history forward.</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => { setPath('landlord'); setStep(2); }}
-                className="flex items-start gap-3 rounded-[14px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-4 text-left transition hover:border-[var(--color-action)]"
-              >
-                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--color-background-secondary)] text-[17px]">📤</span>
-                <div>
-                  <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">Ask landlord</p>
-                  <p className="mt-0.5 text-[12px] leading-[1.5] text-[var(--color-text-secondary)]">Send them a link to fill in property and access details.</p>
-                </div>
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => setStep(2)}
+            className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+          >
+            Continue
+          </button>
         </>
       ) : null}
 
-      {/* ===== STEP 2: Landlord / client details ===== */}
+      {/* ===== STEP 2: Who is this for? ===== */}
       {step === 2 ? (
         <>
-          {path === 'landlord' && requestUrl ? (
-            <RequestLandlordDetailsCard requestUrl={requestUrl} />
+          <div className="space-y-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Who is this for?</p>
+            <div className="space-y-2.5">
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  Landlord
+                </label>
+                <Select
+                  value={selectedClientId}
+                  onChange={(event) => handleExistingClientSelect(event.target.value)}
+                  disabled={isPending || clients.length === 0}
+                  className="mt-1.5"
+                >
+                  <option value="">{clients.length ? 'Select landlord' : 'No saved landlords yet'}</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name ?? 'Unnamed landlord'}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  Property
+                </label>
+                <Select
+                  value={selectedPropertyKey || (propertyChosen ? '__manual__' : '')}
+                  onChange={(event) => handleExistingPropertySelect(event.target.value)}
+                  disabled={isPending || !selectedClientId || availableProperties.length === 0}
+                  className="mt-1.5"
+                >
+                  <option value="">
+                    {!selectedClientId
+                      ? 'Select landlord first'
+                      : availableProperties.length
+                        ? 'Select property'
+                        : 'No saved properties yet'}
+                  </option>
+                  <option value="__manual__">New / manual entry</option>
+                  {availableProperties.map((property) => (
+                    <option key={property.key} value={property.key}>
+                      {property.label || [property.job_address_line1, property.job_address_city, property.job_postcode].filter(Boolean).join(', ')}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 border-t-[0.5px] border-[var(--color-border-tertiary)] pt-2.5">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => {
+                  setClientChosen(true);
+                  setClientMode('new');
+                  setSelectedClientId('');
+                  setSelectedPropertyKey('');
+                  setPropertyChosen(true);
+                  setClientName('');
+                  setClientPhone('');
+                  setClientEmail('');
+                }}
+                className="text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
+              >
+                + New landlord
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => {
+                  setSelectedPropertyKey('');
+                  setPropertyChosen(true);
+                }}
+                className="text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
+              >
+                + New property
+              </button>
+            </div>
+          </div>
+
+          {canShowContinue ? (
+            <button
+              type="button"
+              onClick={() => {
+                setPath(null);
+                setStep(3);
+              }}
+              disabled={isPending}
+              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            >
+              Continue
+            </button>
+          ) : null}
+        </>
+      ) : null}
+
+      {/* ===== STEP 3: Start method ===== */}
+      {step === 3 ? (
+        <>
+          {!path ? (
+            <div className="space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => {
+                  setPath('self');
+                  setStep(4);
+                }}
+                className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
+              >
+                <div>
+                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Fill details myself</p>
+                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Enter or review the landlord and property details now.</p>
+                </div>
+                <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setPath('landlord')}
+                className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
+              >
+                <div>
+                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask landlord</p>
+                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Send a link for the landlord to complete the missing details.</p>
+                </div>
+                <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
+              </button>
+            </div>
           ) : null}
 
+          {path === 'landlord' && selectedClientId ? (
+            <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
+              <div>
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Request details from landlord</p>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">An email will be sent with a secure form link.</p>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={clientEmail}
+                  onChange={(event) => setClientEmail(event.target.value)}
+                  placeholder="Landlord email"
+                  type="email"
+                  disabled={isPending}
+                />
+                <button
+                  type="button"
+                  className="shrink-0 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
+                  onClick={handleRequestLandlordPrefill}
+                  disabled={isPending || !clientEmail.trim()}
+                >
+                  {isPending ? 'Sending…' : 'Send'}
+                </button>
+              </div>
+              {landlordRequestMessage ? (
+                <p className="text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
+              ) : null}
+              {landlordRequestError ? (
+                <p className="text-[12px] text-[var(--color-red)]">{landlordRequestError}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {path === 'landlord' && !selectedClientId && requestUrl ? (
+            <RequestLandlordDetailsCard
+              requestUrl={requestUrl}
+              initialLandlordName={landlordName || clientName}
+              initialLandlordEmail={clientEmail}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {/* ===== STEP 4: Landlord / client details ===== */}
+      {step === 4 ? (
+        <>
           {initialRequest ? (
             <div className="rounded-[12px] border-[0.5px] border-[var(--color-action)]/30 bg-[var(--color-action-bg)] px-4 py-3">
               <p className="text-[13px] font-medium text-[var(--color-action)]">Landlord request details</p>
-              <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+              <div className="mt-2 space-y-1">
                 <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant:</span> {initialRequest.tenantName || 'Not provided'}</p>
-                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
-                <p className="text-[12px] text-[var(--color-text-secondary)] md:col-span-2"><span className="font-medium text-[var(--color-text-primary)]">Preferred dates:</span> {initialRequest.preferredDates || 'Not provided'}</p>
-                <p className="text-[12px] text-[var(--color-text-secondary)] md:col-span-2"><span className="font-medium text-[var(--color-text-primary)]">Access notes:</span> {initialRequest.accessNotes || 'Not provided'}</p>
+                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
+                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Preferred dates:</span> {initialRequest.preferredDates || 'Not provided'}</p>
+                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Access notes:</span> {initialRequest.accessNotes || 'Not provided'}</p>
               </div>
             </div>
           ) : null}
 
-          {/* Compact client + property selector */}
-          <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
-            <button
-              type="button"
-              onClick={() => setClientSheetOpen(true)}
-              disabled={isPending}
-              className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-[var(--color-background-secondary)]"
-            >
-              <span className={`truncate text-[14px] font-medium ${row1Display ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}>
-                {row1Display ?? 'Select a client'}
-              </span>
-              <span className="ml-3 shrink-0 text-[11px] text-[var(--color-text-tertiary)]">↓</span>
-            </button>
-            <div className="border-t-[0.5px] border-[var(--color-border-tertiary)]" />
-            <button
-              type="button"
-              onClick={() => setPropertySheetOpen(true)}
-              disabled={isPending}
-              className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-[var(--color-background-secondary)]"
-            >
-              <span className={`truncate text-[13px] ${row2Display ? 'text-[var(--color-text-secondary)]' : 'text-[var(--color-text-tertiary)]'}`}>
-                {row2Display ?? 'Select a property'}
-              </span>
-              <span className="ml-3 shrink-0 text-[11px] text-[var(--color-text-tertiary)]">↓</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4 px-1">
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => {
-                setClientChosen(true);
-                setClientMode('new');
-                setSelectedClientId('');
-                setSelectedPropertyKey('');
-                setPropertyChosen(true);
-                setClientName('');
-                setClientPhone('');
-                setClientEmail('');
-              }}
-              className="text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
-            >
-              + New client
-            </button>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => {
-                setSelectedPropertyKey('');
-                setPropertyChosen(true);
-              }}
-              className="text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
-            >
-              + New property
-            </button>
-          </div>
-
-          {selectedClientId && path === 'self' ? (
-            <div>
-              {!showAskLandlord ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAskLandlord(true)}
-                  className="text-[12px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
-                >
-                  Send prefill request to landlord →
-                </button>
-              ) : (
-                <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                  <div className="grid gap-2 sm:grid-cols-[1fr,auto]">
-                    <Input
-                      value={clientEmail}
-                      onChange={(event) => setClientEmail(event.target.value)}
-                      placeholder="Landlord email"
-                      type="email"
-                      className="rounded-[10px]"
-                      disabled={isPending}
-                    />
-                    <button
-                      type="button"
-                      className="rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
-                      onClick={handleRequestLandlordPrefill}
-                      disabled={isPending || !clientEmail.trim()}
-                    >
-                      Ask landlord
-                    </button>
-                  </div>
-                  {landlordRequestMessage ? (
-                    <p className="mt-2 text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
-                  ) : null}
-                  {landlordRequestError ? (
-                    <p className="mt-2 text-[12px] font-medium text-[var(--color-red)]">{landlordRequestError}</p>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          ) : null}
-
-          {/* Landlord / party details */}
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="mb-3 text-[14px] font-medium text-[var(--color-text-primary)]">{partyCardTitle}</p>
+            <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">{partyCardTitle}</p>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
@@ -1313,28 +1392,28 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
           {canShowContinue ? (
             <button
               type="button"
-              onClick={() => setStep(3)}
+              onClick={() => setStep(5)}
               disabled={isPending}
-              className="inline-flex h-[44px] w-full items-center justify-center rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
             >
-              Continue →
+              Continue
             </button>
           ) : null}
         </>
       ) : null}
 
-      {/* ===== STEP 3: Job address ===== */}
-      {step === 3 ? (
+      {/* ===== STEP 5: Job address ===== */}
+      {step === 5 ? (
         <>
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Job address</p>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Job address</p>
               {landlordAddressLine1 || landlordName ? (
                 <button
                   type="button"
                   onClick={handleCopyLandlordToJob}
                   disabled={isPending}
-                  className="text-[11px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-action)] hover:underline underline-offset-2"
+                  className="text-[11px] text-[var(--color-text-tertiary)] underline-offset-2 transition-colors hover:text-[var(--color-action)] hover:underline"
                 >
                   ← Copy landlord address
                 </button>
@@ -1507,93 +1586,6 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
         </>
       ) : null}
 
-      {/* Client selection bottom sheet */}
-      <Sheet open={clientSheetOpen} onOpenChange={setClientSheetOpen}>
-        <SheetContent side="bottom" title="Select client">
-          <Input
-            value={clientSearchQuery}
-            onChange={(event) => setClientSearchQuery(event.target.value)}
-            placeholder="Search clients…"
-            className="rounded-[10px]"
-            autoFocus
-          />
-          <div className="mt-2 max-h-64 overflow-y-auto">
-            {filteredClients.length === 0 ? (
-              <p className="px-3 py-4 text-center text-[13px] text-[var(--color-text-tertiary)]">No clients found</p>
-            ) : (
-              filteredClients.map((client) => (
-                <button
-                  key={client.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedClientId(client.id);
-                    setClientChosen(true);
-                    setClientSheetOpen(false);
-                    setClientSearchQuery('');
-                  }}
-                  className={`w-full rounded-[10px] px-3 py-2.5 text-left text-[14px] transition-colors hover:bg-[var(--color-background-secondary)] ${
-                    selectedClientId === client.id
-                      ? 'font-medium text-[var(--color-action)]'
-                      : 'text-[var(--color-text-primary)]'
-                  }`}
-                >
-                  {client.name ?? 'Unnamed client'}
-                </button>
-              ))
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Property selection bottom sheet */}
-      <Sheet open={propertySheetOpen} onOpenChange={setPropertySheetOpen}>
-        <SheetContent side="bottom" title="Select property">
-          <div className="space-y-0.5">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedPropertyKey('');
-                setPropertyChosen(true);
-                setPropertySheetOpen(false);
-              }}
-              className={`w-full rounded-[10px] px-3 py-2.5 text-left text-[14px] transition-colors hover:bg-[var(--color-background-secondary)] ${
-                propertyChosen && !selectedPropertyKey
-                  ? 'font-medium text-[var(--color-action)]'
-                  : 'text-[var(--color-text-secondary)]'
-              }`}
-            >
-              New / manual entry
-            </button>
-            {!selectedClientId ? (
-              <p className="px-3 py-3 text-center text-[13px] text-[var(--color-text-tertiary)]">Select a client first to see saved properties</p>
-            ) : availableProperties.length === 0 ? (
-              <p className="px-3 py-3 text-center text-[13px] text-[var(--color-text-tertiary)]">No saved properties for this client</p>
-            ) : (
-              availableProperties.map((property) => (
-                <button
-                  key={property.key}
-                  type="button"
-                  onClick={() => {
-                    setSelectedPropertyKey(property.key);
-                    setPropertyChosen(true);
-                    setPropertySheetOpen(false);
-                  }}
-                  className={`w-full rounded-[10px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--color-background-secondary)] ${
-                    selectedPropertyKey === property.key
-                      ? 'text-[var(--color-action)]'
-                      : 'text-[var(--color-text-primary)]'
-                  }`}
-                >
-                  <p className="text-[14px] font-medium">{property.job_address_line1 || property.job_address_name}</p>
-                  <p className="text-[12px] text-[var(--color-text-secondary)]">
-                    {[property.job_address_city, property.job_postcode].filter(Boolean).join(', ')}
-                  </p>
-                </button>
-              ))
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
     </form>
   );
 }

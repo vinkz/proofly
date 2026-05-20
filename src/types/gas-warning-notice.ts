@@ -65,7 +65,6 @@ export const GAS_WARNING_REQUIRED_FOR_ISSUE = [
   'customer_name',
   'appliance_location',
   'appliance_type',
-  'serial_number',
   'classification',
   'unsafe_situation_description',
   'actions_taken',

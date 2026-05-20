@@ -63,6 +63,35 @@ type BoilerServiceJobAddress = {
   job_tel: string;
 };
 
+type CheckItem = { key: keyof BoilerServiceChecks; label: string };
+
+const SAFETY_CHECK_ITEMS: CheckItem[] = [
+  { key: 'appliance_operating_correctly', label: 'Appliance is operating correctly' },
+  { key: 'appliance_conforms_standards', label: 'Appliance conforms to current safety standards' },
+  { key: 'appliance_controls_checked', label: 'Appliance/system controls checked/adjusted' },
+  { key: 'appliance_flueing_safe', label: 'Appliance flueing is safe' },
+  { key: 'appliance_ventilation_safe', label: 'Appliance ventilation is safe' },
+  { key: 'emission_combustion_test', label: 'Emission/combustion test' },
+  { key: 'burner_pressure_gas_rate_correct', label: 'Burner pressure/Gas rate correct' },
+  { key: 'tightness_test_carried_out', label: 'Tightness Test carried out' },
+];
+
+const CENTRAL_HEATING_CHECK_ITEMS: CheckItem[] = [
+  { key: 'boiler_working_correctly', label: 'Boiler/warm air working correctly' },
+  { key: 'cylinder_condition_checked', label: 'Hot water cylinder condition checked and in working order' },
+  { key: 'programmer_controls_working', label: 'Programmer/timer and all controls working correctly' },
+  { key: 'warm_air_grills_working', label: 'Warm air/outlet grills working correctly' },
+  { key: 'pipework_free_from_leaks', label: 'Visible pipework free from water leaks' },
+  { key: 'magnetic_filter_fitted', label: 'Magnetic System filter fitted (where applicable)' },
+  { key: 'water_quality_acceptable', label: 'Water quality/level of inhibitor acceptable' },
+];
+
+const ADVICE_CHECK_ITEMS: CheckItem[] = [
+  { key: 'co_alarm_fitted', label: 'Approved audible Carbon Monoxide Alarm fitted*' },
+  { key: 'appliance_safe', label: 'Appliance is safe' },
+  { key: 'all_functional_parts_available', label: 'All functional parts available' },
+];
+
 type BoilerServiceDraftState = {
   step: number;
   completionDate: string;
@@ -70,6 +99,7 @@ type BoilerServiceDraftState = {
   jobAddress: BoilerServiceJobAddress;
   details: BoilerServiceDetails;
   checks: BoilerServiceChecks;
+  checkComments: Record<string, string>;
   engineerSignature: string;
   customerSignature: string;
   addressSearchQuery: string;
@@ -314,6 +344,7 @@ export function BoilerServiceWizard({
 
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+  const [checkComments, setCheckComments] = useState<Record<string, string>>({});
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
   const offsetStep = (step: number) => step + stepOffset;
@@ -342,6 +373,7 @@ export function BoilerServiceWizard({
       jobAddress,
       details,
       checks,
+      checkComments,
       engineerSignature,
       customerSignature,
       addressSearchQuery,
@@ -349,6 +381,7 @@ export function BoilerServiceWizard({
     }),
     [
       addressSearchQuery,
+      checkComments,
       checks,
       completionDate,
       customerAddressSearchQuery,
@@ -393,6 +426,7 @@ export function BoilerServiceWizard({
       setChecks((prev) => ({ ...prev, ...(draft.checks ?? {}) }));
       setEngineerSignature(draft.engineerSignature ?? '');
       setCustomerSignature(draft.customerSignature ?? '');
+      setCheckComments(draft.checkComments ?? {});
       setAddressSearchQuery(draft.addressSearchQuery ?? '');
       setCustomerAddressSearchQuery(draft.customerAddressSearchQuery ?? '');
     },
@@ -838,6 +872,16 @@ export function BoilerServiceWizard({
   };
 
   const handleChecksNext = () => {
+    const commentableItems = [...SAFETY_CHECK_ITEMS, ...ADVICE_CHECK_ITEMS];
+    const compiled = commentableItems
+      .filter((item) => checks[item.key] === 'no' && checkComments[item.key]?.trim())
+      .map((item) => `${item.label}: ${checkComments[item.key].trim()}`)
+      .join('\n');
+    const nextChecks = compiled && !checks.recommendations.trim()
+      ? { ...checks, recommendations: compiled }
+      : checks;
+    if (nextChecks !== checks) setChecks(nextChecks);
+
     startTransition(async () => {
       try {
         if (!isOnline) {
@@ -849,7 +893,7 @@ export function BoilerServiceWizard({
           });
           return;
         }
-        await saveBoilerServiceChecks({ jobId, data: checks });
+        await saveBoilerServiceChecks({ jobId, data: nextChecks });
         window.setTimeout(markSynced, 0);
         setStep(4);
         pushToast({ title: 'Saved checks', variant: 'success' });
@@ -929,6 +973,10 @@ export function BoilerServiceWizard({
     setChecks((prev) => ({ ...prev, [key]: value }));
   };
 
+  const setCheckComment = (key: string, value: string) => {
+    setCheckComments((prev) => ({ ...prev, [key]: value }));
+  };
+
   const applyServiceDate = (value: string) => {
     const nextDue = addOneYear(value);
     setJobAddress((prev) => ({ ...prev, job_visit_date: value }));
@@ -976,7 +1024,6 @@ export function BoilerServiceWizard({
       });
     };
 
-  type CheckItem = { key: keyof BoilerServiceChecks; label: string };
   const combustionReadingFields: Array<keyof BoilerServiceChecks> = [
     'high_combustion_co_ppm',
     'high_combustion_co2',
@@ -985,31 +1032,7 @@ export function BoilerServiceWizard({
     'low_combustion_co2',
     'low_combustion_ratio',
   ];
-  const safetyCheckItems: CheckItem[] = [
-    { key: 'appliance_operating_correctly', label: 'Appliance is operating correctly' },
-    { key: 'appliance_conforms_standards', label: 'Appliance conforms to current safety standards' },
-    { key: 'appliance_controls_checked', label: 'Appliance/system controls checked/adjusted' },
-    { key: 'appliance_flueing_safe', label: 'Appliance flueing is safe' },
-    { key: 'appliance_ventilation_safe', label: 'Appliance ventilation is safe' },
-    { key: 'emission_combustion_test', label: 'Emission/combustion test' },
-    { key: 'burner_pressure_gas_rate_correct', label: 'Burner pressure/Gas rate correct' },
-    { key: 'tightness_test_carried_out', label: 'Tightness Test carried out' },
-  ];
   const safetyNumericFields: Array<keyof BoilerServiceChecks> = ['operating_pressure_mbar', 'heat_input'];
-  const centralHeatingCheckItems: CheckItem[] = [
-    { key: 'boiler_working_correctly', label: 'Boiler/warm air working correctly' },
-    { key: 'cylinder_condition_checked', label: 'Hot water cylinder condition checked and in working order' },
-    { key: 'programmer_controls_working', label: 'Programmer/timer and all controls working correctly' },
-    { key: 'warm_air_grills_working', label: 'Warm air/outlet grills working correctly' },
-    { key: 'pipework_free_from_leaks', label: 'Visible pipework free from water leaks' },
-    { key: 'magnetic_filter_fitted', label: 'Magnetic System filter fitted (where applicable)' },
-    { key: 'water_quality_acceptable', label: 'Water quality/level of inhibitor acceptable' },
-  ];
-  const adviceCheckItems: CheckItem[] = [
-    { key: 'co_alarm_fitted', label: 'Approved audible Carbon Monoxide Alarm fitted*' },
-    { key: 'appliance_safe', label: 'Appliance is safe' },
-    { key: 'all_functional_parts_available', label: 'All functional parts available' },
-  ];
   const hasValue = (value: string) => value.trim().length > 0;
   const renderCheckToggle = (item: CheckItem) => (
     <div
@@ -1033,13 +1056,47 @@ export function BoilerServiceWizard({
       </div>
     </div>
   );
+  const renderCheckToggleWithComment = (item: CheckItem) => (
+    <div
+      key={item.key}
+      className="overflow-hidden rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+        <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{item.label}</p>
+        <div className="flex gap-2">
+          {(['yes', 'no'] as const).map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              onClick={() => setCheckValue(item.key, choice)}
+              className={`rounded-[6px] px-3 py-1 text-xs font-semibold ${
+                checks[item.key] === choice ? 'bg-[var(--color-action)] text-white' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
+              }`}
+            >
+              {choice.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+      {checks[item.key] === 'no' ? (
+        <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-3 pb-3 pt-2">
+          <Textarea
+            value={checkComments[item.key] ?? ''}
+            onChange={(e) => setCheckComment(item.key, e.target.value)}
+            placeholder="Note the reason — added to recommendations"
+            className="min-h-[52px] text-[12px]"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
   const readingsCompleted = combustionReadingFields.filter((key) => hasValue(checks[key] ?? '')).length;
   const safetyCompleted =
-    safetyCheckItems.filter((item) => hasValue(checks[item.key] ?? '')).length +
+    SAFETY_CHECK_ITEMS.filter((item) => hasValue(checks[item.key] ?? '')).length +
     safetyNumericFields.filter((key) => hasValue(checks[key] ?? '')).length;
-  const safetyTotal = safetyCheckItems.length + safetyNumericFields.length;
-  const centralHeatingCompleted = centralHeatingCheckItems.filter((item) => hasValue(checks[item.key] ?? '')).length;
-  const adviceCompleted = adviceCheckItems.filter((item) => hasValue(checks[item.key] ?? '')).length;
+  const safetyTotal = SAFETY_CHECK_ITEMS.length + safetyNumericFields.length;
+  const centralHeatingCompleted = CENTRAL_HEATING_CHECK_ITEMS.filter((item) => hasValue(checks[item.key] ?? '')).length;
+  const adviceCompleted = ADVICE_CHECK_ITEMS.filter((item) => hasValue(checks[item.key] ?? '')).length;
   const summaryComplete = hasValue(checks.service_summary) && hasValue(checks.recommendations);
   const defectsActive = (checks.defects_found ?? '') === 'yes';
   const defectsComplete = !defectsActive || hasValue(checks.defects_details ?? '');
@@ -1047,8 +1104,8 @@ export function BoilerServiceWizard({
   const sectionOrder = [
     { key: 'readings', complete: readingsCompleted === combustionReadingFields.length },
     { key: 'safety', complete: safetyCompleted === safetyTotal },
-    { key: 'central-heating', complete: centralHeatingCompleted === centralHeatingCheckItems.length },
-    { key: 'advice', complete: adviceCompleted === adviceCheckItems.length },
+    { key: 'central-heating', complete: centralHeatingCompleted === CENTRAL_HEATING_CHECK_ITEMS.length },
+    { key: 'advice', complete: adviceCompleted === ADVICE_CHECK_ITEMS.length },
     { key: 'summary', complete: summaryComplete },
     { key: 'defects', complete: defectsComplete },
     { key: 'next', complete: nextServiceComplete },
@@ -1562,7 +1619,7 @@ export function BoilerServiceWizard({
             defaultOpen={firstIncompleteKey === 'safety'}
           >
             <div className="space-y-2">
-              {safetyCheckItems.slice(0, 3).map(renderCheckToggle)}
+              {SAFETY_CHECK_ITEMS.slice(0, 3).map(renderCheckToggleWithComment)}
               <div className="grid gap-3 sm:grid-cols-2">
                 <UnitNumberInput
                   label="Operating pressure"
@@ -1586,24 +1643,24 @@ export function BoilerServiceWizard({
                   unit="kW"
                 />
               </div>
-              {safetyCheckItems.slice(3).map(renderCheckToggle)}
+              {SAFETY_CHECK_ITEMS.slice(3).map(renderCheckToggleWithComment)}
             </div>
           </CollapsibleSection>
 
           <CollapsibleSection
             title="Central heating Annual Service and Plumbing Inspection"
-            subtitle={`${centralHeatingCompleted}/${centralHeatingCheckItems.length} complete`}
+            subtitle={`${centralHeatingCompleted}/${CENTRAL_HEATING_CHECK_ITEMS.length} complete`}
             defaultOpen={firstIncompleteKey === 'central-heating'}
           >
-            <div className="space-y-2">{centralHeatingCheckItems.map(renderCheckToggle)}</div>
+            <div className="space-y-2">{CENTRAL_HEATING_CHECK_ITEMS.map(renderCheckToggle)}</div>
           </CollapsibleSection>
 
           <CollapsibleSection
             title="Appliance / system advice and recommendations"
-            subtitle={`${adviceCompleted}/${adviceCheckItems.length} complete`}
+            subtitle={`${adviceCompleted}/${ADVICE_CHECK_ITEMS.length} complete`}
             defaultOpen={firstIncompleteKey === 'advice'}
           >
-            <div className="space-y-2">{adviceCheckItems.map(renderCheckToggle)}</div>
+            <div className="space-y-2">{ADVICE_CHECK_ITEMS.map(renderCheckToggleWithComment)}</div>
           </CollapsibleSection>
 
           </div>

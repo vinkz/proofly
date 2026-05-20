@@ -101,14 +101,19 @@ export default async function SettingsPage() {
         </div>
       </section>
 
-      <form action="/logout" method="post">
-        <button
-          type="submit"
-          className="h-[38px] rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)]"
-        >
-          Sign out
-        </button>
-      </form>
+      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Account</p>
+        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Sign out</h2>
+        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">You will be returned to the login screen.</p>
+        <form action="/logout" method="post" className="mt-3">
+          <button
+            type="submit"
+            className="inline-flex h-[36px] items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-red)]/40 bg-transparent px-4 text-[13px] text-[var(--color-red)]"
+          >
+            Sign out
+          </button>
+        </form>
+      </section>
     </div>
   );
 }

@@ -5,9 +5,17 @@ import { useState, useTransition } from 'react';
 import { Input } from '@/components/ui/input';
 import { sendEngineerRequestLinkToLandlord } from '@/server/job-requests';
 
-export function RequestLandlordDetailsCard({ requestUrl }: { requestUrl: string }) {
-  const [landlordName, setLandlordName] = useState('');
-  const [landlordEmail, setLandlordEmail] = useState('');
+export function RequestLandlordDetailsCard({
+  requestUrl,
+  initialLandlordName = '',
+  initialLandlordEmail = '',
+}: {
+  requestUrl: string;
+  initialLandlordName?: string;
+  initialLandlordEmail?: string;
+}) {
+  const [landlordName, setLandlordName] = useState(initialLandlordName);
+  const [landlordEmail, setLandlordEmail] = useState(initialLandlordEmail);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();

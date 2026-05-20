@@ -94,17 +94,7 @@ export function Cp12VoiceReadings({
   useEffect(() => {
     onActiveChangeRef.current?.(state === 'recording');
   }, [state]);
-  const resolvedButtonLabel =
-    buttonLabel ??
-    (scope === 'pressure'
-      ? 'Speak pressure'
-      : scope === 'combustion'
-        ? 'Speak combustion'
-      : scope === 'high'
-        ? 'Speak high'
-        : scope === 'low'
-          ? 'Speak low'
-          : 'Speak readings');
+  const resolvedButtonLabel = buttonLabel ?? 'Speak';
 
   const resetState = () => {
     setState('idle');

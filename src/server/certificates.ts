@@ -3421,18 +3421,28 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       .from('jobs')
       .update({ status: 'issued' } as Record<string, unknown>)
       .eq('id', input.jobId);
-    const followUpJob = await createFollowUpJob({
-      sb: admin,
-      userId: user.id,
-      sourceJobId: input.jobId,
-      sourceJob: jobContext.job,
-      customer,
-      propertyAddress,
-      fields: gasWarningFields as unknown as Record<string, unknown>,
-    });
+    let followUpJob: Awaited<ReturnType<typeof createFollowUpJob>> | null = null;
+    try {
+      followUpJob = await createFollowUpJob({
+        sb: admin,
+        userId: user.id,
+        sourceJobId: input.jobId,
+        sourceJob: jobContext.job,
+        customer,
+        propertyAddress,
+        fields: gasWarningFields as unknown as Record<string, unknown>,
+      });
+    } catch (error) {
+      console.warn('generateCertificatePdf: gas warning follow-up job creation failed', {
+        jobId: input.jobId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
     revalidatePath(`/jobs/${input.jobId}`);
     revalidatePath(`/jobs/${input.jobId}/complete`);
-    revalidatePath(`/jobs/${followUpJob.jobId}`);
+    if (followUpJob?.jobId) {
+      revalidatePath(`/jobs/${followUpJob.jobId}`);
+    }
     revalidatePath('/dashboard');
     return {
       pdfUrl: admin.storage.from('certificates').getPublicUrl(path).data.publicUrl,

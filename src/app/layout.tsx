@@ -6,6 +6,12 @@ import { Toaster } from '@/components/ui/toaster';
 
 export const metadata = { title: 'PlumbLog' };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>

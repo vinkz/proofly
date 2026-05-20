@@ -135,6 +135,36 @@ describe('parseCp12VoiceReadings', () => {
     });
   });
 
+  it('fills pressure and heat input by order when scoped pressure has only numbers', () => {
+    const result = parseCp12VoiceReadings('20 24 point 5', { scope: 'pressure' });
+
+    expect(result.parsed).toMatchObject({
+      workingPressure: '20',
+      heatInput: '24.5',
+    });
+    expect(result.warnings).toContain('Filled missing values by recording order. Review before applying.');
+  });
+
+  it('fills high combustion readings by order when scoped high has only numbers', () => {
+    const result = parseCp12VoiceReadings('8 9 point 2 point 0008', { scope: 'high' });
+
+    expect(result.parsed).toMatchObject({
+      highCoPpm: '8',
+      highCo2Percent: '9.2',
+      highRatio: '0.0008',
+    });
+  });
+
+  it('fills low combustion readings by order when scoped low has only numbers', () => {
+    const result = parseCp12VoiceReadings('six eight point eight zero point zero zero zero six', { scope: 'low' });
+
+    expect(result.parsed).toMatchObject({
+      lowCoPpm: '6',
+      lowCo2Percent: '8.80',
+      lowRatio: '0.0006',
+    });
+  });
+
   it('limits combustion scope to high and low combustion values', () => {
     const result = parseCp12VoiceReadings(
       'pressure 20 heat input 24 high fire co 9 co2 9 point 1 ratio point 0009 low fire co 7 co2 8 point 7 ratio point 0007',

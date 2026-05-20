@@ -9,7 +9,6 @@ export const runtime = 'nodejs';
 const getTranscriptionModel = () =>
   process.env.OPENAI_TRANSCRIBE_MODEL?.trim() ||
   process.env.OPENAI_TRANSCRIBE_MODE?.trim() ||
-  process.env.OPENAI_MODEL?.trim() ||
   'gpt-4o-mini-transcribe';
 
 export async function POST(request: Request) {
@@ -54,6 +53,8 @@ export async function POST(request: Request) {
     const transcription = await getOpenAIClient().audio.transcriptions.create({
       file: audio,
       model: getTranscriptionModel(),
+      prompt:
+        'Gas engineer reading appliance values. Preserve numbers exactly, including decimals. Likely phrases: operating pressure, heat input, CO ppm, CO2 percent, ratio. If only numbers are spoken, transcribe them in order.',
       response_format: 'json',
     });
 

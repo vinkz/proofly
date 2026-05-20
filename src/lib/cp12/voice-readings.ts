@@ -305,6 +305,87 @@ function parseLeadingNumberPhrase(value: string) {
   return `${whole}.${fraction}`;
 }
 
+function parseNumberAt(tokens: string[], index: number) {
+  const token = tokens[index];
+  if (!token) return null;
+
+  if (DECIMAL_TOKENS.has(token)) {
+    const fractionTokens: string[] = [];
+    let cursor = index + 1;
+    while (cursor < tokens.length && (/^[0-9]+$/.test(tokens[cursor]) || tokens[cursor] in DIGIT_WORDS)) {
+      fractionTokens.push(tokens[cursor]);
+      cursor += 1;
+    }
+    const fraction = parseFractionTokens(fractionTokens);
+    return fraction ? { value: `0.${fraction}`, nextIndex: cursor } : null;
+  }
+
+  const numericMatch = token.match(/^(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/);
+  if (numericMatch) {
+    if (tokens[index + 1] && DECIMAL_TOKENS.has(tokens[index + 1])) {
+      const fractionTokens: string[] = [];
+      let cursor = index + 2;
+      while (cursor < tokens.length && (/^[0-9]+$/.test(tokens[cursor]) || tokens[cursor] in DIGIT_WORDS)) {
+        fractionTokens.push(tokens[cursor]);
+        cursor += 1;
+      }
+      const whole = normalizeNumericString(token);
+      const fraction = parseFractionTokens(fractionTokens);
+      if (whole && fraction) return { value: `${whole}.${fraction}`, nextIndex: cursor };
+    }
+
+    const value = normalizeNumericString(token);
+    return value ? { value, nextIndex: index + 1 } : null;
+  }
+
+  if (token in SMALL_NUMBERS || token in TENS) {
+    const wordTokens = [token];
+    const nextToken = tokens[index + 1];
+    if (token in TENS && nextToken && nextToken in SMALL_NUMBERS && SMALL_NUMBERS[nextToken] < 10) {
+      wordTokens.push(nextToken);
+    }
+
+    const decimalIndex = index + wordTokens.length;
+    if (tokens[decimalIndex] && DECIMAL_TOKENS.has(tokens[decimalIndex])) {
+      const fractionTokens: string[] = [];
+      let cursor = decimalIndex + 1;
+      while (cursor < tokens.length && (/^[0-9]+$/.test(tokens[cursor]) || tokens[cursor] in DIGIT_WORDS)) {
+        fractionTokens.push(tokens[cursor]);
+        cursor += 1;
+      }
+      const whole = parseWholeNumberTokens(wordTokens);
+      const fraction = parseFractionTokens(fractionTokens);
+      if (whole && fraction) return { value: `${whole}.${fraction}`, nextIndex: cursor };
+    }
+
+    const value = parseWholeNumberTokens(wordTokens);
+    return value ? { value, nextIndex: index + wordTokens.length } : null;
+  }
+
+  return null;
+}
+
+function extractOrderedNumbers(text: string) {
+  const tokens = text
+    .split(/\s+/)
+    .map((token) => token.replace(/[^a-z0-9.]/g, ''))
+    .filter(Boolean);
+
+  const values: string[] = [];
+  let cursor = 0;
+  while (cursor < tokens.length) {
+    const parsed = parseNumberAt(tokens, cursor);
+    if (!parsed) {
+      cursor += 1;
+      continue;
+    }
+    values.push(parsed.value);
+    cursor = Math.max(parsed.nextIndex, cursor + 1);
+  }
+
+  return values;
+}
+
 function extractFieldValue(text: string, patterns: RegExp[]) {
   for (const pattern of patterns) {
     const match = text.match(pattern);
@@ -398,6 +479,48 @@ function applyScope(parsed: Cp12VoiceReadingsParsed, normalized: string, scope: 
   return scoped;
 }
 
+function applyOrderedScopeFallback(
+  parsed: Cp12VoiceReadingsParsed,
+  normalized: string,
+  scope: Cp12VoiceReadingScope,
+) {
+  if (scope === 'all') return { parsed, used: false };
+
+  const values = extractOrderedNumbers(normalized);
+  if (!values.length) return { parsed, used: false };
+
+  const nextParsed = { ...parsed };
+  let used = false;
+  const applyByOrder = (keys: Array<keyof Cp12VoiceReadingsParsed>, offset = 0) => {
+    keys.forEach((key, index) => {
+      const value = values[index + offset];
+      if (!nextParsed[key] && value) {
+        nextParsed[key] = value;
+        used = true;
+      }
+    });
+  };
+
+  if (scope === 'pressure') {
+    applyByOrder(['workingPressure', 'heatInput']);
+    return { parsed: nextParsed, used };
+  }
+
+  if (scope === 'high') {
+    applyByOrder(['highCoPpm', 'highCo2Percent', 'highRatio']);
+    return { parsed: nextParsed, used };
+  }
+
+  if (scope === 'low') {
+    applyByOrder(['lowCoPpm', 'lowCo2Percent', 'lowRatio']);
+    return { parsed: nextParsed, used };
+  }
+
+  applyByOrder(['highCoPpm', 'highCo2Percent', 'highRatio']);
+  applyByOrder(['lowCoPpm', 'lowCo2Percent', 'lowRatio'], 3);
+  return { parsed: nextParsed, used };
+}
+
 export function parseCp12VoiceReadings(
   transcript: string,
   options: { scope?: Cp12VoiceReadingScope } = {},
@@ -421,6 +544,11 @@ export function parseCp12VoiceReadings(
 
   parsed = applyCombustionBlockParsing(parsed, normalized);
   parsed = applyScope(parsed, normalized, scope);
+  const orderedFallback = applyOrderedScopeFallback(parsed, normalized, scope);
+  parsed = orderedFallback.parsed;
+  if (orderedFallback.used) {
+    warnings.push('Filled missing values by recording order. Review before applying.');
+  }
 
   if ((scope === 'all' || scope === 'combustion') && /(?<!high\s)(?<!low\s)\bco2\b/.test(normalized) && !parsed.highCo2Percent && !parsed.lowCo2Percent) {
     warnings.push('Ignored CO2 value because CP12 combustion readings need high or low context.');
