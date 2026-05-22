@@ -1589,9 +1589,10 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
 
   const typedJobId = jobId as JobRow['id'];
   const untypedSb = sb as unknown as UntypedTableClient;
+  const admin = await supabaseServerServiceRole();
   const [{ data: certificateRows, error: certErr }, { data: fieldRows, error: fieldsErr }, appliancesResp, invoiceResp] =
     await Promise.all([
-      sb
+      admin
         .from('certificates')
         .select('id, cert_type, status, pdf_path, pdf_url, issued_at, created_at')
         .eq('job_id', typedJobId)

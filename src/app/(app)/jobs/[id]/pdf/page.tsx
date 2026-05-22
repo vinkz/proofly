@@ -83,6 +83,16 @@ export default async function JobPdfPage({
 
   if (qs.url) {
     pdfUrl = qs.url;
+  } else if (selectedCertificateType) {
+    try {
+      const signed = await getCertificatePdfSignedUrl({
+        jobId: id,
+        certificateType: selectedCertificateType,
+      });
+      pdfUrl = signed.url;
+    } catch (error) {
+      pdfError = error instanceof Error ? error.message : 'Unable to load PDF.';
+    }
   } else {
     const certificateState = await getCertificateState(certificate ?? null);
     if (!certificateError && certificateState !== 'missing') {
