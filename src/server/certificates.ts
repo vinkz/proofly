@@ -3413,10 +3413,16 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       fields: gasWarningFields,
     };
     const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
-    const writeCertificate = (payload: Record<string, unknown>) =>
-      existingCertificate
-        ? admin.from('certificates').update(payload).eq('job_id', input.jobId).eq('cert_type', input.certificateType)
-        : admin.from('certificates').insert(payload);
+    const writeCertificate = async (payload: Record<string, unknown>) => {
+      if (existingCertificate) {
+        return admin.from('certificates').update(payload).eq('job_id', input.jobId).eq('cert_type', input.certificateType);
+      }
+
+      const insertResult = await admin.from('certificates').insert(payload);
+      if (insertResult.error?.code !== '23505') return insertResult;
+
+      return admin.from('certificates').update(payload).eq('job_id', input.jobId).eq('cert_type', input.certificateType);
+    };
     const { error: certErr } = await writeCertificate(certificatePayload);
     if (certErr) {
       throw new Error(certErr.message);
