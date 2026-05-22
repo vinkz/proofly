@@ -1077,9 +1077,12 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
               onClick={startManualEntry}
               className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
             >
-              <div>
-                <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Fill myself</p>
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Open the landlord and property form now.</p>
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--color-background-secondary)] text-lg">📋</span>
+                <div>
+                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Fill myself</p>
+                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Open the landlord and property form now.</p>
+                </div>
               </div>
               <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
             </button>
@@ -1094,9 +1097,12 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                   : 'border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] hover:border-[var(--color-action)]'
               }`}
             >
-              <div>
-                <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask landlord</p>
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Send your request link by email or SMS.</p>
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--color-background-secondary)] text-lg">📤</span>
+                <div>
+                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask landlord</p>
+                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Send your request link by email or SMS.</p>
+                </div>
               </div>
               <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">{path === 'landlord' ? '-' : '+'}</span>
             </button>
@@ -1116,9 +1122,12 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
               onClick={startExistingLandlordEntry}
               className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
             >
-              <div>
-                <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Existing landlord</p>
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Choose a saved landlord and property from dropdowns.</p>
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--color-background-secondary)] text-lg">📂</span>
+                <div>
+                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Existing landlord</p>
+                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Choose a saved landlord and property from dropdowns.</p>
+                </div>
               </div>
               <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
             </button>

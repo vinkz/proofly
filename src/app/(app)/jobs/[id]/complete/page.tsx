@@ -102,14 +102,24 @@ function ChecklistRow({ item }: { item: JobCompletionChecklistItem }) {
           ) : null}
         </div>
       </div>
-      {item.href ? (
-        <Link
-          href={item.href}
-          className={`inline-flex h-[34px] shrink-0 items-center justify-center rounded-[10px] px-3 text-[12px] font-medium transition-opacity hover:opacity-80 ${actionClass}`}
-        >
-          {actionLabel}
-        </Link>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        {item.editHref && item.status === 'completed' ? (
+          <Link
+            href={item.editHref}
+            className="inline-flex h-[34px] items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-opacity hover:opacity-80"
+          >
+            Edit
+          </Link>
+        ) : null}
+        {item.href ? (
+          <Link
+            href={item.href}
+            className={`inline-flex h-[34px] items-center justify-center rounded-[10px] px-3 text-[12px] font-medium transition-opacity hover:opacity-80 ${actionClass}`}
+          >
+            {actionLabel}
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }

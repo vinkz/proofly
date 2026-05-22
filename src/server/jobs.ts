@@ -1500,6 +1500,7 @@ export type JobCompletionChecklistItem = {
   status: JobCompletionChecklistStatus;
   blocking: boolean;
   href: string | null;
+  editHref?: string | null;
   completedAt: string | null;
 };
 
@@ -1650,6 +1651,9 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
       href: certificate
         ? `/jobs/${jobId}/pdf?certificateType=${type === 'boiler_service' ? 'gas_service' : type}`
         : `/wizard/create/${type === 'boiler_service' ? 'boiler_service' : type}?jobId=${jobId}`,
+      editHref: certificate
+        ? `/wizard/create/${type === 'boiler_service' ? 'boiler_service' : type}?jobId=${jobId}`
+        : null,
       completedAt,
     };
   });
@@ -1667,6 +1671,7 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
       href: certificate
         ? `/jobs/${jobId}/pdf?certificateType=gas_warning_notice`
         : `/wizard/create/gas_warning_notice?jobId=${jobId}`,
+      editHref: certificate ? `/wizard/create/gas_warning_notice?jobId=${jobId}` : null,
       completedAt:
         typeof certificate?.issued_at === 'string'
           ? certificate.issued_at

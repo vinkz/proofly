@@ -290,12 +290,7 @@ export function Cp12VoiceReadings({
   if (isInlineScoped) {
     const busy = state === 'starting' || state === 'transcribing';
     const active = state === 'recording';
-    const idleHint =
-      scope === 'pressure'
-        ? 'Say: pressure 20, input 24'
-        : scope === 'combustion'
-          ? 'Say: high rate CO 12, CO2 9.2, ratio 0.0008. Low rate CO 8, CO2 8.9, ratio 0.0007'
-          : 'Say: CO 8, CO2 9.2, ratio 0.0008';
+    const idleHint = 'Speak in order with small pauses in between.';
     return (
       <span className="inline-flex flex-col items-start gap-1">
         <Button
@@ -350,7 +345,7 @@ export function Cp12VoiceReadings({
             <div className="rounded-[16px] border border-[var(--color-action)]/30 bg-[var(--color-action-bg)] p-4">
               <p className="text-sm font-medium text-[var(--color-text-secondary)]">Listening…</p>
               <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-                Say readings like working pressure 20, high CO2 9 point 2, or low ratio 0 point 0006.
+                Speak in order with small pauses in between.
               </p>
               <div className="mt-4 flex gap-2">
                 <Button type="button" className="rounded-full" onClick={stopRecording}>

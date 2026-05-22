@@ -101,52 +101,61 @@ const FIELD_PATTERNS: Array<{ key: keyof Cp12VoiceReadingsParsed; patterns: RegE
   {
     key: 'highCoPpm',
     patterns: [
-      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|full\\s+load|high\\s+rate|high\\s+fire|high\\s+load|combustion\\s+high|high\\s+combustion)(?:\\s+reading|\\s+readings)?\\s+(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\s+(?:high|hi|maximum|max|full\\s+rate|full\\s+load|high\\s+rate|high\\s+fire|high\\s+load)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'highCo2Percent',
     patterns: [
-      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|full\\s+load|high\\s+rate|high\\s+fire|high\\s+load|combustion\\s+high|high\\s+combustion)(?:\\s+reading|\\s+readings)?\\s+(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:co2|carbon\\s+dioxide)\\s+(?:high|hi|maximum|max|full\\s+rate|full\\s+load|high\\s+rate|high\\s+fire|high\\s+load)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'highRatio',
     patterns: [
-      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|combustion\\s+high|high\\s+combustion)(?:\\s+reading)?\\s+(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:high|hi|maximum|max|full\\s+rate|full\\s+load|high\\s+rate|high\\s+fire|high\\s+load|combustion\\s+high|high\\s+combustion)(?:\\s+reading|\\s+readings)?\\s+(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio|co\\s+co2\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:ratio|combustion\\s+ratio|co\\s+co2\\s+ratio)\\s+(?:high|hi|maximum|max|full\\s+rate|full\\s+load|high\\s+rate|high\\s+fire|high\\s+load)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'lowCoPpm',
     patterns: [
-      new RegExp(`\\b(?:low|minimum|min|low\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:low|lo|minimum|min|low\\s+rate|low\\s+fire|low\\s+load|load\\s+rate|load\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading|\\s+readings)?\\s+(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\s+(?:low|lo|minimum|min|low\\s+rate|low\\s+fire|low\\s+load|load\\s+rate|load\\s+fire)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'lowCo2Percent',
     patterns: [
-      new RegExp(`\\b(?:low|minimum|min|low\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:low|lo|minimum|min|low\\s+rate|low\\s+fire|low\\s+load|load\\s+rate|load\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading|\\s+readings)?\\s+(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:co2|carbon\\s+dioxide)\\s+(?:low|lo|minimum|min|low\\s+rate|low\\s+fire|low\\s+load|load\\s+rate|load\\s+fire)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'lowRatio',
     patterns: [
-      new RegExp(`\\b(?:low|minimum|min|low\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading)?\\s+(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:low|lo|minimum|min|low\\s+rate|low\\s+fire|low\\s+load|load\\s+rate|load\\s+fire|combustion\\s+low|low\\s+combustion)(?:\\s+reading|\\s+readings)?\\s+(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio|co\\s+co2\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:ratio|combustion\\s+ratio|co\\s+co2\\s+ratio)\\s+(?:low|lo|minimum|min|low\\s+rate|low\\s+fire|low\\s+load|load\\s+rate|load\\s+fire)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'workingPressure',
     patterns: [
-      new RegExp(`\\b(?:working|operating|burner|gas|dynamic)\\s+pressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:working|operating|operation|burner|gas|dynamic|running|appliance)\\s+pressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
       new RegExp(`\\b(?:inlet|standing)\\s+pressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:wp|op)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
       new RegExp(`\\bpressure\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
     key: 'heatInput',
     patterns: [
-      new RegExp(`\\b(?:net|gross|max|maximum)?\\s*heat\\s+(?:input|in\\s+put|imput|inlet|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
-      new RegExp(`\\b(?:gas\\s+rate|rated\\s+input|appliance\\s+input|input\\s+rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:net|gross|max|maximum|nominal)?\\s*heat\\s+(?:input|in\\s+put|imput|inlet|output|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:heating\\s+put|heat\\s+and\\s+put|heatinput|heat\\s+imput)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:gas\\s+rate|gas\\s+rating|rated\\s+input|rated\\s+heat\\s+input|appliance\\s+input|input\\s+rate|kw\\s+input|kilowatt\\s+input|kw\\s+rating)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\binput\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
   {
@@ -160,17 +169,18 @@ const FIELD_PATTERNS: Array<{ key: keyof Cp12VoiceReadingsParsed; patterns: RegE
 const SCOPED_COMBUSTION_PATTERNS = {
   coPpm: [new RegExp(`\\b(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i')],
   co2Percent: [new RegExp(`\\b(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i')],
-  ratio: [new RegExp(`\\b(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i')],
+  ratio: [new RegExp(`\\b(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio|co\\s+co2\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i')],
 };
 
 const SCOPED_PRESSURE_PATTERNS = {
   heatInput: [
-    new RegExp(`\\b(?:net|gross|max|maximum)?\\s*heat\\s+(?:input|in\\s+put|imput|inlet|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
-    new RegExp(`\\b(?:gas\\s+rate|rated\\s+input|appliance\\s+input|input\\s+rate|input)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+    new RegExp(`\\b(?:net|gross|max|maximum|nominal)?\\s*heat\\s+(?:input|in\\s+put|imput|inlet|output|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+    new RegExp(`\\b(?:heating\\s+put|heat\\s+and\\s+put|heatinput|heat\\s+imput)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+    new RegExp(`\\b(?:gas\\s+rate|gas\\s+rating|rated\\s+input|rated\\s+heat\\s+input|appliance\\s+input|input\\s+rate|kw\\s+input|kilowatt\\s+input|kw\\s+rating|input)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
   ],
 };
 
-const COMBUSTION_BLOCK_MARKER = /\b(high|hi|maximum|max|full\s+rate|full\s+load|high\s+rate|high\s+fire|combustion\s+high|high\s+combustion|low|minimum|min|low\s+rate|low\s+fire|low\s+load|combustion\s+low|low\s+combustion)\b/gi;
+const COMBUSTION_BLOCK_MARKER = /\b(high|hi|maximum|max|full\s+rate|full\s+load|high\s+rate|high\s+fire|high\s+load|combustion\s+high|high\s+combustion|low|lo|minimum|min|low\s+rate|low\s+fire|low\s+load|load\s+rate|load\s+fire|combustion\s+low|low\s+combustion)\b/gi;
 
 function normalizeTranscript(text: string) {
   return text
@@ -178,8 +188,13 @@ function normalizeTranscript(text: string) {
     .replace(/co₂/g, 'co2')
     .replace(/\bc\s*o\s*2\b/g, 'co2')
     .replace(/\bco[\s-]*two\b/g, 'co2')
+    .replace(/\bco[\s-]*(?:to|too)\b/g, 'co2')
     .replace(/\bcarbon\s+dioxide\b/g, 'co2')
     .replace(/\bcarbon\s+monoxide\b/g, 'co')
+    .replace(/\bheating\s+put\b/g, 'heat input')
+    .replace(/\bheat\s+and\s+put\b/g, 'heat input')
+    .replace(/\bheat\s*imput\b/g, 'heat input')
+    .replace(/\bheatinput\b/g, 'heat input')
     .replace(/\bco\s*\/\s*co2\b/g, 'co co2')
     .replace(/\bm\s*bar\b/g, 'mbar')
     .replace(/\bkilowatts?\b/g, 'kw')
@@ -401,7 +416,7 @@ export function hasParsedCp12VoiceReadings(parsed: Cp12VoiceReadingsParsed) {
 }
 
 function getCombustionMarkerKind(marker: string): 'high' | 'low' {
-  return /\b(?:low|minimum|min)\b/.test(marker) ? 'low' : 'high';
+  return /\b(?:low|lo|minimum|min|load)\b/.test(marker) ? 'low' : 'high';
 }
 
 function extractCombustionValuesFromText(text: string) {

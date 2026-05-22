@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       file: audio,
       model: getTranscriptionModel(),
       prompt:
-        'Gas engineer reading appliance values. Preserve numbers exactly, including decimals. Likely phrases: operating pressure, heat input, CO ppm, CO2 percent, ratio. If only numbers are spoken, transcribe them in order.',
+        'Gas engineer reading appliance values. Preserve numbers exactly, including decimals and small pauses. The engineer may speak only numbers in order. Pressure scope order: operating pressure, heat input. Combustion scope order: CO ppm, CO2 percent, ratio. Likely phrases include operating pressure, working pressure, burner pressure, heat input, heating put, input, gas rate, rated input, high rate, full rate, high fire, low rate, low fire, load rate, CO ppm, CO2 percent, carbon monoxide, carbon dioxide, ratio, CO/CO2 ratio.',
       response_format: 'json',
     });
 
