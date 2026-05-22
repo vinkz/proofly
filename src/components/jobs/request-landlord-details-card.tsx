@@ -9,16 +9,23 @@ export function RequestLandlordDetailsCard({
   requestUrl,
   initialLandlordName = '',
   initialLandlordEmail = '',
+  initialLandlordPhone = '',
 }: {
   requestUrl: string;
   initialLandlordName?: string;
   initialLandlordEmail?: string;
+  initialLandlordPhone?: string;
 }) {
   const [landlordName, setLandlordName] = useState(initialLandlordName);
   const [landlordEmail, setLandlordEmail] = useState(initialLandlordEmail);
+  const [landlordPhone, setLandlordPhone] = useState(initialLandlordPhone);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const shareText = `Please fill in the job details for my CertNow request: ${requestUrl}`;
+  const smsHref = landlordPhone.trim()
+    ? `sms:${encodeURIComponent(landlordPhone.trim())}?&body=${encodeURIComponent(shareText)}`
+    : null;
 
   return (
     <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
@@ -40,7 +47,7 @@ export function RequestLandlordDetailsCard({
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,1fr,auto]">
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,1fr,1fr,auto]">
         <Input
           value={landlordName}
           onChange={(event) => setLandlordName(event.target.value)}
@@ -53,6 +60,14 @@ export function RequestLandlordDetailsCard({
           onChange={(event) => setLandlordEmail(event.target.value)}
           placeholder="Landlord email"
           type="email"
+          className="h-[38px] rounded-[10px]"
+          disabled={isPending}
+        />
+        <Input
+          value={landlordPhone}
+          onChange={(event) => setLandlordPhone(event.target.value)}
+          placeholder="Phone for SMS"
+          type="tel"
           className="h-[38px] rounded-[10px]"
           disabled={isPending}
         />
@@ -80,6 +95,14 @@ export function RequestLandlordDetailsCard({
           {isPending ? 'Sending…' : 'Send'}
         </button>
       </div>
+      {smsHref ? (
+        <a
+          href={smsHref}
+          className="mt-2.5 inline-flex h-9 items-center justify-center rounded-[18px] border-[0.5px] border-[var(--color-border-secondary)] px-4 text-[13px] font-medium text-[var(--color-text-primary)]"
+        >
+          Send by SMS
+        </a>
+      ) : null}
       {message ? (
         <p className="mt-2.5 text-[13px] font-medium text-[var(--color-action)]">{message}</p>
       ) : null}

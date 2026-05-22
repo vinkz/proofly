@@ -324,8 +324,12 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
       return;
     }
     if (step === 4) {
+      if (selectedClientId) {
+        setStep(2);
+        return;
+      }
       setPath(null);
-      setStep(3);
+      setStep(1);
       return;
     }
     if (step === 3 && path) {
@@ -766,6 +770,22 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     });
   };
 
+  const startManualEntry = () => {
+    setPath('self');
+    setClientMode('new');
+    setSelectedClientId('');
+    setSelectedPropertyKey('');
+    setClientChosen(true);
+    setPropertyChosen(true);
+    setStep(4);
+  };
+
+  const startExistingLandlordEntry = () => {
+    setPath('self');
+    setClientMode('existing');
+    setStep(2);
+  };
+
   const handleLandlordNameInput = (value: string) => {
     setLandlordName(value);
   };
@@ -1018,7 +1038,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
         </div>
       ) : null}
 
-      {/* ===== STEP 1: Job type ===== */}
+      {/* ===== STEP 1: Job type and entry route ===== */}
       {step === 1 ? (
         <>
           <div>
@@ -1049,14 +1069,60 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             ) : null}
           </div>
 
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => setStep(2)}
-            className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
-          >
-            Continue
-          </button>
+          <div className="space-y-2">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={startManualEntry}
+              className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
+            >
+              <div>
+                <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Fill myself</p>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Open the landlord and property form now.</p>
+              </div>
+              <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setPath(path === 'landlord' ? null : 'landlord')}
+              className={`flex w-full items-center justify-between rounded-[12px] border-[0.5px] px-4 py-3.5 text-left transition-colors ${
+                path === 'landlord'
+                  ? 'border-[var(--color-action)] bg-[var(--color-action-bg)]'
+                  : 'border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] hover:border-[var(--color-action)]'
+              }`}
+            >
+              <div>
+                <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask landlord</p>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Send your request link by email or SMS.</p>
+              </div>
+              <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">{path === 'landlord' ? '-' : '+'}</span>
+            </button>
+
+            {path === 'landlord' && requestUrl ? (
+              <RequestLandlordDetailsCard
+                requestUrl={requestUrl}
+                initialLandlordName={landlordName || clientName}
+                initialLandlordEmail={clientEmail}
+                initialLandlordPhone={clientPhone || landlordTel}
+              />
+            ) : null}
+
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={startExistingLandlordEntry}
+              className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
+            >
+              <div>
+                <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Existing landlord</p>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Choose a saved landlord and property from dropdowns.</p>
+              </div>
+              <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
+            </button>
+          </div>
         </>
       ) : null}
 
@@ -1146,13 +1212,13 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             <button
               type="button"
               onClick={() => {
-                setPath(null);
-                setStep(3);
+                setPath('self');
+                setStep(4);
               }}
               disabled={isPending}
               className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
             >
-              Continue
+              Continue to details
             </button>
           ) : null}
         </>
@@ -1232,6 +1298,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
               requestUrl={requestUrl}
               initialLandlordName={landlordName || clientName}
               initialLandlordEmail={clientEmail}
+              initialLandlordPhone={clientPhone || landlordTel}
             />
           ) : null}
         </>

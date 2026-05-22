@@ -1541,7 +1541,8 @@ export async function saveGasWarningJobInfo(payload: z.infer<typeof GasWarningJo
     address: data.property_address ?? null,
     title: data.customer_name ? `Gas Warning Notice for ${data.customer_name}` : 'Gas Warning Notice draft',
   } as Record<string, unknown>;
-  await sb.from('jobs').update(updatePayload).eq('id', jobId).eq('user_id', user.id);
+  const { error: updateErr } = await sb.from('jobs').update(updatePayload).eq('id', jobId).eq('user_id', user.id);
+  if (updateErr) throw new Error(updateErr.message);
   await upsertCustomerFromJobFields({
     jobId,
     fields: {
@@ -1593,7 +1594,10 @@ export async function saveGasWarningDetails(payload: z.infer<typeof GasWarningDe
   if (input.data.issued_at) {
     updates.scheduled_for = input.data.issued_at;
   }
-  await sb.from('jobs').update(updates).eq('id', input.jobId).eq('user_id', user.id);
+  if (Object.keys(updates).length) {
+    const { error: updateErr } = await sb.from('jobs').update(updates).eq('id', input.jobId).eq('user_id', user.id);
+    if (updateErr) throw new Error(updateErr.message);
+  }
 
   const entries = Object.entries(input.data)
     .filter(([, value]) => value !== undefined)

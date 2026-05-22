@@ -98,6 +98,9 @@ export default async function DashboardPage({
   const profileMissingFields = getMissingOnboardingFields(profile);
   const certificateProfileComplete = isOnboardingProfileComplete(profile);
   const invoiceMissingFields = getInvoiceSetupMissingFields(profile);
+  const completionJobs = activeJobs
+    .filter((job) => isIssuedJob(job))
+    .sort((a, b) => new Date(b.created_at ?? '').getTime() - new Date(a.created_at ?? '').getTime());
 
   const upcomingJobsBase = activeJobs
     .filter((job) => job.scheduled_for && isTodayOrFuture(job.scheduled_for, now))
@@ -254,6 +257,22 @@ export default async function DashboardPage({
                   </form>
                 </div>
               </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {completionJobs.length ? (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 px-0.5">
+            <h2 className="text-[13px] font-medium text-[var(--color-text-primary)]">Needs review</h2>
+            <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[10px] bg-[var(--color-amber-bg)] px-1.5 text-[11px] font-medium text-[var(--color-amber)]">
+              {completionJobs.length}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {completionJobs.map((job) => (
+              <DashboardJobRow key={job.id} job={job} />
             ))}
           </div>
         </section>
