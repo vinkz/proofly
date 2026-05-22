@@ -3421,7 +3421,19 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       const insertResult = await admin.from('certificates').insert(payload);
       if (insertResult.error?.code !== '23505') return insertResult;
 
-      return admin.from('certificates').update(payload).eq('job_id', input.jobId).eq('cert_type', input.certificateType);
+      const fallbackUpdate = await admin
+        .from('certificates')
+        .update(payload)
+        .eq('job_id', input.jobId)
+        .eq('cert_type', input.certificateType)
+        .select('id')
+        .maybeSingle();
+      if (!fallbackUpdate.error && !fallbackUpdate.data) {
+        throw new Error(
+          'Certificate table still has a job-only uniqueness rule. Apply the latest certificates_allow_multiple_per_job migration.',
+        );
+      }
+      return fallbackUpdate;
     };
     const { error: certErr } = await writeCertificate(certificatePayload);
     if (certErr) {
