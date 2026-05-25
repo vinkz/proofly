@@ -10,6 +10,48 @@ import type { ClientListItem } from '@/types/client';
 type ClientRow = Database['public']['Tables']['clients']['Row'];
 type ReportRow = Database['public']['Tables']['reports']['Row'];
 type JobFieldRow = Database['public']['Tables']['job_fields']['Row'];
+
+export type ComplianceStatus = 'overdue' | 'amber' | 'current' | 'unknown';
+
+export type ClientPropertyHealth = {
+  id: string;
+  name: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  town: string | null;
+  postcode: string | null;
+  phone: string | null;
+  nextServiceDue: string | null;
+  status: ComplianceStatus;
+};
+
+export type ClientWithCompliance = ClientListItem & {
+  properties: ClientPropertyHealth[];
+  propertyCount: number;
+  overdueCount: number;
+  amberCount: number;
+  currentCount: number;
+  worstStatus: ComplianceStatus;
+};
+
+function computeComplianceStatus(nextServiceDue: string | null | undefined): ComplianceStatus {
+  if (!nextServiceDue) return 'unknown';
+  const due = new Date(nextServiceDue).getTime();
+  if (Number.isNaN(due)) return 'unknown';
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const daysUntil = Math.floor((due - todayStart) / 86_400_000);
+  if (daysUntil < 0) return 'overdue';
+  if (daysUntil <= 45) return 'amber';
+  return 'current';
+}
+
+function worstComplianceStatus(statuses: ComplianceStatus[]): ComplianceStatus {
+  if (statuses.includes('overdue')) return 'overdue';
+  if (statuses.includes('amber')) return 'amber';
+  if (statuses.includes('current')) return 'current';
+  return 'unknown';
+}
 type JobSummaryRow = Pick<
   Database['public']['Tables']['jobs']['Row'],
   'id' | 'title' | 'status' | 'scheduled_for' | 'created_at' | 'template_id' | 'notes' | 'address'
@@ -151,6 +193,64 @@ export async function listClients(search?: string): Promise<ClientListItem[]> {
   }
 
   return grouped.filter((client) => matchesSearch(client, search));
+}
+
+export async function listClientsWithCompliance(search?: string): Promise<ClientWithCompliance[]> {
+  const clients = await listClients(search);
+  if (!clients.length) return [];
+
+  const sb = await supabaseServerReadOnly();
+  const { data: { user }, error } = await sb.auth.getUser();
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const allClientIds = clients.flatMap((c) => c.client_ids ?? [c.id]);
+
+  const { data: propertyRows, error: propertiesErr } = await sb
+    .from('properties')
+    .select('id, client_id, name, address_line1, address_line2, town, postcode, phone, next_service_due')
+    .eq('user_id', user.id)
+    .in('client_id', allClientIds);
+  if (propertiesErr) throw new Error(propertiesErr.message);
+
+  const clientIdToPrimary = new Map<string, string>();
+  clients.forEach((client) => {
+    (client.client_ids ?? [client.id]).forEach((id) => clientIdToPrimary.set(id, client.id));
+  });
+
+  const propertiesByClientId = new Map<string, ClientPropertyHealth[]>();
+  clients.forEach((c) => propertiesByClientId.set(c.id, []));
+
+  (propertyRows ?? []).forEach((row) => {
+    if (!row.address_line1) return;
+    const primaryId = clientIdToPrimary.get(row.client_id ?? '') ?? row.client_id ?? '';
+    const bucket = propertiesByClientId.get(primaryId);
+    if (!bucket) return;
+    bucket.push({
+      id: row.id,
+      name: row.name ?? null,
+      addressLine1: row.address_line1,
+      addressLine2: row.address_line2 ?? null,
+      town: row.town ?? null,
+      postcode: row.postcode ?? null,
+      phone: row.phone ?? null,
+      nextServiceDue: row.next_service_due ?? null,
+      status: computeComplianceStatus(row.next_service_due),
+    });
+  });
+
+  return clients.map((client) => {
+    const props = propertiesByClientId.get(client.id) ?? [];
+    const statuses = props.map((p) => p.status);
+    return {
+      ...client,
+      properties: props,
+      propertyCount: props.length,
+      overdueCount: statuses.filter((s) => s === 'overdue').length,
+      amberCount: statuses.filter((s) => s === 'amber').length,
+      currentCount: statuses.filter((s) => s === 'current').length,
+      worstStatus: worstComplianceStatus(statuses),
+    };
+  });
 }
 
 export async function createClient(payload: FormData | Record<string, unknown>) {
@@ -415,12 +515,34 @@ export async function getClientDetail(id: string) {
     reports = reportRows ?? [];
   }
 
+  const { data: propertyRows, error: propErr } = await sb
+    .from('properties')
+    .select('id, client_id, name, address_line1, address_line2, town, postcode, phone, next_service_due')
+    .eq('user_id', user.id)
+    .in('client_id', clientIds);
+  if (propErr) throw new Error(propErr.message);
+
+  const properties: ClientPropertyHealth[] = (propertyRows ?? [])
+    .filter((row) => !!row.address_line1)
+    .map((row) => ({
+      id: row.id,
+      name: row.name ?? null,
+      addressLine1: row.address_line1!,
+      addressLine2: row.address_line2 ?? null,
+      town: row.town ?? null,
+      postcode: row.postcode ?? null,
+      phone: row.phone ?? null,
+      nextServiceDue: row.next_service_due ?? null,
+      status: computeComplianceStatus(row.next_service_due),
+    }));
+
   return {
     client: normalized,
     jobs: mergedJobs,
     reports,
     contactDetails,
     contactSources,
+    properties,
   };
 }
 
