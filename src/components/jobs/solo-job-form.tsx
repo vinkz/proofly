@@ -16,7 +16,11 @@ import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-d
 
 export type SavedPropertyOption = {
   key: string;
+  property_id?: string;
+  source_job_id?: string;
   label: string;
+  next_service_due?: string | null;
+  compliance_badge?: string | null;
   job_address_name: string;
   job_address_line1: string;
   job_address_line2: string;
@@ -91,13 +95,14 @@ const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'tr
 const WIZARD_ROUTE_BY_JOB_TYPE: Record<JobType, string> = {
   safety_check: 'cp12',
   service: 'boiler_service',
+  safety_check_service: 'cp12',
   breakdown: 'breakdown',
   installation: 'commissioning',
   warning_notice: 'gas_warning_notice',
   general: 'general_works',
 };
 
-const LAUNCH_VISIBLE_JOB_TYPES: readonly JobType[] = ['safety_check', 'service'];
+const LAUNCH_VISIBLE_JOB_TYPES: readonly JobType[] = ['safety_check', 'service', 'safety_check_service'];
 
 const splitAddressParts = (value: string | null | undefined) =>
   String(value ?? '')
@@ -182,6 +187,21 @@ const JOB_DEMO_VALUES: Record<
     partyCity: 'London',
     partyPostcode: 'SE1 2BB',
     partyTel: '07700 900456',
+  },
+  safety_check_service: {
+    jobAddressName: 'Flat 2 - Tenant entrance',
+    jobAddressLine1: '42 Station Road',
+    jobAddressLine2: 'Rear access gate',
+    jobAddressCity: 'London',
+    jobAddressPostcode: 'E2 2AA',
+    jobAddressTel: '020 7000 0000',
+    partyName: 'Sam Patel',
+    partyCompany: 'Patel Properties',
+    partyAddressLine1: '7 Owner Road',
+    partyAddressLine2: 'Office 3',
+    partyCity: 'London',
+    partyPostcode: 'N1 1AA',
+    partyTel: '07700 900123',
   },
   breakdown: {
     jobAddressName: 'Ground-floor flat',
@@ -294,7 +314,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [partyAddressSearchError, setPartyAddressSearchError] = useState<string | null>(null);
   const [clientChosen, setClientChosen] = useState(() => !clients.length || !!initialRequest);
   const [propertyChosen, setPropertyChosen] = useState(() => !!initialRequest);
-  const isCp12Upcoming = jobType === 'safety_check';
+  const isCp12Upcoming = jobType === 'safety_check' || jobType === 'safety_check_service';
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const scheduleFieldLabel = isCp12Upcoming ? 'Inspection date' : 'Scheduled date and time';
   const partyCardTitle = isCp12Upcoming ? 'Landlord / Property owner' : 'Client';
@@ -314,6 +334,10 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
         label: property.label,
       })),
     [availableProperties],
+  );
+  const selectedProperty = useMemo(
+    () => availableProperties.find((property) => property.key === selectedPropertyKey) ?? null,
+    [availableProperties, selectedPropertyKey],
   );
 
   const canShowContinue = clientChosen && propertyChosen;
@@ -522,7 +546,6 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   }, [availableProperties, selectedClientId, selectedPropertyKey]);
 
   useEffect(() => {
-    const selectedProperty = availableProperties.find((property) => property.key === selectedPropertyKey);
     if (!selectedProperty) return;
     const nextPropertyName = selectedProperty.job_address_name || selectedProperty.job_address_line1;
     setJobAddressName(nextPropertyName);
@@ -545,7 +568,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
     if (selectedProperty.landlord_tel) setLandlordTel(selectedProperty.landlord_tel);
     if (selectedProperty.landlord_email) setClientEmail(selectedProperty.landlord_email);
     if (selectedProperty.landlord_tel) setClientPhone(selectedProperty.landlord_tel);
-  }, [availableProperties, selectedPropertyKey]);
+  }, [selectedProperty]);
 
   useEffect(() => {
     const selectedClient = clients.find((client) => client.id === selectedClientId);
@@ -936,7 +959,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
       setJobAddressTel(landlordTel);
       setSitePhone(landlordTel);
     }
-    if (landlordName && !jobAddressName) {
+    if (landlordName) {
       setJobAddressName(landlordName);
       setPropertyName(landlordName);
     }
@@ -978,7 +1001,8 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
           landlordCity,
           landlordPostcode,
           landlordTel,
-          selectedPropertyJobId: selectedPropertyKey,
+          selectedPropertyId: selectedProperty?.property_id ?? '',
+          selectedPropertyJobId: selectedProperty?.source_job_id ?? (selectedProperty?.property_id ? '' : selectedPropertyKey),
           requestId: initialRequest?.id,
         });
         clearDraft();
@@ -1179,7 +1203,11 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                   <option value="__manual__">New / manual entry</option>
                   {availableProperties.map((property) => (
                     <option key={property.key} value={property.key}>
-                      {property.label || [property.job_address_line1, property.job_address_city, property.job_postcode].filter(Boolean).join(', ')}
+                      {[
+                        property.label || [property.job_address_line1, property.job_address_city, property.job_postcode].filter(Boolean).join(', '),
+                        property.next_service_due ? `Due ${property.next_service_due}` : null,
+                        property.compliance_badge,
+                      ].filter(Boolean).join(' · ')}
                     </option>
                   ))}
                 </Select>
@@ -1491,7 +1519,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                   disabled={isPending}
                   className="text-[11px] text-[var(--color-text-tertiary)] underline-offset-2 transition-colors hover:text-[var(--color-action)] hover:underline"
                 >
-                  ← Copy landlord address
+                  ← Copy landlord details
                 </button>
               ) : null}
             </div>
@@ -1513,7 +1541,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
               </div>
               <div>
                 <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                  Property name / reference
+                  Tenant name
                 </label>
                 <Input
                   value={jobAddressName}
@@ -1522,7 +1550,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                       ? handleCp12PropertyReferenceInput(event.target.value)
                       : handlePropertyReferenceInput(event.target.value)
                   }
-                  placeholder="Flat 2 - Tenant entrance"
+                  placeholder="Tenant name"
                   className="mt-1"
                   list={isCp12Upcoming ? undefined : 'job-property-reference-options'}
                   required

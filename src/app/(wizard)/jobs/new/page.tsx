@@ -19,6 +19,32 @@ const splitAddressParts = (value: string | null | undefined) =>
     .map((part) => part.trim())
     .filter(Boolean);
 
+const normalizeDateOnly = (value: string | null | undefined) => {
+  const dateOnly = String(value ?? '').trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateOnly) ? dateOnly : '';
+};
+
+const formatDueDate = (value: string | null | undefined) => {
+  const dateOnly = normalizeDateOnly(value);
+  if (!dateOnly) return null;
+  return new Date(`${dateOnly}T00:00:00`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const getComplianceBadge = (value: string | null | undefined) => {
+  const dateOnly = normalizeDateOnly(value);
+  if (!dateOnly) return 'No due date';
+  const due = new Date(`${dateOnly}T00:00:00`).getTime();
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  if (due < todayStart) return 'Red';
+  if (due <= todayStart + 60 * 24 * 60 * 60 * 1000) return 'Amber';
+  return 'Green';
+};
+
 export default async function NewJobPage({
   searchParams,
 }: {
@@ -35,6 +61,11 @@ export default async function NewJobPage({
 
   const clients = await listClients();
   const supabase = await supabaseServerReadOnly();
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+  if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
   let requestPrefill: JobRequestPrefill | null = null;
   let requestPrefillError = '';
   if (requestIdParam) {
@@ -53,8 +84,31 @@ export default async function NewJobPage({
   });
 
   const clientIds = Array.from(clientIdToPrimary.keys());
+  const { data: propertyRows, error: propertiesErr } = clientIds.length
+    ? await supabase
+        .from('properties')
+        .select('id, client_id, name, address_line1, address_line2, town, postcode, phone, next_service_due, updated_at')
+        .eq('user_id', user.id)
+        .in('client_id', clientIds)
+        .order('updated_at', { ascending: false })
+    : { data: [], error: null };
+  if (propertiesErr) throw new Error(propertiesErr.message);
+
+  const propertyIds = (propertyRows ?? [])
+    .map((property) => property.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const { data: propertyJobs, error: propertyJobsErr } = propertyIds.length
+    ? await supabase
+        .from('jobs')
+        .select('id, property_id, created_at, delivered_at, completed_at, scheduled_for')
+        .eq('user_id', user.id)
+        .in('property_id', propertyIds)
+        .order('created_at', { ascending: false })
+    : { data: [], error: null };
+  if (propertyJobsErr) throw new Error(propertyJobsErr.message);
+
   const { data: clientJobs, error: jobsErr } = clientIds.length
-    ? await supabase.from('jobs').select('id, client_id, address, created_at').in('client_id', clientIds).order('created_at', { ascending: false })
+    ? await supabase.from('jobs').select('id, client_id, property_id, address, created_at').in('client_id', clientIds).order('created_at', { ascending: false })
     : { data: [], error: null };
   if (jobsErr) throw new Error(jobsErr.message);
 
@@ -102,8 +156,61 @@ export default async function NewJobPage({
   }, {});
   const clientByPrimaryId = new Map(clients.map((client) => [client.id, client]));
   const seenByClient = new Map<string, Set<string>>();
+  const latestJobByPropertyId = new Map<string, string>();
+  (propertyJobs ?? []).forEach((job) => {
+    const propertyId = job.property_id ?? '';
+    if (!propertyId || latestJobByPropertyId.has(propertyId)) return;
+    latestJobByPropertyId.set(propertyId, job.id);
+  });
+
+  (propertyRows ?? []).forEach((property) => {
+    const rawClientId = property.client_id ?? '';
+    const clientId = rawClientId ? clientIdToPrimary.get(rawClientId) ?? rawClientId : '';
+    if (!clientId || !propertiesByClientId[clientId]) return;
+    const client = clientByPrimaryId.get(clientId);
+    if (!client || !property.address_line1) return;
+
+    const landlordAddressParts = splitAddressParts(pickText(client.landlord_address, client.address));
+    const dueDate = formatDueDate(property.next_service_due);
+    const complianceBadge = getComplianceBadge(property.next_service_due);
+    const label = [
+      property.name || property.address_line1,
+      [property.address_line1, property.town, property.postcode].filter(Boolean).join(', '),
+    ]
+      .filter(Boolean)
+      .join(' - ');
+    const option: SavedPropertyOption = {
+      key: property.id,
+      property_id: property.id,
+      source_job_id: latestJobByPropertyId.get(property.id) ?? '',
+      label,
+      next_service_due: dueDate,
+      compliance_badge: complianceBadge,
+      job_address_name: property.name ?? '',
+      job_address_line1: property.address_line1 ?? '',
+      job_address_line2: property.address_line2 ?? '',
+      job_address_city: property.town ?? '',
+      job_postcode: property.postcode ?? '',
+      job_tel: property.phone ?? '',
+      landlord_name: pickText(client.landlord_name, client.name),
+      landlord_company: client.organization ?? '',
+      landlord_address_line1: landlordAddressParts[0] ?? '',
+      landlord_address_line2: landlordAddressParts.length > 2 ? landlordAddressParts.slice(1, -1).join(', ') : '',
+      landlord_city: landlordAddressParts.length > 1 ? landlordAddressParts.at(-1) ?? '' : '',
+      landlord_postcode: client.postcode ?? '',
+      landlord_tel: client.phone ?? '',
+      landlord_email: client.email ?? '',
+    };
+    const dedupeKey = [option.job_address_line1, option.job_address_city, option.job_postcode].join('::').toLowerCase();
+    const seen = seenByClient.get(clientId) ?? new Set<string>();
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    seenByClient.set(clientId, seen);
+    propertiesByClientId[clientId].push(option);
+  });
 
   (clientJobs ?? []).forEach((job) => {
+    if (job.property_id) return;
     const rawClientId = job.client_id ?? '';
     const clientId = rawClientId ? clientIdToPrimary.get(rawClientId) ?? rawClientId : '';
     if (!clientId || !propertiesByClientId[clientId]) return;
@@ -115,7 +222,10 @@ export default async function NewJobPage({
     const parts = splitAddressParts(job.address);
     const property: SavedPropertyOption = {
       key: job.id,
+      source_job_id: job.id,
       label: '',
+      next_service_due: null,
+      compliance_badge: 'Legacy',
       job_address_name: pickText(fields.job_address_name),
       job_address_line1: pickText(fields.job_address_line1, parts[0]),
       job_address_line2: pickText(fields.job_address_line2),

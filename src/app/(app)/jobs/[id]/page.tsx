@@ -18,7 +18,12 @@ import type { Database } from '@/lib/database.types';
 import { isUUID } from '@/lib/ids';
 import { reportKindForJobType, type ReportKind } from '@/types/reports';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
-import { buildCertificateResumeHref, getCertificateWizardRouteForJobType, getResumeStepFromRecord } from '@/lib/certificate-resume';
+import {
+  getCertificateWizardRouteForJobType,
+  getLifecycleJobHref,
+  getResumeStepFromRecord,
+  isCompletedJobStatus,
+} from '@/lib/certificate-resume';
 import { listInvoicesForJob } from '@/server/invoices';
 
 type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
@@ -100,10 +105,17 @@ export default async function JobDetailPage({
 
   const { job, items, photos, signatures, report } = data;
   const wizardRoute = getCertificateWizardRouteForJobType(job.job_type ?? null);
-  if (String(job.status ?? '').toLowerCase() === 'issued') {
-    redirect(`/jobs/${jobId}/complete`);
+  const normalizedStatus = String(job.status ?? '').toLowerCase();
+  if (normalizedStatus === 'issued' || isCompletedJobStatus(normalizedStatus)) {
+    redirect(
+      getLifecycleJobHref({
+        jobId,
+        status: job.status,
+        jobType: job.job_type ?? null,
+      }),
+    );
   }
-  if (job.status !== 'completed' && wizardRoute) {
+  if (wizardRoute) {
     let jobRecordRow: { record: unknown } | null = null;
     try {
       const { data: recordData, error: jobRecordErr } = await supabase
@@ -116,8 +128,9 @@ export default async function JobDetailPage({
     } catch {
     }
     redirect(
-      buildCertificateResumeHref({
+      getLifecycleJobHref({
         jobId,
+        status: job.status,
         jobType: job.job_type ?? null,
         startStep: getResumeStepFromRecord(jobRecordRow?.record ?? null),
       }),

@@ -1125,7 +1125,7 @@ export function CertificateWizard({
       try {
         const payload = buildCp12DraftPersistencePayload();
         if (!payload.jobAddress.job_address_name.trim()) {
-          throw new Error('Property name / reference is required');
+          throw new Error('Tenant name is required');
         }
         if (!info.landlord_name.trim()) {
           throw new Error('Landlord / owner name is required');
@@ -1639,6 +1639,7 @@ export function CertificateWizard({
         hasValue(companyPostcode) &&
         hasValue(companyPhone),
       hint: 'Set in Settings',
+      action: () => router.push('/settings'),
       blocking: true,
     });
 
@@ -1761,7 +1762,9 @@ export function CertificateWizard({
     resolvedInitialInfo.gas_safe_number,
     engineerSignature,
     customerSignature,
+    router,
   ]);
+  const firstBlockingMissing = checklist.items.find((item) => item.blocking !== false && !item.ok);
 
   if (issuedJobId && certificateType === 'cp12') {
     const pdfHref = `/jobs/${issuedJobId}/pdf?certificateType=cp12`;
@@ -1960,7 +1963,7 @@ export function CertificateWizard({
               <Input
                 value={jobAddress.job_address_name}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                placeholder="Property name / reference"
+                placeholder="Tenant name"
                 required
                 className="rounded-[8px]"
               />
@@ -3011,9 +3014,15 @@ export function CertificateWizard({
           disabled={isBusy || checklist.blockingMissing > 0 || !isOnline || hasUnsyncedChanges}
           onClick={handleGenerate}
           data-testid="cp12-issue"
-          className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#1a7a52] text-[14px] font-medium text-white disabled:opacity-50"
+          className="flex min-h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#1a7a52] px-2 text-center text-[14px] font-medium leading-tight text-white disabled:opacity-50"
         >
-          {!isOnline || hasUnsyncedChanges ? 'Ready once synced' : isGeneratingPdf ? 'Issuing…' : 'Issue CP12'}
+          {!isOnline || hasUnsyncedChanges
+            ? 'Sync first'
+            : firstBlockingMissing
+              ? `Complete: ${firstBlockingMissing.label}`
+              : isGeneratingPdf
+                ? 'Issuing…'
+                : 'Issue CP12'}
         </button>
       </div>
     </WizardLayout>

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 
 import type { Database } from '@/lib/database.types';
-import { buildCertificateResumeHref } from '@/lib/certificate-resume';
+import { getLifecycleJobHref, isCompletedJobStatus } from '@/lib/certificate-resume';
 import { Button } from '@/components/ui/button';
 import { DeleteJobButton } from '@/components/jobs/delete-job-button';
 
@@ -13,7 +13,7 @@ export default function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const router = useRouter();
 
   const handleRowClick = (job: JobRow) => {
-  const href = job.status === 'completed' ? `/documents/${job.id}` : resumeHref(job);
+    const href = resumeHref(job);
     router.push(href);
   };
 
@@ -64,7 +64,7 @@ export default function JobsTable({ jobs }: { jobs: JobRow[] }) {
                 <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex flex-wrap justify-end gap-2">
                     <Button asChild variant="outline">
-                      <a href={resumeHref(job)}>{job.status === 'completed' ? 'Report' : 'Open'}</a>
+                      <a href={resumeHref(job)}>{isCompletedJobStatus(job.status) ? 'Open PDF' : 'Open'}</a>
                     </Button>
                     <DeleteJobButton jobId={job.id} />
                   </div>
@@ -86,8 +86,11 @@ export default function JobsTable({ jobs }: { jobs: JobRow[] }) {
 }
 
 function resumeHref(job: JobRow) {
-  if (job.status === 'completed') return `/jobs/${job.id}/pdf`;
-  return buildCertificateResumeHref({ jobId: job.id, jobType: job.job_type });
+  return getLifecycleJobHref({
+    jobId: job.id,
+    status: job.status,
+    jobType: job.job_type,
+  });
 }
 
 function StatusBadge({ status }: { status: string }) {

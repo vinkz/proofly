@@ -101,6 +101,8 @@ type GasWarningDraftState = {
   customerSignature: string;
 };
 
+type MissingIssueItem = { id: string; label: string; step?: number; href?: string };
+
 const FINAL_EVIDENCE_CATEGORIES: Array<{ key: PhotoCategory; label: string }> = [
   { key: 'appliance_photo', label: 'Appliance' },
   { key: 'issue_photo', label: 'Issue/Defect' },
@@ -144,6 +146,8 @@ const buildAddressText = (...parts: Array<string | null | undefined>) =>
     .map((part) => String(part ?? '').trim())
     .filter(Boolean)
     .join('\n');
+
+const hasValue = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
 
 function LabeledField({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
   return (
@@ -258,6 +262,63 @@ export function GasWarningNoticeWizard({
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
   const didPrefillRef = useRef(false);
+
+  const gasWarningMissingItems = useMemo<MissingIssueItem[]>(() => {
+    const items: MissingIssueItem[] = [];
+    const add = (id: string, label: string, ok: boolean, step?: number, href?: string) => {
+      if (!ok) items.push({ id, label, step, href });
+    };
+    const propertyAddressOk = hasValue(fields.property_address) || hasValue(jobAddress.job_address_line1);
+    const handoverConfirmed = fields.customer_present ? fields.customer_informed : fields.notice_left_on_premises;
+
+    add('property-address', 'Property address', propertyAddressOk, 1);
+    add('customer-name', 'Customer name', hasValue(fields.customer_name), 1);
+    add('appliance-location', 'Appliance location', hasValue(fields.appliance_location), 2);
+    add('appliance-type', 'Appliance type', hasValue(fields.appliance_type), 2);
+    add('classification', 'Warning classification', hasValue(fields.classification), 2);
+    add('unsafe-description', 'Unsafe situation description', hasValue(fields.unsafe_situation_description), 2);
+    add('actions-taken', 'Actions taken', hasValue(fields.actions_taken), 2);
+    add('engineer-name', 'Engineer name in profile', hasValue(fields.engineer_name), undefined, '/settings');
+    add('gas-safe-number', 'Gas Safe number in profile', hasValue(fields.gas_safe_number), undefined, '/settings');
+    add('issue-date', 'Issue date', hasValue(fields.issued_at), 3);
+    add(
+      'handover-confirmed',
+      fields.customer_present ? 'Customer informed' : 'Notice left on premises',
+      handoverConfirmed,
+      3,
+    );
+
+    if (fields.classification === 'IMMEDIATELY_DANGEROUS') {
+      add('danger-label', 'Danger: Do Not Use label fitted', fields.danger_do_not_use_label_fitted, 2);
+      add(
+        'isolation-or-refusal',
+        'Gas isolated or customer refusal recorded',
+        fields.gas_supply_isolated || fields.customer_refused_isolation,
+        2,
+      );
+    }
+
+    return items;
+  }, [
+    fields.actions_taken,
+    fields.appliance_location,
+    fields.appliance_type,
+    fields.classification,
+    fields.customer_informed,
+    fields.customer_name,
+    fields.customer_present,
+    fields.customer_refused_isolation,
+    fields.danger_do_not_use_label_fitted,
+    fields.engineer_name,
+    fields.gas_safe_number,
+    fields.gas_supply_isolated,
+    fields.issued_at,
+    fields.notice_left_on_premises,
+    fields.property_address,
+    fields.unsafe_situation_description,
+    jobAddress.job_address_line1,
+  ]);
+  const firstGasWarningMissing = gasWarningMissingItems[0];
 
   const gasWarningDraft = useMemo<GasWarningDraftState>(
     () => ({
@@ -604,6 +665,14 @@ export function GasWarningNoticeWizard({
   const handleGenerate = () => {
     startTransition(async () => {
       try {
+        if (gasWarningMissingItems.length > 0) {
+          pushToast({
+            title: 'Complete required item first',
+            description: gasWarningMissingItems[0]?.label ?? 'Please check the required fields and try again.',
+            variant: 'error',
+          });
+          return;
+        }
         await persistAll();
         const { jobId: resultJobId } = await generateCertificatePdf({
           jobId,
@@ -704,11 +773,11 @@ export function GasWarningNoticeWizard({
                     className="rounded-[8px]"
                   />
                 </LabeledField>
-                <LabeledField label="Name" className="sm:col-span-2">
+                <LabeledField label="Tenant name" className="sm:col-span-2">
                   <Input
                     value={jobAddress.job_address_name}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                    placeholder="Property name / reference"
+                    placeholder="Tenant name"
                     className="rounded-[8px]"
                   />
                 </LabeledField>
@@ -1191,6 +1260,29 @@ export function GasWarningNoticeWizard({
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             </div>
           </CollapsibleSection>
+          {gasWarningMissingItems.length > 0 ? (
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-4">
+              <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
+                {gasWarningMissingItems.length} required item{gasWarningMissingItems.length === 1 ? '' : 's'} missing
+              </p>
+              <div className="mt-3 space-y-2">
+                {gasWarningMissingItems.slice(0, 4).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-[10px] bg-[var(--color-background-primary)] px-3 py-2 text-[13px]">
+                    <span className="font-medium text-[var(--color-text-primary)]">{item.label}</span>
+                    {item.href ? (
+                      <Link href={item.href} className="rounded-full px-3 py-1 text-[12px] font-medium text-[var(--color-action)]">
+                        Open
+                      </Link>
+                    ) : item.step ? (
+                      <Button type="button" variant="ghost" className="rounded-full px-3 py-1 text-[12px]" onClick={() => setStep(item.step!)}>
+                        Go
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           </div>
           <div id="gw-step3-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
             <button
@@ -1212,10 +1304,10 @@ export function GasWarningNoticeWizard({
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={isPending}
-              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-red)] text-[14px] font-medium text-white disabled:opacity-50"
+              disabled={isPending || gasWarningMissingItems.length > 0}
+              className="flex min-h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-red)] px-2 text-center text-[14px] font-medium leading-tight text-white disabled:opacity-50"
             >
-              Generate PDF
+              {firstGasWarningMissing ? `Complete: ${firstGasWarningMissing.label}` : 'Generate PDF'}
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>

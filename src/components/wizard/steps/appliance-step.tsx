@@ -399,7 +399,7 @@ export function ApplianceStep({
                     </div>
                   ) : null}
                   <div className="space-y-2 sm:col-span-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number (optional)</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number</p>
                     <Input
                       value={appliance?.serial ?? ''}
                       onChange={(e) => updateApplianceField(index, 'serial', e.target.value)}
@@ -550,7 +550,7 @@ export function ApplianceStep({
                 </div>
               ) : null}
               <div className="space-y-2 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number (optional)</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number</p>
                 <Input
                   value={activeAppliances[editingIndex]?.serial ?? ''}
                   onChange={(e) => updateApplianceField(editingIndex, 'serial', e.target.value)}

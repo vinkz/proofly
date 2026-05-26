@@ -135,6 +135,17 @@ describe('parseCp12VoiceReadings', () => {
     });
   });
 
+  it('accepts common transcriptions for heat input when paired with operating pressure', () => {
+    const result = parseCp12VoiceReadings('operating pressure 20 point 4 appliance rating 24 point 6', {
+      scope: 'pressure',
+    });
+
+    expect(result.parsed).toMatchObject({
+      workingPressure: '20.4',
+      heatInput: '24.6',
+    });
+  });
+
   it('accepts misheard heat input phrases in scoped pressure mode', () => {
     const result = parseCp12VoiceReadings('operating pressure 20 heating put 24 gas rating 24', { scope: 'pressure' });
 
@@ -180,6 +191,22 @@ describe('parseCp12VoiceReadings', () => {
     });
 
     expect(result.parsed).toMatchObject({
+      lowCoPpm: '6',
+      lowCo2Percent: '8.8',
+      lowRatio: '0.0006',
+    });
+  });
+
+  it('accepts common spoken ratio variations', () => {
+    const high = parseCp12VoiceReadings('co 8 co2 9 point 1 co over co2 ratio point 0007', { scope: 'high' });
+    const low = parseCp12VoiceReadings('co 6 co two 8 point 8 co2 ratio zero zero zero six', { scope: 'low' });
+
+    expect(high.parsed).toMatchObject({
+      highCoPpm: '8',
+      highCo2Percent: '9.1',
+      highRatio: '0.0007',
+    });
+    expect(low.parsed).toMatchObject({
       lowCoPpm: '6',
       lowCo2Percent: '8.8',
       lowRatio: '0.0006',

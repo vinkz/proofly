@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 
 import { JobCard } from './job-card';
 import { Input } from '@/components/ui/input';
+import { getLifecycleJobHref, isCompletedJobStatus } from '@/lib/certificate-resume';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 
 export type JobSummary = {
@@ -20,8 +21,6 @@ export type JobSummary = {
 };
 
 type FilterView = 'upcoming' | 'past' | 'all';
-
-const DONE_STATUSES = ['completed', 'closed', 'delivered'];
 
 const getJobTimestamp = (job: JobSummary) => {
   const when = job.scheduled_for ?? job.created_at ?? null;
@@ -67,17 +66,22 @@ const buildSearchIndex = (job: JobSummary) => {
 };
 
 const getJobHref = (job: JobSummary) => {
-  const status = (job.status ?? '').toLowerCase();
-  if (status === 'issued') return `/jobs/${job.id}/complete`;
-  if (DONE_STATUSES.includes(status)) return `/jobs/${job.id}/pdf`;
-  return `/jobs/${job.id}`;
+  return getLifecycleJobHref({
+    jobId: job.id,
+    status: job.status,
+    jobType: job.job_type,
+  });
 };
 
 const getActionLabel = (status?: string | null) => {
   const s = (status ?? '').toLowerCase();
   if (s === 'issued') return 'Review & send';
-  if (DONE_STATUSES.includes(s)) return 'Open PDF';
-  return 'Open job';
+  if (isCompletedJobStatus(s)) return 'Open PDF';
+  if (s === 'awaiting_landlord') return 'Waiting';
+  if (s === 'prepared') return 'Start';
+  if (s === 'in_progress' || s === 'active') return 'Continue';
+  if (s === 'draft') return 'Prepare';
+  return 'Open';
 };
 
 const FILTER_LABELS: Record<FilterView, string> = {
@@ -97,7 +101,7 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
       .filter((job) => {
         const haystack = buildSearchIndex(job);
         const matchesQuery = terms.every((term) => haystack.includes(term));
-        const isDone = DONE_STATUSES.includes((job.status ?? '').toLowerCase());
+        const isDone = isCompletedJobStatus(job.status);
         const matchesView =
           view === 'upcoming' ? !isDone : view === 'past' ? isDone : true;
         return matchesQuery && matchesView;
@@ -109,8 +113,8 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
         if (left === null) return 1;
         if (right === null) return -1;
 
-        const leftDone = DONE_STATUSES.includes((a.status ?? '').toLowerCase());
-        const rightDone = DONE_STATUSES.includes((b.status ?? '').toLowerCase());
+        const leftDone = isCompletedJobStatus(a.status);
+        const rightDone = isCompletedJobStatus(b.status);
         if (view === 'past') return right - left;
         if (view === 'upcoming') return !leftDone && !rightDone ? left - right : leftDone ? 1 : -1;
         if (leftDone !== rightDone) return leftDone ? 1 : -1;

@@ -4,6 +4,7 @@ import type { CertificateType } from '@/types/certificates';
 const WIZARD_ROUTE_BY_JOB_TYPE: Record<JobType, string> = {
   safety_check: 'cp12',
   service: 'boiler_service',
+  safety_check_service: 'cp12',
   breakdown: 'breakdown',
   installation: 'commissioning',
   warning_notice: 'gas_warning_notice',
@@ -31,6 +32,7 @@ const DEFAULT_EDIT_STEP_BY_CERTIFICATE_TYPE: Record<CertificateType, number> = {
 const DEFAULT_EDIT_STEP_BY_JOB_TYPE: Record<JobType, number> = {
   safety_check: 4,
   service: 4,
+  safety_check_service: 4,
   breakdown: 4,
   installation: 4,
   warning_notice: 3,
@@ -82,6 +84,25 @@ export function buildCertificateResumeHref(params: {
     query.set('startStep', String(params.startStep));
   }
   return `/wizard/create/${route}?${query.toString()}`;
+}
+
+export const COMPLETED_JOB_STATUSES = ['completed', 'closed', 'delivered'] as const;
+
+export function isCompletedJobStatus(status: string | null | undefined) {
+  return COMPLETED_JOB_STATUSES.includes((status ?? '').toLowerCase() as (typeof COMPLETED_JOB_STATUSES)[number]);
+}
+
+export function getLifecycleJobHref(params: {
+  jobId: string;
+  status: string | null | undefined;
+  jobType: string | null | undefined;
+  startStep?: number | null;
+}) {
+  const status = (params.status ?? '').toLowerCase();
+  if (status === 'issued') return `/jobs/${params.jobId}/complete`;
+  if (isCompletedJobStatus(status)) return `/jobs/${params.jobId}/pdf`;
+  if (status === 'awaiting_landlord') return '/dashboard';
+  return buildCertificateResumeHref(params);
 }
 
 export function buildCertificateEditHref(params: {

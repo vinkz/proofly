@@ -15,7 +15,6 @@ import { useToast } from '@/components/ui/use-toast';
 import { CollapsibleSection } from '@/components/wizard/layout/collapsible-section';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
-import { FgaAutofillInline } from '@/components/fga/FgaAutofillInline';
 import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import {
   BOILER_SERVICE_DEMO_INFO,
@@ -64,6 +63,7 @@ type BoilerServiceJobAddress = {
 };
 
 type CheckItem = { key: keyof BoilerServiceChecks; label: string };
+type MissingIssueItem = { id: string; label: string; step?: number; href?: string };
 
 const SAFETY_CHECK_ITEMS: CheckItem[] = [
   { key: 'appliance_operating_correctly', label: 'Appliance is operating correctly' },
@@ -101,7 +101,9 @@ type BoilerServiceDraftState = {
   checks: BoilerServiceChecks;
   checkComments: Record<string, string>;
   engineerSignature: string;
+  engineerSignaturePath: string;
   customerSignature: string;
+  customerSignaturePath: string;
   addressSearchQuery: string;
   customerAddressSearchQuery: string;
 };
@@ -274,7 +276,6 @@ export function BoilerServiceWizard({
   const [customerAddressSearchError, setCustomerAddressSearchError] = useState<string | null>(null);
   const deferredAddressSearchQuery = useDeferredValue(addressSearchQuery.trim());
   const deferredCustomerAddressSearchQuery = useDeferredValue(customerAddressSearchQuery.trim());
-  const fgaApplianceId = typeof resolvedFields.appliance_id === 'string' ? resolvedFields.appliance_id : null;
   const customerAddressParts = splitAddressParts(
     resolvedFields.customer_address ?? initialJobContext?.customer?.address ?? '',
   );
@@ -343,7 +344,9 @@ export function BoilerServiceWizard({
   });
 
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
+  const [engineerSignaturePath, setEngineerSignaturePath] = useState((resolvedFields.engineer_signature_path as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+  const [customerSignaturePath, setCustomerSignaturePath] = useState((resolvedFields.customer_signature_path as string) ?? '');
   const [checkComments, setCheckComments] = useState<Record<string, string>>({});
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
@@ -375,7 +378,9 @@ export function BoilerServiceWizard({
       checks,
       checkComments,
       engineerSignature,
+      engineerSignaturePath,
       customerSignature,
+      customerSignaturePath,
       addressSearchQuery,
       customerAddressSearchQuery,
     }),
@@ -386,8 +391,10 @@ export function BoilerServiceWizard({
       completionDate,
       customerAddressSearchQuery,
       customerSignature,
+      customerSignaturePath,
       details,
       engineerSignature,
+      engineerSignaturePath,
       jobAddress,
       jobInfo,
       step,
@@ -401,9 +408,11 @@ export function BoilerServiceWizard({
       details,
       checks,
       engineerSignature,
+      engineerSignaturePath,
       customerSignature,
+      customerSignaturePath,
     }),
-    [checks, completionDate, customerSignature, details, engineerSignature, jobAddress, jobInfo],
+    [checks, completionDate, customerSignature, customerSignaturePath, details, engineerSignature, engineerSignaturePath, jobAddress, jobInfo],
   );
 
   const {
@@ -425,7 +434,9 @@ export function BoilerServiceWizard({
       setDetails((prev) => ({ ...prev, ...(draft.details ?? {}) }));
       setChecks((prev) => ({ ...prev, ...(draft.checks ?? {}) }));
       setEngineerSignature(draft.engineerSignature ?? '');
+      setEngineerSignaturePath(draft.engineerSignaturePath ?? '');
       setCustomerSignature(draft.customerSignature ?? '');
+      setCustomerSignaturePath(draft.customerSignaturePath ?? '');
       setCheckComments(draft.checkComments ?? {});
       setAddressSearchQuery(draft.addressSearchQuery ?? '');
       setCustomerAddressSearchQuery(draft.customerAddressSearchQuery ?? '');
@@ -458,9 +469,13 @@ export function BoilerServiceWizard({
         job_tel: jobAddress.job_tel,
         job_visit_date: serviceDate,
         completion_date: completionDate || serviceDate,
+        engineer_signature: engineerSignature || engineerSignaturePath,
+        engineer_signature_path: engineerSignaturePath,
+        customer_signature: customerSignature || customerSignaturePath,
+        customer_signature_path: customerSignaturePath,
       },
     };
-  }, [completionDate, jobAddress, jobInfo]);
+  }, [completionDate, customerSignature, customerSignaturePath, engineerSignature, engineerSignaturePath, jobAddress, jobInfo]);
 
   const syncBoilerServiceOfflineDraft = useCallback(async () => {
     if (isOfflineDraftSyncing) return;
@@ -933,6 +948,10 @@ export function BoilerServiceWizard({
         job_tel: jobAddress.job_tel,
         job_visit_date: serviceDate,
         completion_date: completionDate || serviceDate,
+        engineer_signature: engineerSignature || engineerSignaturePath,
+        engineer_signature_path: engineerSignaturePath,
+        customer_signature: customerSignature || customerSignaturePath,
+        customer_signature_path: customerSignaturePath,
       },
     });
     await saveBoilerServiceDetails({ jobId, data: details });
@@ -941,9 +960,46 @@ export function BoilerServiceWizard({
 
   const goBackOneStep = () => setStep((prev) => Math.max(1, prev - 1));
 
+  const showBoilerValidationError = (error: unknown) => {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (!message.includes('validation failed') && !message.includes('is required')) return false;
+
+    const validationTargets: MissingIssueItem[] = [
+      ...boilerMissingItems,
+      { id: 'engineer-signature', label: 'Engineer signature', step: 4 },
+      { id: 'customer-signature', label: 'Customer signature', step: 4 },
+      { id: 'service-summary', label: 'Service summary', step: 4 },
+      { id: 'recommendations', label: 'Recommendations', step: 4 },
+      { id: 'property-address', label: 'Property address', step: 1 },
+      { id: 'service-date', label: 'Service date', step: 1 },
+      { id: 'boiler-make', label: 'Boiler make', step: 2 },
+      { id: 'boiler-model', label: 'Boiler model', step: 2 },
+      { id: 'boiler-location', label: 'Boiler location', step: 2 },
+    ];
+    const target =
+      validationTargets.find((item) => message.includes(item.label.toLowerCase())) ??
+      validationTargets.find((item) => message.includes(item.id.replace(/-/g, ' ')));
+
+    pushToast({
+      title: 'Complete required item first',
+      description: target ? `${target.label} is missing.` : 'Please review the required fields before generating the certificate.',
+      variant: 'error',
+    });
+    if (target?.step) setStep(target.step);
+    return true;
+  };
+
   const handleGenerate = () => {
     startTransition(async () => {
       try {
+        if (boilerMissingItems.length > 0) {
+          pushToast({
+            title: 'Complete required item first',
+            description: boilerMissingItems[0]?.label ?? 'Please check the required fields and try again.',
+            variant: 'error',
+          });
+          return;
+        }
         await persistBeforePdf();
         const finalInfo = { ...jobInfo, service_date: completionDate || jobInfo.service_date };
         await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
@@ -960,6 +1016,7 @@ export function BoilerServiceWizard({
         });
         router.push(`/jobs/${resultJobId}/complete`);
       } catch (error) {
+        if (showBoilerValidationError(error)) return;
         pushToast({
           title: 'Could not generate PDF',
           description: error instanceof Error ? error.message : 'Please check required fields and try again.',
@@ -1010,9 +1067,15 @@ export function BoilerServiceWizard({
       data.append('file', file);
       startTransition(async () => {
         try {
-          const { url } = await uploadSignature(data);
-          if (role === 'engineer') setEngineerSignature(url);
-          if (role === 'customer') setCustomerSignature(url);
+          const { url, path } = await uploadSignature(data);
+          if (role === 'engineer') {
+            setEngineerSignature(url);
+            setEngineerSignaturePath(path);
+          }
+          if (role === 'customer') {
+            setCustomerSignature(url);
+            setCustomerSignaturePath(path);
+          }
           pushToast({ title: `${role === 'engineer' ? 'Engineer' : 'Customer'} signature saved`, variant: 'success' });
         } catch (error) {
           pushToast({
@@ -1033,7 +1096,54 @@ export function BoilerServiceWizard({
     'low_combustion_ratio',
   ];
   const safetyNumericFields: Array<keyof BoilerServiceChecks> = ['operating_pressure_mbar', 'heat_input'];
-  const hasValue = (value: string) => value.trim().length > 0;
+  const hasValue = useCallback((value: string) => value.trim().length > 0, []);
+  const boilerMissingItems = useMemo<MissingIssueItem[]>(() => {
+    const items: MissingIssueItem[] = [];
+    const add = (id: string, label: string, ok: boolean, step?: number, href?: string) => {
+      if (!ok) items.push({ id, label, step, href });
+    };
+    const serviceDate = completionDate || jobInfo.service_date || jobAddress.job_visit_date;
+    const propertyAddressOk =
+      hasValue(jobInfo.property_address) || (hasValue(jobAddress.job_address_line1) && hasValue(jobAddress.job_postcode));
+
+    add('property-address', 'Property address', propertyAddressOk, 1);
+    add('service-date', 'Service date', hasValue(serviceDate), 1);
+    add('engineer-name', 'Engineer name in profile', hasValue(jobInfo.engineer_name), undefined, '/settings');
+    add('gas-safe-number', 'Gas Safe number in profile', hasValue(jobInfo.gas_safe_number), undefined, '/settings');
+    add('boiler-make', 'Boiler make', hasValue(details.boiler_make), 2);
+    add('boiler-model', 'Boiler model', hasValue(details.boiler_model), 2);
+    add('boiler-location', 'Boiler location', hasValue(details.boiler_location), 2);
+    add('service-summary', 'Service summary', hasValue(checks.service_summary), 4);
+    add('recommendations', 'Recommendations', hasValue(checks.recommendations), 4);
+    if (checks.defects_found === 'yes') {
+      add('defects-details', 'Defect details', hasValue(checks.defects_details), 4);
+    }
+    add('engineer-signature', 'Engineer signature', hasValue(engineerSignature) || hasValue(engineerSignaturePath), 4);
+    add('customer-signature', 'Customer signature', hasValue(customerSignature) || hasValue(customerSignaturePath), 4);
+    return items;
+  }, [
+    checks.defects_details,
+    checks.defects_found,
+    checks.recommendations,
+    checks.service_summary,
+    completionDate,
+    customerSignature,
+    customerSignaturePath,
+    details.boiler_location,
+    details.boiler_make,
+    details.boiler_model,
+    engineerSignature,
+    engineerSignaturePath,
+    hasValue,
+    jobAddress.job_address_line1,
+    jobAddress.job_postcode,
+    jobAddress.job_visit_date,
+    jobInfo.engineer_name,
+    jobInfo.gas_safe_number,
+    jobInfo.property_address,
+    jobInfo.service_date,
+  ]);
+  const firstBoilerMissing = boilerMissingItems[0];
   const renderCheckToggle = (item: CheckItem) => (
     <div
       key={item.key}
@@ -1169,12 +1279,12 @@ export function BoilerServiceWizard({
                 </div>
                 <div>
                   <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                    Property name / reference
+                    Tenant name
                   </label>
                   <Input
                     value={jobAddress.job_address_name}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                    placeholder="Boiler room"
+                    placeholder="Tenant name"
                     className="mt-1"
                   />
                 </div>
@@ -1531,30 +1641,6 @@ export function BoilerServiceWizard({
             <div className="mb-3">
               <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">FGA readings</p>
             </div>
-            <div className="mb-3 grid gap-2 sm:grid-cols-2">
-              <FgaAutofillInline
-                jobId={jobId}
-                applianceId={fgaApplianceId}
-                readingSet="high"
-                label="High combustion"
-                onApply={(values) => {
-                  if (values.co_ppm !== undefined) setCheckValue('high_combustion_co_ppm', String(values.co_ppm));
-                  if (values.co2_pct !== undefined) setCheckValue('high_combustion_co2', String(values.co2_pct));
-                  if (values.ratio !== undefined) setCheckValue('high_combustion_ratio', String(values.ratio));
-                }}
-              />
-              <FgaAutofillInline
-                jobId={jobId}
-                applianceId={fgaApplianceId}
-                readingSet="low"
-                label="Low combustion"
-                onApply={(values) => {
-                  if (values.co_ppm !== undefined) setCheckValue('low_combustion_co_ppm', String(values.co_ppm));
-                  if (values.co2_pct !== undefined) setCheckValue('low_combustion_co2', String(values.co2_pct));
-                  if (values.ratio !== undefined) setCheckValue('low_combustion_ratio', String(values.ratio));
-                }}
-              />
-            </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <UnitNumberInput
                 label="High CO"
@@ -1630,7 +1716,7 @@ export function BoilerServiceWizard({
                     <Cp12VoiceReadings
                       jobId={jobId}
                       scope="pressure"
-                      buttonLabel="Speak pressure"
+                      buttonLabel="Speak pressure/input"
                       buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
                       onApply={applyVoiceReadings}
                     />
@@ -1817,6 +1903,29 @@ export function BoilerServiceWizard({
                 />
               </div>
             </details>
+            {boilerMissingItems.length > 0 ? (
+              <div className="rounded-[16px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-4">
+                <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
+                  {boilerMissingItems.length} required item{boilerMissingItems.length === 1 ? '' : 's'} missing
+                </p>
+                <div className="mt-3 space-y-2">
+                  {boilerMissingItems.slice(0, 4).map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-[10px] bg-[var(--color-background-primary)] px-3 py-2 text-[13px]">
+                      <span className="font-medium text-[var(--color-text-primary)]">{item.label}</span>
+                      {item.href ? (
+                        <Link href={item.href} className="rounded-full px-3 py-1 text-[12px] font-medium text-[var(--color-action)]">
+                          Open
+                        </Link>
+                      ) : item.step ? (
+                        <Button type="button" variant="ghost" className="rounded-full px-3 py-1 text-[12px]" onClick={() => setStep(item.step!)}>
+                          Go
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
           <div id="boiler-step4-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
             <button
@@ -1830,10 +1939,16 @@ export function BoilerServiceWizard({
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={isPending || !isOnline || hasUnsyncedChanges}
-              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-action)] text-[14px] font-medium text-white disabled:opacity-50"
+              disabled={isPending || boilerMissingItems.length > 0 || !isOnline || hasUnsyncedChanges}
+              className="flex min-h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-action)] px-2 text-center text-[14px] font-medium leading-tight text-white disabled:opacity-50"
             >
-              {!isOnline || hasUnsyncedChanges ? 'Ready once synced' : isPending ? 'Generating…' : 'Generate Boiler Service'}
+              {!isOnline || hasUnsyncedChanges
+                ? 'Sync first'
+                : firstBoilerMissing
+                  ? `Complete: ${firstBoilerMissing.label}`
+                  : isPending
+                    ? 'Generating…'
+                    : 'Generate Boiler Service'}
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>

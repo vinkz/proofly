@@ -153,8 +153,8 @@ const FIELD_PATTERNS: Array<{ key: keyof Cp12VoiceReadingsParsed; patterns: RegE
     key: 'heatInput',
     patterns: [
       new RegExp(`\\b(?:net|gross|max|maximum|nominal)?\\s*heat\\s+(?:input|in\\s+put|imput|inlet|output|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
-      new RegExp(`\\b(?:heating\\s+put|heat\\s+and\\s+put|heatinput|heat\\s+imput)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
-      new RegExp(`\\b(?:gas\\s+rate|gas\\s+rating|rated\\s+input|rated\\s+heat\\s+input|appliance\\s+input|input\\s+rate|kw\\s+input|kilowatt\\s+input|kw\\s+rating)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:heating\\s+put|heat\\s+and\\s+put|heat\\s+in\\s+put|heat\\s+inn\\s+put|heater\\s+input|heatinput|heat\\s+imput)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+      new RegExp(`\\b(?:gas\\s+rate|gas\\s+rating|rated\\s+input|rated\\s+output|rated\\s+heat\\s+input|appliance\\s+input|appliance\\s+rating|input\\s+rate|kw\\s+input|kilowatt\\s+input|kw\\s+rating|kilowatt\\s+rating)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
       new RegExp(`\\binput\\b\\s*${NUMBER_CAPTURE}`, 'i'),
     ],
   },
@@ -169,14 +169,14 @@ const FIELD_PATTERNS: Array<{ key: keyof Cp12VoiceReadingsParsed; patterns: RegE
 const SCOPED_COMBUSTION_PATTERNS = {
   coPpm: [new RegExp(`\\b(?:co|carbon\\s+monoxide)(?:\\s+ppm)?\\b\\s*${NUMBER_CAPTURE}`, 'i')],
   co2Percent: [new RegExp(`\\b(?:co2|carbon\\s+dioxide)\\b\\s*${NUMBER_CAPTURE}`, 'i')],
-  ratio: [new RegExp(`\\b(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio|co\\s+co2\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i')],
+  ratio: [new RegExp(`\\b(?:(?:co|carbon\\s+monoxide)\\s+(?:co2|carbon\\s+dioxide)\\s+)?(?:ratio|combustion\\s+ratio|co\\s+co2\\s+ratio|co2\\s+ratio)\\b\\s*${NUMBER_CAPTURE}`, 'i')],
 };
 
 const SCOPED_PRESSURE_PATTERNS = {
   heatInput: [
     new RegExp(`\\b(?:net|gross|max|maximum|nominal)?\\s*heat\\s+(?:input|in\\s+put|imput|inlet|output|rating|rate)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
-    new RegExp(`\\b(?:heating\\s+put|heat\\s+and\\s+put|heatinput|heat\\s+imput)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
-    new RegExp(`\\b(?:gas\\s+rate|gas\\s+rating|rated\\s+input|rated\\s+heat\\s+input|appliance\\s+input|input\\s+rate|kw\\s+input|kilowatt\\s+input|kw\\s+rating|input)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+    new RegExp(`\\b(?:heating\\s+put|heat\\s+and\\s+put|heat\\s+in\\s+put|heat\\s+inn\\s+put|heater\\s+input|heatinput|heat\\s+imput)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
+    new RegExp(`\\b(?:gas\\s+rate|gas\\s+rating|rated\\s+input|rated\\s+output|rated\\s+heat\\s+input|appliance\\s+input|appliance\\s+rating|input\\s+rate|kw\\s+input|kilowatt\\s+input|kw\\s+rating|kilowatt\\s+rating|input)\\b\\s*${NUMBER_CAPTURE}`, 'i'),
   ],
 };
 
@@ -187,12 +187,21 @@ function normalizeTranscript(text: string) {
     .toLowerCase()
     .replace(/co₂/g, 'co2')
     .replace(/\bc\s*o\s*2\b/g, 'co2')
+    .replace(/\bco\s+(?:over|to|too)\s+co\s*(?:two|to|too|2)\b/g, 'co co2')
+    .replace(/\bco\s+(?:over|to|too)\s+co2\b/g, 'co co2')
+    .replace(/\bco2\s+ratio\b/g, 'co co2 ratio')
+    .replace(/\bco[\s-]*(?:two|to|too|2)\s+ratio\b/g, 'co co2 ratio')
     .replace(/\bco[\s-]*two\b/g, 'co2')
     .replace(/\bco[\s-]*(?:to|too)\b/g, 'co2')
     .replace(/\bcarbon\s+dioxide\b/g, 'co2')
     .replace(/\bcarbon\s+monoxide\b/g, 'co')
     .replace(/\bheating\s+put\b/g, 'heat input')
     .replace(/\bheat\s+and\s+put\b/g, 'heat input')
+    .replace(/\bheat\s+(?:in|inn|and)\s+put\b/g, 'heat input')
+    .replace(/\bheater\s+input\b/g, 'heat input')
+    .replace(/\bheat\s+inlet\b/g, 'heat input')
+    .replace(/\brated\s+output\b/g, 'heat input')
+    .replace(/\bappliance\s+rating\b/g, 'heat input')
     .replace(/\bheat\s*imput\b/g, 'heat input')
     .replace(/\bheatinput\b/g, 'heat input')
     .replace(/\bco\s*\/\s*co2\b/g, 'co co2')
@@ -320,6 +329,37 @@ function parseLeadingNumberPhrase(value: string) {
   return `${whole}.${fraction}`;
 }
 
+function parseLeadingRatioPhrase(value: string) {
+  const tokens = value
+    .trim()
+    .split(/\s+/)
+    .map((token) => token.replace(/[^a-z0-9.]/g, ''))
+    .filter(Boolean);
+
+  let cursor = 0;
+  while (cursor < tokens.length && FILLER_TOKENS.has(tokens[cursor])) {
+    cursor += 1;
+  }
+
+  const firstToken = tokens[cursor];
+  if (firstToken && /^0{2,}[0-9]+$/.test(firstToken)) {
+    return `0.${firstToken}`;
+  }
+
+  const digitTokens: string[] = [];
+  let digitCursor = cursor;
+  while (digitCursor < tokens.length && (/^[0-9]$/.test(tokens[digitCursor]) || tokens[digitCursor] in DIGIT_WORDS)) {
+    digitTokens.push(tokens[digitCursor]);
+    digitCursor += 1;
+  }
+  const digitString = digitTokens.map((token) => (token in DIGIT_WORDS ? DIGIT_WORDS[token] : token)).join('');
+  if (/^0{2,}[0-9]+$/.test(digitString)) {
+    return `0.${digitString}`;
+  }
+
+  return parseLeadingNumberPhrase(value);
+}
+
 function parseNumberAt(tokens: string[], index: number) {
   const token = tokens[index];
   if (!token) return null;
@@ -401,11 +441,11 @@ function extractOrderedNumbers(text: string) {
   return values;
 }
 
-function extractFieldValue(text: string, patterns: RegExp[]) {
+function extractFieldValue(text: string, patterns: RegExp[], valueKind: 'number' | 'ratio' = 'number') {
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (!match?.[1]) continue;
-    const parsed = parseLeadingNumberPhrase(match[1]);
+    const parsed = valueKind === 'ratio' ? parseLeadingRatioPhrase(match[1]) : parseLeadingNumberPhrase(match[1]);
     if (parsed) return parsed;
   }
   return null;
@@ -423,7 +463,7 @@ function extractCombustionValuesFromText(text: string) {
   return {
     coPpm: extractFieldValue(text, SCOPED_COMBUSTION_PATTERNS.coPpm),
     co2Percent: extractFieldValue(text, SCOPED_COMBUSTION_PATTERNS.co2Percent),
-    ratio: extractFieldValue(text, SCOPED_COMBUSTION_PATTERNS.ratio),
+    ratio: extractFieldValue(text, SCOPED_COMBUSTION_PATTERNS.ratio, 'ratio'),
   };
 }
 
@@ -479,7 +519,7 @@ function applyScope(parsed: Cp12VoiceReadingsParsed, normalized: string, scope: 
 
   const coPpm = parsed.coPpm ?? extractFieldValue(normalized, SCOPED_COMBUSTION_PATTERNS.coPpm);
   const co2Percent = extractFieldValue(normalized, SCOPED_COMBUSTION_PATTERNS.co2Percent);
-  const ratio = extractFieldValue(normalized, SCOPED_COMBUSTION_PATTERNS.ratio);
+  const ratio = extractFieldValue(normalized, SCOPED_COMBUSTION_PATTERNS.ratio, 'ratio');
 
   if (scope === 'high') {
     scoped.highCoPpm = parsed.highCoPpm ?? coPpm;
@@ -554,7 +594,7 @@ export function parseCp12VoiceReadings(
   }
 
   for (const field of FIELD_PATTERNS) {
-    parsed[field.key] = extractFieldValue(normalized, field.patterns);
+    parsed[field.key] = extractFieldValue(normalized, field.patterns, field.key.toLowerCase().includes('ratio') ? 'ratio' : 'number');
   }
 
   parsed = applyCombustionBlockParsing(parsed, normalized);

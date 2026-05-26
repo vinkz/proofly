@@ -80,11 +80,12 @@ const SoloJobSchema = z
     landlordCity: z.string().optional(),
     landlordPostcode: z.string().optional(),
     landlordTel: z.string().optional(),
+    selectedPropertyId: z.string().uuid().optional().or(z.literal('')),
     selectedPropertyJobId: z.string().uuid().optional().or(z.literal('')),
     requestId: z.string().uuid().optional(),
   })
   .superRefine((value, ctx) => {
-    const isSafetyCheck = value.jobType === 'safety_check';
+    const isSafetyCheck = value.jobType === 'safety_check' || value.jobType === 'safety_check_service';
     if (!isSafetyCheck && value.clientMode === 'existing' && !value.clientId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -293,6 +294,7 @@ const firstText = (...values: Array<string | null | undefined>) => {
 };
 
 const certTypesForJobType = (jobType: JobType) => {
+  if (jobType === 'safety_check_service') return ['cp12', 'boiler_service'];
   if (jobType === 'service') return ['boiler_service'];
   if (jobType === 'safety_check') return ['cp12'];
   return [];
@@ -985,7 +987,7 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
 
   const sb = await supabaseServerServiceRole();
 
-  const isSafetyCheck = input.jobType === 'safety_check';
+  const isSafetyCheck = input.jobType === 'safety_check' || input.jobType === 'safety_check_service';
   const inspectionDate =
     normalizeOptionalText(input.inspectionDate) ?? input.scheduledFor.slice(0, 10);
   const jobAddressName = normalizeOptionalText(input.jobAddressName);
@@ -1031,6 +1033,18 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
   const normalizedJobAddressLine1 = jobAddressLine1 ?? normalizeOptionalText(input.addressLine1);
   const normalizedJobAddressCity = jobAddressCity ?? normalizeOptionalText(input.city);
   const normalizedJobAddressPostcode = jobAddressPostcode ?? normalizeOptionalText(input.postcode);
+  let selectedPropertyId = normalizeOptionalText(input.selectedPropertyId);
+  if (selectedPropertyId) {
+    const { data: selectedProperty, error: selectedPropertyErr } = await sb
+      .from('properties')
+      .select('id')
+      .eq('id', selectedPropertyId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (selectedPropertyErr) throw new Error(selectedPropertyErr.message);
+    if (!selectedProperty) throw new Error('Property not found');
+    selectedPropertyId = selectedProperty.id;
+  }
 
   let client: Pick<ClientRow, 'id' | 'name' | 'phone' | 'email' | 'organization' | 'address' | 'postcode'> | null = null;
 
@@ -1092,9 +1106,12 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
     address: propertyAddress,
     status: 'prepared',
     user_id: user.id,
-    title: isSafetyCheck ? `CP12 for ${landlordName ?? 'upcoming job'}` : jobTypeLabel,
+    title: isSafetyCheck
+      ? `${JOB_TYPE_LABELS[input.jobType]} for ${landlordName ?? 'upcoming job'}`
+      : jobTypeLabel,
     scheduled_for: input.scheduledFor,
     job_type: input.jobType,
+    property_id: selectedPropertyId,
     entry_point: input.requestId ? 'landlord_request' : 'engineer_created',
     cert_types: certTypesForJobType(input.jobType),
     data_collection_status: 'complete',
@@ -1190,7 +1207,7 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
     });
   }
 
-  if (input.jobType === 'service' && input.selectedPropertyJobId) {
+  if ((input.jobType === 'service' || input.jobType === 'safety_check_service') && input.selectedPropertyJobId) {
     await copyBoilerServiceIdentityFromPreviousJob({
       sb,
       sourceJobId: input.selectedPropertyJobId,
@@ -1546,6 +1563,7 @@ const inferRequiredCertTypes = (job: Record<string, unknown>, certificateTypes: 
   const certificateType = normalizeCertType(job.certificate_type);
   if (jobType === 'safety_check' || certificateType === 'cp12') return ['cp12'];
   if (jobType === 'service' || certificateType === 'boiler_service') return ['boiler_service'];
+  if (jobType === 'safety_check_service') return ['cp12', 'boiler_service'];
 
   const existingTargetCertificates = certificateTypes.filter((type) => type === 'cp12' || type === 'boiler_service');
   return Array.from(new Set(existingTargetCertificates));

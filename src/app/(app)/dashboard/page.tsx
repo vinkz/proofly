@@ -47,6 +47,7 @@ const PREP_REQUIRED_FIELD_KEYS = [
 const DASHBOARD_JOB_TYPE_LABELS: Partial<Record<JobType, string>> = {
   safety_check: 'CP12',
   service: 'Boiler Service',
+  safety_check_service: 'CP12 + Service',
   installation: 'Commissioning',
   warning_notice: 'Gas Warning Notice',
   general: 'General Works',
@@ -272,7 +273,7 @@ export default async function DashboardPage({
           </div>
           <div className="space-y-2">
             {completionJobs.map((job) => (
-              <DashboardJobRow key={job.id} job={job} />
+              <DashboardJobRow key={job.id} job={job} leadingDate />
             ))}
           </div>
         </section>
@@ -389,6 +390,14 @@ function formatTimeShort(dateString: string) {
   });
 }
 
+function formatDateShort(dateString: string) {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
 function formatRelativeTime(dateString: string | null | undefined) {
   if (!dateString) return null;
   const target = new Date(dateString).getTime();
@@ -469,7 +478,7 @@ function isIssuedJob(job: BasicJob) {
 }
 
 function needsPrep(job: BasicJob & { prepComplete?: boolean }) {
-  return job.job_type === 'safety_check' && job.prepComplete === false;
+  return (job.job_type === 'safety_check' || job.job_type === 'safety_check_service') && job.prepComplete === false;
 }
 
 function formatSelectedDate(dateString: string) {
@@ -481,7 +490,7 @@ function formatSelectedDate(dateString: string) {
 }
 
 function getUpcomingJobHref(job: BasicJob & { prepComplete?: boolean }) {
-  if (job.job_type === 'safety_check') {
+  if (job.job_type === 'safety_check' || job.job_type === 'safety_check_service') {
     if (job.prepComplete === false) {
       return `/wizard/create/cp12?jobId=${job.id}&prepare=1`;
     }
@@ -503,7 +512,7 @@ function getUpcomingJobActionLabel(job: BasicJob & { prepComplete?: boolean }) {
   if (isCompletedJob(job)) {
     return 'Open PDF';
   }
-  if (job.job_type === 'safety_check') {
+  if (job.job_type === 'safety_check' || job.job_type === 'safety_check_service') {
     if (job.prepComplete === false) return 'Prepare';
     return 'Start';
   }
@@ -648,7 +657,7 @@ function getInvoiceSetupMissingFields(profile: unknown) {
   return missing;
 }
 
-function DashboardJobRow({ job }: { job: BasicJob & { prepComplete?: boolean } }) {
+function DashboardJobRow({ job, leadingDate = false }: { job: BasicJob & { prepComplete?: boolean }; leadingDate?: boolean }) {
   const issued = isIssuedJob(job);
   const completed = isCompletedJob(job);
   const href = issued ? `/jobs/${job.id}/complete` : completed ? `/jobs/${job.id}/pdf` : getUpcomingJobHref(job);
@@ -672,14 +681,18 @@ function DashboardJobRow({ job }: { job: BasicJob & { prepComplete?: boolean } }
     ctaClass = 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]';
   }
 
-  const timeLabel = job.scheduled_for ? formatTimeShort(job.scheduled_for) : '';
+  const leadingLabel = leadingDate
+    ? formatDateShort(job.scheduled_for ?? job.created_at ?? '')
+    : job.scheduled_for
+      ? formatTimeShort(job.scheduled_for)
+      : '';
 
   return (
     <article className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
       <div className={`h-[3px] w-full ${accent}`} aria-hidden="true" />
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className="min-w-[44px] text-right text-[12px] font-normal text-[var(--color-text-tertiary)]">
-          {timeLabel || '—'}
+        <div className="min-w-[52px] text-right text-[12px] font-normal text-[var(--color-text-tertiary)]">
+          {leadingLabel || '—'}
         </div>
         <div className="h-9 w-px bg-[var(--color-border-tertiary)]" aria-hidden="true" />
         <div className="min-w-0 flex-1">

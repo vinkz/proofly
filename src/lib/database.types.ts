@@ -858,6 +858,7 @@ export type Database = {
           created_at: string
           id: string
           name: string | null
+          next_service_due: string | null
           phone: string | null
           postcode: string | null
           public_token: string
@@ -872,6 +873,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string | null
+          next_service_due?: string | null
           phone?: string | null
           postcode?: string | null
           public_token?: string
@@ -886,6 +888,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string | null
+          next_service_due?: string | null
           phone?: string | null
           postcode?: string | null
           public_token?: string

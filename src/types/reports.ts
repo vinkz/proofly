@@ -15,6 +15,7 @@ export type ReportKind = (typeof REPORT_KINDS)[number];
 const REPORT_KIND_BY_JOB_TYPE: Record<JobType, ReportKind> = {
   safety_check: 'cp12',
   service: 'boiler_service',
+  safety_check_service: 'cp12',
   breakdown: 'breakdown',
   installation: 'commissioning',
   warning_notice: 'warning_notice',
