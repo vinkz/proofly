@@ -6,6 +6,7 @@ import { Buffer } from 'node:buffer';
 import type { Database } from '@/lib/database.types';
 import { sendEmail } from '@/lib/resend';
 import { requireUser, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { promoteDeliveredJobData } from '@/server/delivery-promotion';
 import { persistJobFields, type JobFieldEntry } from '@/server/job-fields';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 
@@ -189,14 +190,14 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
 
   const { data: job, error: jobErr } = await sb
     .from('jobs')
-    .select('id, title, address, client_name, status, public_token, user_id, client_id')
+    .select('id, title, address, client_name, status, public_token, user_id, client_id, property_id')
     .eq('id', jobId as Database['public']['Tables']['jobs']['Row']['id'])
     .maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
   if (!job) throw new Error('Job not found');
   if (job.user_id !== user.id) throw new Error('Unauthorized');
 
-  const [{ data: certificateRows, error: certErr }, { data: fieldRows, error: fieldsErr }, profileResp, clientResp, invoiceResp] =
+  const [{ data: certificateRows, error: certErr }, { data: fieldRows, error: fieldsErr }, profileResp, clientResp, invoiceResp, propertyResp] =
     await Promise.all([
       admin
         .from('certificates')
@@ -220,6 +221,13 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      job.property_id
+        ? admin
+            .from('properties')
+            .select('public_token')
+            .eq('id', job.property_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
     ]);
 
   if (certErr) throw new Error(certErr.message);
@@ -227,6 +235,7 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
   if (profileResp.error) throw new Error(profileResp.error.message);
   if (clientResp.error) throw new Error(clientResp.error.message);
   if (invoiceResp.error) throw new Error(invoiceResp.error.message);
+  if (propertyResp.error) throw new Error(propertyResp.error.message);
 
   const certificates: DeliveryCertificate[] = await Promise.all(
     ((certificateRows ?? []) as CertificateRow[]).map(async (certificate) => {
@@ -254,6 +263,7 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
   const profile = profileResp.data;
   const client = clientResp.data;
   const invoice = invoiceResp.data as InvoiceRow | null;
+  const property = propertyResp.data as { public_token: string } | null;
   const constructedAddress = [
     fieldMap.job_address_line1,
     fieldMap.job_address_city,
@@ -261,12 +271,13 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
   ].filter(Boolean).join(', ');
   const address = pickText(fieldMap.property_address, constructedAddress, job.address, 'Property address not recorded');
   const publicToken = job.public_token;
+  const publicHref = property?.public_token ? `/p/${property.public_token}` : `/j/${publicToken}`;
 
   return {
     jobId: job.id,
     address,
     publicToken,
-    publicHref: `/j/${publicToken}`,
+    publicHref,
     landlordName: pickText(fieldMap.landlord_name, client?.name ?? null, job.client_name) || null,
     landlordEmail: pickText(fieldMap.landlord_email, client?.email ?? null) || null,
     tenantName: pickText(fieldMap.tenant_name) || null,
@@ -293,7 +304,16 @@ export async function sendDeliveryBundle(
 ): Promise<SendDeliveryResult> {
   if (method !== 'email') return { ok: false, recipientsSent: [], error: 'Unsupported delivery method.' };
 
-  const { sb } = await requireUser({ write: true });
+  const { sb, user } = await requireUser({ write: true });
+
+  // Promote job data to properties/clients before building bundle so that
+  // the delivery email can reference the /p/ vault URL if promotion succeeds.
+  try {
+    await promoteDeliveredJobData({ jobId, userId: user.id });
+  } catch {
+    // Promotion failure is non-fatal — email delivery still proceeds.
+  }
+
   const bundle = await buildDeliveryBundle(jobId);
   const recipientEmails = uniqueRecipients(
     recipients === 'landlord'

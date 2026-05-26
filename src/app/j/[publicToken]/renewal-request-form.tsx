@@ -17,7 +17,11 @@ export function RenewalRequestForm({ token }: { token: string }) {
   const [isPending, startTransition] = useTransition();
 
   if (message) {
-    return <p className="mt-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p>;
+    return (
+      <div className="mt-3 rounded-[12px] bg-[var(--color-action-bg)] p-4">
+        <p className="text-[14px] font-medium text-[var(--color-action)]">{message}</p>
+      </div>
+    );
   }
 
   return (
@@ -37,14 +41,34 @@ export function RenewalRequestForm({ token }: { token: string }) {
         });
       }}
     >
-      <Input value={tenantName} onChange={(event) => setTenantName(event.target.value)} placeholder="Tenant name" className="rounded-2xl bg-white" />
-      <Input value={tenantPhone} onChange={(event) => setTenantPhone(event.target.value)} placeholder="Tenant phone" className="rounded-2xl bg-white" />
-      <Textarea value={accessNotes} onChange={(event) => setAccessNotes(event.target.value)} placeholder="Access notes" className="rounded-2xl bg-white" />
-      <Textarea value={preferredDates} onChange={(event) => setPreferredDates(event.target.value)} placeholder="Preferred dates" className="rounded-2xl bg-white" />
+      <Input
+        value={tenantName}
+        onChange={(event) => setTenantName(event.target.value)}
+        placeholder="Tenant name"
+        className="rounded-[10px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]"
+      />
+      <Input
+        value={tenantPhone}
+        onChange={(event) => setTenantPhone(event.target.value)}
+        placeholder="Tenant phone"
+        className="rounded-[10px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]"
+      />
+      <Textarea
+        value={accessNotes}
+        onChange={(event) => setAccessNotes(event.target.value)}
+        placeholder="Access notes"
+        className="rounded-[10px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]"
+      />
+      <Textarea
+        value={preferredDates}
+        onChange={(event) => setPreferredDates(event.target.value)}
+        placeholder="Preferred dates"
+        className="rounded-[10px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]"
+      />
       <Button type="submit" disabled={isPending} className="rounded-full">
         {isPending ? 'Sending…' : 'Request renewal'}
       </Button>
-      {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="text-[12px] text-[var(--color-red)]">{error}</p> : null}
     </form>
   );
 }
