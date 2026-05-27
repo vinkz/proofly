@@ -123,7 +123,7 @@ begin
     );
     next_due := case
       when (
-        job_rec.job_type in ('safety_check', 'safety_check_service')
+        job_rec.job_type::text in ('safety_check', 'safety_check_service')
         or job_rec.certificate_type = 'cp12'
         or coalesce(job_rec.cert_types, '{}'::text[]) @> array['cp12']::text[]
       )
@@ -190,4 +190,5 @@ begin
       updated_at = now()
     where id = job_rec.id;
   end loop;
-end backfill $$;
+end backfill;
+$$;
