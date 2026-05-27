@@ -100,7 +100,7 @@ export function getLifecycleJobHref(params: {
 }) {
   const status = (params.status ?? '').toLowerCase();
   if (status === 'issued') return `/jobs/${params.jobId}/complete`;
-  if (isCompletedJobStatus(status)) return `/jobs/${params.jobId}/pdf`;
+  if (isCompletedJobStatus(status)) return `/jobs/${params.jobId}/complete`;
   if (status === 'awaiting_landlord') return '/dashboard';
   return buildCertificateResumeHref(params);
 }

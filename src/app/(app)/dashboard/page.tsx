@@ -510,7 +510,7 @@ function getUpcomingJobActionLabel(job: BasicJob & { prepComplete?: boolean }) {
     return 'Review & send';
   }
   if (isCompletedJob(job)) {
-    return 'Open PDF';
+    return 'Review';
   }
   if (job.job_type === 'safety_check' || job.job_type === 'safety_check_service') {
     if (job.prepComplete === false) return 'Prepare';
@@ -660,8 +660,8 @@ function getInvoiceSetupMissingFields(profile: unknown) {
 function DashboardJobRow({ job, leadingDate = false }: { job: BasicJob & { prepComplete?: boolean }; leadingDate?: boolean }) {
   const issued = isIssuedJob(job);
   const completed = isCompletedJob(job);
-  const href = issued ? `/jobs/${job.id}/complete` : completed ? `/jobs/${job.id}/pdf` : getUpcomingJobHref(job);
-  const actionLabel = issued ? 'Review & send' : completed ? 'Open PDF' : getUpcomingJobActionLabel(job);
+  const href = issued || completed ? `/jobs/${job.id}/complete` : getUpcomingJobHref(job);
+  const actionLabel = issued ? 'Review & send' : completed ? 'Review' : getUpcomingJobActionLabel(job);
 
   const accent = needsPrep(job)
     ? 'bg-[var(--color-amber)]'
@@ -672,7 +672,7 @@ function DashboardJobRow({ job, leadingDate = false }: { job: BasicJob & { prepC
   let ctaClass: string;
   if (actionLabel === 'Review & send') {
     ctaClass = 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]';
-  } else if (actionLabel === 'Open PDF') {
+  } else if (actionLabel === 'Review') {
     ctaClass = 'bg-[var(--color-action-bg)] text-[var(--color-action)]';
   } else if (actionLabel === 'Prepare' || actionLabel === 'Open') {
     ctaClass =

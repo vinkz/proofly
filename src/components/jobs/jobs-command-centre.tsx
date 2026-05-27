@@ -79,7 +79,7 @@ const getJobHref = (job: JobSummary) =>
 const getActionLabel = (status?: string | null) => {
   const s = (status ?? '').toLowerCase();
   if (s === 'issued') return 'Review & send';
-  if (isCompletedJobStatus(s)) return 'Open PDF';
+  if (isCompletedJobStatus(s)) return 'Review';
   if (s === 'awaiting_landlord') return 'Waiting';
   if (s === 'prepared') return 'Start';
   if (s === 'in_progress' || s === 'active') return 'Continue';

@@ -64,7 +64,7 @@ export default function JobsTable({ jobs }: { jobs: JobRow[] }) {
                 <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex flex-wrap justify-end gap-2">
                     <Button asChild variant="outline">
-                      <a href={resumeHref(job)}>{isCompletedJobStatus(job.status) ? 'Open PDF' : 'Open'}</a>
+                      <a href={resumeHref(job)}>{isCompletedJobStatus(job.status) ? 'Review' : 'Open'}</a>
                     </Button>
                     <DeleteJobButton jobId={job.id} />
                   </div>
