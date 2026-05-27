@@ -3,30 +3,45 @@ import { redirect } from 'next/navigation';
 
 import { listClientsWithCompliance, type ComplianceStatus, type ClientWithCompliance } from '@/server/clients';
 
-const formatDate = (value: string | null | undefined) => {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+function getInitials(name: string | null | undefined): string {
+  if (!name) return '?';
+  const words = name.trim().split(/\s+/);
+  if (words.length === 1) return (words[0][0] ?? '?').toUpperCase();
+  return ((words[0][0] ?? '') + (words[words.length - 1][0] ?? '')).toUpperCase();
+}
+
+const AVATAR_STYLE: Record<ComplianceStatus, { bg: string; color: string }> = {
+  overdue: { bg: '#fcebeb', color: '#a32d2d' },
+  amber: { bg: '#faeeda', color: '#BA7517' },
+  current: { bg: '#edf7f2', color: '#1a7a52' },
+  unknown: { bg: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)' },
 };
 
-const COMPLIANCE_CONFIG: Record<ComplianceStatus, { label: string; badgeClass: string } | null> = {
-  overdue: { label: 'Overdue', badgeClass: 'bg-[var(--color-red)]/10 text-[var(--color-red)]' },
-  amber: { label: 'Due soon', badgeClass: 'bg-[var(--color-amber)]/10 text-[var(--color-amber)]' },
-  current: { label: 'Current', badgeClass: 'bg-[var(--color-action-bg)] text-[var(--color-action)]' },
+const BADGE_CONFIG: Record<ComplianceStatus, { bg: string; color: string; label: string } | null> = {
+  overdue: { bg: '#fcebeb', color: '#a32d2d', label: 'Overdue' },
+  amber: { bg: '#faeeda', color: '#BA7517', label: 'Due soon' },
+  current: { bg: '#edf7f2', color: '#1a7a52', label: 'Current' },
   unknown: null,
 };
 
-const buildPropertySummary = (client: ClientWithCompliance) => {
-  const { propertyCount, overdueCount, amberCount, currentCount } = client;
-  if (!propertyCount) return null;
-  const parts: string[] = [];
-  if (overdueCount) parts.push(`${overdueCount} overdue`);
-  if (amberCount) parts.push(`${amberCount} due soon`);
-  if (currentCount) parts.push(`${currentCount} current`);
-  const label = `${propertyCount} ${propertyCount === 1 ? 'property' : 'properties'}`;
-  return parts.length ? `${label} — ${parts.join(', ')}` : label;
-};
+function buildComplianceSummary(client: ClientWithCompliance): { text: string; color: string } | null {
+  if (client.propertyCount === 0) return null;
+  if (client.overdueCount > 0) {
+    const parts = [`${client.overdueCount} overdue`];
+    if (client.amberCount > 0) parts.push(`${client.amberCount} due soon`);
+    return { text: parts.join(' · '), color: '#a32d2d' };
+  }
+  if (client.amberCount > 0) {
+    return {
+      text: `${client.amberCount} ${client.amberCount === 1 ? 'property' : 'properties'} due soon`,
+      color: '#BA7517',
+    };
+  }
+  return {
+    text: `${client.propertyCount} ${client.propertyCount === 1 ? 'property' : 'properties'} · all current`,
+    color: 'var(--color-text-secondary)',
+  };
+}
 
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All' },
@@ -42,6 +57,67 @@ const matchesStatusFilter = (client: ClientWithCompliance, status: string): bool
   if (status === 'current') return client.worstStatus === 'current';
   return true;
 };
+
+function ClientRow({ client, clientId }: { client: ClientWithCompliance; clientId: string }) {
+  const displayName = client.landlord_name || client.name || 'Unnamed client';
+  const avatar = AVATAR_STYLE[client.worstStatus];
+  const initials = getInitials(displayName);
+  const badge = BADGE_CONFIG[client.worstStatus];
+  const summary = buildComplianceSummary(client);
+  const subParts = [client.organization, client.propertyCount > 0 ? `${client.propertyCount} ${client.propertyCount === 1 ? 'property' : 'properties'}` : null].filter(Boolean);
+
+  return (
+    <Link
+      href={`/clients/${clientId}`}
+      className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-[var(--color-background-secondary)]/50"
+    >
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-medium"
+        style={{ backgroundColor: avatar.bg, color: avatar.color }}
+      >
+        {initials}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">{displayName}</p>
+        {subParts.length > 0 ? (
+          <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-secondary)]">
+            {subParts.join(' · ')}
+          </p>
+        ) : null}
+        {summary ? (
+          <p className="mt-0.5 text-[12px] font-medium" style={{ color: summary.color }}>
+            {summary.text}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {badge ? (
+          <span
+            className="rounded-full px-2 py-0.5 text-[11px] font-medium"
+            style={{ backgroundColor: badge.bg, color: badge.color }}
+          >
+            {badge.label}
+          </span>
+        ) : null}
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--color-text-tertiary)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </div>
+    </Link>
+  );
+}
 
 export default async function ClientsPage({
   searchParams,
@@ -72,107 +148,150 @@ export default async function ClientsPage({
     return qs ? `/clients?${qs}` : '/clients';
   };
 
+  const statsOverdue = clients.filter((c) => c.overdueCount > 0).length;
+  const statsAmber = clients.filter((c) => c.worstStatus === 'amber').length;
+  const statsCurrent = clients.filter((c) => c.worstStatus === 'current').length;
+
+  const needsAttention = filtered.filter((c) => c.overdueCount > 0 || c.amberCount > 0);
+  const allCurrent = filtered.filter((c) => c.overdueCount === 0 && c.amberCount === 0);
+
   return (
-    <main className="mx-auto max-w-2xl space-y-4 px-4 py-6">
-      <div className="rounded-[18px] bg-[var(--color-background-primary)] p-5 shadow-sm">
-        <p className="text-[12px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-          Landlords
-        </p>
-        <h1 className="mt-1 text-[24px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
-          Clients
-        </h1>
-        <p className="mt-1 text-[14px] leading-6 text-[var(--color-text-secondary)]">
-          Compliance health at a glance. Tap a client to see their properties and job history.
-        </p>
+    <div className="min-h-full">
+      {/* Page-level header */}
+      <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-[18px] py-[14px]">
+          <h1 className="text-[20px] font-medium text-[var(--color-text-primary)]">Clients</h1>
+          <Link
+            href="/clients/new"
+            className="flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)]"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span className="sr-only">Add client</span>
+          </Link>
+        </div>
       </div>
 
-      {/* Search */}
-      <form action="/clients" method="get" className="flex gap-2">
-        {statusFilter ? <input type="hidden" name="status" value={statusFilter} /> : null}
-        <input
-          type="search"
-          name="q"
-          defaultValue={q}
-          placeholder="Search by name or email…"
-          className="h-[38px] min-w-0 flex-1 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-action)] focus:outline-none"
-        />
-        <button
-          type="submit"
-          className="inline-flex h-[38px] items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-[13px] text-[var(--color-text-secondary)] hover:border-[var(--color-action)]"
-        >
-          Search
-        </button>
-      </form>
+      <div className="mx-auto max-w-2xl space-y-4 px-4 py-4">
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
+            <p className="text-[22px] font-medium text-[var(--color-text-primary)]">{clients.length}</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">
+              Total clients
+            </p>
+          </div>
+          <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
+            <p className="text-[22px] font-medium" style={{ color: statsOverdue > 0 ? '#a32d2d' : 'var(--color-text-primary)' }}>
+              {statsOverdue}
+            </p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">
+              Overdue
+            </p>
+          </div>
+          <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
+            <p className="text-[22px] font-medium" style={{ color: statsAmber > 0 ? '#BA7517' : 'var(--color-text-primary)' }}>
+              {statsAmber}
+            </p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">
+              Due soon
+            </p>
+          </div>
+          <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
+            <p className="text-[22px] font-medium" style={{ color: statsCurrent > 0 ? '#1a7a52' : 'var(--color-text-primary)' }}>
+              {statsCurrent}
+            </p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">
+              Current
+            </p>
+          </div>
+        </div>
 
-      {/* Status filter chips */}
-      <div className="flex flex-wrap gap-2">
-        {STATUS_FILTERS.map((f) => {
-          const active = f.value === statusFilter;
-          return (
-            <Link
-              key={f.value}
-              href={buildFilterUrl(f.value)}
-              className={`inline-flex h-[30px] items-center rounded-full px-3 text-[12px] font-medium transition-colors ${
-                active
-                  ? 'bg-[var(--color-text-primary)] text-[var(--color-background-primary)]'
-                  : 'border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)] hover:border-[var(--color-border-primary)]'
-              }`}
-            >
-              {f.label}
-            </Link>
-          );
-        })}
-      </div>
+        {/* Search */}
+        <form action="/clients" method="get">
+          {statusFilter ? <input type="hidden" name="status" value={statusFilter} /> : null}
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </div>
+            <input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder="Search by name or email…"
+              className="h-10 w-full rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] pl-10 pr-3 text-[14px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-action)] focus:outline-none"
+            />
+          </div>
+        </form>
 
-      <div className="grid gap-3">
-        {filtered.map((client) => {
-          const name = client.landlord_name || client.name || 'Unnamed client';
-          const badge = COMPLIANCE_CONFIG[client.worstStatus];
-          const summary = buildPropertySummary(client);
-          return (
-            <Link
-              key={client.id}
-              href={`/clients/${client.id}`}
-              className="block rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 transition hover:border-[var(--color-border-secondary)]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-[15px] font-medium text-[var(--color-text-primary)]">{name}</p>
-                  {client.organization ? (
-                    <p className="mt-0.5 truncate text-[13px] text-[var(--color-text-secondary)]">{client.organization}</p>
-                  ) : null}
+        {/* Filter chips */}
+        <div className="flex flex-wrap gap-1.5">
+          {STATUS_FILTERS.map((f) => {
+            const active = f.value === statusFilter;
+            return (
+              <Link
+                key={f.value}
+                href={buildFilterUrl(f.value)}
+                className={`rounded-full px-3 py-[5px] text-[12px] font-medium transition-colors ${
+                  active
+                    ? 'border-[0.5px] border-[#1a7a52] bg-[#edf7f2] text-[#1a7a52]'
+                    : 'border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] text-[var(--color-text-secondary)]'
+                }`}
+              >
+                {f.label}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Needs attention section */}
+        {needsAttention.length > 0 ? (
+          <div>
+            <p className="mb-1.5 px-0.5 text-[13px] font-medium tracking-[0.3px] text-[var(--color-text-tertiary)]">
+              Needs attention
+            </p>
+            <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+              {needsAttention.map((client, index) => (
+                <div
+                  key={client.id}
+                  className={index > 0 ? 'border-t-[0.5px] border-[var(--color-border-tertiary)]' : ''}
+                >
+                  <ClientRow client={client} clientId={client.id} />
                 </div>
-                {badge ? (
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${badge.badgeClass}`}>
-                    {badge.label}
-                  </span>
-                ) : (
-                  <span className="shrink-0 rounded-full bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">
-                    {formatDate(client.updated_at ?? client.created_at) ?? 'No activity'}
-                  </span>
-                )}
-              </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
-              <div className="mt-3 space-y-1 border-t-[0.5px] border-[var(--color-border-tertiary)] pt-3 text-[13px] text-[var(--color-text-secondary)]">
-                {summary ? (
-                  <p className="font-medium text-[var(--color-text-primary)]">{summary}</p>
-                ) : null}
-                {client.email ? <p className="truncate">{client.email}</p> : null}
-                {client.phone ? <p className="truncate">{client.phone}</p> : null}
-                {!summary && (client.address || client.landlord_address) ? (
-                  <p className="truncate">{client.address || client.landlord_address}</p>
-                ) : null}
-              </div>
-            </Link>
-          );
-        })}
+        {/* All current section */}
+        {allCurrent.length > 0 ? (
+          <div>
+            <p className="mb-1.5 px-0.5 text-[13px] font-medium tracking-[0.3px] text-[var(--color-text-tertiary)]">
+              All current
+            </p>
+            <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+              {allCurrent.map((client, index) => (
+                <div
+                  key={client.id}
+                  className={index > 0 ? 'border-t-[0.5px] border-[var(--color-border-tertiary)]' : ''}
+                >
+                  <ClientRow client={client} clientId={client.id} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
+        {/* Empty states */}
         {filtered.length === 0 && clients.length > 0 ? (
           <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-6 text-center">
             <p className="text-[15px] font-medium text-[var(--color-text-primary)]">No clients match this filter</p>
             <Link
               href="/clients"
-              className="mt-3 inline-flex h-9 items-center justify-center rounded-[18px] border-[0.5px] border-[var(--color-border-secondary)] px-4 text-[13px] text-[var(--color-text-secondary)]"
+              className="mt-3 inline-flex h-8 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] px-4 text-[12px] font-medium text-[var(--color-text-secondary)]"
             >
               Clear filters
             </Link>
@@ -181,19 +300,19 @@ export default async function ClientsPage({
 
         {clients.length === 0 ? (
           <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-6 text-center">
-            <h2 className="text-[16px] font-medium text-[var(--color-text-primary)]">No clients yet</h2>
-            <p className="mt-1 text-[14px] text-[var(--color-text-secondary)]">
+            <p className="text-[15px] font-medium text-[var(--color-text-primary)]">No clients yet</p>
+            <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
               Clients are created when you start jobs or receive landlord requests.
             </p>
             <Link
               href="/jobs/new"
-              className="mt-4 inline-flex h-10 items-center justify-center rounded-[20px] bg-[var(--color-cta)] px-4 text-[13px] font-medium text-[var(--color-cta-fg)]"
+              className="mt-4 inline-flex h-10 items-center justify-center rounded-[24px] bg-[#111] px-5 text-[13px] font-medium text-white"
             >
               New job
             </Link>
           </div>
         ) : null}
       </div>
-    </main>
+    </div>
   );
 }

@@ -2,9 +2,6 @@
 
 import { useState, useTransition } from 'react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { submitPublicJobRenewalRequest } from '@/server/public-job';
 
 export function RenewalRequestForm({ token }: { token: string }) {
@@ -18,57 +15,79 @@ export function RenewalRequestForm({ token }: { token: string }) {
 
   if (message) {
     return (
-      <div className="mt-3 rounded-[12px] bg-[var(--color-action-bg)] p-4">
-        <p className="text-[14px] font-medium text-[var(--color-action)]">{message}</p>
+      <div className="rounded-[10px] bg-[#edf7f2] p-4">
+        <p className="text-[14px] font-medium text-[#1a7a52]">{message}</p>
       </div>
     );
   }
 
+  const fieldClass =
+    'w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-[14px] py-[11px] text-[14px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-action)] focus:outline-none';
+
   return (
     <form
-      className="mt-4 grid gap-3"
+      className="grid gap-3"
       onSubmit={(event) => {
         event.preventDefault();
         setError(null);
         startTransition(async () => {
           try {
-            const result = await submitPublicJobRenewalRequest({ token, tenantName, tenantPhone, accessNotes, preferredDates });
-            const contact = result.engineer?.phone || result.engineer?.email ? ` ${result.engineer.phone ?? result.engineer.email}` : '';
-            setMessage(`Renewal request sent. Your engineer has the access details and will contact you.${contact}`);
+            const result = await submitPublicJobRenewalRequest({
+              token,
+              tenantName,
+              tenantPhone,
+              accessNotes,
+              preferredDates,
+            });
+            const contact =
+              result.engineer?.phone || result.engineer?.email
+                ? ` ${result.engineer.phone ?? result.engineer.email}`
+                : '';
+            setMessage(
+              `Request sent. Your engineer has the access details and will be in touch.${contact}`,
+            );
           } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : 'Could not send request.');
           }
         });
       }}
     >
-      <Input
+      <input
+        type="text"
         value={tenantName}
         onChange={(event) => setTenantName(event.target.value)}
         placeholder="Tenant name"
-        className="rounded-[10px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]"
+        className={fieldClass}
       />
-      <Input
+      <input
+        type="tel"
         value={tenantPhone}
         onChange={(event) => setTenantPhone(event.target.value)}
         placeholder="Tenant phone"
-        className="rounded-[10px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]"
+        className={fieldClass}
       />
-      <Textarea
+      <textarea
         value={accessNotes}
         onChange={(event) => setAccessNotes(event.target.value)}
-        placeholder="Access notes"
-        className="rounded-[10px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]"
+        placeholder="Access notes (key safe code, gate code, etc.)"
+        rows={3}
+        className={`${fieldClass} min-h-[70px] resize-none`}
       />
-      <Textarea
+      <input
+        type="text"
         value={preferredDates}
         onChange={(event) => setPreferredDates(event.target.value)}
         placeholder="Preferred dates"
-        className="rounded-[10px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]"
+        className={fieldClass}
       />
-      <Button type="submit" disabled={isPending} className="rounded-full">
-        {isPending ? 'Sending…' : 'Request renewal'}
-      </Button>
-      {error ? <p className="text-[12px] text-[var(--color-red)]">{error}</p> : null}
+      <button
+        type="submit"
+        disabled={isPending}
+        className="w-full rounded-[24px] bg-[#111] px-5 py-[13px] text-[15px] font-medium text-white disabled:opacity-50"
+      >
+        {isPending ? 'Sending…' : 'Send to your engineer →'}
+      </button>
+      {error ? <p className="text-[12px] text-[#a32d2d]">{error}</p> : null}
     </form>
   );
 }

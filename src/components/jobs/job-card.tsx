@@ -21,29 +21,82 @@ const formatDate = (value: string | null | undefined) => {
   return parsed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
-const formatStatus = (value: string | null | undefined) =>
-  value ? value.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()) : 'Draft';
-
-const getAccentClass = (status?: string | null) => {
+const getJobIconStyle = (status?: string | null): { bg: string; color: string } => {
   const s = (status ?? '').toLowerCase();
-  if (s === 'issued') return 'bg-[var(--color-cta)]';
-  if (['completed', 'closed', 'delivered'].includes(s)) return 'bg-[var(--color-action)]';
-  return 'bg-[var(--color-border-secondary)]';
+  if (['completed', 'closed', 'delivered'].includes(s)) return { bg: '#edf7f2', color: '#1a7a52' };
+  if (s === 'issued') return { bg: '#e6f1fb', color: '#185fa5' };
+  if (s === 'awaiting_landlord') return { bg: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)' };
+  return { bg: '#faeeda', color: '#BA7517' };
 };
 
-const getStatusBadgeClass = (status?: string | null) => {
+const getActionStyle = (status?: string | null): string => {
   const s = (status ?? '').toLowerCase();
-  if (s === 'issued') return 'bg-[var(--color-cta)]/10 text-[var(--color-cta)]';
-  if (['completed', 'closed', 'delivered'].includes(s)) return 'bg-[var(--color-action-bg)] text-[var(--color-action)]';
-  return 'bg-[var(--color-background-secondary)] text-[var(--color-text-tertiary)]';
-};
-
-const getActionChipClass = (status?: string | null) => {
-  const s = (status ?? '').toLowerCase();
-  if (s === 'issued') return 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]';
-  if (['completed', 'closed', 'delivered'].includes(s)) return 'bg-[var(--color-action-bg)] text-[var(--color-action)]';
+  if (['in_progress', 'active', 'draft', 'prepared'].includes(s)) {
+    return 'bg-[#111] text-white';
+  }
+  if (s === 'issued') {
+    return 'bg-[#edf7f2] text-[#1a7a52]';
+  }
   return 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]';
 };
+
+function JobIcon({ status, jobType }: { status?: string | null; jobType?: string | null }) {
+  const s = (status ?? '').toLowerCase();
+  const style = getJobIconStyle(status);
+
+  if (['completed', 'closed', 'delivered'].includes(s)) {
+    return (
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+        style={{ backgroundColor: style.bg }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={style.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </div>
+    );
+  }
+  if (s === 'issued') {
+    return (
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+        style={{ backgroundColor: style.bg }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={style.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      </div>
+    );
+  }
+  if (s === 'awaiting_landlord') {
+    return (
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+        style={{ backgroundColor: style.bg }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      </div>
+    );
+  }
+  // Active / in progress / draft / prepared — show wrench
+  void jobType;
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+      style={{ backgroundColor: style.bg }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={style.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </svg>
+    </div>
+  );
+}
 
 export function JobCard({
   href,
@@ -66,41 +119,30 @@ export function JobCard({
   return (
     <Link
       href={href}
-      className="block overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] transition hover:border-[var(--color-border-secondary)]"
+      className="flex items-center gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3.5 transition hover:border-[var(--color-border-secondary)]"
     >
-      <div className={`h-[3px] w-full ${getAccentClass(status)}`} aria-hidden="true" />
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-medium text-[var(--color-text-primary)]">{title}</p>
-            <p className="mt-0.5 truncate text-[13px] text-[var(--color-text-secondary)]">
-              {address ?? 'No address'}
-            </p>
-          </div>
-          {jobTypeLabel ? (
-            <span className="shrink-0 rounded-[6px] bg-[var(--color-background-secondary)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-text-secondary)]">
-              {jobTypeLabel}
-            </span>
+      <JobIcon status={status} jobType={jobType} />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">{title}</p>
+          {displayDate ? (
+            <span className="shrink-0 text-[11px] text-[var(--color-text-tertiary)]">{displayDate}</span>
           ) : null}
         </div>
-        <div className="mt-3 flex items-center justify-between gap-3 border-t-[0.5px] border-[var(--color-border-tertiary)] pt-3">
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex items-center rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium ${getStatusBadgeClass(status)}`}
-            >
-              {formatStatus(status)}
-            </span>
-            {displayDate ? (
-              <span className="text-[12px] text-[var(--color-text-tertiary)]">{displayDate}</span>
-            ) : null}
-          </div>
-          <span
-            className={`inline-flex h-[28px] items-center justify-center rounded-[8px] px-2.5 text-[12px] font-medium ${getActionChipClass(status)}`}
-          >
-            {actionLabel ?? 'Open job'} →
-          </span>
-        </div>
+        {jobTypeLabel ? (
+          <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">{jobTypeLabel}</p>
+        ) : null}
+        {address ? (
+          <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-secondary)]">{address}</p>
+        ) : null}
       </div>
+
+      <span
+        className={`ml-1 shrink-0 rounded-full px-3 py-1 text-[12px] font-medium ${getActionStyle(status)}`}
+      >
+        {actionLabel ?? 'Open'} →
+      </span>
     </Link>
   );
 }
