@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useToast } from '@/components/ui/use-toast';
-import { setInvoiceMeta, upsertLineItems, type InvoiceLineItemInput, type InvoiceRow } from '@/server/invoices';
+import { setInvoiceMeta, upsertLineItems, sendInvoiceEmail, type InvoiceLineItemInput, type InvoiceRow } from '@/server/invoices';
 
 type ClientSummary = {
   name: string;
@@ -165,8 +165,8 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
 
   // Read-only client fields — computed from saved overrides or original data
   const clientName = invoice.client_name_override ?? client?.name ?? '';
-  const clientEmail = invoice.client_email_override ?? client?.email ?? '';
-  const clientPhone = invoice.client_phone_override ?? client?.phone ?? '';
+  const [clientEmail, setClientEmail] = useState(invoice.client_email_override ?? client?.email ?? '');
+  const [clientPhone, setClientPhone] = useState(invoice.client_phone_override ?? client?.phone ?? '');
   const clientAddressLine1 = initialAddressParts[0] ?? '';
   const clientAddressLine2 =
     initialAddressParts.length > 3
@@ -279,14 +279,36 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   const handleEmail = () => {
     startTransition(async () => {
       try {
-        if (!clientEmail.trim()) throw new Error('Add a client email first.');
+        const email = clientEmail.trim();
+        if (!email) throw new Error('Add a client email address first.');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid email address.');
         const url = await sharePdf();
-        const subject = encodeURIComponent(`Invoice ${invoice.invoice_number}`);
-        const body = encodeURIComponent(`Hi,\n\nPlease find your invoice here:\n${url}\n\nThanks.`);
-        window.location.href = `mailto:${clientEmail}?subject=${subject}&body=${body}`;
+        const result = await sendInvoiceEmail(invoice.id, email, url);
+        if (result.status === 'not_configured') {
+          throw new Error('Email sending is not configured on this account.');
+        }
+        if (result.status === 'failed') {
+          throw new Error(result.error ?? 'Send failed. Please try again.');
+        }
+        pushToast({ title: `Invoice sent to ${email}`, variant: 'success' });
       } catch (error) {
         pushToast({
           title: 'Unable to email invoice',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
+  const handlePreview = () => {
+    startTransition(async () => {
+      try {
+        const url = await sharePdf();
+        window.open(url, '_blank');
+      } catch (error) {
+        pushToast({
+          title: 'Unable to generate preview',
           description: error instanceof Error ? error.message : 'Please try again.',
           variant: 'error',
         });
@@ -314,7 +336,6 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
 
   const badge = STATUS_BADGE[invoiceStatus];
   const initials = getInitials(clientName || 'C');
-  const contactLine = [clientPhone, clientEmail].filter(Boolean).join(' · ');
   const displayPaidAt =
     invoiceStatus === 'paid'
       ? formatDisplayDate(invoice.status === 'paid' ? invoice.updated_at : new Date().toISOString())
@@ -388,9 +409,6 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
               <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">
                 {clientName || 'Client'}
               </p>
-              {contactLine ? (
-                <p className="truncate text-[12px] text-[var(--color-text-secondary)]">{contactLine}</p>
-              ) : null}
             </div>
           </div>
 
@@ -405,6 +423,34 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
               </p>
             </div>
           ) : null}
+
+          {/* Email */}
+          <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
+            <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</p>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={clientEmail}
+              onChange={(e) => setClientEmail(e.target.value)}
+              placeholder="client@example.com"
+              className="min-w-0 flex-1 bg-transparent text-right text-[14px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+            />
+          </div>
+
+          {/* Phone */}
+          <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
+            <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Phone</p>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={clientPhone}
+              onChange={(e) => setClientPhone(e.target.value)}
+              placeholder="+44 7700 000000"
+              className="min-w-0 flex-1 bg-transparent text-right text-[14px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+            />
+          </div>
 
           {/* Due date */}
           <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
@@ -436,6 +482,18 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
               className="rounded-[24px] border-[0.5px] border-[var(--color-border-secondary)] px-3 py-[13px] text-[15px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
             >
               WhatsApp
+            </button>
+          </div>
+
+          {/* Preview */}
+          <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3.5 pt-2 text-center">
+            <button
+              type="button"
+              onClick={handlePreview}
+              disabled={isPending}
+              className="text-[12px] text-[var(--color-text-tertiary)] underline-offset-2 hover:text-[var(--color-text-secondary)] hover:underline disabled:opacity-50"
+            >
+              Preview PDF ↗
             </button>
           </div>
         </div>

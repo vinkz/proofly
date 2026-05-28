@@ -1,6 +1,7 @@
 'use server';
 
 import { supabaseServerAction } from '@/lib/supabaseServer';
+import { sendEmail } from '@/lib/resend';
 import {
   STANDARD_RATE_DESCRIPTIONS,
   normalizeStandardRates,
@@ -425,6 +426,51 @@ export async function upsertLineItems(invoiceId: string, items: InvoiceLineItemI
   if (insertErr) throw new Error(insertErr.message);
 
   return (inserted ?? []) as InvoiceLineItemRow[];
+}
+
+export async function sendInvoiceEmail(invoiceId: string, toEmail: string, pdfUrl: string) {
+  const { sb, user } = await getAuthedClient();
+
+  const { data: invoice, error: invoiceErr } = await fromInvoices(sb)
+    .select('id, invoice_number')
+    .eq('id', invoiceId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (invoiceErr || !invoice) throw new Error(invoiceErr?.message ?? 'Invoice not found');
+
+  const invoiceRow = invoice as { id: string; invoice_number: string };
+
+  let senderName = '';
+  try {
+    const { data: profileData } = await sb
+      .from('profiles')
+      .select('full_name, company_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    const p = profileData as { full_name?: string | null; company_name?: string | null } | null;
+    senderName = p?.company_name ?? p?.full_name ?? '';
+  } catch {
+    // send without name if profile unavailable
+  }
+
+  return sendEmail({
+    to: toEmail,
+    subject: `Invoice ${invoiceRow.invoice_number}`,
+    html: [
+      '<p>Hi,</p>',
+      '<p>Please find your invoice via the link below.</p>',
+      `<p><a href="${pdfUrl}">View Invoice ${invoiceRow.invoice_number}</a></p>`,
+      senderName ? `<p>Kind regards,<br>${senderName}</p>` : '<p>Kind regards</p>',
+    ].join(''),
+    text: [
+      'Hi,',
+      '',
+      'Please find your invoice via the link below.',
+      pdfUrl,
+      '',
+      senderName ? `Kind regards,\n${senderName}` : 'Kind regards',
+    ].join('\n'),
+  });
 }
 
 export async function setInvoiceMeta(invoiceId: string, meta: InvoiceMetaInput) {
