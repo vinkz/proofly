@@ -3,7 +3,6 @@
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@/components/ui/button';
 import { createInvoiceForJob } from '@/server/invoices';
 
 export function CreateInvoiceButton({ jobId }: { jobId: string }) {
@@ -22,8 +21,13 @@ export function CreateInvoiceButton({ jobId }: { jobId: string }) {
   };
 
   return (
-    <Button onClick={handleCreate} disabled={isPending} className="rounded-full">
+    <button
+      type="button"
+      onClick={handleCreate}
+      disabled={isPending}
+      className="shrink-0 rounded-[24px] bg-[#111] px-4 py-[10px] text-[13px] font-medium text-white disabled:opacity-50"
+    >
       {isPending ? 'Creating…' : 'Create invoice'}
-    </Button>
+    </button>
   );
 }

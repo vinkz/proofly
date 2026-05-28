@@ -54,31 +54,41 @@ export default async function NewInvoicePage({
 
   if (guided === '1') {
     return (
-      <main className="mx-auto max-w-3xl space-y-6 p-6">
-        <div>
-          <Link href="/dashboard" className="text-xs uppercase tracking-wide text-accent">
-            ← Back to dashboard
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold text-muted">Create invoice</h1>
-          <p className="text-sm text-muted-foreground/70">
+      <div className="min-h-full">
+        <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+          <div className="mx-auto flex max-w-2xl items-center gap-3 px-[18px] py-[14px]">
+            <Link
+              href="/dashboard"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)]"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              <span className="sr-only">Back</span>
+            </Link>
+            <h1 className="text-[20px] font-medium text-[var(--color-text-primary)]">Create invoice</h1>
+          </div>
+        </div>
+        <div className="mx-auto max-w-2xl px-4 py-6">
+          <p className="text-[14px] text-[var(--color-text-secondary)]">
             Invoices are issued at the end of a job. Start a new job to get started.
           </p>
+          <div className="mt-4 flex gap-2">
+            <Link
+              href="/jobs/new"
+              className="inline-flex h-10 items-center justify-center rounded-[24px] bg-[#111] px-5 text-[13px] font-medium text-white"
+            >
+              Start a new job
+            </Link>
+            <Link
+              href="/jobs"
+              className="inline-flex h-10 items-center justify-center rounded-[24px] border-[0.5px] border-[var(--color-border-secondary)] px-5 text-[13px] font-medium text-[var(--color-text-secondary)]"
+            >
+              View jobs
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Link
-            href="/jobs/new"
-            className="inline-flex items-center justify-center rounded-full bg-[var(--action)] px-4 py-2 text-sm font-semibold text-[var(--brand)] shadow-sm transition hover:-translate-y-0.5"
-          >
-            Start a new job
-          </Link>
-          <Link
-            href="/jobs"
-            className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/70 px-4 py-2 text-sm font-semibold text-[var(--brand)] transition hover:bg-white"
-          >
-            View jobs
-          </Link>
-        </div>
-      </main>
+      </div>
     );
   }
 
@@ -120,39 +130,56 @@ export default async function NewInvoicePage({
   }, {});
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-6">
-      <div>
-        <Link href="/dashboard" className="text-xs uppercase tracking-wide text-accent">
-          ← Back to dashboard
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-muted">Create an invoice</h1>
-        <p className="text-sm text-muted-foreground/70">
-          Select a job to attach its certificate and photos.
-        </p>
+    <div className="min-h-full">
+      {/* Page-level header */}
+      <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-[18px] py-[14px]">
+          <Link
+            href="/invoices"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)]"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span className="sr-only">Back to invoices</span>
+          </Link>
+          <h1 className="text-[20px] font-medium text-[var(--color-text-primary)]">Choose a job</h1>
+        </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="mx-auto max-w-2xl space-y-3 px-4 py-4">
         {jobRows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/20 bg-white/40 p-6 text-sm text-muted-foreground/70">
-            No jobs yet. Create a job to start an invoice.
+          <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-6 text-center">
+            <p className="text-[15px] font-medium text-[var(--color-text-primary)]">No jobs yet</p>
+            <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">Create a job to start an invoice.</p>
+            <Link
+              href="/jobs/new"
+              className="mt-4 inline-flex h-10 items-center justify-center rounded-[24px] bg-[#111] px-5 text-[13px] font-medium text-white"
+            >
+              New job
+            </Link>
           </div>
         ) : (
           jobRows.map((job) => {
             const cert = certMap.get(job.id);
-            const hasCertificate = Boolean(cert?.pdf_path || cert?.pdf_url);
+            const hasCertificate = Boolean(cert?.pdf_path ?? cert?.pdf_url);
             const count = photoCount[job.id] ?? 0;
             return (
-              <div key={job.id} className="rounded-2xl border border-white/10 bg-white/80 p-4 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground/70">
-                      {job.job_code ? `Job ${job.job_code}` : 'Job'}
+              <div
+                key={job.id}
+                className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]"
+              >
+                <div className="flex items-center gap-3 px-4 py-3.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">
+                      {job.title ?? job.client_name ?? 'Job'}
                     </p>
-                    <p className="text-lg font-semibold text-muted">{job.title ?? job.client_name ?? 'Job'}</p>
-                    <p className="text-sm text-muted-foreground/70">{job.address ?? 'Address not set'}</p>
-                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground/70">
-                      <span>{hasCertificate ? 'Certificate: ready' : 'Certificate: not generated'}</span>
-                      <span>Photos: {count}</span>
+                    {job.address ? (
+                      <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-secondary)]">{job.address}</p>
+                    ) : null}
+                    <div className="mt-1 flex flex-wrap gap-2 text-[12px] text-[var(--color-text-tertiary)]">
+                      <span>{hasCertificate ? 'Certificate ready' : 'No certificate'}</span>
+                      {count > 0 ? <span>{count} photo{count === 1 ? '' : 's'}</span> : null}
                     </div>
                   </div>
                   <CreateInvoiceButton jobId={job.id} />
@@ -162,6 +189,6 @@ export default async function NewInvoicePage({
           })
         )}
       </div>
-    </main>
+    </div>
   );
 }

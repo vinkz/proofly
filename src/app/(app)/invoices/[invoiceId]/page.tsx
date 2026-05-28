@@ -58,13 +58,7 @@ export default async function InvoiceEditorPage({ params }: { params: Promise<{ 
     : { data: null };
 
   return (
-    <main className="mx-auto max-w-3xl p-6">
-      <div className="mb-6">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Invoice</p>
-        <h1 className="text-2xl font-semibold text-muted">{invoice.invoice_number}</h1>
-        <p className="text-sm text-muted-foreground/70">{job.title ?? 'Job invoice'}</p>
-      </div>
-      <InvoiceEditor
+    <InvoiceEditor
         invoice={invoice}
         lineItems={lineItems.map((item) => ({
           description: item.description,
@@ -96,6 +90,5 @@ export default async function InvoiceEditorPage({ params }: { params: Promise<{ 
         }}
         certificateType={resolvedCertificateType}
       />
-    </main>
   );
 }

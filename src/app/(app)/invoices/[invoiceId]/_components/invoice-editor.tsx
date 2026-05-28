@@ -1,11 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { setInvoiceMeta, upsertLineItems, type InvoiceLineItemInput, type InvoiceRow } from '@/server/invoices';
 
@@ -30,12 +28,35 @@ type InvoiceEditorProps = {
   certificateType?: string | null;
 };
 
+type InvoiceStatus = 'draft' | 'unpaid' | 'overdue' | 'paid';
+
+const STATUS_BADGE: Record<InvoiceStatus, { bg: string; color: string; label: string }> = {
+  draft:   { bg: 'var(--color-background-secondary)', color: 'var(--color-text-secondary)', label: 'Draft' },
+  unpaid:  { bg: '#faeeda', color: '#BA7517',         label: 'Unpaid' },
+  overdue: { bg: '#fcebeb', color: '#a32d2d',         label: 'Overdue' },
+  paid:    { bg: '#edf7f2', color: '#1a7a52',         label: 'Paid' },
+};
+
+const STATUS_SEGMENTS: Array<{ value: InvoiceStatus; label: string; activeBg: string; activeColor: string }> = [
+  { value: 'draft',   label: 'Draft',   activeBg: 'var(--color-background-secondary)', activeColor: 'var(--color-text-secondary)' },
+  { value: 'unpaid',  label: 'Unpaid',  activeBg: '#faeeda', activeColor: '#BA7517' },
+  { value: 'overdue', label: 'Overdue', activeBg: '#fcebeb', activeColor: '#a32d2d' },
+  { value: 'paid',    label: 'Paid',    activeBg: '#edf7f2', activeColor: '#1a7a52' },
+];
+
 const LAST_USED_PRICE_STORAGE_KEY = 'certnow.invoice.last-used-prices';
 
 const DEFAULT_LINE_ITEM_BY_CERTIFICATE_TYPE: Record<string, string> = {
   cp12: 'Gas Safety Certificate (CP12)',
   gas_warning_notice: 'Gas Warning Notice Inspection',
 };
+
+function getInitials(name: string) {
+  const words = name.trim().split(/\s+/);
+  if (!words.length || !words[0]) return '?';
+  if (words.length === 1) return (words[0][0] ?? '?').toUpperCase();
+  return ((words[0][0] ?? '') + (words[words.length - 1][0] ?? '')).toUpperCase();
+}
 
 function getVatPercentDisplay(value: number | string | null | undefined) {
   const numeric = Number(value ?? 0);
@@ -70,7 +91,7 @@ function writeLastUsedPrice(certificateType: string | null | undefined, unitPric
     parsed[certificateType] = unitPrice;
     window.localStorage.setItem(LAST_USED_PRICE_STORAGE_KEY, JSON.stringify(parsed));
   } catch {
-    // Ignore local storage write failures.
+    // ignore
   }
 }
 
@@ -81,29 +102,50 @@ function splitAddressParts(value: string | null | undefined) {
     .filter(Boolean);
 }
 
-function buildAddressText(parts: Array<string | null | undefined>) {
-  return parts
-    .map((part) => String(part ?? '').trim())
-    .filter(Boolean)
-    .join(', ');
-}
-
 function parseMoneyInput(value: string) {
   const sanitized = value.replace(/[^\d.]/g, '');
   const numeric = Number(sanitized);
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function normalizeInvoiceStatus(status: string | null | undefined) {
-  return status === 'paid' ? 'paid' : 'unpaid';
+function computeInitialStatus(
+  status: string | null | undefined,
+  dueDate: string | null | undefined,
+): InvoiceStatus {
+  const s = (status ?? '').toLowerCase();
+  if (s === 'paid') return 'paid';
+  if (s === 'overdue') return 'overdue';
+  if (
+    dueDate &&
+    !Number.isNaN(new Date(dueDate).getTime()) &&
+    new Date(dueDate) < new Date()
+  ) return 'overdue';
+  if (s === 'unpaid') return 'unpaid';
+  return 'draft';
+}
+
+function toInputDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+function formatDisplayDate(isoDate: string | null | undefined) {
+  if (!isoDate) return null;
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 export function InvoiceEditor({ invoice, lineItems, client, job, certificateType }: InvoiceEditorProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
-  const defaultDescription = certificateType ? DEFAULT_LINE_ITEM_BY_CERTIFICATE_TYPE[certificateType] ?? '' : '';
+
+  const defaultDescription = certificateType ? (DEFAULT_LINE_ITEM_BY_CERTIFICATE_TYPE[certificateType] ?? '') : '';
   const initialAddressParts = splitAddressParts(invoice.client_address_override ?? client?.address ?? job?.address ?? '');
+
   const [items, setItems] = useState<InvoiceLineItemInput[]>(
     lineItems.length
       ? lineItems
@@ -111,20 +153,30 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   );
   const [vatRate, setVatRate] = useState<string>(getVatPercentDisplay(invoice.vat_rate ?? 0.2));
   const [notes, setNotes] = useState<string>(invoice.notes ?? '');
-  const [invoiceStatus, setInvoiceStatus] = useState<'paid' | 'unpaid'>(normalizeInvoiceStatus(invoice.status));
-  const [clientName, setClientName] = useState<string>(invoice.client_name_override ?? client?.name ?? '');
-  const [clientAddressLine1, setClientAddressLine1] = useState<string>(initialAddressParts[0] ?? '');
-  const [clientAddressLine2, setClientAddressLine2] = useState<string>(
-    initialAddressParts.length > 3 ? initialAddressParts.slice(1, -2).join(', ') : initialAddressParts[1] ?? '',
+  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus>(
+    computeInitialStatus(invoice.status, invoice.due_date),
   );
-  const [clientCity, setClientCity] = useState<string>(
-    initialAddressParts.length >= 3 ? initialAddressParts[initialAddressParts.length - 2] ?? '' : '',
-  );
-  const [clientPostcode, setClientPostcode] = useState<string>(
-    invoice.client_address_override ? initialAddressParts.at(-1) ?? '' : client?.postcode ?? '',
-  );
-  const [clientEmail, setClientEmail] = useState<string>(invoice.client_email_override ?? client?.email ?? '');
-  const [clientPhone, setClientPhone] = useState<string>(invoice.client_phone_override ?? client?.phone ?? '');
+  const [dueDate, setDueDate] = useState<string>(() => {
+    if (invoice.due_date) return toInputDate(invoice.due_date);
+    const d = new Date(invoice.created_at);
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().slice(0, 10);
+  });
+
+  // Read-only client fields — computed from saved overrides or original data
+  const clientName = invoice.client_name_override ?? client?.name ?? '';
+  const clientEmail = invoice.client_email_override ?? client?.email ?? '';
+  const clientPhone = invoice.client_phone_override ?? client?.phone ?? '';
+  const clientAddressLine1 = initialAddressParts[0] ?? '';
+  const clientAddressLine2 =
+    initialAddressParts.length > 3
+      ? initialAddressParts.slice(1, -2).join(', ')
+      : (initialAddressParts[1] ?? '');
+  const clientCity =
+    initialAddressParts.length >= 3 ? (initialAddressParts[initialAddressParts.length - 2] ?? '') : '';
+  const clientPostcode = invoice.client_address_override
+    ? (initialAddressParts.at(-1) ?? '')
+    : (client?.postcode ?? '');
 
   useEffect(() => {
     if (!certificateType || lineItems.length > 0) return;
@@ -133,8 +185,8 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
     setItems((prev) => {
       if (prev.length !== 1) return prev;
       const [firstItem] = prev;
-      if (Number(firstItem.unit_price ?? 0) > 0) return prev;
-      return [{ ...firstItem, unit_price: lastUsedPrice, description: firstItem.description || defaultDescription }];
+      if (Number(firstItem?.unit_price ?? 0) > 0) return prev;
+      return [{ ...firstItem!, unit_price: lastUsedPrice, description: firstItem?.description || defaultDescription }];
     });
   }, [certificateType, defaultDescription, lineItems.length]);
 
@@ -164,23 +216,37 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
 
   const removeRow = (index: number) => setItems((prev) => prev.filter((_, idx) => idx !== index));
 
+  const buildSaveAddress = () => {
+    const parts = [clientAddressLine1, clientAddressLine2, clientCity, clientPostcode]
+      .map((p) => p.trim())
+      .filter(Boolean);
+    return parts.filter((p, idx, arr) => arr.indexOf(p) === idx).join(', ');
+  };
+
+  const displayAddress = (() => {
+    const parts = [clientAddressLine1, clientAddressLine2, clientCity, clientPostcode]
+      .map((p) => p.trim())
+      .filter(Boolean);
+    return parts.filter((p, idx, arr) => arr.indexOf(p) === idx).join('\n');
+  })();
+
   const handleSave = () => {
     startTransition(async () => {
       try {
         await upsertLineItems(invoice.id, items.filter((item) => item.description?.trim().length));
         await setInvoiceMeta(invoice.id, {
-          status: invoiceStatus === 'paid' ? 'paid' : 'draft',
+          status: invoiceStatus,
+          due_date: dueDate || null,
           vat_rate: normalizeVatPercent(vatRate) / 100,
           notes,
           client_name_override: clientName || null,
-          client_address_override:
-            buildAddressText([clientAddressLine1, clientAddressLine2, clientCity, clientPostcode]) || null,
+          client_address_override: buildSaveAddress() || null,
           client_email_override: clientEmail || null,
           client_phone_override: clientPhone || null,
         });
-        const rememberedUnitPrice = items.find((item) => item.description?.trim() && Number(item.unit_price ?? 0) >= 0);
-        if (rememberedUnitPrice) {
-          writeLastUsedPrice(certificateType, Number(rememberedUnitPrice.unit_price ?? 0));
+        const rememberedItem = items.find((item) => item.description?.trim() && Number(item.unit_price ?? 0) >= 0);
+        if (rememberedItem) {
+          writeLastUsedPrice(certificateType, Number(rememberedItem.unit_price ?? 0));
         }
         const response = await fetch(`/api/invoices/${invoice.id}/pdf`, { method: 'POST' });
         if (!response.ok) {
@@ -213,9 +279,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   const handleEmail = () => {
     startTransition(async () => {
       try {
-        if (!clientEmail.trim()) {
-          throw new Error('Add a client email first.');
-        }
+        if (!clientEmail.trim()) throw new Error('Add a client email first.');
         const url = await sharePdf();
         const subject = encodeURIComponent(`Invoice ${invoice.invoice_number}`);
         const body = encodeURIComponent(`Hi,\n\nPlease find your invoice here:\n${url}\n\nThanks.`);
@@ -233,9 +297,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   const handleWhatsApp = () => {
     startTransition(async () => {
       try {
-        if (!clientPhone.trim()) {
-          throw new Error('Add a client phone number first.');
-        }
+        if (!clientPhone.trim()) throw new Error('Add a client phone number first.');
         const url = await sharePdf();
         const message = encodeURIComponent(`Invoice ${invoice.invoice_number}: ${url}`);
         const phone = clientPhone.replace(/[^\d+]/g, '');
@@ -250,184 +312,240 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
     });
   };
 
+  const badge = STATUS_BADGE[invoiceStatus];
+  const initials = getInitials(clientName || 'C');
+  const contactLine = [clientPhone, clientEmail].filter(Boolean).join(' · ');
+  const displayPaidAt =
+    invoiceStatus === 'paid'
+      ? formatDisplayDate(invoice.status === 'paid' ? invoice.updated_at : new Date().toISOString())
+      : null;
+
   return (
-    <div className="space-y-6 pb-24">
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Invoice status</h2>
-        <div className="mt-3 flex gap-2">
-          <Button
-            variant={invoiceStatus === 'unpaid' ? 'primary' : 'outline'}
-            className="rounded-full"
-            onClick={() => setInvoiceStatus('unpaid')}
+    <div className="min-h-full">
+      {/* Page-level header */}
+      <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+        <div className="mx-auto flex max-w-2xl items-center gap-3 px-[18px] py-[14px]">
+          <Link
+            href="/invoices"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)]"
           >
-            Unpaid
-          </Button>
-          <Button
-            variant={invoiceStatus === 'paid' ? 'primary' : 'outline'}
-            className="rounded-full"
-            onClick={() => setInvoiceStatus('paid')}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span className="sr-only">Back to invoices</span>
+          </Link>
+          <p className="min-w-0 flex-1 truncate text-[16px] font-medium text-[var(--color-text-primary)]">
+            Invoice {invoice.invoice_number}
+          </p>
+          <span
+            className="shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium"
+            style={{ backgroundColor: badge.bg, color: badge.color }}
           >
-            Paid
-          </Button>
+            {badge.label}
+          </span>
         </div>
-      </section>
+      </div>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Client & address</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
-            placeholder="Client name"
-            className="rounded-2xl"
-          />
-          <Input
-            value={clientPhone}
-            onChange={(e) => setClientPhone(e.target.value)}
-            placeholder="Phone"
-            className="rounded-2xl"
-          />
-          <Input
-            value={clientEmail}
-            onChange={(e) => setClientEmail(e.target.value)}
-            placeholder="Email"
-            className="rounded-2xl"
-          />
-          <Input
-            value={clientAddressLine1}
-            onChange={(e) => setClientAddressLine1(e.target.value)}
-            placeholder="Address line 1"
-            className="rounded-2xl sm:col-span-2"
-          />
-          <Input
-            value={clientAddressLine2}
-            onChange={(e) => setClientAddressLine2(e.target.value)}
-            placeholder="Address line 2 (optional)"
-            className="rounded-2xl sm:col-span-2"
-          />
-          <Input
-            value={clientCity}
-            onChange={(e) => setClientCity(e.target.value)}
-            placeholder="Town / city"
-            className="rounded-2xl"
-          />
-          <Input
-            value={clientPostcode}
-            onChange={(e) => setClientPostcode(e.target.value)}
-            placeholder="Postcode"
-            className="rounded-2xl"
-          />
+      <div className="mx-auto max-w-2xl space-y-4 px-4 py-4">
+        {/* Status card */}
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            Payment status
+          </p>
+          <div className="mt-3 flex gap-1 rounded-[10px] bg-[var(--color-background-secondary)] p-1">
+            {STATUS_SEGMENTS.map((seg) => {
+              const active = invoiceStatus === seg.value;
+              return (
+                <button
+                  key={seg.value}
+                  type="button"
+                  onClick={() => setInvoiceStatus(seg.value)}
+                  className="flex-1 rounded-[8px] py-[7px] text-[13px] font-medium transition-colors"
+                  style={
+                    active
+                      ? { backgroundColor: seg.activeBg, color: seg.activeColor }
+                      : { backgroundColor: 'transparent', color: 'var(--color-text-tertiary)' }
+                  }
+                >
+                  {seg.label}
+                </button>
+              );
+            })}
+          </div>
+          {invoiceStatus === 'paid' && displayPaidAt ? (
+            <p className="mt-2 text-[13px] text-[var(--color-text-secondary)]">Paid on {displayPaidAt}</p>
+          ) : null}
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button variant="outline" className="rounded-full" onClick={handleEmail} disabled={isPending}>
-            Email invoice
-          </Button>
-          <Button variant="outline" className="rounded-full" onClick={handleWhatsApp} disabled={isPending}>
-            WhatsApp invoice
-          </Button>
-        </div>
-      </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Line items</h2>
-          <Button variant="outline" className="rounded-full text-xs" onClick={addRow}>
-            Add row
-          </Button>
+        {/* Client card */}
+        <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+          {/* Avatar + name */}
+          <div className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-background-secondary)] text-[13px] font-medium text-[var(--color-text-secondary)]">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">
+                {clientName || 'Client'}
+              </p>
+              {contactLine ? (
+                <p className="truncate text-[12px] text-[var(--color-text-secondary)]">{contactLine}</p>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Bill to address */}
+          {displayAddress ? (
+            <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3 pt-3">
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                Bill to
+              </p>
+              <p className="mt-1.5 whitespace-pre-line text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
+                {displayAddress}
+              </p>
+            </div>
+          ) : null}
+
+          {/* Due date */}
+          <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Due</p>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="cursor-pointer bg-transparent text-right text-[14px] font-medium text-[var(--color-text-primary)] outline-none"
+            />
+          </div>
+
+          {/* Send buttons */}
+          <div className="flex gap-2 border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
+            <button
+              type="button"
+              onClick={handleEmail}
+              disabled={isPending}
+              style={{ flex: 2 }}
+              className="rounded-[24px] bg-[#111] px-5 py-[13px] text-[15px] font-medium text-white disabled:opacity-50"
+            >
+              {invoiceStatus === 'paid' ? 'Resend receipt' : 'Email invoice'} →
+            </button>
+            <button
+              type="button"
+              onClick={handleWhatsApp}
+              disabled={isPending}
+              style={{ flex: 1 }}
+              className="rounded-[24px] border-[0.5px] border-[var(--color-border-secondary)] px-3 py-[13px] text-[15px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              WhatsApp
+            </button>
+          </div>
         </div>
-        <div className="mt-3 space-y-3">
+
+        {/* Line items card */}
+        <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+          <div className="flex items-center justify-between px-4 py-3">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Line items</p>
+            <button
+              type="button"
+              onClick={addRow}
+              className="rounded-full bg-[#edf7f2] px-3 py-1 text-[12px] font-medium text-[#1a7a52]"
+            >
+              + Add item
+            </button>
+          </div>
+
           {items.map((item, index) => (
-            <div key={`item-${index}`} className="rounded-2xl border border-white/10 bg-white/80 p-3">
-              <div className="grid gap-2 sm:grid-cols-5">
-                <Input
-                  value={item.description}
-                  onChange={(e) => updateItem(index, { description: e.target.value })}
-                  placeholder="Description"
-                  className="sm:col-span-3"
-                />
-                <Input
-                  type="number"
-                  min="0"
-                  value={item.quantity ?? 0}
-                  onChange={(e) => updateItem(index, { quantity: Number(e.target.value) })}
-                  placeholder="Qty"
-                />
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/70">
-                    £
-                  </span>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={String(item.unit_price ?? 0)}
-                    onChange={(e) => updateItem(index, { unit_price: parseMoneyInput(e.target.value) })}
-                    placeholder="Price"
-                    className="pl-8"
+            <div key={`item-${index}`} className="border-t-[0.5px] border-[var(--color-border-tertiary)]">
+              <div className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={item.description}
+                    onChange={(e) => updateItem(index, { description: e.target.value })}
+                    placeholder="Description"
+                    className="min-w-0 flex-1 bg-transparent text-[14px] font-medium text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
                   />
+                  <div className="flex shrink-0 items-center">
+                    <span className="text-[14px] font-medium text-[var(--color-text-primary)]">£</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={String(item.unit_price ?? 0)}
+                      onChange={(e) => updateItem(index, { unit_price: parseMoneyInput(e.target.value) })}
+                      className="w-16 bg-transparent text-right text-[14px] font-medium text-[var(--color-text-primary)] outline-none"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex justify-end">
-                <Button variant="outline" className="rounded-full text-xs" onClick={() => removeRow(index)}>
-                  Delete row
-                </Button>
+                <div className="mt-1 flex items-center justify-between">
+                  <p className="text-[12px] text-[var(--color-text-secondary)]">
+                    {item.quantity ?? 1} × £{Number(item.unit_price ?? 0).toFixed(2)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => removeRow(index)}
+                    className="text-[12px] text-[#a32d2d]"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
           ))}
-        </div>
-      </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">VAT rate & totals</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="relative">
-            <Input
-              type="number"
-              step="0.1"
-              min="0"
-              value={vatRate}
-              onChange={(e) => setVatRate(e.target.value)}
-              placeholder="VAT"
-              className="pr-8"
-            />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground/70">
-              %
-            </span>
+          {/* VAT */}
+          <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
+            <p className="text-[13px] text-[var(--color-text-secondary)]">VAT rate</p>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={vatRate}
+                onChange={(e) => setVatRate(e.target.value)}
+                className="w-[60px] rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2 py-1 text-right text-[13px] text-[var(--color-text-primary)] outline-none"
+              />
+              <span className="text-[13px] text-[var(--color-text-secondary)]">%</span>
+            </div>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/80 p-4 text-sm text-muted-foreground/80">
-            <div className="flex items-center justify-between">
+
+          {/* Totals */}
+          <div className="space-y-1.5 border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
+            <div className="flex justify-between text-[13px] text-[var(--color-text-secondary)]">
               <span>Subtotal</span>
               <span>£{totals.subtotal.toFixed(2)}</span>
             </div>
-            <div className="mt-2 flex items-center justify-between">
+            <div className="flex justify-between text-[13px] text-[var(--color-text-secondary)]">
               <span>VAT ({normalizeVatPercent(vatRate).toFixed(0)}%)</span>
               <span>£{totals.vat.toFixed(2)}</span>
             </div>
-            <div className="mt-3 border-t border-white/10 pt-3">
-              <div className="flex items-center justify-between font-semibold text-muted">
-                <span>Total</span>
-                <span>£{totals.total.toFixed(2)}</span>
-              </div>
+            <div className="flex justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] pt-2">
+              <span className="text-[15px] font-medium text-[var(--color-text-primary)]">Total</span>
+              <span className="text-[15px] font-medium text-[#1a7a52]">£{totals.total.toFixed(2)}</span>
             </div>
           </div>
         </div>
-      </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Notes</h2>
-        <Textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Notes for this invoice (optional)"
-          className="mt-3 min-h-[120px]"
-        />
-      </section>
-
-      <div className="sticky bottom-0 z-10 -mx-4 border-t border-white/10 bg-white/90 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row sm:justify-end">
-          <Button onClick={handleSave} disabled={isPending} className="rounded-full">
-            {isPending ? 'Saving…' : 'Save Invoice'}
-          </Button>
+        {/* Notes card */}
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            Notes (optional)
+          </p>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Payment due within 14 days. Thank you for your custom."
+            rows={4}
+            className="mt-3 w-full resize-none border-none bg-transparent text-[13px] text-[var(--color-text-secondary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+          />
         </div>
+
+        {/* Save button */}
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isPending}
+          className="w-full rounded-[24px] bg-[#111] py-[14px] text-[15px] font-medium text-white disabled:opacity-50"
+        >
+          {isPending ? 'Saving…' : 'Save invoice'}
+        </button>
       </div>
     </div>
   );
