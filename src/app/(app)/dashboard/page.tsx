@@ -99,6 +99,18 @@ export default async function DashboardPage({
   const profileMissingFields = getMissingOnboardingFields(profile);
   const certificateProfileComplete = isOnboardingProfileComplete(profile);
   const invoiceMissingFields = getInvoiceSetupMissingFields(profile);
+  const signatureSaved = !!(profile as Record<string, unknown> | null)?.saved_signature_url;
+  const rawStandardRates = (profile as Record<string, unknown> | null)?.standard_rates;
+  const cp12Rate =
+    rawStandardRates && typeof rawStandardRates === 'object' && !Array.isArray(rawStandardRates)
+      ? (rawStandardRates as Record<string, unknown>).cp12
+      : null;
+  const hasStandardRate = !!(cp12Rate && Number(cp12Rate) > 0);
+  const accountSetupIncomplete =
+    !certificateProfileComplete ||
+    invoiceMissingFields.length > 0 ||
+    !signatureSaved ||
+    !hasStandardRate;
   const completionJobs = activeJobs
     .filter((job) => isIssuedJob(job))
     .sort((a, b) => new Date(b.created_at ?? '').getTime() - new Date(a.created_at ?? '').getTime());
@@ -188,9 +200,26 @@ export default async function DashboardPage({
             profileMissingFields={profileMissingFields}
             certificateProfileComplete={certificateProfileComplete}
             invoiceMissingFields={invoiceMissingFields}
+            signatureSaved={signatureSaved}
+            hasStandardRate={hasStandardRate}
           />
         )}
       </section>
+
+      {latestRequest && accountSetupIncomplete ? (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 px-0.5">
+            <h2 className="text-[13px] font-medium text-[var(--color-text-primary)]">Account setup</h2>
+          </div>
+          <GetStartedCard
+            profileMissingFields={profileMissingFields}
+            certificateProfileComplete={certificateProfileComplete}
+            invoiceMissingFields={invoiceMissingFields}
+            signatureSaved={signatureSaved}
+            hasStandardRate={hasStandardRate}
+          />
+        </section>
+      ) : null}
 
       {awaitingLandlordJobs.length ? (
         <section className="space-y-2">

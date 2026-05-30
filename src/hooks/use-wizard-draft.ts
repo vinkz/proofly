@@ -45,14 +45,6 @@ export function useWizardDraft<T>({
   const [localUpdatedAt, setLocalUpdatedAt] = useState<number | null>(null);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [restoredFromDraft, setRestoredFromDraft] = useState(false);
-  const serializedDataSnapshot = useMemo(
-    () =>
-      JSON.stringify({
-        version,
-        data: state,
-      } satisfies WizardDraftEnvelope<T>),
-    [state, version],
-  );
   const serializedSyncSnapshot = useMemo(
     () =>
       JSON.stringify({
@@ -152,21 +144,26 @@ export function useWizardDraft<T>({
     return () => window.clearTimeout(timeoutId);
   }, [debounceMs, enabled, isReady, serializedSyncSnapshot, state, storageKey, syncedAt, version]);
 
-  const markSynced = () => {
+  const markSynced = (stateOverride?: T, syncStateOverride?: unknown) => {
     if (!storageKey || typeof window === 'undefined') return;
     const now = Date.now();
-    const snapshot = currentSnapshotRef.current;
+    const data = stateOverride ?? state;
+    const syncData = syncStateOverride ?? (stateOverride === undefined ? syncState ?? state : syncState ?? stateOverride);
+    const snapshot = JSON.stringify({
+      version,
+      data: syncData,
+    });
     lastSyncedSnapshotRef.current = snapshot;
     setLocalUpdatedAt(now);
     setSyncedAt(now);
     setHasUnsyncedChanges(false);
 
     try {
-      const envelope = JSON.parse(serializedDataSnapshot) as WizardDraftEnvelope<T>;
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
-          ...envelope,
+          version,
+          data,
           localUpdatedAt: now,
           syncedAt: now,
           syncedSnapshot: snapshot,

@@ -14,7 +14,6 @@ import {
 import { TRADE_TYPES } from '@/lib/profile-options';
 import {
   STANDARD_RATE_KEYS,
-  STANDARD_RATE_LABELS,
   type StandardRateKey,
   type StandardRates,
 } from '@/lib/standard-rates';
@@ -41,6 +40,12 @@ type ProfilePreferencesProps = {
   initialStandardRates?: StandardRates;
 };
 
+const RATE_DISPLAY_LABELS: Record<StandardRateKey, string> = {
+  cp12: 'CP12',
+  boiler_service: 'Boiler',
+  cp12_boiler_service: 'Both',
+};
+
 const buildRateInputState = (rates: StandardRates): Record<StandardRateKey, string> =>
   STANDARD_RATE_KEYS.reduce<Record<StandardRateKey, string>>((state, key) => {
     state[key] = rates[key] ? String(rates[key]) : '';
@@ -56,19 +61,34 @@ const parseRateInputState = (rates: Record<StandardRateKey, string>): StandardRa
     return parsed;
   }, {});
 
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
-  return (
-    <label className="block">
-      <span className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-        {children}
-      </span>
-      {hint ? <span className="ml-1.5 text-[11px] text-[var(--color-text-tertiary)]">{hint}</span> : null}
-    </label>
-  );
+function toTitleCase(str: string): string {
+  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
+}
+
+function displayPostcode(v: string): string {
+  const c = v.replace(/\s/g, '').toUpperCase();
+  return c.length >= 5 ? c.slice(0, -3) + ' ' + c.slice(-3) : c;
+}
+
+function displaySortCode(v: string): string {
+  const c = v.replace(/\D/g, '');
+  return c.length === 6 ? `${c.slice(0, 2)}-${c.slice(2, 4)}-${c.slice(4, 6)}` : v;
 }
 
 const inputClass =
-  'mt-1.5 h-[38px] w-full rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-action)] disabled:opacity-50';
+  'mt-1 h-[38px] w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-[11px] text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-action)] disabled:opacity-50';
+
+const labelClass = 'text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]';
+
+const eyebrowClass = 'text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]';
+
+const cardTitleClass = 'text-[15px] font-medium text-[var(--color-text-primary)]';
+
+const cardClass = 'overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]';
+
+const cardHeaderClass = 'flex items-center justify-between border-b-[0.5px] border-[var(--color-border-tertiary)] px-4 py-[14px]';
+
+const cardBodyClass = 'flex flex-col gap-[12px] p-4';
 
 export function ProfilePreferences({
   mode = 'settings',
@@ -220,165 +240,311 @@ export function ProfilePreferences({
     bankAccountNumber !== initialBankAccountNumber ||
     STANDARD_RATE_KEYS.some((key) => standardRates[key] !== initialRateInputs[key]);
 
-  const saveLabel = isPending ? 'Saving…' : mode === 'onboarding' ? 'Complete setup' : dirty ? 'Save changes' : 'Saved';
+  const saveButtonLabel = isPending ? 'Saving…' : dirty ? 'Save' : 'Saved';
+  const saveButtonClass = `text-[12px] font-medium px-[14px] py-[5px] rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)] bg-transparent disabled:opacity-40 transition-colors hover:border-[var(--color-text-tertiary)]`;
+
+  if (mode === 'onboarding') {
+    return (
+      <div className="flex flex-col gap-[12px]">
+        <div className={cardClass}>
+          <div className={cardBodyClass}>
+            <div className="grid grid-cols-2 gap-[10px]">
+              <div>
+                <label className={labelClass}>Full name</label>
+                <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} disabled={isPending} />
+              </div>
+              <div>
+                <label className={labelClass}>Date of birth</label>
+                <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={inputClass} disabled={isPending} />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Profession</label>
+              <Select
+                value={professionChoice}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setProfessionChoice(value);
+                  if (value && value !== 'Other') {
+                    setProfession(value);
+                  } else if (value !== 'Other') {
+                    setProfession('');
+                  }
+                }}
+                className="mt-1 h-[38px] rounded-[8px] text-[13px]"
+                disabled={isPending}
+              >
+                <option value="">Select profession</option>
+                {TRADE_TYPES.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+                <option value="Other">Other</option>
+              </Select>
+            </div>
+            {professionChoice === 'Other' ? (
+              <div>
+                <label className={labelClass}>Profession (specify)</label>
+                <input value={profession} onChange={(e) => setProfession(e.target.value)} className={inputClass} disabled={isPending} />
+              </div>
+            ) : null}
+            <div className="grid grid-cols-2 gap-[10px]">
+              <div>
+                <label className={labelClass}>
+                  Gas Safe reg no. <span className="ml-1 text-[var(--color-text-tertiary)] opacity-60">· 6 digits</span>
+                </label>
+                <input
+                  value={gasSafeNumber}
+                  onChange={(e) => setGasSafeNumber(e.target.value)}
+                  className={inputClass}
+                  disabled={isPending}
+                  inputMode="numeric"
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  placeholder="123456"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>
+                  ID card no. <span className="ml-1 text-[var(--color-text-tertiary)] opacity-60">· 7 digits</span>
+                </label>
+                <input
+                  value={engineerId}
+                  onChange={(e) => setEngineerId(e.target.value)}
+                  className={inputClass}
+                  disabled={isPending}
+                  inputMode="numeric"
+                  maxLength={7}
+                  pattern="[0-9]{7}"
+                  placeholder="1234567"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-[10px]">
+              <div>
+                <label className={labelClass}>Engineer name</label>
+                <input value={toTitleCase(engineerName)} onChange={(e) => setEngineerName(e.target.value)} className={inputClass} disabled={isPending} placeholder="As it appears on certificates" />
+              </div>
+              <div>
+                <label className={labelClass}>Company name</label>
+                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} disabled={isPending} />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Address line 1</label>
+              <input value={companyAddressLine1} onChange={(e) => setCompanyAddressLine1(e.target.value)} className={inputClass} disabled={isPending} />
+            </div>
+            <div className="grid grid-cols-2 gap-[10px]">
+              <div>
+                <label className={labelClass}>Town / city</label>
+                <input value={companyAddressLine3} onChange={(e) => setCompanyAddressLine3(e.target.value)} className={inputClass} disabled={isPending} />
+              </div>
+              <div>
+                <label className={labelClass}>Postcode</label>
+                <input value={displayPostcode(companyPostcode)} onChange={(e) => setCompanyPostcode(e.target.value)} className={inputClass} disabled={isPending} />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Phone</label>
+              <input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} className={inputClass} disabled={isPending} type="tel" />
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isPending || !dirty}
+            className="rounded-full bg-[#111] px-[20px] py-[10px] text-[13px] font-medium text-white disabled:opacity-40"
+          >
+            {isPending ? 'Saving…' : 'Complete setup'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
-      {/* Personal details */}
-      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Personal details</p>
-        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">
-          {mode === 'onboarding' ? 'Complete your profile' : 'Personal & engineer details'}
-        </h2>
-        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-          {mode === 'onboarding'
-            ? 'Required before creating any certificate.'
-            : 'These values populate the installer section of certificate PDFs.'}
-        </p>
-
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      {/* Card 1: Personal & engineer details */}
+      <section className={cardClass}>
+        <div className={cardHeaderClass}>
           <div>
-            <FieldLabel>Full name</FieldLabel>
-            <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} disabled={isPending} />
+            <p className={eyebrowClass}>Profile</p>
+            <h2 className={cardTitleClass}>Personal & engineer details</h2>
           </div>
-          <div>
-            <FieldLabel>Date of birth</FieldLabel>
-            <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={inputClass} disabled={isPending} />
+          <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
+            {saveButtonLabel}
+          </button>
+        </div>
+        <div className={cardBodyClass}>
+          <div className="grid grid-cols-2 gap-[10px]">
+            <div>
+              <label className={labelClass}>Full name</label>
+              <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} disabled={isPending} />
+            </div>
+            <div>
+              <label className={labelClass}>Date of birth</label>
+              <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={inputClass} disabled={isPending} />
+            </div>
           </div>
-          <div>
-            <FieldLabel>Profession</FieldLabel>
-            <Select
-              value={professionChoice}
-              onChange={(event) => {
-                const value = event.target.value;
-                setProfessionChoice(value);
-                if (value && value !== 'Other') {
-                  setProfession(value);
-                } else if (value !== 'Other') {
-                  setProfession('');
-                }
-              }}
-              className="mt-1.5 h-[38px] rounded-[10px] text-[13px]"
-              disabled={isPending}
-            >
-              <option value="">Select profession</option>
-              {TRADE_TYPES.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-              <option value="Other">Other</option>
-            </Select>
+          <div className="grid grid-cols-2 gap-[10px]">
+            <div>
+              <label className={labelClass}>Profession</label>
+              <Select
+                value={professionChoice}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setProfessionChoice(value);
+                  if (value && value !== 'Other') {
+                    setProfession(value);
+                  } else if (value !== 'Other') {
+                    setProfession('');
+                  }
+                }}
+                className="mt-1 h-[38px] rounded-[8px] text-[13px]"
+                disabled={isPending}
+              >
+                <option value="">Select profession</option>
+                {TRADE_TYPES.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+                <option value="Other">Other</option>
+              </Select>
+            </div>
+            <div>
+              <label className={labelClass}>Engineer name</label>
+              <input value={toTitleCase(engineerName)} onChange={(e) => setEngineerName(e.target.value)} className={inputClass} disabled={isPending} placeholder="As on certificates" />
+            </div>
           </div>
           {professionChoice === 'Other' ? (
             <div>
-              <FieldLabel>Profession (specify)</FieldLabel>
+              <label className={labelClass}>Profession (specify)</label>
               <input value={profession} onChange={(e) => setProfession(e.target.value)} className={inputClass} disabled={isPending} />
             </div>
-          ) : (
-            <div />
-          )}
-          <div>
-            <FieldLabel>Engineer name</FieldLabel>
-            <input value={engineerName} onChange={(e) => setEngineerName(e.target.value)} className={inputClass} disabled={isPending} placeholder="As it appears on certificates" />
-          </div>
-          <div>
-            <FieldLabel hint="6 digits">Gas Safe registration no.</FieldLabel>
-            <input
-              value={gasSafeNumber}
-              onChange={(e) => setGasSafeNumber(e.target.value)}
-              className={inputClass}
-              disabled={isPending}
-              inputMode="numeric"
-              maxLength={6}
-              pattern="[0-9]{6}"
-              placeholder="123456"
-            />
-          </div>
-          <div>
-            <FieldLabel hint="7 digits">Engineer ID card no.</FieldLabel>
-            <input
-              value={engineerId}
-              onChange={(e) => setEngineerId(e.target.value)}
-              className={inputClass}
-              disabled={isPending}
-              inputMode="numeric"
-              maxLength={7}
-              pattern="[0-9]{7}"
-              placeholder="1234567"
-            />
+          ) : null}
+          <div className="grid grid-cols-2 gap-[10px]">
+            <div>
+              <label className={labelClass}>
+                Gas Safe reg no. <span className="ml-1 opacity-60">· 6 digits</span>
+              </label>
+              <input
+                value={gasSafeNumber}
+                onChange={(e) => setGasSafeNumber(e.target.value)}
+                className={inputClass}
+                disabled={isPending}
+                inputMode="numeric"
+                maxLength={6}
+                pattern="[0-9]{6}"
+                placeholder="123456"
+              />
+            </div>
+            <div>
+              <label className={labelClass}>
+                ID card no. <span className="ml-1 opacity-60">· 7 digits</span>
+              </label>
+              <input
+                value={engineerId}
+                onChange={(e) => setEngineerId(e.target.value)}
+                className={inputClass}
+                disabled={isPending}
+                inputMode="numeric"
+                maxLength={7}
+                pattern="[0-9]{7}"
+                placeholder="1234567"
+              />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Company details */}
-      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</p>
-        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Company details</h2>
-        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">Appears in the company section on certificate and invoice PDFs.</p>
-
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <FieldLabel>Company name</FieldLabel>
+      {/* Card 2: Company details */}
+      <section className={cardClass}>
+        <div className={cardHeaderClass}>
+          <div>
+            <p className={eyebrowClass}>Company</p>
+            <h2 className={cardTitleClass}>Company details</h2>
+          </div>
+          <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
+            {saveButtonLabel}
+          </button>
+        </div>
+        <div className={cardBodyClass}>
+          <div>
+            <label className={labelClass}>Company name</label>
             <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} disabled={isPending} />
           </div>
-          <div className="sm:col-span-2">
-            <FieldLabel>Address line 1</FieldLabel>
+          <div>
+            <label className={labelClass}>Address line 1</label>
             <input value={companyAddressLine1} onChange={(e) => setCompanyAddressLine1(e.target.value)} className={inputClass} disabled={isPending} />
           </div>
-          <div className="sm:col-span-2">
-            <FieldLabel>Address line 2</FieldLabel>
-            <input value={companyAddressLine2} onChange={(e) => setCompanyAddressLine2(e.target.value)} className={inputClass} disabled={isPending} />
+          <div>
+            <label className={labelClass}>Address line 2</label>
+            <input value={companyAddressLine2} onChange={(e) => setCompanyAddressLine2(e.target.value)} className={inputClass} disabled={isPending} placeholder="Optional" />
           </div>
-          <div className="sm:col-span-2">
-            <FieldLabel>Town / City</FieldLabel>
-            <input value={companyAddressLine3} onChange={(e) => setCompanyAddressLine3(e.target.value)} className={inputClass} disabled={isPending} />
+          <div className="grid grid-cols-2 gap-[10px]">
+            <div>
+              <label className={labelClass}>Town / city</label>
+              <input value={companyAddressLine3} onChange={(e) => setCompanyAddressLine3(e.target.value)} className={inputClass} disabled={isPending} />
+            </div>
+            <div>
+              <label className={labelClass}>Postcode</label>
+              <input value={displayPostcode(companyPostcode)} onChange={(e) => setCompanyPostcode(e.target.value)} className={inputClass} disabled={isPending} />
+            </div>
           </div>
           <div>
-            <FieldLabel>Postcode</FieldLabel>
-            <input value={companyPostcode} onChange={(e) => setCompanyPostcode(e.target.value)} className={inputClass} disabled={isPending} />
-          </div>
-          <div>
-            <FieldLabel>Phone</FieldLabel>
+            <label className={labelClass}>Phone</label>
             <input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} className={inputClass} disabled={isPending} type="tel" />
           </div>
         </div>
       </section>
 
-      {/* Invoices */}
-      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Invoices</p>
-        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Bank transfer &amp; rates</h2>
-        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">Bank details appear on invoice PDFs. Rates pre-fill draft invoices after a certificate is issued.</p>
-
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      {/* Card 3: Bank transfer & rates */}
+      <section className={cardClass}>
+        <div className={cardHeaderClass}>
           <div>
-            <FieldLabel>Bank name</FieldLabel>
-            <input value={bankName} onChange={(e) => setBankName(e.target.value)} className={inputClass} disabled={isPending} />
+            <p className={eyebrowClass}>Invoices</p>
+            <h2 className={cardTitleClass}>Bank transfer & rates</h2>
           </div>
-          <div>
-            <FieldLabel>Account name</FieldLabel>
-            <input value={bankAccountName} onChange={(e) => setBankAccountName(e.target.value)} className={inputClass} disabled={isPending} />
-          </div>
-          <div>
-            <FieldLabel>Sort code</FieldLabel>
-            <input value={bankSortCode} onChange={(e) => setBankSortCode(e.target.value)} className={inputClass} disabled={isPending} placeholder="12-34-56" />
-          </div>
-          <div>
-            <FieldLabel>Account number</FieldLabel>
-            <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className={inputClass} disabled={isPending} placeholder="12345678" />
-          </div>
+          <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
+            {saveButtonLabel}
+          </button>
         </div>
+        <div className={cardBodyClass}>
+          <div className="grid grid-cols-2 gap-[10px]">
+            <div>
+              <label className={labelClass}>Bank name</label>
+              <input value={bankName} onChange={(e) => setBankName(e.target.value)} className={inputClass} disabled={isPending} />
+            </div>
+            <div>
+              <label className={labelClass}>Account name</label>
+              <input value={bankAccountName} onChange={(e) => setBankAccountName(e.target.value)} className={inputClass} disabled={isPending} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-[10px]">
+            <div>
+              <label className={labelClass}>Sort code</label>
+              <input value={displaySortCode(bankSortCode)} onChange={(e) => setBankSortCode(e.target.value)} className={inputClass} disabled={isPending} placeholder="20-02-02" />
+            </div>
+            <div>
+              <label className={labelClass}>Account number</label>
+              <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className={inputClass} disabled={isPending} placeholder="12345678" />
+            </div>
+          </div>
 
-        <div className="mt-5 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
-          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Standard rates</p>
-          <p className="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
-            Optional. Pre-fills invoice line items after a certificate is issued.
-          </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div className="h-[0.5px] bg-[var(--color-border-tertiary)]" />
+
+          <div>
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Standard rates</p>
+            <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+              Pre-fill invoice line items after a certificate is issued.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-[8px]">
             {STANDARD_RATE_KEYS.map((key) => (
               <div key={key}>
-                <FieldLabel>{STANDARD_RATE_LABELS[key]}</FieldLabel>
-                <div className="mt-1.5 flex h-[38px] overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]">
-                  <span className="grid place-items-center border-r-[0.5px] border-[var(--color-border-secondary)] px-2.5 text-[13px] text-[var(--color-text-tertiary)]">£</span>
+                <label className={labelClass}>{RATE_DISPLAY_LABELS[key]}</label>
+                <div className="mt-1 flex items-center overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)]">
+                  <span className="border-r-[0.5px] border-[var(--color-border-secondary)] px-[8px] text-[13px] text-[var(--color-text-tertiary)]">£</span>
                   <input
                     type="number"
                     min="0"
@@ -387,7 +553,7 @@ export function ProfilePreferences({
                     onChange={(event) =>
                       setStandardRates((current) => ({ ...current, [key]: event.target.value }))
                     }
-                    className="w-full bg-transparent px-3 text-[13px] text-[var(--color-text-primary)] outline-none disabled:opacity-50"
+                    className="min-w-0 flex-1 bg-transparent p-[9px_8px] text-[13px] text-[var(--color-text-primary)] outline-none disabled:opacity-50"
                     disabled={isPending}
                   />
                 </div>
@@ -396,41 +562,6 @@ export function ProfilePreferences({
           </div>
         </div>
       </section>
-
-      {/* Sticky save footer (settings mode) */}
-      {mode === 'settings' ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-          <div className="pointer-events-auto mx-auto flex max-w-2xl items-center justify-between gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]/95 p-3 shadow-lg backdrop-blur-sm">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
-                {dirty ? 'Unsaved changes' : 'All saved'}
-              </p>
-              <p className="text-[11px] text-[var(--color-text-tertiary)]">
-                {dirty ? 'Personal, company, and invoice details' : 'Make a change to enable saving.'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isPending || !dirty}
-              className="h-[38px] shrink-0 rounded-[10px] bg-[#111] px-5 text-[13px] font-medium text-white disabled:opacity-40"
-            >
-              {saveLabel}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isPending || !dirty}
-            className="h-[40px] rounded-[10px] bg-[#111] px-6 text-[13px] font-medium text-white disabled:opacity-40"
-          >
-            {saveLabel}
-          </button>
-        </div>
-      )}
     </>
   );
 }

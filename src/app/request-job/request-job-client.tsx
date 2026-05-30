@@ -174,7 +174,17 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
     }
   };
 
-  const copyLandlordAddressToJobAddress = () => {
+  const hasLandlordDetailsToCopy = Boolean(
+    landlordName.trim() ||
+    landlordPhone.trim() ||
+    landlordAddressLine1.trim() ||
+    landlordCity.trim() ||
+    landlordPostcode.trim(),
+  );
+
+  const copyLandlordDetailsToProperty = () => {
+    if (landlordName.trim()) setTenantName(landlordName);
+    if (landlordPhone.trim()) setSitePhone(landlordPhone);
     setAddressLine1(landlordAddressLine1);
     setAddressLine2(landlordAddressLine2);
     setCity(landlordCity);
@@ -257,6 +267,8 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         const engineerNotice =
           result.engineerNotificationStatus === 'sent'
             ? ' The engineer contact has also been emailed.'
+            : result.engineerNotificationStatus === 'skipped_same_recipient'
+              ? ' The engineer email was skipped because the landlord and engineer email are the same. The request is still on the engineer dashboard.'
             : result.engineerNotificationStatus === 'not_configured'
               ? ' The engineer email was not sent because email delivery is not configured or no engineer email was supplied.'
               : ' The engineer email could not be sent, but the request details were saved.';
@@ -442,6 +454,23 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       {step === 3 ? (
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
           <div className="grid gap-3">
+            <div className="flex flex-col gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Property same as your details?</p>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                  Copy your name, phone and address from Step 2.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={copyLandlordDetailsToProperty}
+                disabled={!hasLandlordDetailsToCopy}
+                className="shrink-0"
+              >
+                Copy details
+              </Button>
+            </div>
             <Input
               value={tenantName}
               onChange={(e) => setTenantName(e.target.value)}
@@ -507,14 +536,6 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
                 placeholder="Postcode"
               />
             </div>
-            <button
-              type="button"
-              onClick={copyLandlordAddressToJobAddress}
-              disabled={!landlordAddressLine1 && !landlordCity && !landlordPostcode}
-              className="self-start text-[13px] font-medium text-[var(--color-action)] disabled:opacity-40"
-            >
-              Same as your address
-            </button>
             <Input
               type="tel"
               value={sitePhone}

@@ -78,6 +78,25 @@ export function ToolsMenu() {
                 {item.label}
               </Link>
             ))}
+            <div className="my-1 border-t-[0.5px] border-[var(--color-border-tertiary)]" />
+            <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              Account
+            </p>
+            <form action="/logout" method="post">
+              <button
+                type="submit"
+                role="menuitem"
+                className="flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-left text-[13px] font-medium text-[var(--color-red)] transition-colors hover:bg-[var(--color-background-secondary)]"
+              >
+                <LogOutIcon
+                  width={15}
+                  height={15}
+                  strokeWidth={1.75}
+                  className="shrink-0 text-[var(--color-red)]"
+                />
+                Sign out
+              </button>
+            </form>
           </div>
         </div>
       ) : null}
@@ -126,6 +145,15 @@ function FileTextIcon(props: SVGProps<SVGSVGElement>) {
     <svg {...iconBase(props)}>
       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
       <path d="M14 3v6h6M8 13h8M8 17h6" />
+    </svg>
+  );
+}
+
+function LogOutIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconBase(props)}>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="M16 17l5-5-5-5M21 12H9" />
     </svg>
   );
 }

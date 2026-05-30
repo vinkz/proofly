@@ -1,7 +1,5 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-
 export type PassFailValue = 'pass' | 'fail' | null;
 
 type PassFailToggleProps = {
@@ -10,27 +8,58 @@ type PassFailToggleProps = {
   onChange: (value: PassFailValue) => void;
 };
 
+const PASS_SELECTED = {
+  background: '#0a3d26',
+  color: '#5DCAA5',
+  border: '0.5px solid #1D9E75',
+  fontWeight: 500,
+} as const;
+
+const FAIL_SELECTED = {
+  background: '#3d0a0a',
+  color: '#F09595',
+  border: '0.5px solid #A32D2D',
+  fontWeight: 500,
+} as const;
+
+const UNSELECTED = {
+  background: 'rgba(255,255,255,0.04)',
+  color: 'rgba(255,255,255,0.4)',
+  border: '0.5px solid rgba(255,255,255,0.12)',
+  fontWeight: 400,
+} as const;
+
 export function PassFailToggle({ label, value, onChange }: PassFailToggleProps) {
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
+    <div className="space-y-[6px]">
+      <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">{label}</p>
       <div className="flex gap-2">
-        <Button
+        <button
           type="button"
-          variant={value === 'pass' ? 'primary' : 'outline'}
-          className="rounded-full px-4 py-1 text-xs"
           onClick={() => onChange('pass')}
+          style={{
+            minWidth: 72,
+            height: 36,
+            borderRadius: 20,
+            fontSize: 12,
+            ...(value === 'pass' ? PASS_SELECTED : UNSELECTED),
+          }}
         >
           Pass
-        </Button>
-        <Button
+        </button>
+        <button
           type="button"
-          variant={value === 'fail' ? 'primary' : 'outline'}
-          className="rounded-full px-4 py-1 text-xs"
           onClick={() => onChange('fail')}
+          style={{
+            minWidth: 72,
+            height: 36,
+            borderRadius: 20,
+            fontSize: 12,
+            ...(value === 'fail' ? FAIL_SELECTED : UNSELECTED),
+          }}
         >
           Fail
-        </Button>
+        </button>
       </div>
     </div>
   );

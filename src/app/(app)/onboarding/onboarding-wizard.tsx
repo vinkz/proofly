@@ -51,7 +51,7 @@ const isAddressLookupUnavailable = (message: string | null) => {
 };
 
 const fieldLabel = (text: string) => (
-  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">{text}</p>
+  <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">{text}</p>
 );
 
 export function OnboardingWizard({
@@ -509,7 +509,7 @@ export function OnboardingWizard({
               />
             </div>
             <div>
-              {fieldLabel('Tel. No')}
+              {fieldLabel('Phone')}
               <Input
                 value={companyPhone}
                 onChange={(event) => setCompanyPhone(event.target.value)}

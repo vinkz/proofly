@@ -6,8 +6,8 @@ export type StandardRates = Partial<Record<StandardRateKey, number>>;
 
 export const STANDARD_RATE_LABELS: Record<StandardRateKey, string> = {
   cp12: 'CP12',
-  boiler_service: 'Boiler Service',
-  cp12_boiler_service: 'CP12 + Boiler Service',
+  boiler_service: 'Boiler service',
+  cp12_boiler_service: 'CP12 + boiler service',
 };
 
 export const STANDARD_RATE_DESCRIPTIONS: Record<StandardRateKey, string> = {

@@ -1,10 +1,12 @@
+import Link from 'next/link';
+
 import { getProfile } from '@/server/profile';
 import { userHasPassword } from '@/server/auth';
+import { normalizeStandardRates } from '@/lib/standard-rates';
 import { ProfilePreferences } from './profile-preferences';
 import { PasswordSection } from './password-section';
 import { SavedSignatureSection } from './saved-signature-section';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { normalizeStandardRates } from '@/lib/standard-rates';
+import { ThemeSection } from './theme-section';
 
 export default async function SettingsPage() {
   const { profile, user } = await getProfile();
@@ -28,17 +30,23 @@ export default async function SettingsPage() {
     (profile as { standard_rates?: unknown } | null)?.standard_rates,
   );
   const savedSignatureUrl = (profile as { saved_signature_url?: string | null } | null)?.saved_signature_url ?? null;
+  const trialEndsAt = (profile as { trial_ends_at?: string | null } | null)?.trial_ends_at ?? null;
+  const subscriptionStatus = (profile as { subscription_status?: string | null } | null)?.subscription_status ?? null;
+  const isSubscribed = subscriptionStatus === 'active';
+  const trialEndFormatted = trialEndsAt
+    ? new Date(trialEndsAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
 
   const { hasPassword } = await userHasPassword();
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-4 px-4 py-6 sm:py-10">
-      <div>
-        <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-[var(--color-text-primary)]">
+    <div className="mx-auto w-full max-w-2xl space-y-[12px] px-4 py-6 sm:py-10">
+      <div className="pb-2">
+        <h1 className="text-[22px] font-medium leading-tight tracking-[-0.02em] text-[var(--color-text-primary)]">
           Settings
         </h1>
         <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-          Manage the details used to populate certificates, invoices, and your public profile.
+          Manage the details used on certificates, invoices, and your public profile.
         </p>
       </div>
 
@@ -62,57 +70,97 @@ export default async function SettingsPage() {
         initialStandardRates={standardRates}
       />
 
-      {/* Saved signature */}
-      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-        <div className="mb-4">
+      {/* Saved signature card */}
+      <section className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+        <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] px-4 py-[14px]">
           <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Signature</p>
-          <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Saved signature</h2>
-          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+          <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">Saved signature</h2>
+        </div>
+        <div className="p-4">
+          <p className="mb-3 text-[12px] text-[var(--color-text-secondary)]">
             Stored once and pre-filled on every CP12 and boiler service certificate. You can always re-draw per job.
           </p>
+          <SavedSignatureSection existingUrl={savedSignatureUrl} />
         </div>
-        <SavedSignatureSection existingUrl={savedSignatureUrl} />
       </section>
 
       <PasswordSection hasPassword={hasPassword} email={user.email ?? ''} />
 
-      {/* Appearance */}
-      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Appearance</p>
-        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Theme</h2>
-        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">Switch between light and dark mode.</p>
-        <div className="mt-4">
-          <ThemeToggle />
+      {/* Theme card */}
+      <section className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+        <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] px-4 py-[14px]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Appearance</p>
+          <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">Theme</h2>
+        </div>
+        <div className="p-4">
+          <ThemeSection />
         </div>
       </section>
 
-      {/* Subscription — placeholder until Milestone 5 */}
-      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Subscription</p>
-        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Plan & billing</h2>
-        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-          Subscription management will be available here once billing is enabled.
-        </p>
-        <div
-          className="mt-3 inline-flex h-[36px] cursor-not-allowed items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] px-4 text-[13px] text-[var(--color-text-tertiary)] opacity-50"
-          aria-disabled="true"
-        >
-          Manage subscription
+      {/* Plan & billing card */}
+      <section className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+        <div className="flex items-center justify-between border-b-[0.5px] border-[var(--color-border-tertiary)] px-4 py-[14px]">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Subscription</p>
+            <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">Plan & billing</h2>
+          </div>
+          {isSubscribed ? (
+            <span className="rounded-full bg-[var(--color-action-bg)] px-3 py-1 text-[11px] font-medium text-[var(--color-action)]">
+              Active
+            </span>
+          ) : (
+            <span className="rounded-full bg-[var(--color-amber-bg)] px-3 py-1 text-[11px] font-medium text-[var(--color-amber)]">
+              Free trial
+            </span>
+          )}
+        </div>
+        <div className="flex flex-col gap-[12px] p-4">
+          {isSubscribed ? (
+            <>
+              <p className="text-[13px] text-[var(--color-text-secondary)]">Your subscription is active.</p>
+              <Link
+                href="/billing"
+                className="inline-flex items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[14px] py-[5px] text-[12px] font-medium text-[var(--color-text-secondary)]"
+              >
+                Manage subscription
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-[13px] text-[var(--color-text-secondary)]">
+                {trialEndFormatted
+                  ? `Your free trial ends on ${trialEndFormatted}. Subscribe to keep issuing certificates.`
+                  : "Your free trial is active. Subscribe to keep issuing certificates."}
+              </p>
+              <Link
+                href="/billing"
+                className="flex w-full items-center justify-center rounded-full bg-[#111] px-[20px] py-[10px] text-[13px] font-medium text-white"
+              >
+                Subscribe — £12.99/month
+              </Link>
+              <p className="text-center text-[12px] text-[var(--color-text-tertiary)]">Cancel anytime. No commitment.</p>
+            </>
+          )}
         </div>
       </section>
 
-      <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Account</p>
-        <h2 className="mt-1 text-[16px] font-semibold text-[var(--color-text-primary)]">Sign out</h2>
-        <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">You will be returned to the login screen.</p>
-        <form action="/logout" method="post" className="mt-3">
-          <button
-            type="submit"
-            className="inline-flex h-[36px] items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-red)]/40 bg-transparent px-4 text-[13px] text-[var(--color-red)]"
-          >
-            Sign out
-          </button>
-        </form>
+      {/* Account / sign out */}
+      <section className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+        <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] px-4 py-[14px]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Account</p>
+          <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">Sign out</h2>
+        </div>
+        <div className="p-4">
+          <p className="mb-3 text-[13px] text-[var(--color-text-secondary)]">You will be returned to the login screen.</p>
+          <form action="/logout" method="post">
+            <button
+              type="submit"
+              className="rounded-full border-[0.5px] border-[#f09595] bg-[#fcebeb] px-[12px] py-[5px] text-[12px] font-medium text-[#a32d2d]"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </section>
     </div>
   );

@@ -736,7 +736,10 @@ export function CertificateWizard({
       await saveCp12Appliances({ jobId, appliances, defects });
       setJobAddress(payload.jobAddress);
       setInfo(payload.data);
-      window.setTimeout(markSynced, 0);
+      markSynced(
+        { ...cp12Draft, jobAddress: payload.jobAddress, info: payload.data },
+        { ...cp12DraftSyncState, jobAddress: payload.jobAddress, info: payload.data },
+      );
       pushToast({ title: 'Offline draft synced', variant: 'success' });
     } catch (error) {
       setOfflineDraftSyncError(error instanceof Error ? error.message : 'Could not sync offline draft.');
@@ -746,6 +749,8 @@ export function CertificateWizard({
   }, [
     appliances,
     buildCp12DraftPersistencePayload,
+    cp12Draft,
+    cp12DraftSyncState,
     defects,
     isCp12,
     isOfflineDraftSyncing,
@@ -1156,13 +1161,16 @@ export function CertificateWizard({
         await saveJobFields({ jobId, fields: payload.jobFields });
         setJobAddress(payload.jobAddress);
         setInfo(payload.data);
-        window.setTimeout(markSynced, 0);
         if (prepareOnly) {
           clearDraft();
           router.push('/dashboard');
           return;
         }
         setStep(2);
+        markSynced(
+          { ...cp12Draft, step: 2, jobAddress: payload.jobAddress, info: payload.data },
+          { ...cp12DraftSyncState, jobAddress: payload.jobAddress, info: payload.data },
+        );
       } catch (error) {
         pushToast({
           title: 'Could not save job info',
@@ -1186,8 +1194,11 @@ export function CertificateWizard({
           return;
         }
         await saveCp12Appliances({ jobId, appliances, defects });
-        window.setTimeout(markSynced, 0);
         setStep(4);
+        markSynced(
+          { ...cp12Draft, step: 4, appliances, defects },
+          { ...cp12DraftSyncState, appliances, defects },
+        );
       } catch (error) {
         pushToast({
           title: 'Could not save CP12 checks',
@@ -1765,6 +1776,38 @@ export function CertificateWizard({
     router,
   ]);
   const firstBlockingMissing = checklist.items.find((item) => item.blocking !== false && !item.ok);
+  const cp12RequiredMissingItems = checklist.items.filter((item) => item.blocking !== false && !item.ok);
+  const cp12RequiredItemsPanel = cp12RequiredMissingItems.length > 0 ? (
+    <div className="rounded-[16px] border-[0.5px] border-[rgba(186,117,23,0.4)] bg-[rgba(186,117,23,0.15)] p-4">
+      <p className="text-[13px] font-medium text-[#EF9F27]">
+        {cp12RequiredMissingItems.length} required item{cp12RequiredMissingItems.length === 1 ? '' : 's'} missing
+      </p>
+      <div className="mt-3 space-y-2">
+        {cp12RequiredMissingItems.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-3 rounded-[8px] bg-[rgba(255,255,255,0.04)] px-3 py-2 text-[13px]">
+            <div className="min-w-0">
+              <p className="font-medium text-[var(--color-text-primary)]">{item.label}</p>
+              {item.hint ? <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">{item.hint}</p> : null}
+            </div>
+            {item.action ? (
+              <button type="button" className="rounded-full px-3 py-1 text-[12px] font-medium text-[#1a7a52]" onClick={item.action}>
+                Go
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <div className="flex items-center gap-2 rounded-[16px] border-[0.5px] border-[var(--color-action)]/20 bg-[var(--color-action-bg)] p-4">
+      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-action)]">
+        <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      </span>
+      <p className="text-[13px] font-medium text-[var(--color-action)]">All required items complete</p>
+    </div>
+  );
 
   if (issuedJobId && certificateType === 'cp12') {
     const pdfHref = `/jobs/${issuedJobId}/pdf?certificateType=cp12`;
@@ -2466,21 +2509,25 @@ export function CertificateWizard({
                     />
                   </div>
                 </div>
+
                 <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                  <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Combustion readings</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">Combustion readings</p>
+                  <p className="mb-3 mt-1 text-[11px] leading-[1.5] text-[rgba(255,255,255,0.28)]">Speak readings in order with small pauses between each value.</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                      <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">High combustion reading</p>
-                      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">High combustion reading</p>
+                        {renderReadingsVoiceButton(index, 'high', 'Speak high')}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
                         <UnitNumberInput
                           label="CO ppm"
                           unit="ppm"
                           value={appliance.high_co_ppm ?? ''}
                           onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
-                          labelAction={renderReadingsVoiceButton(index, 'high', 'Speak high')}
                         />
                         <UnitNumberInput
-                          label="CO2 %"
+                          label="CO₂ %"
                           unit="%"
                           value={appliance.high_co2 ?? ''}
                           onChange={(val) => setApplianceField(index, 'high_co2', val)}
@@ -2494,17 +2541,19 @@ export function CertificateWizard({
                       </div>
                     </div>
                     <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                      <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Low combustion reading</p>
-                      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">Low combustion reading</p>
+                        {renderReadingsVoiceButton(index, 'low', 'Speak low')}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
                         <UnitNumberInput
                           label="CO ppm"
                           unit="ppm"
                           value={appliance.low_co_ppm ?? ''}
                           onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
-                          labelAction={renderReadingsVoiceButton(index, 'low', 'Speak low')}
                         />
                         <UnitNumberInput
-                          label="CO2 %"
+                          label="CO₂ %"
                           unit="%"
                           value={appliance.low_co2 ?? ''}
                           onChange={(val) => setApplianceField(index, 'low_co2', val)}
@@ -2519,8 +2568,8 @@ export function CertificateWizard({
                     </div>
                   </div>
                   <div className="mt-3 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                      <span>Combustion notes (optional)</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">Combustion notes (optional)</span>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -2579,8 +2628,8 @@ export function CertificateWizard({
                 className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
               >
                 <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} safety</p>
-                <div className="mt-4 space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 space-y-[14px]">
+                  <div className="grid gap-[14px] sm:grid-cols-2">
                     <PassFailToggle
                       label="Safety device(s) correct operation"
                       value={(appliance.safety_devices_correct ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.safety_devices_correct ?? '').toLowerCase() === 'fail' ? 'fail' : null}
@@ -2820,6 +2869,7 @@ export function CertificateWizard({
     >
       <div className="space-y-3">
         {offlineDraftBanner}
+        {cp12RequiredItemsPanel}
         {!info.landlord_email.trim() ? (
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-4 text-[13px] text-[var(--color-text-primary)]">
             <p className="font-medium">Landlord email is missing</p>
@@ -2831,55 +2881,6 @@ export function CertificateWizard({
             </Button>
           </div>
         ) : null}
-        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Ready to issue?</p>
-            <p className="text-[12px] text-[var(--color-text-tertiary)]">
-              {checklist.blockingMissing > 0 ? `${checklist.blockingMissing} required item(s) missing` : 'All required items complete'}
-            </p>
-          </div>
-          {checklist.blockingMissing === 0 ? (
-            <div className="mt-3 flex items-center gap-2 rounded-[8px] bg-[var(--color-action-bg)] px-3 py-2">
-              <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-action)]">
-                <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-              </span>
-              <p className="text-[13px] font-medium text-[var(--color-action)]">Ready to issue</p>
-            </div>
-          ) : null}
-          <div className="mt-3 space-y-2">
-            {checklist.items.map((item) => (
-              <div
-                key={item.id}
-                className={`flex items-start gap-2 rounded-[8px] px-3 py-2 text-[13px] ${
-                  item.ok ? 'bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]' : item.blocking !== false ? 'bg-[var(--color-amber-bg)] text-[var(--color-text-primary)]' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
-                }`}
-              >
-                {item.ok ? (
-          <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-action)]">
-            <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-          </span>
-        ) : item.blocking === false ? (
-          <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-text-tertiary)]">
-            <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M12 16v-4M12 8h.01" /></svg>
-          </span>
-        ) : (
-          <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-amber)]">
-            <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01" /></svg>
-          </span>
-        )}
-                <div className="flex-1">
-                  <p className="font-medium">{item.label}</p>
-                  {!item.ok && item.hint ? <p className="text-[12px] text-[var(--color-text-tertiary)]">{item.hint}</p> : null}
-                </div>
-                {!item.ok && item.action ? (
-                  <Button type="button" variant="ghost" className="rounded-full px-3 py-1 text-[12px]" onClick={item.action}>
-                    Go
-                  </Button>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
         <SignatureCard
           label="Customer"
           existingUrl={customerSignature as string}

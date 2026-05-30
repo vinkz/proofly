@@ -17,26 +17,29 @@ type UnitNumberInputProps = {
 
 export function UnitNumberInput({ label, value, unit, onChange, placeholder, disabled = false, note, labelAction }: UnitNumberInputProps) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-[6px]">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
+        <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">{label}</p>
         {labelAction}
       </div>
-      <div className="relative">
+      <div className="flex items-center gap-2">
         <Input
           type="text"
           inputMode="decimal"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="pr-16"
+          className="flex-1"
           disabled={disabled}
         />
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground/70">
+        <span
+          className="flex-shrink-0 text-[11px] text-[rgba(255,255,255,0.3)]"
+          style={{ width: unit === 'mbar' ? 32 : 28 }}
+        >
           {unit}
         </span>
       </div>
-      {note ? <p className="text-[11px] font-medium text-muted-foreground/70">{note}</p> : null}
+      {note ? <p className="text-[11px] text-[var(--color-text-tertiary)]">{note}</p> : null}
     </div>
   );
 }

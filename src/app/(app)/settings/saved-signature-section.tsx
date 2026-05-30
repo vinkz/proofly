@@ -63,49 +63,44 @@ export function SavedSignatureSection({ existingUrl }: { existingUrl: string | n
   };
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-[10px]">
       {previewUrl && !showCanvas ? (
-        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Saved signature</p>
-              <p className="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">Pre-fills on every new certificate</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowCanvas(true)}
-                disabled={isPending}
-                className="h-[30px] rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-3 text-[12px] text-[var(--color-text-secondary)] disabled:opacity-50"
-              >
-                Replace
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isPending}
-                className="h-[30px] rounded-[8px] bg-[var(--color-red-bg)] px-3 text-[12px] text-[var(--color-red)] disabled:opacity-50"
-              >
-                {isPending ? 'Removing…' : 'Remove'}
-              </button>
-            </div>
-          </div>
+        <div className="flex items-center gap-3 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={previewUrl}
             alt="Saved engineer signature"
-            className="mt-3 h-16 max-w-[240px] rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-white object-contain p-1"
+            className="h-12 w-20 flex-shrink-0 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] object-contain p-1"
           />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Saved</p>
+            <p className="text-[12px] text-[var(--color-text-secondary)]">Pre-fills on every new certificate</p>
+          </div>
+          <div className="flex flex-shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCanvas(true)}
+              disabled={isPending}
+              className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[12px] py-[5px] text-[12px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isPending}
+              className="rounded-full border-[0.5px] border-[#f09595] bg-[#fcebeb] px-[12px] py-[5px] text-[12px] font-medium text-[#a32d2d] disabled:opacity-50"
+            >
+              {isPending ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
         </div>
       ) : null}
 
       {showCanvas ? (
-        <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
-          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Draw your signature</p>
-          <p className="mt-0.5 text-[11px] text-[var(--color-text-tertiary)]">
-            This will pre-fill on every new CP12 and boiler service certificate.
-          </p>
-          <div className="mt-3 h-[120px] w-full touch-none rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]">
+        <div className="flex flex-col gap-[10px]">
+          <p className="text-[12px] text-[var(--color-text-secondary)]">Draw your signature below. This will pre-fill on every new CP12 and boiler service certificate.</p>
+          <div className="h-[120px] w-full touch-none rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)]">
             <canvas
               ref={pad.canvasRef}
               className="h-full w-full touch-none rounded-[10px]"
@@ -113,30 +108,30 @@ export function SavedSignatureSection({ existingUrl }: { existingUrl: string | n
               {...pad.handlers}
             />
           </div>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={pad.clear}
               disabled={isPending}
-              className="h-[34px] rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-3 text-[12px] text-[var(--color-text-secondary)] disabled:opacity-50"
+              className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[12px] py-[5px] text-[12px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
             >
               Clear
             </button>
-            {previewUrl && (
+            {previewUrl ? (
               <button
                 type="button"
                 onClick={() => { pad.clear(); setShowCanvas(false); }}
                 disabled={isPending}
-                className="h-[34px] rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-3 text-[12px] text-[var(--color-text-secondary)] disabled:opacity-50"
+                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[12px] py-[5px] text-[12px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
               >
                 Cancel
               </button>
-            )}
+            ) : null}
             <button
               type="button"
               onClick={handleSave}
               disabled={isPending}
-              className="h-[34px] flex-1 rounded-[8px] bg-[#111] text-[12px] font-medium text-white disabled:opacity-50"
+              className="flex-1 rounded-full bg-[#111] py-[10px] text-[13px] font-medium text-white disabled:opacity-50"
             >
               {isPending ? 'Saving…' : 'Save signature'}
             </button>

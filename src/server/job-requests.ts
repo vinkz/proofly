@@ -825,12 +825,18 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
     }),
   })).status;
   const engineerNotificationRecipient = await getEngineerNotificationRecipient(admin, engineerProfile, request.engineerEmail);
+  const normalizedEngineerNotificationRecipient = normalizeEmailKey(engineerNotificationRecipient);
+  const notificationMatchesLandlord = Boolean(
+    normalizedEngineerNotificationRecipient &&
+    normalizedEngineerNotificationRecipient === normalizeEmailKey(request.landlordEmail),
+  );
   const engineerNotificationTarget =
-    normalizeEmailKey(engineerNotificationRecipient) &&
-    normalizeEmailKey(engineerNotificationRecipient) !== normalizeEmailKey(request.landlordEmail)
+    normalizedEngineerNotificationRecipient && !notificationMatchesLandlord
       ? engineerNotificationRecipient
       : '';
-  const engineerNotificationStatus = engineerNotificationTarget
+  const engineerNotificationStatus = notificationMatchesLandlord
+    ? 'skipped_same_recipient'
+    : engineerNotificationTarget
     ? engineerProfile
       ? (await sendEmail({
           to: engineerNotificationTarget,

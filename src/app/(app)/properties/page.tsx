@@ -71,6 +71,7 @@ type StatusFilter = 'overdue' | 'amber' | 'current' | 'no_cert' | 'all';
 
 type PropertyRow = {
   id: string;
+  client_id: string | null;
   public_token: string | null;
   name: string | null;
   address: string;
@@ -134,7 +135,12 @@ function PropertyCard({ property }: { property: PropertyRow }) {
           </svg>
         ) : (
           <Link
-            href={`/jobs/new?propertyId=${property.id}`}
+            href={`/jobs/new?${new URLSearchParams(
+              Object.entries({
+                propertyId: property.id,
+                clientId: property.client_id ?? '',
+              }).filter(([, value]) => value),
+            ).toString()}`}
             className={`inline-flex h-7 items-center justify-center rounded-full px-3 text-[12px] font-medium ${
               isUrgent
                 ? 'bg-[#111] text-white'
@@ -186,7 +192,15 @@ export default async function PropertiesPage({
     const address = [p.address_line1, p.address_line2, p.town, p.postcode]
       .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
       .join(', ');
-    return { id: p.id, public_token: p.public_token ?? null, name: p.name ?? null, address, complianceStatus, next_service_due: p.next_service_due ?? null };
+    return {
+      id: p.id,
+      client_id: p.client_id ?? null,
+      public_token: p.public_token ?? null,
+      name: p.name ?? null,
+      address,
+      complianceStatus,
+      next_service_due: p.next_service_due ?? null,
+    };
   });
 
   const filteredProperties =

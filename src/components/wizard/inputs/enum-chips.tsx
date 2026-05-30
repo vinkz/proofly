@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import type { CSSProperties } from 'react';
 
 export type EnumChipOption = {
   label: string;
@@ -14,23 +14,50 @@ type EnumChipsProps = {
   onChange: (value: string) => void;
 };
 
+function chipStyle(optionValue: string, isActive: boolean): CSSProperties {
+  if (!isActive) {
+    return {
+      background: 'rgba(255,255,255,0.04)',
+      color: 'rgba(255,255,255,0.4)',
+      border: '0.5px solid rgba(255,255,255,0.12)',
+      fontWeight: 400,
+    };
+  }
+  const v = optionValue.toLowerCase();
+  if (v === 'yes' || v === 'pass' || v === 'safe') {
+    return { background: '#0a3d26', color: '#5DCAA5', border: '0.5px solid #1D9E75', fontWeight: 500 };
+  }
+  if (v === 'no' || v === 'fail' || v === 'id') {
+    return { background: '#3d0a0a', color: '#F09595', border: '0.5px solid #A32D2D', fontWeight: 500 };
+  }
+  if (v === 'ncs' || v === 'ar') {
+    return { background: '#3d2a00', color: '#EF9F27', border: '0.5px solid #BA7517', fontWeight: 500 };
+  }
+  // Default selected: green (appliance type chips, etc.)
+  return { background: '#0a3d26', color: '#5DCAA5', border: '0.5px solid #1D9E75', fontWeight: 500 };
+}
+
 export function EnumChips({ label, value, options, onChange }: EnumChipsProps) {
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
+    <div className="space-y-[6px]">
+      <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">{label}</p>
       <div className="flex flex-wrap gap-2">
         {options.map((option) => {
           const isActive = value === option.value;
           return (
-            <Button
+            <button
               key={option.value}
               type="button"
-              variant={isActive ? 'primary' : 'outline'}
-              className="rounded-full px-3 py-1 text-xs"
               onClick={() => onChange(option.value)}
+              style={{
+                padding: '7px 18px',
+                borderRadius: 20,
+                fontSize: 12,
+                ...chipStyle(option.value, isActive),
+              }}
             >
               {option.label}
-            </Button>
+            </button>
           );
         })}
       </div>

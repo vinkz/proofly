@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { supabaseServerAction, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import { TRADE_TYPES } from '@/lib/profile-options';
+import { isEmailConfigured, sendEmail } from '@/lib/resend';
 import {
   ENGINEER_ID_CARD_NUMBER_MESSAGE,
   ENGINEER_ID_CARD_NUMBER_PATTERN,
@@ -15,6 +16,78 @@ import type { TablesInsert } from '@/lib/database.types';
 
 const defaultTrades = TRADE_TYPES as unknown as string[];
 const LEGACY_LONG_REQUEST_SLUG_PATTERN = /^cn-[a-f0-9]{20,}$/i;
+const WELCOME_EMAIL_SUBJECT = 'Welcome to CertNow — your 14-day trial has started';
+const WELCOME_EMAIL_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome to CertNow</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:480px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e8e8e8">
+
+    <div style="background:#111;padding:20px 24px">
+      <span style="font-size:16px;font-weight:600;color:#fff;letter-spacing:-0.3px">certnow</span>
+    </div>
+
+    <div style="padding:28px 24px">
+      <h1 style="font-size:20px;font-weight:600;color:#111;margin:0 0 8px">
+        You're all set, [engineer_name].
+      </h1>
+      <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 24px">
+        Your CertNow account is ready. You can start issuing CP12 certificates
+        and boiler service records right away.
+      </p>
+
+      <div style="background:#f9f9f9;border-radius:8px;padding:16px;margin-bottom:24px">
+        <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:10px">Your trial</div>
+        <div style="font-size:14px;color:#111;margin-bottom:4px">
+          Free trial active — ends <strong>[trial_end_date]</strong>
+        </div>
+        <div style="font-size:13px;color:#777">
+          No card required. Subscribe any time from Settings → Plan & billing.
+        </div>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <div style="font-size:13px;font-weight:600;color:#111;margin-bottom:8px">Quick start</div>
+        <div style="font-size:13px;color:#555;line-height:1.8">
+          1. Tap <strong>+ New job</strong> on your dashboard<br>
+          2. Choose a cert type and fill in the property details<br>
+          3. Complete the wizard on site<br>
+          4. Send the certificate to your landlord in one tap
+        </div>
+      </div>
+
+      <a href="https://certnow.uk/dashboard"
+         style="display:block;background:#111;color:#fff;text-align:center;padding:13px 20px;border-radius:24px;font-size:14px;font-weight:500;text-decoration:none">
+        Go to dashboard →
+      </a>
+    </div>
+
+    <div style="padding:16px 24px;border-top:1px solid #f0f0f0;text-align:center">
+      <p style="font-size:12px;color:#aaa;margin:0">
+        CertNow · <a href="https://certnow.uk" style="color:#aaa">certnow.uk</a>
+      </p>
+    </div>
+
+  </div>
+</body>
+</html>`;
+const WELCOME_EMAIL_TEXT = `Welcome to CertNow, [engineer_name].
+
+Your account is ready. Your free trial runs until [trial_end_date].
+
+To get started:
+1. Go to certnow.uk/dashboard
+2. Tap + New job
+3. Complete the wizard on site
+4. Send the certificate to your landlord
+
+No card required. Subscribe any time from Settings.
+
+certnow.uk`;
 
 const SignupWizardSchema = z.object({
   email: z.string().email({ message: 'Valid email required' }),
@@ -53,6 +126,81 @@ const buildSignupRequestSlug = (body: z.infer<typeof SignupWizardSchema>, suffix
   return `cn-${seed}-${randomUUID().replace(/-/g, '').slice(0, 6)}`;
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const getFirstName = (fullName: string | null | undefined) => fullName?.trim().split(/\s+/)[0] || 'there';
+
+const formatTrialEndDate = (trialEndsAt: string | null | undefined) => {
+  if (!trialEndsAt) return 'in 14 days';
+  const date = new Date(trialEndsAt);
+  if (Number.isNaN(date.getTime())) return 'in 14 days';
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+};
+
+const renderWelcomeEmail = (engineerName: string, trialEndDate: string) => ({
+  html: WELCOME_EMAIL_HTML
+    .replace(/\[engineer_name\]/g, escapeHtml(engineerName))
+    .replace(/\[trial_end_date\]/g, escapeHtml(trialEndDate)),
+  text: WELCOME_EMAIL_TEXT
+    .replace(/\[engineer_name\]/g, engineerName)
+    .replace(/\[trial_end_date\]/g, trialEndDate),
+});
+
+async function getTrialEndsAt(
+  profileSb: Awaited<ReturnType<typeof supabaseServerServiceRole>>,
+  userId: string,
+) {
+  try {
+    const { data, error } = await profileSb
+      .from('profiles')
+      .select('trial_ends_at')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) return null;
+    return (data as { trial_ends_at?: string | null } | null)?.trial_ends_at ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function sendWelcomeEmailAfterSignup(input: {
+  email: string;
+  fullName: string | null | undefined;
+  profileSb: Awaited<ReturnType<typeof supabaseServerServiceRole>>;
+  userId: string;
+}) {
+  if (!isEmailConfigured()) return;
+
+  try {
+    const trialEndsAt = await getTrialEndsAt(input.profileSb, input.userId);
+    const engineerName = getFirstName(input.fullName);
+    const trialEndDate = formatTrialEndDate(trialEndsAt);
+    const email = renderWelcomeEmail(engineerName, trialEndDate);
+    const result = await sendEmail({
+      to: input.email,
+      subject: WELCOME_EMAIL_SUBJECT,
+      html: email.html,
+      text: email.text,
+    });
+
+    if (result.status !== 'sent') {
+      console.error('[completeSignupWizard] welcome email failed:', result.error ?? result.status);
+    }
+  } catch (err) {
+    console.error('[completeSignupWizard] welcome email failed:', err);
+  }
+}
+
 async function getAvailableRequestSlug(
   profileSb: Awaited<ReturnType<typeof supabaseServerServiceRole>>,
   userId: string,
@@ -88,6 +236,7 @@ export async function completeSignupWizard(payload: unknown) {
   } = await sb.auth.getUser();
 
   let userId = existingUser?.id ?? null;
+  let userEmail = existingUser?.email ?? body.email;
 
   if (!userId) {
     if (!body.password || body.password.length < 6) {
@@ -115,6 +264,7 @@ export async function completeSignupWizard(payload: unknown) {
     });
     if (error) throw new Error(error.message);
     userId = data.user?.id ?? null;
+    userEmail = data.user?.email ?? body.email;
   } else {
     const { error } = await sb.auth.updateUser({
       data: {
@@ -139,10 +289,11 @@ export async function completeSignupWizard(payload: unknown) {
   const profileSb = await supabaseServerServiceRole();
   const { data: existingProfile, error: existingProfileErr } = await profileSb
     .from('profiles')
-    .select('request_link_slug')
+    .select('request_link_slug,onboarding_complete')
     .eq('id', userId)
     .maybeSingle();
   if (existingProfileErr) throw new Error(existingProfileErr.message);
+  const shouldSendWelcomeEmail = existingProfile?.onboarding_complete !== true;
   const requestLinkSlug = await getAvailableRequestSlug(
     profileSb,
     userId,
@@ -170,6 +321,15 @@ export async function completeSignupWizard(payload: unknown) {
 
   const { error: profileErr } = await profileSb.from('profiles').upsert(profile, { onConflict: 'id' });
   if (profileErr) throw new Error(profileErr.message);
+
+  if (shouldSendWelcomeEmail) {
+    await sendWelcomeEmailAfterSignup({
+      email: userEmail,
+      fullName: profile.full_name,
+      profileSb,
+      userId,
+    });
+  }
 
   return { ok: true };
 }

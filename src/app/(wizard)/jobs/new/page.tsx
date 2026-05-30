@@ -5,6 +5,7 @@ import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { listClients } from '@/server/clients';
 import { getJobRequestPrefill, getOrCreateEngineerRequestLink, type JobRequestPrefill } from '@/server/job-requests';
 import { getProfile } from '@/server/profile';
+import { JOB_TYPES, type JobType } from '@/types/job-records';
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
@@ -48,12 +49,27 @@ const getComplianceBadge = (value: string | null | undefined) => {
 export default async function NewJobPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ requestId?: string | string[] }>;
+  searchParams?: Promise<{
+    requestId?: string | string[];
+    clientId?: string | string[];
+    propertyId?: string | string[];
+    jobType?: string | string[];
+  }>;
 }) {
   const resolvedSearchParams = await searchParams;
   const requestIdParam = Array.isArray(resolvedSearchParams?.requestId)
     ? resolvedSearchParams?.requestId[0]
     : resolvedSearchParams?.requestId;
+  const requestedClientId = Array.isArray(resolvedSearchParams?.clientId)
+    ? resolvedSearchParams?.clientId[0]
+    : resolvedSearchParams?.clientId;
+  const requestedPropertyId = Array.isArray(resolvedSearchParams?.propertyId)
+    ? resolvedSearchParams?.propertyId[0]
+    : resolvedSearchParams?.propertyId;
+  const requestedJobType = Array.isArray(resolvedSearchParams?.jobType)
+    ? resolvedSearchParams?.jobType[0]
+    : resolvedSearchParams?.jobType;
+  const initialJobType = JOB_TYPES.includes(requestedJobType as JobType) ? (requestedJobType as JobType) : null;
   const { profile } = await getProfile();
   if (!isOnboardingProfileComplete(profile)) {
     return <ProfileRequiredCard title="Finish your profile before creating a job" missingFields={getMissingOnboardingFields(profile)} />;
@@ -93,6 +109,22 @@ export default async function NewJobPage({
         .order('updated_at', { ascending: false })
     : { data: [], error: null };
   if (propertiesErr) throw new Error(propertiesErr.message);
+
+  const propertyStartRow = requestedPropertyId
+    ? (propertyRows ?? []).find((property) => property.id === requestedPropertyId)
+    : null;
+  const initialClientId =
+    requestedClientId && clientIdToPrimary.has(requestedClientId)
+      ? clientIdToPrimary.get(requestedClientId) ?? requestedClientId
+      : propertyStartRow?.client_id
+        ? clientIdToPrimary.get(propertyStartRow.client_id) ?? propertyStartRow.client_id
+        : null;
+  const initialPropertyId =
+    propertyStartRow && initialClientId
+      ? propertyStartRow.id
+      : requestedPropertyId && (propertyRows ?? []).some((property) => property.id === requestedPropertyId)
+        ? requestedPropertyId
+        : null;
 
   const propertyIds = (propertyRows ?? [])
     .map((property) => property.id)
@@ -303,6 +335,15 @@ export default async function NewJobPage({
           propertiesByClientId={propertiesByClientId}
           initialRequest={requestPrefill}
           requestUrl={requestLink?.url ?? null}
+          initialSelection={
+            initialClientId || initialPropertyId || initialJobType
+              ? {
+                  clientId: initialClientId,
+                  propertyId: initialPropertyId,
+                  jobType: initialJobType,
+                }
+              : null
+          }
         />
       </div>
     </div>

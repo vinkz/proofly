@@ -46,13 +46,13 @@ export function SignatureCard({ label, existingUrl, onUpload }: SignatureCardPro
     <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
       <div className="flex items-center justify-between">
         <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{label} signature</p>
-        <span className="rounded-full bg-[var(--color-background-secondary)] px-3 py-1 text-[11px] font-medium uppercase text-[var(--color-text-secondary)]">
+        <span className="rounded-full bg-[var(--color-background-secondary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)]">
           Draw
         </span>
       </div>
       <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">Draw a signature below.</p>
       <div className="mt-3 touch-none rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-3">
-        <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Draw signature</p>
+        <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Draw signature</p>
         <div className="mt-2 h-28 w-full touch-none overscroll-contain rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]">
           <canvas
             ref={pad.canvasRef}
@@ -67,7 +67,7 @@ export function SignatureCard({ label, existingUrl, onUpload }: SignatureCardPro
           </Button>
           <Button
             type="button"
-            className="rounded-full text-xs"
+            className="rounded-full bg-[#111] text-xs text-white"
             onClick={handleSaveDrawn}
             disabled={isSaving || !onUpload}
           >

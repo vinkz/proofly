@@ -21,7 +21,9 @@ export type ClientPropertyHealth = {
   town: string | null;
   postcode: string | null;
   phone: string | null;
+  lastCertificateDate: string | null;
   nextServiceDue: string | null;
+  daysUntilDue: number | null;
   status: ComplianceStatus;
 };
 
@@ -31,16 +33,22 @@ export type ClientWithCompliance = ClientListItem & {
   overdueCount: number;
   amberCount: number;
   currentCount: number;
+  dueSoonestDays: number | null;
   worstStatus: ComplianceStatus;
 };
 
-function computeComplianceStatus(nextServiceDue: string | null | undefined): ComplianceStatus {
+function daysUntilDue(nextServiceDue: string | null | undefined) {
   if (!nextServiceDue) return 'unknown';
   const due = new Date(nextServiceDue).getTime();
   if (Number.isNaN(due)) return 'unknown';
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const daysUntil = Math.floor((due - todayStart) / 86_400_000);
+  return Math.floor((due - todayStart) / 86_400_000);
+}
+
+function computeComplianceStatus(nextServiceDue: string | null | undefined): ComplianceStatus {
+  const daysUntil = daysUntilDue(nextServiceDue);
+  if (daysUntil === 'unknown') return 'unknown';
   if (daysUntil < 0) return 'overdue';
   if (daysUntil <= 45) return 'amber';
   return 'current';
@@ -155,6 +163,72 @@ const pickJobFieldValue = (rows: JobFieldRow[], keys: string[]) => {
   return null;
 };
 
+type PropertyCertificateDates = {
+  lastCertificateDate: string | null;
+};
+
+async function loadLatestCertificateDatesByProperty(
+  sb: Awaited<ReturnType<typeof supabaseServerReadOnly>>,
+  userId: string,
+  propertyIds: string[],
+) {
+  const result = new Map<string, PropertyCertificateDates>();
+  propertyIds.forEach((id) => result.set(id, { lastCertificateDate: null }));
+  if (!propertyIds.length) return result;
+
+  const { data: jobRows, error: jobsErr } = await sb
+    .from('jobs')
+    .select('id, property_id, delivered_at, completed_at, scheduled_for, created_at')
+    .eq('user_id', userId)
+    .in('property_id', propertyIds);
+  if (jobsErr) throw new Error(jobsErr.message);
+
+  const propertyByJobId = new Map<string, string>();
+  const latestJobDateByProperty = new Map<string, string>();
+  (jobRows ?? []).forEach((job) => {
+    if (!job.id || !job.property_id) return;
+    propertyByJobId.set(job.id, job.property_id);
+    const fallbackDate = job.delivered_at ?? job.completed_at ?? job.scheduled_for ?? job.created_at ?? null;
+    if (!fallbackDate) return;
+    const current = latestJobDateByProperty.get(job.property_id);
+    if (!current || parseDateValue(fallbackDate) > parseDateValue(current)) {
+      latestJobDateByProperty.set(job.property_id, fallbackDate);
+    }
+  });
+
+  const jobIds = Array.from(propertyByJobId.keys());
+  if (jobIds.length) {
+    const { data: certificateRows, error: certErr } = await sb
+      .from('certificates')
+      .select('job_id, cert_type, issued_at, created_at')
+      .in('job_id', jobIds)
+      .in('cert_type', ['cp12', 'gas_service', 'boiler_service'])
+      .order('created_at', { ascending: false });
+    if (certErr) throw new Error(certErr.message);
+
+    (certificateRows ?? []).forEach((cert) => {
+      if (!cert.job_id) return;
+      const propertyId = propertyByJobId.get(cert.job_id);
+      if (!propertyId) return;
+      const certDate = cert.issued_at ?? cert.created_at ?? null;
+      if (!certDate) return;
+      const current = result.get(propertyId)?.lastCertificateDate ?? null;
+      if (!current || parseDateValue(certDate) > parseDateValue(current)) {
+        result.set(propertyId, { lastCertificateDate: certDate });
+      }
+    });
+  }
+
+  latestJobDateByProperty.forEach((fallbackDate, propertyId) => {
+    const current = result.get(propertyId)?.lastCertificateDate ?? null;
+    if (!current) {
+      result.set(propertyId, { lastCertificateDate: fallbackDate });
+    }
+  });
+
+  return result;
+}
+
 const ClientId = z.string().uuid();
 const ClientSchema = z.object({
   name: z.string().min(2, 'Client name required'),
@@ -219,12 +293,17 @@ export async function listClientsWithCompliance(search?: string): Promise<Client
 
   const propertiesByClientId = new Map<string, ClientPropertyHealth[]>();
   clients.forEach((c) => propertiesByClientId.set(c.id, []));
+  const propertyIds = (propertyRows ?? [])
+    .map((row) => row.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const certificateDatesByProperty = await loadLatestCertificateDatesByProperty(sb, user.id, propertyIds);
 
   (propertyRows ?? []).forEach((row) => {
     if (!row.address_line1) return;
     const primaryId = clientIdToPrimary.get(row.client_id ?? '') ?? row.client_id ?? '';
     const bucket = propertiesByClientId.get(primaryId);
     if (!bucket) return;
+    const days = daysUntilDue(row.next_service_due);
     bucket.push({
       id: row.id,
       name: row.name ?? null,
@@ -233,7 +312,9 @@ export async function listClientsWithCompliance(search?: string): Promise<Client
       town: row.town ?? null,
       postcode: row.postcode ?? null,
       phone: row.phone ?? null,
+      lastCertificateDate: certificateDatesByProperty.get(row.id)?.lastCertificateDate ?? null,
       nextServiceDue: row.next_service_due ?? null,
+      daysUntilDue: typeof days === 'number' ? days : null,
       status: computeComplianceStatus(row.next_service_due),
     });
   });
@@ -241,6 +322,11 @@ export async function listClientsWithCompliance(search?: string): Promise<Client
   return clients.map((client) => {
     const props = propertiesByClientId.get(client.id) ?? [];
     const statuses = props.map((p) => p.status);
+    const dueSoonestDays =
+      props
+        .filter((p) => p.status === 'amber' && p.daysUntilDue !== null)
+        .map((p) => p.daysUntilDue as number)
+        .sort((a, b) => a - b)[0] ?? null;
     return {
       ...client,
       properties: props,
@@ -248,6 +334,7 @@ export async function listClientsWithCompliance(search?: string): Promise<Client
       overdueCount: statuses.filter((s) => s === 'overdue').length,
       amberCount: statuses.filter((s) => s === 'amber').length,
       currentCount: statuses.filter((s) => s === 'current').length,
+      dueSoonestDays,
       worstStatus: worstComplianceStatus(statuses),
     };
   });
@@ -521,20 +608,29 @@ export async function getClientDetail(id: string) {
     .eq('user_id', user.id)
     .in('client_id', clientIds);
   if (propErr) throw new Error(propErr.message);
+  const propertyIds = (propertyRows ?? [])
+    .map((row) => row.id)
+    .filter((propertyId): propertyId is string => typeof propertyId === 'string' && propertyId.length > 0);
+  const certificateDatesByProperty = await loadLatestCertificateDatesByProperty(sb, user.id, propertyIds);
 
   const properties: ClientPropertyHealth[] = (propertyRows ?? [])
     .filter((row) => !!row.address_line1)
-    .map((row) => ({
-      id: row.id,
-      name: row.name ?? null,
-      addressLine1: row.address_line1!,
-      addressLine2: row.address_line2 ?? null,
-      town: row.town ?? null,
-      postcode: row.postcode ?? null,
-      phone: row.phone ?? null,
-      nextServiceDue: row.next_service_due ?? null,
-      status: computeComplianceStatus(row.next_service_due),
-    }));
+    .map((row) => {
+      const days = daysUntilDue(row.next_service_due);
+      return {
+        id: row.id,
+        name: row.name ?? null,
+        addressLine1: row.address_line1!,
+        addressLine2: row.address_line2 ?? null,
+        town: row.town ?? null,
+        postcode: row.postcode ?? null,
+        phone: row.phone ?? null,
+        lastCertificateDate: certificateDatesByProperty.get(row.id)?.lastCertificateDate ?? null,
+        nextServiceDue: row.next_service_due ?? null,
+        daysUntilDue: typeof days === 'number' ? days : null,
+        status: computeComplianceStatus(row.next_service_due),
+      };
+    });
 
   return {
     client: normalized,

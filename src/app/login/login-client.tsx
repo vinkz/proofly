@@ -93,8 +93,8 @@ export function LoginClient() {
       <div className="mt-4 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
         <div className="flex flex-col gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-              Work email
+            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              Email
             </p>
             <Input
               value={email}
@@ -109,7 +109,7 @@ export function LoginClient() {
 
           {authMode === 'password' ? (
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                 Password
               </p>
               <Input
@@ -139,7 +139,7 @@ export function LoginClient() {
         variant="primary"
         onClick={authMode === 'password' ? handlePasswordLogin : handleMagicLink}
         disabled={isPending || (authMode === 'password' ? !email || !password : !email)}
-        className="mt-5 h-11 w-full"
+        className="mt-5 h-11 w-full bg-[#111] text-white disabled:opacity-40"
       >
         {isPending
           ? authMode === 'password'

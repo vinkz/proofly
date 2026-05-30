@@ -26,19 +26,29 @@ const BADGE_CONFIG: Record<ComplianceStatus, { bg: string; color: string; label:
 
 function buildComplianceSummary(client: ClientWithCompliance): { text: string; color: string } | null {
   if (client.propertyCount === 0) return null;
+  const propertyLabel = `${client.propertyCount} ${client.propertyCount === 1 ? 'property' : 'properties'}`;
+  const parts: string[] = [];
+  if (client.overdueCount > 0) parts.push(`${client.overdueCount} overdue`);
+  if (client.amberCount > 0) {
+    const dueText =
+      client.dueSoonestDays !== null
+        ? `${client.amberCount} due in ${client.dueSoonestDays} day${client.dueSoonestDays === 1 ? '' : 's'}`
+        : `${client.amberCount} due soon`;
+    parts.push(dueText);
+  }
+  if (client.currentCount > 0) parts.push(`${client.currentCount} current`);
+
   if (client.overdueCount > 0) {
-    const parts = [`${client.overdueCount} overdue`];
-    if (client.amberCount > 0) parts.push(`${client.amberCount} due soon`);
-    return { text: parts.join(' · '), color: '#a32d2d' };
+    return { text: `${propertyLabel} - ${parts.join(', ')}`, color: '#a32d2d' };
   }
   if (client.amberCount > 0) {
     return {
-      text: `${client.amberCount} ${client.amberCount === 1 ? 'property' : 'properties'} due soon`,
+      text: `${propertyLabel} - ${parts.join(', ')}`,
       color: '#BA7517',
     };
   }
   return {
-    text: `${client.propertyCount} ${client.propertyCount === 1 ? 'property' : 'properties'} · all current`,
+    text: `${propertyLabel} - ${parts.length ? parts.join(', ') : 'all current'}`,
     color: 'var(--color-text-secondary)',
   };
 }

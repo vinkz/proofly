@@ -81,9 +81,27 @@ export default function SignupStep1Page() {
   return (
     <div className="pt-10">
       <h1 className="text-[24px] font-medium text-[var(--color-text-primary)]">Create your account</h1>
-      <p className="mb-8 mt-2 text-[14px] text-[var(--color-text-secondary)]">
-        Start your free trial — no card required
+      <p className="mt-2 text-[13px] text-[var(--color-text-tertiary)]">
+        14-day free trial · No card required · Cancel anytime
       </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '16px 0 24px' }}>
+        {[
+          'Issue CP12 certificates on site in minutes',
+          'Landlords get a permanent compliance link automatically',
+          'Renewal reminders sent automatically — never chase again',
+        ].map((text) => (
+          <div key={text} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{
+              width: '20px', height: '20px', borderRadius: '50%',
+              background: '#edf7f2', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', flexShrink: 0,
+              fontSize: '11px', color: '#1a7a52', fontWeight: 500,
+            }}>✓</span>
+            <span style={{ fontSize: '14px', color: 'var(--color-text-secondary)' }}>{text}</span>
+          </div>
+        ))}
+      </div>
 
       <GoogleAuthButton label="Continue with Google" nextPath="/signup/step2" />
 
@@ -96,7 +114,7 @@ export default function SignupStep1Page() {
       <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
         <div className="flex flex-col gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Email
             </p>
             <Input
@@ -109,7 +127,7 @@ export default function SignupStep1Page() {
             />
           </div>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Password
             </p>
             <Input
@@ -122,7 +140,7 @@ export default function SignupStep1Page() {
             />
           </div>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Confirm password
             </p>
             <Input

@@ -55,6 +55,7 @@ function PropertyRow({ property, clientId }: { property: ClientPropertyHealth; c
     ? [property.addressLine1, property.town, property.postcode].filter(Boolean).join(', ')
     : null;
   const dueDateFormatted = formatDate(property.nextServiceDue);
+  const lastCertFormatted = formatDate(property.lastCertificateDate);
   const isUrgent = property.status === 'overdue' || property.status === 'amber';
 
   return (
@@ -85,6 +86,9 @@ function PropertyRow({ property, clientId }: { property: ClientPropertyHealth; c
         ) : (
           <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">No service date recorded</p>
         )}
+        <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">
+          Last cert: {lastCertFormatted ?? 'Not recorded'}
+        </p>
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-2">

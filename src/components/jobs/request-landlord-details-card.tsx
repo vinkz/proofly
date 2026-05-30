@@ -22,7 +22,10 @@ export function RequestLandlordDetailsCard({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const shareText = `Please fill in the job details for my CertNow request: ${requestUrl}`;
+  // Use NEXT_PUBLIC_SHARE_URL as the base so the displayed link shows certnow.uk not localhost
+  const shareBase = process.env.NEXT_PUBLIC_SHARE_URL?.replace(/\/$/, '');
+  const displayUrl = shareBase ? requestUrl.replace(/^https?:\/\/[^/]+/, shareBase) : requestUrl;
+  const shareText = `Please fill in the job details for my CertNow request: ${displayUrl}`;
   const smsHref = landlordPhone.trim()
     ? `sms:${encodeURIComponent(landlordPhone.trim())}?&body=${encodeURIComponent(shareText)}`
     : null;
@@ -42,7 +45,7 @@ export function RequestLandlordDetailsCard({
             Send your request link so the landlord can enter property and access details directly.
           </p>
           <p className="mt-2 truncate rounded-[8px] bg-[var(--color-background-secondary)] px-2.5 py-1.5 text-[12px] text-[var(--color-text-tertiary)]">
-            {requestUrl}
+            {displayUrl}
           </p>
         </div>
       </div>

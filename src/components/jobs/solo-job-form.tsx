@@ -42,6 +42,11 @@ type SoloJobFormProps = {
   propertiesByClientId: Record<string, SavedPropertyOption[]>;
   initialRequest?: JobRequestPrefill | null;
   requestUrl?: string | null;
+  initialSelection?: {
+    clientId?: string | null;
+    propertyId?: string | null;
+    jobType?: JobType | null;
+  } | null;
 };
 
 type AddressLookupApiResponse = {
@@ -265,26 +270,37 @@ const JOB_DEMO_VALUES: Record<
   },
 };
 
-export function SoloJobForm({ clients, propertiesByClientId, initialRequest = null, requestUrl = null }: SoloJobFormProps) {
+export function SoloJobForm({
+  clients,
+  propertiesByClientId,
+  initialRequest = null,
+  requestUrl = null,
+  initialSelection = null,
+}: SoloJobFormProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('jobs_new', 'create'), []);
   const requestAddress = parseRequestAddress(initialRequest?.propertyAddress, initialRequest?.propertyPostcode);
   const requestPreferredDate = firstDateFromPreferredDates(initialRequest?.preferredDates);
-  const [clientMode, setClientMode] = useState<'existing' | 'new'>('new');
-  const [selectedClientId, setSelectedClientId] = useState('');
+  const initialClientId = initialSelection?.clientId ?? '';
+  const initialPropertyId = initialSelection?.propertyId ?? '';
+  const hasInitialSelection = Boolean(initialClientId || initialPropertyId);
+  const [clientMode, setClientMode] = useState<'existing' | 'new'>(initialClientId ? 'existing' : 'new');
+  const [selectedClientId, setSelectedClientId] = useState(initialClientId);
   const [clientName, setClientName] = useState(initialRequest?.landlordName ?? '');
   const [clientPhone, setClientPhone] = useState(initialRequest?.landlordPhone ?? '');
   const [clientEmail, setClientEmail] = useState(initialRequest?.landlordEmail ?? '');
-  const [selectedPropertyKey, setSelectedPropertyKey] = useState('');
+  const [selectedPropertyKey, setSelectedPropertyKey] = useState(initialPropertyId);
   const [propertyName, setPropertyName] = useState(initialRequest ? 'Landlord request' : '');
   const [addressLine1, setAddressLine1] = useState(requestAddress.line1);
   const [city, setCity] = useState(requestAddress.city);
   const [postcode, setPostcode] = useState(requestAddress.postcode);
   const [sitePhone, setSitePhone] = useState(initialRequest?.tenantPhone ?? initialRequest?.landlordPhone ?? '');
   const [scheduledFor, setScheduledFor] = useState(requestPreferredDate ? `${requestPreferredDate}T09:00` : '');
-  const [jobType, setJobType] = useState<JobType>(initialRequest?.jobType === 'service' ? 'service' : 'safety_check');
+  const [jobType, setJobType] = useState<JobType>(
+    initialSelection?.jobType ?? (initialRequest?.jobType === 'service' ? 'service' : 'safety_check'),
+  );
   const [inspectionDate, setInspectionDate] = useState(requestPreferredDate);
   const [jobAddressName, setJobAddressName] = useState(initialRequest ? 'Landlord request' : '');
   const [jobAddressLine1, setJobAddressLine1] = useState(requestAddress.line1);
@@ -299,8 +315,8 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [landlordCity, setLandlordCity] = useState(initialRequest?.landlordCity ?? '');
   const [landlordPostcode, setLandlordPostcode] = useState(initialRequest?.landlordPostcode ?? '');
   const [landlordTel, setLandlordTel] = useState(initialRequest?.landlordPhone ?? '');
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialRequest ? 4 : 1);
-  const [path, setPath] = useState<'self' | 'landlord' | null>(initialRequest ? 'self' : null);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialRequest || initialPropertyId ? 4 : initialClientId ? 2 : 1);
+  const [path, setPath] = useState<'self' | 'landlord' | null>(initialRequest || initialPropertyId ? 'self' : null);
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
   const [landlordRequestMessage, setLandlordRequestMessage] = useState<string | null>(null);
   const [landlordRequestError, setLandlordRequestError] = useState<string | null>(null);
@@ -312,8 +328,8 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const [partyAddressSuggestions, setPartyAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedPartyAddressMatchId, setSelectedPartyAddressMatchId] = useState<string | null>(null);
   const [partyAddressSearchError, setPartyAddressSearchError] = useState<string | null>(null);
-  const [clientChosen, setClientChosen] = useState(() => !clients.length || !!initialRequest);
-  const [propertyChosen, setPropertyChosen] = useState(() => !!initialRequest);
+  const [clientChosen, setClientChosen] = useState(() => !clients.length || !!initialRequest || !!initialClientId);
+  const [propertyChosen, setPropertyChosen] = useState(() => !!initialRequest || !!initialPropertyId);
   const isCp12Upcoming = jobType === 'safety_check' || jobType === 'safety_check_service';
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const scheduleFieldLabel = isCp12Upcoming ? 'Inspection date' : 'Scheduled date and time';
@@ -502,7 +518,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
   const { clearDraft } = useWizardDraft<SoloJobDraftState>({
     storageKey: draftStorageKey,
     state: soloJobDraft,
-    enabled: !initialRequest,
+    enabled: !initialRequest && !hasInitialSelection,
     onRestore: (draft) => {
       setClientMode(draft.clientMode ?? 'new');
       setSelectedClientId(draft.selectedClientId ?? '');
@@ -1166,7 +1182,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
             <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Who is this for?</p>
             <div className="space-y-2.5">
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                   Landlord
                 </label>
                 <Select
@@ -1184,7 +1200,7 @@ export function SoloJobForm({ clients, propertiesByClientId, initialRequest = nu
                 </Select>
               </div>
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                   Property
                 </label>
                 <Select

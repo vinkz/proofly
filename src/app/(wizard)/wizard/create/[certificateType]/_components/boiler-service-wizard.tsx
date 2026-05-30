@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type CSSProperties } from 'react';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { OfflineDraftBanner } from '@/components/certificates/offline-draft-banner';
@@ -489,7 +489,10 @@ export function BoilerServiceWizard({
       await saveBoilerServiceDetails({ jobId, data: details });
       await saveBoilerServiceChecks({ jobId, data: checks });
       setJobInfo(payload.info);
-      window.setTimeout(markSynced, 0);
+      markSynced(
+        { ...boilerServiceDraft, jobInfo: payload.info },
+        { ...boilerServiceDraftSyncState, jobInfo: payload.info },
+      );
       pushToast({ title: 'Offline draft synced', variant: 'success' });
     } catch (error) {
       setOfflineDraftSyncError(error instanceof Error ? error.message : 'Could not sync offline draft.');
@@ -498,6 +501,8 @@ export function BoilerServiceWizard({
     }
   }, [
     buildBoilerServiceDraftPersistencePayload,
+    boilerServiceDraft,
+    boilerServiceDraftSyncState,
     checks,
     details,
     isOfflineDraftSyncing,
@@ -847,8 +852,11 @@ export function BoilerServiceWizard({
         await saveBoilerServiceJobInfo({ jobId, data: payload.info });
         await saveJobFields({ jobId, fields: payload.jobFields });
         setJobInfo(payload.info);
-        window.setTimeout(markSynced, 0);
         setStep(2);
+        markSynced(
+          { ...boilerServiceDraft, step: 2, jobInfo: payload.info },
+          { ...boilerServiceDraftSyncState, jobInfo: payload.info },
+        );
         pushToast({ title: 'Saved job and client details', variant: 'success' });
       } catch (error) {
         pushToast({
@@ -873,8 +881,11 @@ export function BoilerServiceWizard({
           return;
         }
         await saveBoilerServiceDetails({ jobId, data: details });
-        window.setTimeout(markSynced, 0);
         setStep(3);
+        markSynced(
+          { ...boilerServiceDraft, step: 3, details },
+          { ...boilerServiceDraftSyncState, details },
+        );
         pushToast({ title: 'Saved appliance details', variant: 'success' });
       } catch (error) {
         pushToast({
@@ -909,8 +920,11 @@ export function BoilerServiceWizard({
           return;
         }
         await saveBoilerServiceChecks({ jobId, data: nextChecks });
-        window.setTimeout(markSynced, 0);
         setStep(4);
+        markSynced(
+          { ...boilerServiceDraft, step: 4, checks: nextChecks },
+          { ...boilerServiceDraftSyncState, checks: nextChecks },
+        );
         pushToast({ title: 'Saved checks', variant: 'success' });
       } catch (error) {
         pushToast({
@@ -1144,6 +1158,69 @@ export function BoilerServiceWizard({
     jobInfo.service_date,
   ]);
   const firstBoilerMissing = boilerMissingItems[0];
+  const formatNextServiceDate = (dateStr: string) => {
+    if (!dateStr) return dateStr;
+    const d = new Date(`${dateStr}T00:00:00`);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  };
+
+  const boilerRequiredItemsPanel = boilerMissingItems.length > 0 ? (
+    <div className="rounded-[16px] border-[0.5px] border-[rgba(186,117,23,0.4)] bg-[rgba(186,117,23,0.15)] p-4">
+      <p className="text-[13px] font-medium text-[#EF9F27]">
+        {boilerMissingItems.length} required item{boilerMissingItems.length === 1 ? '' : 's'} missing
+      </p>
+      <div className="mt-3 space-y-2">
+        {boilerMissingItems.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-3 rounded-[8px] bg-[rgba(255,255,255,0.04)] px-3 py-2 text-[13px]">
+            <span className="font-medium text-[var(--color-text-primary)]">{item.label}</span>
+            {item.href ? (
+              <Link href={item.href} className="rounded-full px-3 py-1 text-[12px] font-medium text-[#1a7a52]">
+                Open
+              </Link>
+            ) : item.step ? (
+              <button type="button" className="rounded-full px-3 py-1 text-[12px] font-medium text-[#1a7a52]" onClick={() => setStep(item.step!)}>
+                Go
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <div className="flex items-center gap-2 rounded-[16px] border-[0.5px] border-[var(--color-action)]/20 bg-[var(--color-action-bg)] p-4">
+      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--color-action)]">
+        <svg className="h-3 w-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      </span>
+      <p className="text-[13px] font-medium text-[var(--color-action)]">All required items complete</p>
+    </div>
+  );
+  const yesNoButtonStyle = (choice: string, currentValue: string): CSSProperties => {
+    const isActive = currentValue === choice;
+    if (!isActive) {
+      return {
+        padding: '7px 18px',
+        borderRadius: 20,
+        fontSize: 12,
+        fontWeight: 400,
+        background: 'rgba(255,255,255,0.04)',
+        color: 'rgba(255,255,255,0.4)',
+        border: '0.5px solid rgba(255,255,255,0.12)',
+      };
+    }
+    return {
+      padding: '7px 18px',
+      borderRadius: 20,
+      fontSize: 12,
+      fontWeight: 500,
+      background: choice === 'yes' ? '#0a3d26' : '#3d0a0a',
+      color: choice === 'yes' ? '#5DCAA5' : '#F09595',
+      border: choice === 'yes' ? '0.5px solid #1D9E75' : '0.5px solid #A32D2D',
+    };
+  };
+
   const renderCheckToggle = (item: CheckItem) => (
     <div
       key={item.key}
@@ -1151,16 +1228,14 @@ export function BoilerServiceWizard({
     >
       <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{item.label}</p>
       <div className="flex gap-2">
-        {['yes', 'no'].map((choice) => (
+        {(['yes', 'no'] as const).map((choice) => (
           <button
             key={choice}
             type="button"
             onClick={() => setCheckValue(item.key, choice)}
-            className={`rounded-[6px] px-3 py-1 text-xs font-semibold ${
-              checks[item.key] === choice ? 'bg-[var(--color-action)] text-white' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
-            }`}
+            style={yesNoButtonStyle(choice, checks[item.key] ?? '')}
           >
-            {choice.toUpperCase()}
+            {choice === 'yes' ? 'Yes' : 'No'}
           </button>
         ))}
       </div>
@@ -1179,11 +1254,9 @@ export function BoilerServiceWizard({
               key={choice}
               type="button"
               onClick={() => setCheckValue(item.key, choice)}
-              className={`rounded-[6px] px-3 py-1 text-xs font-semibold ${
-                checks[item.key] === choice ? 'bg-[var(--color-action)] text-white' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
-              }`}
+              style={yesNoButtonStyle(choice, checks[item.key] ?? '')}
             >
-              {choice.toUpperCase()}
+              {choice === 'yes' ? 'Yes' : 'No'}
             </button>
           ))}
         </div>
@@ -1635,42 +1708,41 @@ export function BoilerServiceWizard({
           ) : null}
           <CollapsibleSection
             title="High / Low combustion readings"
-            subtitle={`${readingsCompleted}/${combustionReadingFields.length} captured`}
+            subtitle={`${readingsCompleted}/${combustionReadingFields.length} readings`}
             defaultOpen={firstIncompleteKey === 'readings'}
           >
-            <div className="mb-3">
-              <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">FGA readings</p>
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">FGA readings</p>
+              <Cp12VoiceReadings
+                jobId={jobId}
+                scope="high"
+                buttonLabel="Speak high"
+                buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
+                onApply={applyVoiceReadings}
+              />
             </div>
+            <p className="mb-3 text-[11px] leading-[1.5] text-[rgba(255,255,255,0.28)]">Speak readings in order with small pauses between each value.</p>
             <div className="grid gap-3 sm:grid-cols-3">
               <UnitNumberInput
-                label="High CO"
+                label="CO ppm"
                 value={checks.high_combustion_co_ppm}
                 onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
                 unit="ppm"
-                labelAction={
-                  <Cp12VoiceReadings
-                    jobId={jobId}
-                    scope="high"
-                    buttonLabel="Speak high"
-                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
-                    onApply={applyVoiceReadings}
-                  />
-                }
               />
               <UnitNumberInput
-                label="High CO2"
+                label="CO₂ %"
                 value={checks.high_combustion_co2}
                 onChange={(value) => setCheckValue('high_combustion_co2', value)}
                 unit="%"
               />
               <UnitNumberInput
-                label="High ratio"
+                label="Ratio"
                 value={checks.high_combustion_ratio}
                 onChange={(value) => setCheckValue('high_combustion_ratio', value)}
                 unit="ratio"
               />
               <UnitNumberInput
-                label="Low CO"
+                label="CO ppm"
                 value={checks.low_combustion_co_ppm}
                 onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
                 unit="ppm"
@@ -1685,13 +1757,13 @@ export function BoilerServiceWizard({
                 }
               />
               <UnitNumberInput
-                label="Low CO2"
+                label="CO₂ %"
                 value={checks.low_combustion_co2}
                 onChange={(value) => setCheckValue('low_combustion_co2', value)}
                 unit="%"
               />
               <UnitNumberInput
-                label="Low ratio"
+                label="Ratio"
                 value={checks.low_combustion_ratio}
                 onChange={(value) => setCheckValue('low_combustion_ratio', value)}
                 unit="ratio"
@@ -1700,7 +1772,7 @@ export function BoilerServiceWizard({
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="Safety Checks"
+            title="Safety checks"
             subtitle={`${safetyCompleted}/${safetyTotal} complete`}
             defaultOpen={firstIncompleteKey === 'safety'}
           >
@@ -1723,7 +1795,7 @@ export function BoilerServiceWizard({
                   }
                 />
                 <UnitNumberInput
-                  label="Heat Input"
+                  label="Heat input"
                   value={checks.heat_input}
                   onChange={(value) => setCheckValue('heat_input', value)}
                   unit="kW"
@@ -1794,6 +1866,7 @@ export function BoilerServiceWizard({
         >
           <div className="space-y-4">
             {offlineDraftBanner}
+            {boilerRequiredItemsPanel}
             {demoEnabled ? (
               <div className="flex justify-end">
                 <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
@@ -1830,16 +1903,14 @@ export function BoilerServiceWizard({
                 <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                   <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Defects found?</p>
                   <div className="mt-2 flex gap-2">
-                    {['yes', 'no'].map((choice) => (
+                    {(['yes', 'no'] as const).map((choice) => (
                       <button
                         key={choice}
                         type="button"
                         onClick={() => setCheckValue('defects_found', choice)}
-                        className={`rounded-[6px] px-3 py-1 text-xs font-semibold ${
-                          checks.defects_found === choice ? 'bg-[var(--color-action)] text-white' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
-                        }`}
+                        style={yesNoButtonStyle(choice, checks.defects_found ?? '')}
                       >
-                        {choice.toUpperCase()}
+                        {choice === 'yes' ? 'Yes' : 'No'}
                       </button>
                     ))}
                   </div>
@@ -1866,7 +1937,7 @@ export function BoilerServiceWizard({
             </CollapsibleSection>
             <CollapsibleSection
               title="Next service due"
-              subtitle={checks.next_service_due ? checks.next_service_due : 'Set a reminder'}
+              subtitle={checks.next_service_due ? formatNextServiceDate(checks.next_service_due) : 'Set a reminder'}
               defaultOpen={firstIncompleteKey === 'next'}
             >
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1903,29 +1974,6 @@ export function BoilerServiceWizard({
                 />
               </div>
             </details>
-            {boilerMissingItems.length > 0 ? (
-              <div className="rounded-[16px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-4">
-                <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
-                  {boilerMissingItems.length} required item{boilerMissingItems.length === 1 ? '' : 's'} missing
-                </p>
-                <div className="mt-3 space-y-2">
-                  {boilerMissingItems.slice(0, 4).map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-[10px] bg-[var(--color-background-primary)] px-3 py-2 text-[13px]">
-                      <span className="font-medium text-[var(--color-text-primary)]">{item.label}</span>
-                      {item.href ? (
-                        <Link href={item.href} className="rounded-full px-3 py-1 text-[12px] font-medium text-[var(--color-action)]">
-                          Open
-                        </Link>
-                      ) : item.step ? (
-                        <Button type="button" variant="ghost" className="rounded-full px-3 py-1 text-[12px]" onClick={() => setStep(item.step!)}>
-                          Go
-                        </Button>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
           <div id="boiler-step4-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
             <button
