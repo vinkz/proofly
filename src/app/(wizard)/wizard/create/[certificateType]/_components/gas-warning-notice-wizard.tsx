@@ -25,6 +25,7 @@ import { tryUpdateJobRecord } from '@/server/jobRecords';
 import type { CertificateType, Cp12Appliance, PhotoCategory } from '@/types/certificates';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
+import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 
 const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
 
@@ -261,6 +262,7 @@ export function GasWarningNoticeWizard({
 
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+  const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const didPrefillRef = useRef(false);
 
   const gasWarningMissingItems = useMemo<MissingIssueItem[]>(() => {
@@ -674,12 +676,18 @@ export function GasWarningNoticeWizard({
           return;
         }
         await persistAll();
-        const { jobId: resultJobId } = await generateCertificatePdf({
+        const result = await generateCertificatePdf({
           jobId,
           certificateType,
           previewOnly: false,
           fields: buildGenerateFields(),
         });
+        if ('error' in result && result.error === 'limit_reached') {
+          setLimitReachedMessage(result.message ?? 'You have reached your monthly certificate limit.');
+          return;
+        }
+        if (!('jobId' in result)) return;
+        const { jobId: resultJobId } = result;
         clearDraft();
         pushToast({
           title: 'Gas Warning Notice generated successfully',
@@ -1315,6 +1323,9 @@ export function GasWarningNoticeWizard({
           </div>
         </WizardLayout>
       ) : null}
+      {limitReachedMessage && (
+        <LimitReachedModal message={limitReachedMessage} onDismiss={() => setLimitReachedMessage(null)} />
+      )}
     </>
   );
 }

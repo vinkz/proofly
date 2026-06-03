@@ -5,8 +5,22 @@ import { isUUID } from '@/lib/ids';
 import { getInvoice } from '@/server/invoices';
 import { InvoiceEditor } from './_components/invoice-editor';
 
-export default async function InvoiceEditorPage({ params }: { params: Promise<{ invoiceId: string }> }) {
+// Only allow internal, single-leading-slash return paths to avoid open redirects.
+function resolveReturnTo(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  if (!value.startsWith('/') || value.startsWith('//')) return fallback;
+  return value;
+}
+
+export default async function InvoiceEditorPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ invoiceId: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
   const { invoiceId } = await params;
+  const { returnTo: returnToParam } = await searchParams;
   if (!isUUID(invoiceId)) {
     notFound();
   }
@@ -23,72 +37,83 @@ export default async function InvoiceEditorPage({ params }: { params: Promise<{ 
 
   const { invoice, lineItems } = invoiceData;
   const sb = await supabaseServerReadOnly();
-  const { data: job, error: jobErr } = await sb
-    .from('jobs')
-    .select('id, client_id, client_name, address, title, certificate_type')
-    .eq('id', invoice.job_id)
-    .maybeSingle();
-  if (jobErr || !job) {
-    notFound();
+
+  // Standalone (jobless) invoices skip the job/certificate lookups entirely.
+  const job = invoice.job_id
+    ? (
+        await sb
+          .from('jobs')
+          .select('id, client_id, client_name, address, title, certificate_type')
+          .eq('id', invoice.job_id)
+          .maybeSingle()
+      ).data
+    : null;
+
+  let resolvedCertificateType: string | null = null;
+  if (job) {
+    resolvedCertificateType =
+      typeof job.certificate_type === 'string' && job.certificate_type.trim() ? job.certificate_type : null;
+    if (!resolvedCertificateType) {
+      const { data: certificate } = await sb
+        .from('certificates')
+        .select('cert_type, created_at')
+        .eq('job_id', invoice.job_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      resolvedCertificateType = typeof certificate?.cert_type === 'string' ? certificate.cert_type : null;
+    }
   }
 
-  const certificateType =
-    typeof job.certificate_type === 'string' && job.certificate_type.trim()
-      ? job.certificate_type
-      : (() => null)();
+  const { data: client } =
+    invoice.client_id
+      ? await sb
+          .from('clients')
+          .select('id, name, address, postcode, email, phone')
+          .eq('id', invoice.client_id)
+          .maybeSingle()
+      : job?.client_id
+        ? await sb
+            .from('clients')
+            .select('id, name, address, postcode, email, phone')
+            .eq('id', job.client_id)
+            .maybeSingle()
+        : { data: null };
 
-  let resolvedCertificateType = certificateType;
-  if (!resolvedCertificateType) {
-    const { data: certificate } = await sb
-      .from('certificates')
-      .select('cert_type, created_at')
-      .eq('job_id', invoice.job_id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    resolvedCertificateType = typeof certificate?.cert_type === 'string' ? certificate.cert_type : null;
-  }
-
-  const { data: client } = job.client_id
-    ? await sb
-        .from('clients')
-        .select('id, name, address, postcode, email, phone')
-        .eq('id', job.client_id)
-        .maybeSingle()
-    : { data: null };
+  const returnTo = resolveReturnTo(returnToParam, job ? `/jobs/${job.id}/complete` : '/invoices');
 
   return (
     <InvoiceEditor
-        invoice={invoice}
-        lineItems={lineItems.map((item) => ({
-          description: item.description,
-          quantity: Number(item.quantity ?? 0),
-          unit_price: Number(item.unit_price ?? 0),
-          vat_exempt: Boolean(item.vat_exempt),
-          position: item.position,
-        }))}
-        client={
-          client
+      invoice={invoice}
+      lineItems={lineItems.map((item) => ({
+        description: item.description,
+        quantity: Number(item.quantity ?? 0),
+        unit_price: Number(item.unit_price ?? 0),
+        vat_exempt: Boolean(item.vat_exempt),
+        position: item.position,
+      }))}
+      client={
+        client
+          ? {
+              name: client.name ?? job?.client_name ?? 'Client',
+              address: client.address ?? null,
+              postcode: client.postcode ?? null,
+              email: client.email ?? null,
+              phone: client.phone ?? null,
+            }
+          : job
             ? {
-                name: client.name ?? job.client_name ?? 'Client',
-                address: client.address ?? null,
-                postcode: client.postcode ?? null,
-                email: client.email ?? null,
-                phone: client.phone ?? null,
-              }
-            : {
                 name: job.client_name ?? 'Client',
                 address: null,
                 postcode: null,
                 email: null,
                 phone: null,
               }
-        }
-        job={{
-          address: job.address ?? null,
-          title: job.title ?? null,
-        }}
-        certificateType={resolvedCertificateType}
-      />
+            : null
+      }
+      job={job ? { address: job.address ?? null, title: job.title ?? null } : null}
+      certificateType={resolvedCertificateType}
+      returnTo={returnTo}
+    />
   );
 }

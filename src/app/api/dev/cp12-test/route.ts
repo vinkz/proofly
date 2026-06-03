@@ -172,7 +172,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ jobId, mode: 'bypassStorage', directPdfPath, directPdfByteLength, directPdfHash8 });
   }
 
-  const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType: 'cp12', previewOnly: false });
+  const result = await generateCertificatePdf({ jobId, certificateType: 'cp12', previewOnly: false });
+  if (!('pdfUrl' in result)) return NextResponse.json(result, { status: 402 });
+  const { pdfUrl } = result;
   console.log('CP12 test route: generateCertificatePdf return', { jobId, pdfUrl });
 
   return NextResponse.json({ jobId, pdfUrl });

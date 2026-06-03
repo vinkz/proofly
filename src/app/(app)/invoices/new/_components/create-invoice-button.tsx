@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { createInvoiceForJob } from '@/server/invoices';
 
-export function CreateInvoiceButton({ jobId }: { jobId: string }) {
+export function CreateInvoiceButton({ jobId, returnTo }: { jobId: string; returnTo?: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -13,7 +13,8 @@ export function CreateInvoiceButton({ jobId }: { jobId: string }) {
     startTransition(async () => {
       try {
         const invoice = await createInvoiceForJob(jobId);
-        router.push(`/invoices/${invoice.id}`);
+        const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : '';
+        router.push(`/invoices/${invoice.id}${query}`);
       } catch {
         // TODO: add toast if needed
       }

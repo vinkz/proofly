@@ -34,6 +34,7 @@ import { getCustomerById, upsertCustomerFromJobFields } from '@/server/customer-
 import { formatJobAddress } from '@/lib/address';
 import type { JobAddress } from '@/server/address-service';
 import { upsertJobAddressForJob } from '@/server/address-service';
+import { checkCertificateAllowanceForUser, recordCertificateUsageForUser } from '@/server/billing';
 import { buildCertificatePublicId, buildClientRef, ensureJobCode, getNextJobCode } from '@/server/id-chain';
 import { persistJobFields, type JobFieldEntry } from '@/server/job-fields';
 
@@ -45,6 +46,30 @@ type JobInsertPayload = {
   scheduledFor?: string | null;
   clientId?: string | null;
 };
+
+async function getLimitReachedResultForFinalIssue(previewOnly: boolean, userId: string, requiredCertificates = 1) {
+  if (previewOnly) return null;
+  const allowance = await checkCertificateAllowanceForUser(userId, requiredCertificates);
+  if (allowance.allowed) return null;
+  if (allowance.limit === null) {
+    return {
+      error: 'limit_reached' as const,
+      message: 'Upgrade to issue unlimited certificates.',
+      used: allowance.used,
+      limit: allowance.limit,
+    };
+  }
+  const remaining = Math.max(allowance.limit - allowance.used, 0);
+  return {
+    error: 'limit_reached' as const,
+    message:
+      requiredCertificates > 1
+        ? `This job would use ${requiredCertificates} certificates but you only have ${remaining} remaining this month. Upgrade to issue unlimited certificates.`
+        : `You've used ${allowance.used} of your ${allowance.limit} free certificates this month. Upgrade to issue unlimited certificates.`,
+    used: allowance.used,
+    limit: allowance.limit,
+  };
+}
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
 type JobContext = {
@@ -1970,7 +1995,6 @@ function validateCp12ForIssue(
     if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
   });
 
-  const propertyAddress = String(fieldMap.property_address ?? '').trim();
   const landlordLine1 = String(fieldMap.landlord_address_line1 ?? '').trim();
   const landlordLine2 = String(fieldMap.landlord_address_line2 ?? '').trim();
   const landlordCity = String(fieldMap.landlord_city ?? fieldMap.landlord_town ?? '').trim();
@@ -1984,10 +2008,6 @@ function validateCp12ForIssue(
   if (!landlordPostcode && !String(fieldMap.landlord_address ?? '').trim()) {
     errors.push('Landlord postcode is required');
   }
-  if (propertyAddress && landlordAddress && propertyAddress === landlordAddress) {
-    errors.push('Landlord address must be different from the property address');
-  }
-
   if (!booleanFromField(fieldMap.reg_26_9_confirmed)) {
     errors.push('Regulation 26(9) confirmation is required');
   }
@@ -2367,6 +2387,8 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   if (validationErrors.length) {
     throw new Error(`General Works validation failed: ${validationErrors.join('; ')}`);
   }
+  const limitReached = await getLimitReachedResultForFinalIssue(previewOnly, jobOwnerId);
+  if (limitReached) return limitReached;
 
   const photoRows = (photos ?? []) as unknown as Array<{ category?: string | null; file_url?: string | null }>;
   const pdfBytes = await renderGeneralWorksPdf({
@@ -2460,6 +2482,7 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   console.log('GW: job_fields upsert result', issuedAtRes);
   const issuedAtErr = (issuedAtRes as { error?: { code?: string; message: string } }).error;
   if (issuedAtErr) throw new Error(issuedAtErr.message);
+  await recordCertificateUsageForUser(jobOwnerId, input.jobId, 'general_works');
 
   console.log('GW: jobs update (set status completed) start', {
     jobId: input.jobId,
@@ -2559,6 +2582,8 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
   if (validationErrors.length) {
     throw new Error(`Boiler service validation failed: ${validationErrors.join('; ')}`);
   }
+  const limitReached = await getLimitReachedResultForFinalIssue(previewOnly, user.id);
+  if (limitReached) return limitReached;
 
   const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
   const getFieldText = (key: string) => toText(mergedFieldMap[key]);
@@ -2803,6 +2828,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     throw new Error(signedErr?.message ?? 'Unable to create certificate link');
   }
   console.log('GAS SERVICE certificate signed URL generated', { jobId: input.jobId, path });
+  await recordCertificateUsageForUser(user.id, input.jobId, 'boiler_service');
 
   await sb
     .from(JOB_FIELDS_TABLE)
@@ -2892,6 +2918,8 @@ async function generateCp12CertificateForJob(params: {
   if (validationErrors.length) {
     throw new Error(`CP12 validation failed: ${validationErrors.join('; ')}`);
   }
+  const limitReached = await getLimitReachedResultForFinalIssue(previewOnly, userId);
+  if (limitReached) return limitReached;
 
   const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
   const splitAddressParts = (value: unknown) =>
@@ -3096,6 +3124,7 @@ async function generateCp12CertificateForJob(params: {
     throw new Error(signedErr?.message ?? 'Unable to create certificate link');
   }
   const finalSignedUrl = appendCacheBust(signed.signedUrl, cp12PdfHash8);
+  await recordCertificateUsageForUser(userId, jobId, 'cp12');
 
   await sb
     .from(JOB_FIELDS_TABLE)
@@ -3365,6 +3394,8 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     if (validationErrors.length) {
       throw new Error(`Gas warning notice validation failed: ${validationErrors.join('; ')}`);
     }
+    const limitReached = await getLimitReachedResultForFinalIssue(previewOnly, user.id);
+    if (limitReached) return limitReached;
 
     const admin = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -3439,6 +3470,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     if (certErr) {
       throw new Error(certErr.message);
     }
+    await recordCertificateUsageForUser(user.id, input.jobId, 'gas_warning_notice');
     await admin
       .from('jobs')
       .update({ status: 'issued' } as Record<string, unknown>)
@@ -3821,6 +3853,7 @@ export async function getCp12RemoteSignaturePreviewUrl(token: string) {
     userId,
     previewOnly: true,
   });
+  if (!('pdfUrl' in result)) throw new Error(result.message);
   return result.pdfUrl;
 }
 

@@ -6,11 +6,13 @@ import { useState, useTransition } from 'react';
 import { SignatureCard } from '@/components/certificates/signature-card';
 import { useToast } from '@/components/ui/use-toast';
 import { submitCp12RemoteCustomerSignature } from '@/server/certificates';
+import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 
 export function PublicCp12SignatureClient({ token }: { token: string }) {
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [completedPdfUrl, setCompletedPdfUrl] = useState<string | null>(null);
+  const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
 
   if (completedPdfUrl) {
     return (
@@ -31,28 +33,38 @@ export function PublicCp12SignatureClient({ token }: { token: string }) {
   }
 
   return (
-    <div className="space-y-4">
-      <SignatureCard
-        label="Landlord / Responsible person"
-        onUpload={(file) => {
-          startTransition(async () => {
-            try {
-              const result = await submitCp12RemoteCustomerSignature({ token, file });
-              setCompletedPdfUrl(result.pdfUrl);
-              pushToast({ title: 'Signature submitted', variant: 'success' });
-            } catch (error) {
-              pushToast({
-                title: 'Could not submit signature',
-                description: error instanceof Error ? error.message : 'Please try again.',
-                variant: 'error',
-              });
-            }
-          });
-        }}
-      />
-      <p className="text-xs text-muted-foreground/70">
-        {isPending ? 'Submitting signature and finalizing certificate…' : 'Draw and save the signature above to complete the certificate.'}
-      </p>
-    </div>
+    <>
+      <div className="space-y-4">
+        <SignatureCard
+          label="Landlord / Responsible person"
+          onUpload={(file) => {
+            startTransition(async () => {
+              try {
+                const result = await submitCp12RemoteCustomerSignature({ token, file });
+                if ('error' in result && result.error === 'limit_reached') {
+                  setLimitReachedMessage(result.message ?? 'You have reached your monthly certificate limit.');
+                  return;
+                }
+                if (!('pdfUrl' in result)) return;
+                setCompletedPdfUrl(result.pdfUrl);
+                pushToast({ title: 'Signature submitted', variant: 'success' });
+              } catch (error) {
+                pushToast({
+                  title: 'Could not submit signature',
+                  description: error instanceof Error ? error.message : 'Please try again.',
+                  variant: 'error',
+                });
+              }
+            });
+          }}
+        />
+        <p className="text-xs text-muted-foreground/70">
+          {isPending ? 'Submitting signature and finalizing certificate…' : 'Draw and save the signature above to complete the certificate.'}
+        </p>
+      </div>
+      {limitReachedMessage && (
+        <LimitReachedModal message={limitReachedMessage} onDismiss={() => setLimitReachedMessage(null)} />
+      )}
+    </>
   );
 }

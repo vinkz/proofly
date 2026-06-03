@@ -39,6 +39,7 @@ import { tryUpdateJobRecord } from '@/server/jobRecords';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 import { useWizardStepHistory } from '@/hooks/use-wizard-step-history';
+import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 
@@ -274,6 +275,7 @@ export function BoilerServiceWizard({
     resolvedFields.customer_address_line1 ?? resolvedFields.customer_address ?? initialJobContext?.customer?.address ?? '',
   );
   const [customerAddressSearchError, setCustomerAddressSearchError] = useState<string | null>(null);
+  const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const deferredAddressSearchQuery = useDeferredValue(addressSearchQuery.trim());
   const deferredCustomerAddressSearchQuery = useDeferredValue(customerAddressSearchQuery.trim());
   const customerAddressParts = splitAddressParts(
@@ -1017,7 +1019,13 @@ export function BoilerServiceWizard({
         await persistBeforePdf();
         const finalInfo = { ...jobInfo, service_date: completionDate || jobInfo.service_date };
         await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
-        const { jobId: resultJobId } = await generateGasServicePdf({ jobId, previewOnly: false });
+        const result = await generateGasServicePdf({ jobId, previewOnly: false });
+        if ('error' in result && result.error === 'limit_reached') {
+          setLimitReachedMessage(result.message ?? 'You have reached your monthly certificate limit.');
+          return;
+        }
+        if (!('jobId' in result)) return;
+        const { jobId: resultJobId } = result;
         clearDraft();
         pushToast({
           title: 'Boiler Service generated successfully',
@@ -2004,6 +2012,9 @@ export function BoilerServiceWizard({
           </div>
         </WizardLayout>
       ) : null}
+      {limitReachedMessage && (
+        <LimitReachedModal message={limitReachedMessage} onDismiss={() => setLimitReachedMessage(null)} />
+      )}
     </>
   );
 }

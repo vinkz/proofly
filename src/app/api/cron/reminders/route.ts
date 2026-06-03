@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server';
 
 import { isEmailConfigured, sendEmail } from '@/lib/resend';
+import {
+  baseEmail,
+  classificationBadge,
+  ctaButton,
+  emailSubtitle,
+  emailTitle,
+  formatDate,
+  infoCard,
+  joinAddress,
+  note,
+  titleCase,
+} from '@/lib/email-templates';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
 
 type ReminderRow = {
@@ -25,20 +37,23 @@ const pickText = (...values: Array<string | null | undefined>) => {
 
 const formatAddress = (fields: Record<string, string | null>, fallback: string | null | undefined) =>
   pickText(
-    fields.property_address,
-    [
+    joinAddress(
+      [
       fields.job_address_line1,
       fields.job_address_line2,
       fields.job_address_city,
       fields.job_postcode,
-    ].filter(Boolean).join(', '),
+      ],
+      '',
+    ),
+    fields.property_address,
     fallback,
   );
 
 const reminderCopy = (kind: string | null, address: string, publicUrl: string, engineerName: string) => {
   if (kind?.startsWith('landlord_cp12_4_weeks')) {
     return {
-      subject: `Gas safety renewal due soon for ${address}`,
+      subject: `Gas safety renewal due soon — ${address}`,
       text: [
         'Your gas safety certificate is due for renewal in around 4 weeks.',
         '',
@@ -51,7 +66,7 @@ const reminderCopy = (kind: string | null, address: string, publicUrl: string, e
 
   if (kind?.startsWith('landlord_cp12_8_weeks')) {
     return {
-      subject: `Gas safety renewal reminder for ${address}`,
+      subject: `Gas safety renewal coming up — ${address}`,
       text: [
         'Your gas safety certificate is due for renewal in around 8 weeks.',
         '',
@@ -64,7 +79,7 @@ const reminderCopy = (kind: string | null, address: string, publicUrl: string, e
 
   if (kind?.startsWith('engineer_cp12_8_weeks')) {
     return {
-      subject: `CP12 renewal due soon: ${address}`,
+      subject: `CP12 renewal due soon — ${address}`,
       text: [
         'A CP12 renewal is due in around 8 weeks.',
         '',
@@ -76,7 +91,7 @@ const reminderCopy = (kind: string | null, address: string, publicUrl: string, e
 
   if (kind?.startsWith('gas_warning_id')) {
     return {
-      subject: `Urgent gas warning follow-up: ${address}`,
+      subject: `Urgent: gas warning follow-up needed — ${address}`,
       text: [
         'An Immediately Dangerous gas warning follow-up is due.',
         '',
@@ -88,7 +103,7 @@ const reminderCopy = (kind: string | null, address: string, publicUrl: string, e
 
   if (kind?.startsWith('gas_warning_ar')) {
     return {
-      subject: `At Risk gas warning follow-up: ${address}`,
+      subject: `At Risk appliance follow-up — ${address}`,
       text: [
         'An At Risk gas warning follow-up is due.',
         '',
@@ -100,7 +115,7 @@ const reminderCopy = (kind: string | null, address: string, publicUrl: string, e
 
   if (kind?.startsWith('gas_warning_ncs')) {
     return {
-      subject: `Gas warning follow-up due: ${address}`,
+      subject: `Gas warning follow-up due — ${address}`,
       text: [
         'A Not to Current Standards gas warning follow-up is due.',
         '',
@@ -197,11 +212,86 @@ export async function GET(request: Request) {
     }
 
     const copy = reminderCopy(reminder.kind, address || 'the property', publicUrl, engineerName);
-    const delivery = await sendEmail({
-      to: recipient,
-      subject: copy.subject,
-      text: copy.text,
-    });
+    const displayEngineerName = titleCase(engineerName || 'Your engineer');
+    const landlordName = titleCase(pickText(fieldMap.landlord_name, client?.name ?? null, job.client_name) || 'Not provided');
+    const isFourWeekLandlord = reminder.kind?.startsWith('landlord_cp12_4_weeks');
+    const isEngineerCp12 = reminder.kind?.startsWith('engineer_cp12_8_weeks');
+    const isGasWarning = reminder.kind?.startsWith('gas_warning_');
+    const classification = reminder.kind?.startsWith('gas_warning_id')
+      ? 'ID'
+      : reminder.kind?.startsWith('gas_warning_ar')
+        ? 'AR'
+        : reminder.kind?.startsWith('gas_warning_ncs')
+          ? 'NCS'
+          : '';
+    const html = isEngineerCp12
+      ? baseEmail(
+          [
+            emailTitle('CP12 renewal coming up'),
+            emailSubtitle('A gas safety certificate is due for renewal in approximately 8 weeks.'),
+            infoCard('Property', [
+              { label: 'Property', value: address },
+              { label: 'Landlord', value: landlordName },
+              { label: 'Certificate issued', value: 'Not provided' },
+              { label: 'Renewal due', value: formatDate(reminder.due_date) },
+            ]),
+            ctaButton('Create renewal job', publicUrl, 'green'),
+          ].join(''),
+          { subject: copy.subject },
+        )
+      : isGasWarning
+        ? baseEmail(
+            [
+              emailTitle(classification === 'ID' ? 'Urgent follow-up required' : classification === 'AR' ? 'Follow-up visit needed' : 'Follow-up recommended'),
+              emailSubtitle(
+                classification === 'ID'
+                  ? 'A gas appliance marked Immediately Dangerous requires a follow-up visit. This is a safety-critical issue.'
+                  : classification === 'AR'
+                    ? 'A gas appliance marked At Risk requires a follow-up visit.'
+                    : 'A gas appliance flagged as Not to Current Standards may need a follow-up visit.',
+              ),
+              infoCard('Property', [
+                { label: 'Property', value: address },
+                { label: 'Landlord', value: landlordName },
+                { label: 'Appliance', value: pickText(fieldMap.appliance_type, fieldMap.appliance_location) || 'Not provided' },
+                { label: 'Classification', value: classificationBadge(classification), rawValue: true },
+              ]),
+              ctaButton(classification === 'NCS' ? 'View job' : 'Open follow-up job', publicUrl, 'green'),
+            ].join(''),
+            { subject: copy.subject },
+          )
+        : baseEmail(
+            [
+              emailTitle(isFourWeekLandlord ? 'Renewal due soon' : 'Renewal coming up'),
+              emailSubtitle(
+                isFourWeekLandlord
+                  ? `The gas safety certificate for ${address} is due for renewal in approximately 4 weeks. Book your engineer now to stay compliant.`
+                  : `The gas safety certificate for ${address} is due for renewal in approximately 8 weeks.`,
+              ),
+              infoCard('Certificate', [
+                { label: 'Property', value: address },
+                { label: 'Current certificate expires', value: formatDate(reminder.due_date) },
+                { label: 'Engineer', value: displayEngineerName },
+                { label: 'Engineer phone', value: profile?.company_phone ?? 'Not provided' },
+              ]),
+              ctaButton(isFourWeekLandlord ? 'Book renewal now' : 'Request renewal', publicUrl, 'green'),
+              note('No account needed. Your engineer will confirm the visit.'),
+            ].join(''),
+            { subject: copy.subject, sentOnBehalfOf: displayEngineerName },
+          );
+    let delivery;
+    try {
+      delivery = await sendEmail({
+        to: recipient,
+        subject: copy.subject,
+        replyTo: isLandlordReminder ? profile?.company_email ?? undefined : undefined,
+        text: copy.text,
+        html,
+      });
+    } catch (error) {
+      console.error('[cron/reminders] email failed:', error);
+      delivery = { status: 'failed' as const };
+    }
 
     if (delivery.status === 'sent') {
       results.sent += 1;

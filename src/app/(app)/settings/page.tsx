@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { getProfile } from '@/server/profile';
 import { userHasPassword } from '@/server/auth';
 import { normalizeStandardRates } from '@/lib/standard-rates';
+import { getBillingPageData } from '@/server/billing-page';
+import { manageSubscriptionAction } from '@/server/billing';
 import { ProfilePreferences } from './profile-preferences';
 import { PasswordSection } from './password-section';
 import { SavedSignatureSection } from './saved-signature-section';
@@ -30,14 +32,13 @@ export default async function SettingsPage() {
     (profile as { standard_rates?: unknown } | null)?.standard_rates,
   );
   const savedSignatureUrl = (profile as { saved_signature_url?: string | null } | null)?.saved_signature_url ?? null;
-  const trialEndsAt = (profile as { trial_ends_at?: string | null } | null)?.trial_ends_at ?? null;
-  const subscriptionStatus = (profile as { subscription_status?: string | null } | null)?.subscription_status ?? null;
-  const isSubscribed = subscriptionStatus === 'active';
-  const trialEndFormatted = trialEndsAt
-    ? new Date(trialEndsAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-    : null;
 
   const { hasPassword } = await userHasPassword();
+  const billing = await getBillingPageData();
+  const billingStatus = billing.subscriptionStatus;
+  const isBillingActive = billingStatus === 'active';
+  const isBillingPastDue = billingStatus === 'past_due';
+  const usedPct = Math.min(100, Math.round(((billing.usage.used ?? 0) / (billing.usage.limit ?? 10)) * 100));
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-[12px] px-4 py-6 sm:py-10">
@@ -104,39 +105,82 @@ export default async function SettingsPage() {
             <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Subscription</p>
             <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">Plan & billing</h2>
           </div>
-          {isSubscribed ? (
+          {isBillingActive && (
             <span className="rounded-full bg-[var(--color-action-bg)] px-3 py-1 text-[11px] font-medium text-[var(--color-action)]">
               Active
             </span>
-          ) : (
+          )}
+          {isBillingPastDue && (
+            <span className="rounded-full bg-[var(--color-red-bg)] px-3 py-1 text-[11px] font-medium text-[var(--color-red)]">
+              Payment failed
+            </span>
+          )}
+          {!isBillingActive && !isBillingPastDue && (
             <span className="rounded-full bg-[var(--color-amber-bg)] px-3 py-1 text-[11px] font-medium text-[var(--color-amber)]">
-              Free trial
+              Free plan
             </span>
           )}
         </div>
+
         <div className="flex flex-col gap-[12px] p-4">
-          {isSubscribed ? (
+          {isBillingActive && (
             <>
-              <p className="text-[13px] text-[var(--color-text-secondary)]">Your subscription is active.</p>
-              <Link
-                href="/billing"
-                className="inline-flex items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[14px] py-[5px] text-[12px] font-medium text-[var(--color-text-secondary)]"
-              >
-                Manage subscription
-              </Link>
+              <div className="space-y-[2px]">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+                  Unlimited certificates
+                  {billing.subscriptionInterval === 'year' ? ' · Annual' : billing.subscriptionInterval === 'month' ? ' · Monthly' : ''}
+                </p>
+                {billing.periodEnd && (
+                  <p className="text-[12px] text-[var(--color-text-secondary)]">Renews {billing.periodEnd}</p>
+                )}
+              </div>
+              <form action={manageSubscriptionAction}>
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[14px] py-[5px] text-[12px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)]"
+                >
+                  Manage subscription
+                </button>
+              </form>
             </>
-          ) : (
+          )}
+
+          {isBillingPastDue && (
             <>
               <p className="text-[13px] text-[var(--color-text-secondary)]">
-                {trialEndFormatted
-                  ? `Your free trial ends on ${trialEndFormatted}. Subscribe to keep issuing certificates.`
-                  : "Your free trial is active. Subscribe to keep issuing certificates."}
+                Your payment failed. Update your payment method to continue issuing certificates.
               </p>
+              <form action={manageSubscriptionAction}>
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-full bg-[var(--color-red-bg)] px-[14px] py-[6px] text-[12px] font-medium text-[var(--color-red)] transition-colors hover:brightness-95"
+                >
+                  Update payment method
+                </button>
+              </form>
+            </>
+          )}
+
+          {!isBillingActive && !isBillingPastDue && (
+            <>
+              <div className="space-y-[6px]">
+                <p className="text-[13px] text-[var(--color-text-secondary)]">
+                  {"You've used "}
+                  <span className="font-medium text-[var(--color-text-primary)]">{billing.usage.used} of {billing.usage.limit}</span>
+                  {" free certificates in "}{billing.usage.month}.
+                </p>
+                <div className="h-[4px] overflow-hidden rounded-full bg-[var(--color-background-tertiary)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--color-action)] transition-all"
+                    style={{ width: `${usedPct}%` }}
+                  />
+                </div>
+              </div>
               <Link
                 href="/billing"
-                className="flex w-full items-center justify-center rounded-full bg-[#111] px-[20px] py-[10px] text-[13px] font-medium text-white"
+                className="flex w-full items-center justify-center rounded-full bg-[var(--color-text-primary)] px-[20px] py-[9px] text-[13px] font-medium text-[var(--color-text-inverse)] transition-colors hover:opacity-90"
               >
-                Subscribe — £12.99/month
+                View plans — from £8.99/month
               </Link>
               <p className="text-center text-[12px] text-[var(--color-text-tertiary)]">Cancel anytime. No commitment.</p>
             </>

@@ -26,6 +26,7 @@ type InvoiceEditorProps = {
   client: ClientSummary | null;
   job: JobSummary | null;
   certificateType?: string | null;
+  returnTo?: string;
 };
 
 type InvoiceStatus = 'draft' | 'unpaid' | 'overdue' | 'paid';
@@ -138,7 +139,7 @@ function formatDisplayDate(isoDate: string | null | undefined) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export function InvoiceEditor({ invoice, lineItems, client, job, certificateType }: InvoiceEditorProps) {
+export function InvoiceEditor({ invoice, lineItems, client, job, certificateType, returnTo = '/invoices' }: InvoiceEditorProps) {
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -163,20 +164,24 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
     return d.toISOString().slice(0, 10);
   });
 
-  // Read-only client fields — computed from saved overrides or original data
-  const clientName = invoice.client_name_override ?? client?.name ?? '';
+  // Client fields — editable, seeded from saved overrides or original job/client data.
+  const [clientName, setClientName] = useState(invoice.client_name_override ?? client?.name ?? '');
   const [clientEmail, setClientEmail] = useState(invoice.client_email_override ?? client?.email ?? '');
   const [clientPhone, setClientPhone] = useState(invoice.client_phone_override ?? client?.phone ?? '');
-  const clientAddressLine1 = initialAddressParts[0] ?? '';
-  const clientAddressLine2 =
+  const [clientAddressLine1, setClientAddressLine1] = useState(initialAddressParts[0] ?? '');
+  const [clientAddressLine2, setClientAddressLine2] = useState(
     initialAddressParts.length > 3
       ? initialAddressParts.slice(1, -2).join(', ')
-      : (initialAddressParts[1] ?? '');
-  const clientCity =
-    initialAddressParts.length >= 3 ? (initialAddressParts[initialAddressParts.length - 2] ?? '') : '';
-  const clientPostcode = invoice.client_address_override
-    ? (initialAddressParts.at(-1) ?? '')
-    : (client?.postcode ?? '');
+      : (initialAddressParts[1] ?? ''),
+  );
+  const [clientCity, setClientCity] = useState(
+    initialAddressParts.length >= 3 ? (initialAddressParts[initialAddressParts.length - 2] ?? '') : '',
+  );
+  const [clientPostcode, setClientPostcode] = useState(
+    invoice.client_address_override
+      ? (initialAddressParts.at(-1) ?? '')
+      : (client?.postcode ?? ''),
+  );
 
   useEffect(() => {
     if (!certificateType || lineItems.length > 0) return;
@@ -223,13 +228,6 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
     return parts.filter((p, idx, arr) => arr.indexOf(p) === idx).join(', ');
   };
 
-  const displayAddress = (() => {
-    const parts = [clientAddressLine1, clientAddressLine2, clientCity, clientPostcode]
-      .map((p) => p.trim())
-      .filter(Boolean);
-    return parts.filter((p, idx, arr) => arr.indexOf(p) === idx).join('\n');
-  })();
-
   const handleSave = () => {
     startTransition(async () => {
       try {
@@ -254,7 +252,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
           throw new Error(payload?.error ?? 'Unable to generate PDF');
         }
         pushToast({ title: 'Invoice saved', variant: 'success' });
-        router.push('/invoices');
+        router.push(returnTo);
       } catch (error) {
         pushToast({
           title: 'Unable to save invoice',
@@ -347,13 +345,13 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-[18px] py-[14px]">
           <Link
-            href="/invoices"
+            href={returnTo}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)]"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="15 18 9 12 15 6" />
             </svg>
-            <span className="sr-only">Back to invoices</span>
+            <span className="sr-only">Back</span>
           </Link>
           <p className="min-w-0 flex-1 truncate text-[16px] font-medium text-[var(--color-text-primary)]">
             Invoice {invoice.invoice_number}
@@ -405,24 +403,48 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-background-secondary)] text-[13px] font-medium text-[var(--color-text-secondary)]">
               {initials}
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">
-                {clientName || 'Client'}
-              </p>
-            </div>
+            <input
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              placeholder="Client name"
+              className="min-w-0 flex-1 bg-transparent text-[14px] font-medium text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+            />
           </div>
 
           {/* Bill to address */}
-          {displayAddress ? (
-            <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3 pt-3">
-              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                Bill to
-              </p>
-              <p className="mt-1.5 whitespace-pre-line text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
-                {displayAddress}
-              </p>
+          <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3 pt-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              Bill to
+            </p>
+            <div className="mt-1.5 space-y-1.5">
+              <input
+                value={clientAddressLine1}
+                onChange={(e) => setClientAddressLine1(e.target.value)}
+                placeholder="Address line 1"
+                className="w-full bg-transparent text-[13px] text-[var(--color-text-secondary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+              />
+              <input
+                value={clientAddressLine2}
+                onChange={(e) => setClientAddressLine2(e.target.value)}
+                placeholder="Address line 2 (optional)"
+                className="w-full bg-transparent text-[13px] text-[var(--color-text-secondary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+              />
+              <div className="flex gap-2">
+                <input
+                  value={clientCity}
+                  onChange={(e) => setClientCity(e.target.value)}
+                  placeholder="Town / city"
+                  className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--color-text-secondary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+                />
+                <input
+                  value={clientPostcode}
+                  onChange={(e) => setClientPostcode(e.target.value)}
+                  placeholder="Postcode"
+                  className="w-[88px] shrink-0 bg-transparent text-right text-[13px] text-[var(--color-text-secondary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+                />
+              </div>
             </div>
-          ) : null}
+          </div>
 
           {/* Email */}
           <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">

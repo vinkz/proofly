@@ -23,11 +23,14 @@ export function JobInvoicesCard({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  const returnTo = `/jobs/${jobId}`;
+  const editQuery = `?returnTo=${encodeURIComponent(returnTo)}`;
+
   const handleCreate = () => {
     startTransition(async () => {
       try {
         const invoice = await createInvoiceForJob(jobId);
-        router.push(`/invoices/${invoice.id}`);
+        router.push(`/invoices/${invoice.id}${editQuery}`);
       } catch {
         // TODO: wire toast if needed
       }
@@ -64,7 +67,10 @@ export function JobInvoicesCard({
                     £{invoice.total.toFixed(2)}
                   </p>
                   <Button asChild variant="outline" className="rounded-full">
-                    <a href={`/invoices/${invoice.id}`}>Open</a>
+                    <a href={`/invoices/${invoice.id}/pdf`}>Open</a>
+                  </Button>
+                  <Button asChild variant="outline" className="rounded-full">
+                    <a href={`/invoices/${invoice.id}${editQuery}`}>Edit</a>
                   </Button>
                 </div>
               </div>

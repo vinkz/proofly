@@ -43,6 +43,7 @@ import { getMakes } from '@/lib/applianceCatalog/ukBoilers';
 import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
+import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 
 type WizardProps = {
   jobId: string;
@@ -386,6 +387,10 @@ export function CertificateWizard({
     resolvedInitialInfo.landlord_mobile ?? resolvedInitialInfo.customer_mobile ?? resolvedInitialInfo.customer_phone ?? '';
   const initialLandlordAddress =
     resolvedInitialInfo.landlord_address ?? buildLandlordAddress(initialLandlordLine1, initialLandlordLine2, initialLandlordCity);
+  const initialJobAddressName =
+    resolvedInitialInfo.job_address_name?.trim().toLowerCase() === 'landlord request'
+      ? ''
+      : resolvedInitialInfo.job_address_name ?? '';
 
   const [info, setInfo] = useState<Cp12InfoState>({
     customer_name: resolvedInitialInfo.customer_name ?? '',
@@ -415,7 +420,7 @@ export function CertificateWizard({
 
   const [jobAddress, setJobAddress] = useState<Cp12JobAddressState>({
     job_reference: resolvedInitialInfo.job_reference ?? '',
-    job_address_name: resolvedInitialInfo.job_address_name ?? '',
+    job_address_name: initialJobAddressName,
     job_address_line1: resolvedInitialInfo.job_address_line1 ?? resolvedInitialInfo.property_address ?? '',
     job_address_line2: resolvedInitialInfo.job_address_line2 ?? '',
     job_address_city: resolvedInitialInfo.job_address_city ?? '',
@@ -492,6 +497,7 @@ export function CertificateWizard({
       : '',
   );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
   const prefillAppliedRef = useRef(false);
   const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -1316,6 +1322,11 @@ export function CertificateWizard({
             next_inspection_due: evidenceFields.next_inspection_due ?? '',
           },
         });
+        if ('error' in result && result.error === 'limit_reached') {
+          setLimitReachedMessage(result.message ?? 'You have reached your monthly certificate limit.');
+          return;
+        }
+        if (!('jobId' in result)) return;
         const { jobId: resultJobId } = result;
         clearDraft();
         pushToast({
@@ -1993,109 +2004,6 @@ export function CertificateWizard({
         <div className="space-y-3">
           {offlineDraftBanner}
           <p className="text-[13px] text-[var(--color-text-secondary)]">Engineer and company details are pulled from account settings.</p>
-          <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job location</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                type="date"
-                value={info.inspection_date}
-                onChange={(e) => setInfo((prev) => ({ ...prev, inspection_date: e.target.value }))}
-                placeholder="Inspection date"
-                className="rounded-[8px]"
-              />
-              <Input
-                value={jobAddress.job_address_name}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                placeholder="Tenant name"
-                required
-                className="rounded-[8px]"
-              />
-              <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
-                Shown as &quot;Name&quot; in the Job Address section of the certificate.
-              </p>
-              <div className="relative sm:col-span-2">
-                <Input
-                  value={addressSearchQuery}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setAddressSearchQuery(value);
-                    setAddressSearchError(null);
-                    setSelectedPostcodeMatchId(null);
-                    setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
-                    setInfo((prev) => ({
-                      ...prev,
-                      property_address: buildPropertyAddressFromJobAddress({ ...jobAddress, job_address_line1: value }),
-                    }));
-                  }}
-                  placeholder="Start typing address or postcode"
-                  className="rounded-[8px]"
-                />
-                {isPostcodeLookupPending && !postcodeSuggestions.length ? (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)]">
-                    Searching addresses…
-                  </div>
-                ) : null}
-                {postcodeSuggestions.length ? (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
-                    <div className="max-h-72 overflow-y-auto">
-                      {postcodeSuggestions.map((suggestion) => {
-                        const isSelected = selectedPostcodeMatchId === suggestion.id;
-                        return (
-                          <button
-                            key={suggestion.id}
-                            type="button"
-                            onClick={() => void handleAddressMatchSelect(suggestion)}
-                            className={`w-full border-b-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2 text-left transition last:border-0 ${
-                              isSelected
-                                ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
-                                : 'hover:bg-[var(--color-action-bg)] text-[var(--color-text-primary)]'
-                            }`}
-                          >
-                            <div className="text-[13px] font-medium">{suggestion.label}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-                {addressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-red)]">{addressSearchError}</p> : null}
-              </div>
-              <Input
-                value={jobAddress.job_address_line2}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
-                placeholder="Job address line 2"
-                className="rounded-[8px] sm:col-span-2"
-              />
-              <Input
-                value={jobAddress.job_address_city}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
-                placeholder="City / Town"
-                className="rounded-[8px]"
-              />
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  value={jobAddress.job_postcode}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setJobAddress((prev) => ({ ...prev, job_postcode: value }));
-                    setInfo((prev) => ({ ...prev, postcode: value }));
-                  }}
-                  placeholder="Postcode"
-                  className="rounded-[8px] sm:flex-1"
-                />
-              </div>
-              <Input
-                value={jobAddress.job_tel}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
-                placeholder="Site telephone number"
-                className="rounded-[8px]"
-              />
-              <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
-                Shown as &apos;Tel. No&apos; in the Job Address section of the certificate.
-              </p>
-            </div>
-          </div>
-
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Landlord / Property owner</p>
             <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
@@ -2212,6 +2120,109 @@ export function CertificateWizard({
                 placeholder="Email for reminders (optional)"
                 className="rounded-[8px] sm:col-span-2"
               />
+            </div>
+          </div>
+
+          <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job location</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                type="date"
+                value={info.inspection_date}
+                onChange={(e) => setInfo((prev) => ({ ...prev, inspection_date: e.target.value }))}
+                placeholder="Inspection date"
+                className="rounded-[8px]"
+              />
+              <Input
+                value={jobAddress.job_address_name}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
+                placeholder="Tenant name"
+                required
+                className="rounded-[8px]"
+              />
+              <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
+                Shown as &quot;Name&quot; in the Job Address section of the certificate.
+              </p>
+              <div className="relative sm:col-span-2">
+                <Input
+                  value={addressSearchQuery}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setAddressSearchQuery(value);
+                    setAddressSearchError(null);
+                    setSelectedPostcodeMatchId(null);
+                    setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
+                    setInfo((prev) => ({
+                      ...prev,
+                      property_address: buildPropertyAddressFromJobAddress({ ...jobAddress, job_address_line1: value }),
+                    }));
+                  }}
+                  placeholder="Start typing address or postcode"
+                  className="rounded-[8px]"
+                />
+                {isPostcodeLookupPending && !postcodeSuggestions.length ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)]">
+                    Searching addresses…
+                  </div>
+                ) : null}
+                {postcodeSuggestions.length ? (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+                    <div className="max-h-72 overflow-y-auto">
+                      {postcodeSuggestions.map((suggestion) => {
+                        const isSelected = selectedPostcodeMatchId === suggestion.id;
+                        return (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            onClick={() => void handleAddressMatchSelect(suggestion)}
+                            className={`w-full border-b-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2 text-left transition last:border-0 ${
+                              isSelected
+                                ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                                : 'hover:bg-[var(--color-action-bg)] text-[var(--color-text-primary)]'
+                            }`}
+                          >
+                            <div className="text-[13px] font-medium">{suggestion.label}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                {addressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-red)]">{addressSearchError}</p> : null}
+              </div>
+              <Input
+                value={jobAddress.job_address_line2}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
+                placeholder="Job address line 2"
+                className="rounded-[8px] sm:col-span-2"
+              />
+              <Input
+                value={jobAddress.job_address_city}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_city: e.target.value }))}
+                placeholder="City / Town"
+                className="rounded-[8px]"
+              />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={jobAddress.job_postcode}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setJobAddress((prev) => ({ ...prev, job_postcode: value }));
+                    setInfo((prev) => ({ ...prev, postcode: value }));
+                  }}
+                  placeholder="Postcode"
+                  className="rounded-[8px] sm:flex-1"
+                />
+              </div>
+              <Input
+                value={jobAddress.job_tel}
+                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
+                placeholder="Site telephone number"
+                className="rounded-[8px]"
+              />
+              <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
+                Shown as &apos;Tel. No&apos; in the Job Address section of the certificate.
+              </p>
             </div>
           </div>
 
@@ -3029,10 +3040,14 @@ export function CertificateWizard({
     </WizardLayout>
   );
 
-  if (step === 1) return StepOne;
-  if (step === 2) return StepTwo;
-  if (step === 3) return StepThree;
-  return StepFour;
+  const limitModal = limitReachedMessage ? (
+    <LimitReachedModal message={limitReachedMessage} onDismiss={() => setLimitReachedMessage(null)} />
+  ) : null;
+
+  if (step === 1) return <>{StepOne}{limitModal}</>;
+  if (step === 2) return <>{StepTwo}{limitModal}</>;
+  if (step === 3) return <>{StepThree}{limitModal}</>;
+  return <>{StepFour}{limitModal}</>;
 }
 
 const CP12_REQUIRED_FIELDS = ['property_address', 'inspection_date', 'landlord_name'] as const;
@@ -3071,11 +3086,6 @@ function validateCp12AgainstSpec(
   }
   if (!hasValue(info.landlord_postcode)) {
     errors.push('landlord postcode is required');
-  }
-  const propertyAddress = (info.property_address ?? '').trim();
-  const landlordAddress = buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city).trim();
-  if (propertyAddress && landlordAddress && propertyAddress === landlordAddress) {
-    errors.push('Landlord address must be different from the property address');
   }
   if (!hasValue(profileDefaults.engineerName)) {
     errors.push('Engineer name is required (set it in Settings)');

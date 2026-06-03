@@ -283,6 +283,7 @@ export function SoloJobForm({
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('jobs_new', 'create'), []);
   const requestAddress = parseRequestAddress(initialRequest?.propertyAddress, initialRequest?.propertyPostcode);
   const requestPreferredDate = firstDateFromPreferredDates(initialRequest?.preferredDates);
+  const requestTenantName = initialRequest?.tenantName?.trim() ?? '';
   const initialClientId = initialSelection?.clientId ?? '';
   const initialPropertyId = initialSelection?.propertyId ?? '';
   const hasInitialSelection = Boolean(initialClientId || initialPropertyId);
@@ -292,7 +293,7 @@ export function SoloJobForm({
   const [clientPhone, setClientPhone] = useState(initialRequest?.landlordPhone ?? '');
   const [clientEmail, setClientEmail] = useState(initialRequest?.landlordEmail ?? '');
   const [selectedPropertyKey, setSelectedPropertyKey] = useState(initialPropertyId);
-  const [propertyName, setPropertyName] = useState(initialRequest ? 'Landlord request' : '');
+  const [propertyName, setPropertyName] = useState(requestTenantName);
   const [addressLine1, setAddressLine1] = useState(requestAddress.line1);
   const [city, setCity] = useState(requestAddress.city);
   const [postcode, setPostcode] = useState(requestAddress.postcode);
@@ -302,7 +303,7 @@ export function SoloJobForm({
     initialSelection?.jobType ?? (initialRequest?.jobType === 'service' ? 'service' : 'safety_check'),
   );
   const [inspectionDate, setInspectionDate] = useState(requestPreferredDate);
-  const [jobAddressName, setJobAddressName] = useState(initialRequest ? 'Landlord request' : '');
+  const [jobAddressName, setJobAddressName] = useState(requestTenantName);
   const [jobAddressLine1, setJobAddressLine1] = useState(requestAddress.line1);
   const [jobAddressLine2, setJobAddressLine2] = useState(requestAddress.line2);
   const [jobAddressCity, setJobAddressCity] = useState(requestAddress.city);
@@ -431,7 +432,7 @@ export function SoloJobForm({
     setClientName(initialRequest.landlordName);
     setClientPhone(initialRequest.landlordPhone);
     setClientEmail(initialRequest.landlordEmail);
-    setPropertyName('Landlord request');
+    setPropertyName(initialRequest.tenantName.trim());
     setAddressLine1(address.line1);
     setCity(address.city);
     setPostcode(address.postcode);
@@ -439,7 +440,7 @@ export function SoloJobForm({
     setScheduledFor(preferredDate ? `${preferredDate}T09:00` : '');
     setInspectionDate(preferredDate);
     setJobType(initialRequest.jobType === 'service' ? 'service' : 'safety_check');
-    setJobAddressName('Landlord request');
+    setJobAddressName(initialRequest.tenantName.trim());
     setJobAddressLine1(address.line1);
     setJobAddressLine2(address.line2);
     setJobAddressCity(address.city);

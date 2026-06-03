@@ -20,6 +20,7 @@ import {
 import { tryUpdateJobRecord } from '@/server/jobRecords';
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
+import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 
 const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
 
@@ -139,6 +140,7 @@ export function GeneralWorksWizard({
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>(initialPhotoPreviews);
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+  const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
 
   const generalWorksDraft = useMemo<GeneralWorksDraftState>(
     () => ({
@@ -311,7 +313,13 @@ export function GeneralWorksWizard({
     startTransition(async () => {
       try {
         await persistThroughStep();
-        const { jobId: resultJobId } = await generateGeneralWorksPdf({ jobId, previewOnly: false });
+        const result = await generateGeneralWorksPdf({ jobId, previewOnly: false });
+        if ('error' in result && result.error === 'limit_reached') {
+          setLimitReachedMessage(result.message ?? 'You have reached your monthly certificate limit.');
+          return;
+        }
+        if (!('jobId' in result)) return;
+        const { jobId: resultJobId } = result;
         clearDraft();
         pushToast({
           title: 'General Works generated successfully',
@@ -678,6 +686,9 @@ export function GeneralWorksWizard({
           </div>
         </WizardLayout>
       ) : null}
+      {limitReachedMessage && (
+        <LimitReachedModal message={limitReachedMessage} onDismiss={() => setLimitReachedMessage(null)} />
+      )}
     </>
   );
 }

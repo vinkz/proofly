@@ -145,7 +145,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ jobId, mode: 'bypassStorage', directPdfPath, directPdfByteLength, directPdfHash8 });
   }
 
-  const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType: 'cp12', previewOnly: true });
+  const result = await generateCertificatePdf({ jobId, certificateType: 'cp12', previewOnly: true });
+  if (!('pdfUrl' in result)) return NextResponse.json(result, { status: 402 });
+  const { pdfUrl } = result;
   console.log('CP12 template smoke: generateCertificatePdf return', { jobId, pdfUrl });
 
   return NextResponse.json({ jobId, pdfUrl });

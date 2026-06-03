@@ -4,7 +4,18 @@ import { revalidatePath } from 'next/cache';
 import { Buffer } from 'node:buffer';
 
 import type { Database } from '@/lib/database.types';
-import { sendEmail } from '@/lib/resend';
+import { isEmailConfigured, sendEmail } from '@/lib/resend';
+import {
+  baseEmail,
+  ctaButton,
+  emailSubtitle,
+  emailTitle,
+  formatDate,
+  infoCard,
+  joinAddress,
+  note,
+  titleCase,
+} from '@/lib/email-templates';
 import { requireUser, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import { promoteDeliveredJobData } from '@/server/delivery-promotion';
 import { persistJobFields, type JobFieldEntry } from '@/server/job-fields';
@@ -32,6 +43,8 @@ export type DeliveryBundle = {
   tenantEmail: string | null;
   engineerName: string | null;
   engineerEmail: string | null;
+  engineerCompanyName: string | null;
+  gasSafeNumber: string | null;
   certificates: DeliveryCertificate[];
   hasInvoice: boolean;
   invoiceStatus: string | null;
@@ -74,6 +87,18 @@ const getSiteUrl = () =>
     'https://certnow.uk'
   ).replace(/\/$/, '');
 
+async function sendEmailSafely(context: string, input: Parameters<typeof sendEmail>[0]) {
+  if (!isEmailConfigured()) return { status: 'not_configured' as const };
+  try {
+    const result = await sendEmail(input);
+    if (result.status !== 'sent') console.error(`[${context}] email failed:`, result.error ?? result.status);
+    return result;
+  } catch (error) {
+    console.error(`[${context}] email failed:`, error);
+    return { status: 'failed' as const, error: error instanceof Error ? error.message : 'Unknown email error' };
+  }
+}
+
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
     if (typeof value === 'string' && value.trim().length > 0) return value.trim();
@@ -94,14 +119,6 @@ const formatIssuedDate = (value: string | null) => {
     year: 'numeric',
   }).format(date);
 };
-
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 
 const uniqueRecipients = (values: Array<string | null>) => {
   const seen = new Set<string>();
@@ -208,7 +225,7 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
       admin.from('job_fields').select('field_key, value').eq('job_id', jobId),
       admin
         .from('profiles')
-        .select('default_engineer_name, full_name, company_email, gas_safe_number')
+        .select('default_engineer_name, full_name, company_name, company_email, gas_safe_number')
         .eq('id', job.user_id ?? '')
         .maybeSingle(),
       job.client_id
@@ -264,11 +281,12 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
   const client = clientResp.data;
   const invoice = invoiceResp.data as InvoiceRow | null;
   const property = propertyResp.data as { public_token: string } | null;
-  const constructedAddress = [
+  const constructedAddress = joinAddress([
     fieldMap.job_address_line1,
+    fieldMap.job_address_line2,
     fieldMap.job_address_city,
     fieldMap.job_postcode,
-  ].filter(Boolean).join(', ');
+  ], '');
   const address = pickText(fieldMap.property_address, constructedAddress, job.address, 'Property address not recorded');
   const publicToken = job.public_token;
   const publicHref = property?.public_token ? `/p/${property.public_token}` : `/j/${publicToken}`;
@@ -284,6 +302,8 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
     tenantEmail: pickText(fieldMap.tenant_email) || null,
     engineerName: pickText(profile?.default_engineer_name ?? null, profile?.full_name ?? null) || null,
     engineerEmail: pickText(profile?.company_email ?? null) || null,
+    engineerCompanyName: pickText(profile?.company_name ?? null) || null,
+    gasSafeNumber: pickText(profile?.gas_safe_number ?? null) || null,
     certificates,
     hasInvoice: Boolean(invoice),
     invoiceStatus: invoice?.status ?? null,
@@ -348,38 +368,56 @@ export async function sendDeliveryBundle(
     const includedCertificates = bundle.certificates
       .map((certificate) => `- ${certificate.label} (Issued ${formatIssuedDate(certificate.issuedAt)})`)
       .join('\n');
-    const greetingName = bundle.landlordName || 'there';
-    const engineerName = bundle.engineerName || 'CertNow';
+    const greetingName = bundle.landlordName ? titleCase(bundle.landlordName) : 'there';
+    const engineerName = bundle.engineerName ? titleCase(bundle.engineerName) : 'CertNow';
+    const companyName = bundle.engineerCompanyName ? titleCase(bundle.engineerCompanyName) : engineerName;
     const subject = `Gas Safety Certificate — ${bundle.address}`;
+    const primaryCertificate = bundle.certificates[0];
+    const issuedDate = primaryCertificate?.issuedAt ? formatDate(primaryCertificate.issuedAt) : 'Not provided';
+    const validUntil = primaryCertificate?.issuedAt
+      ? formatDate(new Date(new Date(primaryCertificate.issuedAt).setFullYear(new Date(primaryCertificate.issuedAt).getFullYear() + 1)).toISOString())
+      : 'Not provided';
     const text = [
       `Hi ${greetingName},`,
       '',
-      `Please find your gas safety certificate(s) for ${bundle.address} attached.`,
+      `${engineerName} from ${companyName} has completed a gas safety inspection at ${bundle.address}.`,
       '',
-      'You can also view and download your documents online (no login required):',
+      'View and download your certificate:',
       publicUrl,
       '',
-      'Certificate(s) included:',
+      'Certificate details:',
+      `Property: ${bundle.address}`,
+      `Type: ${primaryCertificate?.label ?? 'Gas Safety Certificate'}`,
+      `Issued: ${issuedDate}`,
+      `Valid until: ${validUntil}`,
+      `Engineer: ${engineerName}`,
+      `Gas Safe no.: ${bundle.gasSafeNumber || 'Not provided'}`,
+      '',
+      'Included attachments:',
       includedCertificates || '- Certificate PDF',
       '',
       'Regards,',
       engineerName,
     ].join('\n');
-    const html = [
-      `<p>Hi ${escapeHtml(greetingName)},</p>`,
-      `<p>Please find your gas safety certificate(s) for ${escapeHtml(bundle.address)} attached.</p>`,
-      `<p>You can also view and download your documents online (no login required):<br><a href="${escapeHtml(publicUrl)}">${escapeHtml(publicUrl)}</a></p>`,
-      '<p>Certificate(s) included:</p>',
-      `<ul>${bundle.certificates
-        .map(
-          (certificate) =>
-            `<li>${escapeHtml(certificate.label)} (Issued ${escapeHtml(formatIssuedDate(certificate.issuedAt))})</li>`,
-        )
-        .join('') || '<li>Certificate PDF</li>'}</ul>`,
-      `<p>Regards,<br>${escapeHtml(engineerName)}</p>`,
-    ].join('');
+    const html = baseEmail(
+      [
+        emailTitle('Your gas safety certificate is ready'),
+        emailSubtitle(`${engineerName} from ${companyName} has completed a gas safety inspection at ${bundle.address}.`),
+        infoCard('Certificate details', [
+          { label: 'Property', value: bundle.address },
+          { label: 'Type', value: primaryCertificate?.label ?? 'Gas Safety Certificate' },
+          { label: 'Issued', value: issuedDate },
+          { label: 'Valid until', value: validUntil },
+          { label: 'Engineer', value: engineerName },
+          { label: 'Gas Safe no.', value: bundle.gasSafeNumber || 'Not provided' },
+        ]),
+        ctaButton('View and download certificate', publicUrl, 'green'),
+        note('This link is permanent. You can view and download your certificate any time without creating an account.'),
+      ].join(''),
+      { subject, sentOnBehalfOf: engineerName },
+    );
 
-    const result = await sendEmail({
+    const result = await sendEmailSafely('sendDeliveryBundle', {
       to: recipientEmails,
       subject,
       replyTo: bundle.engineerEmail ?? undefined,

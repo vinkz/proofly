@@ -1,7 +1,18 @@
 'use server';
 
 import { supabaseServerAction } from '@/lib/supabaseServer';
-import { sendEmail } from '@/lib/resend';
+import { isEmailConfigured, sendEmail } from '@/lib/resend';
+import {
+  baseEmail,
+  ctaButton,
+  emailSubtitle,
+  emailTitle,
+  formatDate,
+  formatSortCode,
+  infoCard,
+  joinAddress,
+  titleCase,
+} from '@/lib/email-templates';
 import {
   STANDARD_RATE_DESCRIPTIONS,
   normalizeStandardRates,
@@ -102,6 +113,18 @@ const fromInvoiceLineItems = (sb: Awaited<ReturnType<typeof supabaseServerAction
 
 const fromProfiles = (sb: Awaited<ReturnType<typeof supabaseServerAction>>) =>
   (sb as unknown as UntypedSupabase).from('profiles');
+
+async function sendEmailSafely(context: string, input: Parameters<typeof sendEmail>[0]) {
+  if (!isEmailConfigured()) return { status: 'not_configured' as const };
+  try {
+    const result = await sendEmail(input);
+    if (result.status !== 'sent') console.error(`[${context}] email failed:`, result.error ?? result.status);
+    return result;
+  } catch (error) {
+    console.error(`[${context}] email failed:`, error);
+    return { status: 'failed' as const, error: error instanceof Error ? error.message : 'Unknown email error' };
+  }
+}
 
 const buildInvoiceNumber = (invoiceId: string) => {
   const year = new Date().getFullYear();
@@ -350,6 +373,60 @@ export async function createInvoiceForJob(jobId: string) {
   return updated as InvoiceRow;
 }
 
+export async function createBlankInvoice(input?: { clientId?: string | null }) {
+  const { sb, user } = await getAuthedClient();
+
+  const clientId = input?.clientId?.trim() || null;
+  let client: { name?: string | null; address?: string | null; postcode?: string | null; email?: string | null; phone?: string | null } | null = null;
+  if (clientId) {
+    const { data, error } = await sb
+      .from('clients')
+      .select('id, name, address, postcode, email, phone')
+      .eq('id', clientId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error('Client not found');
+    client = data;
+  }
+
+  const clientAddressOverride = client
+    ? [client.address, client.postcode]
+        .map((part) => String(part ?? '').trim())
+        .filter(Boolean)
+        .filter((part, idx, arr) => arr.indexOf(part) === idx)
+        .join(', ') || null
+    : null;
+
+  const { data: created, error: insertErr } = await fromInvoices(sb)
+    .insert({
+      user_id: user.id,
+      job_id: null,
+      client_id: clientId,
+      client_name_override: client?.name ?? null,
+      client_address_override: clientAddressOverride,
+      client_email_override: client?.email ?? null,
+      client_phone_override: client?.phone ?? null,
+      invoice_number: 'INV-PENDING',
+      vat_rate: 0.2,
+      status: 'draft',
+    })
+    .select('*')
+    .maybeSingle();
+  if (insertErr || !created) throw new Error(insertErr?.message ?? 'Unable to create invoice');
+
+  const createdRow = created as { id: string };
+  const invoiceNumber = buildInvoiceNumber(createdRow.id);
+  const { data: updated, error: updateErr } = await fromInvoices(sb)
+    .update({ invoice_number: invoiceNumber })
+    .eq('id', createdRow.id)
+    .select('*')
+    .maybeSingle();
+  if (updateErr || !updated) throw new Error(updateErr?.message ?? 'Unable to set invoice number');
+
+  return updated as InvoiceRow;
+}
+
 export async function listInvoices() {
   const { sb, user } = await getAuthedClient();
   const { data, error } = await (fromInvoices(sb)
@@ -432,43 +509,84 @@ export async function sendInvoiceEmail(invoiceId: string, toEmail: string, pdfUr
   const { sb, user } = await getAuthedClient();
 
   const { data: invoice, error: invoiceErr } = await fromInvoices(sb)
-    .select('id, invoice_number')
+    .select('id, invoice_number, job_id, issue_date, due_date, client_address_override')
     .eq('id', invoiceId)
     .eq('user_id', user.id)
     .maybeSingle();
   if (invoiceErr || !invoice) throw new Error(invoiceErr?.message ?? 'Invoice not found');
 
-  const invoiceRow = invoice as { id: string; invoice_number: string };
+  const invoiceRow = invoice as {
+    id: string;
+    invoice_number: string;
+    job_id: string | null;
+    issue_date: string | null;
+    due_date: string | null;
+    client_address_override?: string | null;
+  };
+  const { data: profileData } = await (fromProfiles(sb)
+    .select('full_name, company_name, company_email, bank_name, bank_account_name, bank_sort_code, bank_account_number')
+    .eq('id', user.id)
+    .maybeSingle() as Promise<{ data: unknown; error: { message: string } | null }>);
+  const { data: jobData } = invoiceRow.job_id
+    ? await ((sb as unknown as UntypedSupabase)
+        .from('jobs')
+        .select('address, job_type')
+        .eq('id', invoiceRow.job_id)
+        .maybeSingle() as Promise<{ data: unknown; error: { message: string } | null }>)
+    : { data: null };
+  const { data: lineItems } = await (fromInvoiceLineItems(sb)
+    .select('description, quantity, unit_price')
+    .eq('invoice_id', invoiceId) as unknown as Promise<{ data: unknown[] | null; error: { message: string } | null }>);
+  const profile = (profileData ?? {}) as Record<string, string | null>;
+  const job = (jobData ?? {}) as Record<string, string | null>;
+  const rows = (lineItems ?? []) as Array<{ description?: string | null; quantity?: number | string | null; unit_price?: number | string | null }>;
+  const total = rows.reduce((sum, row) => sum + Number(row.quantity ?? 1) * Number(row.unit_price ?? 0), 0);
+  const companyName = titleCase(profile.company_name || profile.full_name || 'CertNow engineer');
+  const address = joinAddress([invoiceRow.client_address_override, job.address], 'the property');
+  const work = rows.map((row) => row.description).filter(Boolean).join(', ') || job.job_type || 'Gas safety work';
+  const subject = `Invoice ${invoiceRow.invoice_number} from ${companyName}`;
 
-  let senderName = '';
-  try {
-    const { data: profileData } = await sb
-      .from('profiles')
-      .select('full_name, company_name')
-      .eq('id', user.id)
-      .maybeSingle();
-    const p = profileData as { full_name?: string | null; company_name?: string | null } | null;
-    senderName = p?.company_name ?? p?.full_name ?? '';
-  } catch {
-    // send without name if profile unavailable
-  }
-
-  return sendEmail({
+  return sendEmailSafely('sendInvoiceEmail', {
     to: toEmail,
-    subject: `Invoice ${invoiceRow.invoice_number}`,
-    html: [
-      '<p>Hi,</p>',
-      '<p>Please find your invoice via the link below.</p>',
-      `<p><a href="${pdfUrl}">View Invoice ${invoiceRow.invoice_number}</a></p>`,
-      senderName ? `<p>Kind regards,<br>${senderName}</p>` : '<p>Kind regards</p>',
-    ].join(''),
+    subject,
+    replyTo: profile.company_email || undefined,
+    html: baseEmail(
+      [
+        emailTitle(`Invoice from ${companyName}`),
+        emailSubtitle(`Please find your invoice for gas safety work at ${address}.`),
+        infoCard('Invoice summary', [
+          { label: 'Invoice no.', value: invoiceRow.invoice_number },
+          { label: 'Property', value: address },
+          { label: 'Work', value: work },
+          { label: 'Issued', value: invoiceRow.issue_date ? formatDate(invoiceRow.issue_date) : 'Not provided' },
+          { label: 'Due', value: invoiceRow.due_date ? formatDate(invoiceRow.due_date) : 'Not provided' },
+          { label: 'Amount due', value: `£${total.toFixed(2)}` },
+        ]),
+        infoCard('How to pay', [
+          { label: 'Pay to', value: profile.bank_account_name || profile.company_name || 'Not provided' },
+          { label: 'Bank', value: profile.bank_name || 'Not provided' },
+          { label: 'Sort code', value: profile.bank_sort_code ? formatSortCode(profile.bank_sort_code) : 'Not provided' },
+          { label: 'Account', value: profile.bank_account_number || 'Not provided' },
+          { label: 'Reference', value: invoiceRow.invoice_number },
+        ]),
+        ctaButton('View invoice', pdfUrl, 'dark'),
+      ].join(''),
+      { subject, sentOnBehalfOf: companyName },
+    ),
     text: [
       'Hi,',
       '',
-      'Please find your invoice via the link below.',
+      `Please find your invoice for gas safety work at ${address}.`,
+      '',
+      `Invoice no.: ${invoiceRow.invoice_number}`,
+      `Work: ${work}`,
+      `Issued: ${invoiceRow.issue_date ? formatDate(invoiceRow.issue_date) : 'Not provided'}`,
+      `Due: ${invoiceRow.due_date ? formatDate(invoiceRow.due_date) : 'Not provided'}`,
+      `Amount due: £${total.toFixed(2)}`,
+      '',
       pdfUrl,
       '',
-      senderName ? `Kind regards,\n${senderName}` : 'Kind regards',
+      `Kind regards,\n${companyName}`,
     ].join('\n'),
   });
 }

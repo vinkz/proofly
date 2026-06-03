@@ -4,7 +4,19 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 
-import { sendEmail } from '@/lib/resend';
+import { isEmailConfigured, sendEmail } from '@/lib/resend';
+import {
+  baseEmail,
+  benefitList,
+  ctaButton,
+  emailSubtitle,
+  emailTitle,
+  formatDate,
+  infoCard,
+  note,
+  paragraph,
+  titleCase,
+} from '@/lib/email-templates';
 import { supabaseServerReadOnly, supabaseServerServiceRole, getSupabaseUser } from '@/lib/supabaseServer';
 
 const RequestIdSchema = z.string().uuid();
@@ -63,14 +75,6 @@ const getSiteUrl = () =>
     process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
     'https://certnow.uk'
   ).replace(/\/$/, '');
-
-const escapeHtml = (value: string | null | undefined) =>
-  String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 
 const formatJobType = (jobType: string) => {
   if (jobType === 'cp12') return 'Annual gas safety check';
@@ -291,56 +295,16 @@ async function findEngineerProfileForRequest(
   return findEngineerProfileByPhone(sb, request.engineerPhone);
 }
 
-function renderEmailShell(input: {
-  preheader: string;
-  title: string;
-  intro: string;
-  rows: Array<{ label: string; value: string | null | undefined }>;
-  button?: { label: string; href: string };
-  footer?: string;
-}) {
-  const rows = input.rows
-    .filter((row) => String(row.value ?? '').trim().length > 0)
-    .map(
-      (row) => `
-        <tr>
-          <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#6b7280;font-size:13px;width:140px;vertical-align:top;">${escapeHtml(row.label)}</td>
-          <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#111111;font-size:14px;font-weight:600;">${escapeHtml(row.value)}</td>
-        </tr>
-      `,
-    )
-    .join('');
-
-  return `
-<!doctype html>
-<html>
-  <body style="margin:0;background:#f4f4f4;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#111111;">
-    <div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(input.preheader)}</div>
-    <main style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0;">
-      <section style="padding:24px 24px 20px;background:#111111;color:#ffffff;">
-        <div style="font-size:18px;font-weight:800;letter-spacing:-0.04em;">certnow</div>
-        <h1 style="margin:20px 0 6px;font-size:24px;font-weight:700;line-height:1.15;">${escapeHtml(input.title)}</h1>
-        <p style="margin:0;color:#d1d5db;font-size:14px;line-height:1.6;">${escapeHtml(input.intro)}</p>
-      </section>
-      <section style="padding:20px 24px 8px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-          ${rows}
-        </table>
-        ${
-          input.button
-            ? `<div style="padding:20px 0 10px;">
-                <a href="${escapeHtml(input.button.href)}" style="display:inline-block;border-radius:8px;background:#111111;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 20px;letter-spacing:0.01em;">${escapeHtml(input.button.label)}</a>
-              </div>
-              <p style="margin:4px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">If the button does not work, paste this link into your browser:<br><span style="color:#374151;">${escapeHtml(input.button.href)}</span></p>`
-            : ''
-        }
-      </section>
-      <section style="padding:16px 24px 22px;border-top:1px solid #f0f0f0;">
-        <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;">${escapeHtml(input.footer ?? 'Sent by CertNow.')}</p>
-      </section>
-    </main>
-  </body>
-</html>`;
+async function sendEmailSafely(context: string, input: Parameters<typeof sendEmail>[0]) {
+  if (!isEmailConfigured()) return { status: 'not_configured' as const };
+  try {
+    const result = await sendEmail(input);
+    if (result.status !== 'sent') console.error(`[${context}] email failed:`, result.error ?? result.status);
+    return result;
+  } catch (error) {
+    console.error(`[${context}] email failed:`, error);
+    return { status: 'failed' as const, error: error instanceof Error ? error.message : 'Unknown email error' };
+  }
 }
 
 export type DashboardJobRequest = {
@@ -506,30 +470,42 @@ export async function sendEngineerRequestLinkToLandlord(input: z.input<typeof La
   const link = await getOrCreateEngineerRequestLink();
   const readClient = await supabaseServerReadOnly();
   const user = await getSupabaseUser(readClient);
-  const engineerName = user?.email ?? 'your engineer';
+  const admin = await supabaseServerServiceRole();
+  const { data: profile } = user
+    ? await (admin as unknown as UntypedSupabase)
+        .from('profiles')
+        .select('default_engineer_name, full_name, company_name, company_email')
+        .eq('id', user.id)
+        .maybeSingle()
+    : { data: null };
+  const profileRow = (profile ?? {}) as Record<string, unknown>;
+  const engineerName = titleCase(cleanText(profileRow.default_engineer_name as string) || cleanText(profileRow.full_name as string) || user?.email || 'your engineer');
+  const companyName = titleCase(cleanText(profileRow.company_name as string) || engineerName);
+  const engineerEmail = cleanText(profileRow.company_email as string) || user?.email || undefined;
   const landlordName = cleanText(parsed.landlordName);
-  const status = (await sendEmail({
+  const subject = `${engineerName} wants your property details`;
+  const status = (await sendEmailSafely('sendEngineerRequestLinkToLandlord', {
     to: parsed.landlordEmail,
-    subject: 'Please send your job details to CertNow',
+    subject,
+    replyTo: engineerEmail,
     text: [
-      landlordName ? `Hi ${landlordName},` : 'Hi,',
+      landlordName ? `Hi ${titleCase(landlordName)},` : 'Hi,',
       '',
-      `${engineerName} has asked you to send the property and access details for your job through CertNow.`,
+      `${engineerName} from ${companyName} is setting up a gas safety job and needs a few details from you.`,
       '',
-      `Open the request form: ${link.url}`,
+      `Fill in property details: ${link.url}`,
       '',
-      'You will not need to enter the engineer details again.',
+      "You'll be asked for property address, tenant contact, and access notes. No account is needed.",
     ].join('\n'),
-    html: renderEmailShell({
-      preheader: 'Send your job details to your engineer through CertNow.',
-      title: 'Send your job details',
-      intro: `${engineerName} has asked you to send the property, access, and preferred date details through CertNow.`,
-      rows: [
-        { label: 'Engineer request link', value: link.url },
-      ],
-      button: { label: 'Open request form', href: link.url },
-      footer: 'This link is scoped to the engineer, so you will not need to enter their details.',
-    }),
+    html: baseEmail(
+      [
+        emailTitle('Property details needed'),
+        emailSubtitle(`${engineerName} from ${companyName} is setting up a gas safety job and needs a few details from you. It takes under 2 minutes and no account is needed.`),
+        ctaButton('Fill in property details', link.url, 'green'),
+        note("You'll be asked for: property address, tenant contact, and access notes. That's it."),
+      ].join(''),
+      { subject, sentOnBehalfOf: engineerName },
+    ),
   })).status;
 
   return { ok: true, status, url: link.url };
@@ -616,34 +592,44 @@ export async function sendJobRequestNotification(requestId: string) {
   if (!engineerEmail || engineerEmail === landlordEmail) return { ok: true, status: 'not_configured' as const };
 
   const href = `${getSiteUrl()}/jobs/new?requestId=${request.id}`;
-  const status = (await sendEmail({
+  const landlordName = titleCase(request.landlordName || 'A landlord');
+  const propertyAddress = request.propertyAddress || 'Not provided';
+  const subject = `New job request from ${landlordName}`;
+  const status = (await sendEmailSafely('sendJobRequestNotification', {
     to: engineerEmail,
-    subject: 'New landlord job request from CertNow',
+    subject,
     text: [
-      `${request.landlordName ?? 'A landlord'} submitted a gas compliance job request.`,
+      `${landlordName} has submitted a job request and named you as their engineer.`,
       '',
-      `Property: ${request.propertyAddress ?? 'Not provided'}`,
+      `Property: ${propertyAddress}`,
+      `Work needed: ${formatJobType(request.jobType)}`,
+      `Landlord: ${landlordName}`,
       `Landlord phone: ${request.landlordPhone ?? 'Not provided'}`,
-      `Preferred dates: ${request.preferredDates ?? 'Not provided'}`,
+      `Landlord email: ${request.landlordEmail ?? 'Not provided'}`,
+      `Tenant: ${request.tenantName || 'Not provided'}`,
+      `Access notes: ${request.accessNotes || 'Not provided'}`,
+      `Preferred dates: ${request.preferredDates || 'Flexible'}`,
       '',
-      `Open prefilled job: ${href}`,
+      `Open request in CertNow: ${href}`,
     ].join('\n'),
-    html: renderEmailShell({
-      preheader: `${request.landlordName ?? 'A landlord'} sent a gas compliance job request.`,
-      title: 'New landlord job request',
-      intro: 'Open the request to create a job with Step 1 prefilled.',
-      rows: [
-        { label: 'Landlord', value: request.landlordName },
-        { label: 'Landlord phone', value: request.landlordPhone },
-        { label: 'Landlord email', value: request.landlordEmail },
-        { label: 'Property', value: request.propertyAddress },
-        { label: 'Work needed', value: formatJobType(request.jobType) },
-        { label: 'Tenant', value: request.tenantName || 'Not provided' },
-        { label: 'Access notes', value: request.accessNotes || 'Not provided' },
-        { label: 'Preferred dates', value: request.preferredDates || 'Not provided' },
-      ],
-      button: { label: 'Open prefilled job', href },
-    }),
+    html: baseEmail(
+      [
+        emailTitle('New job request'),
+        emailSubtitle(`${landlordName} has submitted a job request and named you as their engineer.`),
+        infoCard('Job details', [
+          { label: 'Property', value: propertyAddress },
+          { label: 'Work needed', value: formatJobType(request.jobType) },
+          { label: 'Landlord', value: landlordName },
+          { label: 'Landlord phone', value: request.landlordPhone || 'Not provided' },
+          { label: 'Landlord email', value: request.landlordEmail || 'Not provided' },
+          { label: 'Tenant', value: request.tenantName || 'Not provided' },
+          { label: 'Access notes', value: request.accessNotes || 'Not provided' },
+          { label: 'Preferred dates', value: request.preferredDates || 'Flexible' },
+        ]),
+        ctaButton('Open request in CertNow', href, 'green'),
+      ].join(''),
+      { subject },
+    ),
   })).status;
 
   const { error: updateErr } = await fromJobRequests(admin)
@@ -735,9 +721,6 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
   const jobType = request.jobType === 'service' ? 'service' : 'cp12';
   const certTypes = normalizeCertTypes(request.jobType);
   const engineerDisplayName = engineerProfile?.engineerName ?? request.engineerName;
-  const engineerContact = [request.engineerName, request.engineerEmail, request.engineerPhone]
-    .filter(Boolean)
-    .join(' / ');
   const engineerPrefillUrl = `${getSiteUrl()}/jobs/new?requestId=${requestId}`;
   const engineerClaimUrl = claimToken ? `${getSiteUrl()}/signup/step1?claim=${claimToken}` : null;
   const engineerActionUrl = engineerClaimUrl ?? engineerPrefillUrl;
@@ -794,35 +777,40 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
     }
   }
 
-  const landlordConfirmationStatus = (await sendEmail({
+  const landlordDisplayName = titleCase(request.landlordName);
+  const engineerPublicName = titleCase(engineerProfile?.engineerName || request.engineerName || 'Your engineer');
+  const propertyAddress = request.propertyAddress || 'Not provided';
+  const landlordConfirmationSubject = 'Your gas safety request has been submitted';
+  const landlordConfirmationStatus = (await sendEmailSafely('createPendingJobRequest.landlordConfirmation', {
     to: request.landlordEmail,
-    subject: 'Your CertNow job request has been submitted',
+    subject: landlordConfirmationSubject,
+    replyTo: engineerProfile?.email || request.engineerEmail || undefined,
     text: [
-      `Hi ${request.landlordName},`,
+      `Hi ${landlordDisplayName},`,
       '',
-      'Your gas compliance job request has been submitted.',
+      `Your gas safety job request has been sent to ${engineerPublicName}. They'll be in touch to confirm a visit date.`,
       '',
-      `Property: ${request.propertyAddress}`,
-      `Work needed: ${request.jobType}`,
-      `Engineer contact supplied: ${engineerContact}`,
-      `Preferred dates: ${request.preferredDates || 'Not provided'}`,
+      `Property: ${propertyAddress}`,
+      `Work needed: ${formatJobType(request.jobType)}`,
+      `Engineer: ${engineerPublicName}`,
+      `Submitted: ${formatDate(new Date().toISOString())}`,
       '',
-      'Your engineer will contact you directly to arrange the visit.',
+      `You don't need to do anything else. ${engineerPublicName} will contact you directly to arrange the visit.`,
     ].join('\n'),
-    html: renderEmailShell({
-      preheader: `Your CertNow request for ${request.propertyAddress} has been submitted.`,
-      title: 'Your job request has been submitted',
-      intro: 'We have recorded your request. Your engineer will contact you directly to arrange the visit.',
-      rows: [
-        { label: 'Property', value: request.propertyAddress },
-        { label: 'Work needed', value: formatJobType(request.jobType) },
-        { label: 'Engineer', value: engineerContact },
-        { label: 'Preferred dates', value: request.preferredDates || 'Not provided' },
-        { label: 'Tenant', value: request.tenantName || 'Not provided' },
-        { label: 'Access notes', value: request.accessNotes || 'Not provided' },
-      ],
-      footer: 'The engineer will contact you directly to arrange the visit.',
-    }),
+    html: baseEmail(
+      [
+        emailTitle('Request submitted'),
+        emailSubtitle(`Your gas safety job request has been sent to ${engineerPublicName}. They'll be in touch to confirm a visit date.`),
+        infoCard('Your request', [
+          { label: 'Property', value: propertyAddress },
+          { label: 'Work needed', value: formatJobType(request.jobType) },
+          { label: 'Engineer', value: engineerPublicName || 'Your engineer' },
+          { label: 'Submitted', value: formatDate(new Date().toISOString()) },
+        ]),
+        paragraph(`You don't need to do anything else. ${engineerPublicName} will contact you directly to arrange the visit.`),
+      ].join(''),
+      { subject: landlordConfirmationSubject, sentOnBehalfOf: engineerPublicName },
+    ),
   })).status;
   const engineerNotificationRecipient = await getEngineerNotificationRecipient(admin, engineerProfile, request.engineerEmail);
   const normalizedEngineerNotificationRecipient = normalizeEmailKey(engineerNotificationRecipient);
@@ -838,87 +826,83 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
     ? 'skipped_same_recipient'
     : engineerNotificationTarget
     ? engineerProfile
-      ? (await sendEmail({
+      ? (await sendEmailSafely('createPendingJobRequest.matchedEngineer', {
           to: engineerNotificationTarget,
-          subject: 'New landlord job request from CertNow',
+          subject: `New job request from ${landlordDisplayName}`,
           text: [
-            `Hi ${engineerDisplayName},`,
+            `Hi ${titleCase(engineerDisplayName)},`,
             '',
-            `${request.landlordName} submitted a gas compliance job request and listed you as their chosen engineer.`,
+            `${landlordDisplayName} has submitted a job request and named you as their engineer.`,
             '',
+            `Property: ${propertyAddress}`,
+            `Work needed: ${formatJobType(request.jobType)}`,
+            `Landlord: ${landlordDisplayName}`,
             `Landlord phone: ${request.landlordPhone}`,
             `Landlord email: ${request.landlordEmail}`,
-            `Property: ${request.propertyAddress}`,
-            `Work needed: ${request.jobType}`,
             `Tenant: ${request.tenantName || 'Not provided'}`,
-            `Tenant phone: ${request.tenantPhone || 'Not provided'}`,
             `Access notes: ${request.accessNotes || 'Not provided'}`,
-            `Preferred dates: ${request.preferredDates || 'Not provided'}`,
+            `Preferred dates: ${request.preferredDates || 'Flexible'}`,
             '',
-            `Open the prefilled job request: ${engineerPrefillUrl}`,
+            `Open request in CertNow: ${engineerPrefillUrl}`,
           ].join('\n'),
-          html: renderEmailShell({
-            preheader: `${request.landlordName} sent a gas compliance job request for ${request.propertyAddress}.`,
-            title: 'New landlord job request',
-            intro: `${request.landlordName} listed you as their chosen engineer. Open the request to create a job with Step 1 prefilled.`,
-            rows: [
-              { label: 'Landlord', value: request.landlordName },
-              { label: 'Landlord phone', value: request.landlordPhone },
-              { label: 'Landlord email', value: request.landlordEmail },
-              { label: 'Property', value: request.propertyAddress },
-              { label: 'Work needed', value: formatJobType(request.jobType) },
-              { label: 'Tenant', value: request.tenantName || 'Not provided' },
-              { label: 'Tenant phone', value: request.tenantPhone || 'Not provided' },
-              { label: 'Access notes', value: request.accessNotes || 'Not provided' },
-              { label: 'Preferred dates', value: request.preferredDates || 'Not provided' },
-            ],
-            button: {
-              label: 'Open prefilled job',
-              href: engineerPrefillUrl,
-            },
-            footer: 'Sign in to CertNow to review the request. When you save the job, this request is linked to your account and marked as scheduled.',
-          }),
+          html: baseEmail(
+            [
+              emailTitle('New job request'),
+              emailSubtitle(`${landlordDisplayName} has submitted a job request and named you as their engineer.`),
+              infoCard('Job details', [
+                { label: 'Property', value: propertyAddress },
+                { label: 'Work needed', value: formatJobType(request.jobType) },
+                { label: 'Landlord', value: landlordDisplayName },
+                { label: 'Landlord phone', value: request.landlordPhone || 'Not provided' },
+                { label: 'Landlord email', value: request.landlordEmail || 'Not provided' },
+                { label: 'Tenant', value: request.tenantName || 'Not provided' },
+                { label: 'Access notes', value: request.accessNotes || 'Not provided' },
+                { label: 'Preferred dates', value: request.preferredDates || 'Flexible' },
+              ]),
+              ctaButton('Open request in CertNow', engineerPrefillUrl, 'green'),
+            ].join(''),
+            { subject: `New job request from ${landlordDisplayName}` },
+          ),
         })).status
-      : (await sendEmail({
+      : (await sendEmailSafely('createPendingJobRequest.unregisteredEngineer', {
           to: engineerNotificationTarget,
-          subject: 'A landlord requested you through CertNow',
+          subject: 'A landlord tried to book you through CertNow',
           text: [
-            `Hi ${engineerDisplayName},`,
+            `Hi ${titleCase(engineerDisplayName)},`,
             '',
-            `${request.landlordName} submitted a gas compliance job request and listed you as their chosen engineer.`,
+            `${landlordDisplayName} tried to book you for a gas safety job through CertNow and listed ${request.engineerEmail} as their engineer. Create a free account to claim it.`,
             '',
+            `Property: ${propertyAddress}`,
+            `Work needed: ${formatJobType(request.jobType)}`,
+            `Landlord: ${landlordDisplayName}`,
             `Landlord phone: ${request.landlordPhone}`,
-            `Landlord email: ${request.landlordEmail}`,
-            `Property: ${request.propertyAddress}`,
-            `Work needed: ${request.jobType}`,
-            `Tenant: ${request.tenantName || 'Not provided'}`,
-            `Tenant phone: ${request.tenantPhone || 'Not provided'}`,
-            `Access notes: ${request.accessNotes || 'Not provided'}`,
-            `Preferred dates: ${request.preferredDates || 'Not provided'}`,
+            `Preferred dates: ${request.preferredDates || 'Flexible'}`,
             '',
-            `Create your CertNow account to claim this request: ${engineerClaimUrl}`,
+            `Create free account and claim request: ${engineerClaimUrl ?? engineerActionUrl}`,
+            '',
+            'This link expires in 30 days.',
           ].join('\n'),
-          html: renderEmailShell({
-            preheader: `${request.landlordName} sent a gas compliance job request for ${request.propertyAddress}.`,
-            title: 'A landlord requested you through CertNow',
-            intro: `${request.landlordName} listed you as their chosen engineer. Create your CertNow account to claim the request and open the job with Step 1 prefilled.`,
-            rows: [
-              { label: 'Landlord', value: request.landlordName },
-              { label: 'Landlord phone', value: request.landlordPhone },
-              { label: 'Landlord email', value: request.landlordEmail },
-              { label: 'Property', value: request.propertyAddress },
-              { label: 'Work needed', value: formatJobType(request.jobType) },
-              { label: 'Tenant', value: request.tenantName || 'Not provided' },
-              { label: 'Tenant phone', value: request.tenantPhone || 'Not provided' },
-              { label: 'Access notes', value: request.accessNotes || 'Not provided' },
-              { label: 'Preferred dates', value: request.preferredDates || 'Not provided' },
-            ],
-            button: {
-              label: 'Create account and claim request',
-              href: engineerClaimUrl ?? engineerActionUrl,
-            },
-            footer: 'The claim link is token-based, so you can sign up with the email address you normally use for CertNow.',
-          }),
+          html: baseEmail(
+            [
+              emailTitle('A landlord wants to book you'),
+              emailSubtitle(`${landlordDisplayName} tried to book you for a gas safety job through CertNow and listed ${request.engineerEmail || engineerNotificationTarget} as their engineer. Create a free account to claim it.`),
+              infoCard('The request', [
+                { label: 'Property', value: propertyAddress },
+                { label: 'Work needed', value: formatJobType(request.jobType) },
+                { label: 'Landlord', value: landlordDisplayName },
+                { label: 'Landlord phone', value: request.landlordPhone || 'Not provided' },
+                { label: 'Preferred dates', value: request.preferredDates || 'Flexible' },
+              ]),
+              benefitList([
+                'Issue CP12 certificates on site in minutes',
+                'Landlords get a permanent compliance link automatically',
+                'Renewal reminders sent - never chase again',
+              ]),
+              ctaButton('Create free account and claim request', engineerClaimUrl ?? engineerActionUrl, 'dark'),
+              note('This link expires in 30 days. After that, sign up normally at certnow.uk and search for the request by landlord name.'),
+            ].join(''),
+            { subject: 'A landlord tried to book you through CertNow' },
+          ),
         })).status
     : 'not_configured';
 

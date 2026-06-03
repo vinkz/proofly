@@ -111,7 +111,9 @@ export async function GET() {
     },
   });
 
-  const { pdfUrl } = await generateGasServicePdf({ jobId, previewOnly: true });
+  const result = await generateGasServicePdf({ jobId, previewOnly: true });
+  if (!('pdfUrl' in result)) return NextResponse.json(result, { status: 402 });
+  const { pdfUrl } = result;
 
   return NextResponse.json({ jobId, pdfUrl });
 }

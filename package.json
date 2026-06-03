@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@remotion/cli": "4.0.470",
     "@sentry/nextjs": "^10.52.0",
+    "@stripe/stripe-js": "^9.7.0",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.80.0",
@@ -32,7 +34,9 @@
     "react": "19.1.2",
     "react-dom": "19.1.2",
     "react-hook-form": "^7.65.0",
+    "remotion": "4.0.470",
     "require-in-the-middle": "8.0.1",
+    "stripe": "^22.2.0",
     "uuid": "^13.0.0",
     "zod": "^4.1.12"
   },

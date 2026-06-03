@@ -51,7 +51,9 @@ export async function GET() {
     },
   });
 
-  const { pdfUrl } = await generateCertificatePdf({ jobId, certificateType: 'gas_service', previewOnly: true });
+  const result = await generateCertificatePdf({ jobId, certificateType: 'gas_service', previewOnly: true });
+  if (!('pdfUrl' in result)) return NextResponse.json(result, { status: 402 });
+  const { pdfUrl } = result;
 
   return NextResponse.json({ jobId, pdfUrl });
 }

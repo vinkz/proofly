@@ -11,7 +11,17 @@ import { getSupabaseUser, supabaseServerAction, supabaseServerReadOnly, supabase
 import type { PostgrestError } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { formatAddressLine } from '@/lib/address';
-import { sendEmail } from '@/lib/resend';
+import { isEmailConfigured, sendEmail } from '@/lib/resend';
+import {
+  baseEmail,
+  ctaButton,
+  emailSubtitle,
+  emailTitle,
+  infoCard,
+  joinAddress,
+  note,
+  titleCase,
+} from '@/lib/email-templates';
 import { photoPath, reportPath, signaturePath } from '@/lib/storage';
 import type { Database } from '@/lib/database.types';
 import type { TemplateItem, TemplateModel } from '@/types/template';
@@ -430,6 +440,18 @@ const getSiteUrl = () =>
     'https://certnow.uk'
   ).replace(/\/$/, '');
 
+async function sendEmailSafely(context: string, input: Parameters<typeof sendEmail>[0]) {
+  if (!isEmailConfigured()) return { status: 'not_configured' as const };
+  try {
+    const result = await sendEmail(input);
+    if (result.status !== 'sent') console.error(`[${context}] email failed:`, result.error ?? result.status);
+    return result;
+  } catch (error) {
+    console.error(`[${context}] email failed:`, error);
+    return { status: 'failed' as const, error: error instanceof Error ? error.message : 'Unknown email error' };
+  }
+}
+
 const addDaysIso = (days: number) => {
   const date = new Date();
   date.setDate(date.getDate() + days);
@@ -638,19 +660,43 @@ export async function requestLandlordJobPrefill(payload: z.infer<typeof Landlord
 
   const jobId = job.id as string;
   const prefillUrl = `${getSiteUrl()}/prefill/${jobId}?token=${token}`;
-  const engineerName = user.email ?? 'your engineer';
-  const notificationStatus = (await sendEmail({
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('default_engineer_name, full_name, company_name, company_email')
+    .eq('id', user.id)
+    .maybeSingle();
+  const profileRow = (profile ?? {}) as Record<string, unknown>;
+  const engineerName = titleCase(
+    normalizeOptionalText(profileRow.default_engineer_name as string | null) ??
+      normalizeOptionalText(profileRow.full_name as string | null) ??
+      user.email ??
+      'your engineer',
+  );
+  const companyName = titleCase(normalizeOptionalText(profileRow.company_name as string | null) ?? engineerName);
+  const engineerEmail = normalizeOptionalText(profileRow.company_email as string | null) ?? user.email ?? undefined;
+  const subject = `${engineerName} needs your property details`;
+  const notificationStatus = (await sendEmailSafely('requestLandlordJobPrefill', {
     to: input.landlordEmail,
-    subject: 'Please send your job details to CertNow',
+    subject,
+    replyTo: engineerEmail,
     text: [
       'Hi,',
       '',
-      `${engineerName} has asked you to send the property and access details for an upcoming job through CertNow.`,
+      `${engineerName} is setting up a job for your property and needs a few details. It takes under 2 minutes.`,
       '',
-      `Open the prefill form: ${prefillUrl}`,
+      `Fill in property details: ${prefillUrl}`,
       '',
       'No account is needed.',
     ].join('\n'),
+    html: baseEmail(
+      [
+        emailTitle('Property details needed'),
+        emailSubtitle(`${engineerName} is setting up a job for your property and needs a few details. It takes under 2 minutes.`),
+        ctaButton('Fill in property details', prefillUrl, 'green'),
+        note("You'll be asked for: property address, tenant contact, and access notes. That's it."),
+      ].join(''),
+      { subject, sentOnBehalfOf: companyName },
+    ),
   })).status;
 
   await persistJobFields(
@@ -933,16 +979,43 @@ export async function submitPrefillForm(payload: z.infer<typeof PrefillFormSchem
       recipient = normalizeOptionalText(authUser.user?.email ?? null);
     }
     if (recipient) {
-      notificationStatus = (await sendEmail({
+      const landlordName = titleCase(normalizeOptionalText(input.landlordName) ?? 'Landlord');
+      const propertyAddress = joinAddress([
+        input.jobAddressLine1,
+        input.jobAddressLine2,
+        input.jobAddressCity,
+        input.jobPostcode,
+      ], jobAddress || normalizeOptionalText(job.address as string | null) || 'Not provided');
+      const subject = `${landlordName} has filled in the job details`;
+      notificationStatus = (await sendEmailSafely('submitPrefillForm.engineerNotification', {
         to: recipient,
-        subject: 'Landlord details submitted for your CertNow job',
+        subject,
         text: [
-          'The landlord has submitted the missing job details.',
+          `${landlordName} has submitted the property details for your job. Step 1 is now pre-filled.`,
           '',
-          `Property: ${jobAddress || job.address || 'Not provided'}`,
-          `Landlord: ${input.landlordName || 'Not provided'}`,
-          `Open dashboard: ${getSiteUrl()}/dashboard`,
+          `Property: ${propertyAddress}`,
+          `Landlord: ${landlordName}`,
+          `Tenant: ${input.tenantName || 'Not provided'}`,
+          `Access notes: ${input.accessNotes || 'Not provided'}`,
+          `Preferred dates: ${input.preferredDates || 'Flexible'}`,
+          '',
+          `Open job: ${getSiteUrl()}/dashboard`,
         ].join('\n'),
+        html: baseEmail(
+          [
+            emailTitle('Job details received'),
+            emailSubtitle(`${landlordName} has submitted the property details for your job. Step 1 is now pre-filled.`),
+            infoCard('What they submitted', [
+              { label: 'Property', value: propertyAddress },
+              { label: 'Landlord', value: landlordName },
+              { label: 'Tenant', value: input.tenantName || 'Not provided' },
+              { label: 'Access notes', value: input.accessNotes || 'Not provided' },
+              { label: 'Preferred dates', value: input.preferredDates || 'Flexible' },
+            ]),
+            ctaButton('Open job', `${getSiteUrl()}/dashboard`, 'green'),
+          ].join(''),
+          { subject },
+        ),
       })).status;
     }
   }
@@ -1701,6 +1774,8 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
 
   const invoice = ((invoiceResp.data ?? []) as Record<string, unknown>[])[0] ?? null;
   const invoiceReady = Boolean(invoice?.pdf_path || invoice?.payment_link_url || invoice?.status === 'issued');
+  const invoiceReturnTo = encodeURIComponent(`/jobs/${jobId}/complete`);
+  const invoiceEditHref = invoice?.id ? `/invoices/${invoice.id}?returnTo=${invoiceReturnTo}` : null;
   const optional: JobCompletionChecklistItem[] = [
     {
       id: 'invoice',
@@ -1712,7 +1787,14 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
           : 'Draft needed if this handover should include payment details.',
       status: invoiceReady ? 'completed' : invoice ? 'ready' : 'draft_needed',
       blocking: false,
-      href: invoice?.id ? `/invoices/${invoice.id}` : `/invoices/new?jobId=${jobId}`,
+      // When ready, "Open" goes to the PDF and "Edit" opens the editor; otherwise the
+      // primary action opens the editor / create flow.
+      href: invoiceReady
+        ? `/invoices/${invoice!.id}/pdf`
+        : invoice?.id
+          ? invoiceEditHref
+          : `/invoices/new?jobId=${jobId}&returnTo=${invoiceReturnTo}`,
+      editHref: invoiceReady ? invoiceEditHref : null,
       completedAt: typeof invoice?.created_at === 'string' ? invoice.created_at : null,
     },
   ];
