@@ -8,6 +8,7 @@ export function RenewalRequestForm({ token }: { token: string }) {
   const [tenantName, setTenantName] = useState('');
   const [tenantPhone, setTenantPhone] = useState('');
   const [accessNotes, setAccessNotes] = useState('');
+  const [preferredDate, setPreferredDate] = useState('');
   const [preferredDates, setPreferredDates] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export function RenewalRequestForm({ token }: { token: string }) {
               tenantName,
               tenantPhone,
               accessNotes,
+              preferredDate,
               preferredDates,
             });
             const contact =
@@ -73,11 +75,22 @@ export function RenewalRequestForm({ token }: { token: string }) {
         rows={3}
         className={`${fieldClass} min-h-[70px] resize-none`}
       />
+      <div>
+        <label className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">
+          Preferred date
+        </label>
+        <input
+          type="date"
+          value={preferredDate}
+          onChange={(event) => setPreferredDate(event.target.value)}
+          className={fieldClass}
+        />
+      </div>
       <input
         type="text"
         value={preferredDates}
         onChange={(event) => setPreferredDates(event.target.value)}
-        placeholder="Preferred dates"
+        placeholder="Other notes on timing (optional)"
         className={fieldClass}
       />
       <button

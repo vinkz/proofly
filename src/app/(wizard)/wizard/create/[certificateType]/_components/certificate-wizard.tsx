@@ -110,6 +110,17 @@ const KNOWN_MAKES = getMakes()
   .filter((make) => make.toLowerCase() !== 'other')
   .sort((a, b) => b.length - a.length);
 
+// A CP12 is valid for 12 months, so the next inspection defaults to one year after
+// completion. Returns '' for unparseable input so callers can fall back gracefully.
+const addOneYearDateOnly = (value: string | null | undefined): string => {
+  const dateOnly = String(value ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) return '';
+  const date = new Date(`${dateOnly}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+};
+
 const splitMakeModel = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return { make: '', model: '' };
@@ -500,6 +511,7 @@ export function CertificateWizard({
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
   const prefillAppliedRef = useRef(false);
+  const autoNextInspectionRef = useRef<string | null>(null);
   const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prevApplianceCountRef = useRef(appliances.length);
 
@@ -521,6 +533,24 @@ export function CertificateWizard({
     setStep,
     step,
   });
+
+  // Auto-fill the next inspection date to 12 months after completion. It stays editable:
+  // we only (re)set it while the field is empty or still holds the value we last derived,
+  // so a manual edit by the engineer is never overwritten.
+  useEffect(() => {
+    if (!isCp12) return;
+    const computed = addOneYearDateOnly(completionDate);
+    if (!computed) return;
+    setEvidenceFields((prev) => {
+      const current = (prev.next_inspection_due ?? '').trim();
+      if (current === '' || current === autoNextInspectionRef.current) {
+        autoNextInspectionRef.current = computed;
+        if (current === computed) return prev;
+        return { ...prev, next_inspection_due: computed };
+      }
+      return prev;
+    });
+  }, [isCp12, completionDate]);
 
   useEffect(() => {
     if (!isCp12 || prefillAppliedRef.current) return;
@@ -2990,6 +3020,9 @@ export function CertificateWizard({
             onChange={(e) => handleEvidenceFieldsUpdate({ next_inspection_due: e.target.value })}
             className="mt-2"
           />
+          <p className="mt-1.5 text-[12px] text-[var(--color-text-tertiary)]">
+            Auto-set to 12 months after completion. Edit if the renewal should fall on a different date.
+          </p>
         </div>
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Evidence photos (optional)</p>
