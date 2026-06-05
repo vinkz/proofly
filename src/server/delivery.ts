@@ -298,7 +298,7 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
     publicHref,
     landlordName: pickText(fieldMap.landlord_name, client?.name ?? null, job.client_name) || null,
     landlordEmail: pickText(fieldMap.landlord_email, client?.email ?? null) || null,
-    tenantName: pickText(fieldMap.tenant_name) || null,
+    tenantName: pickText(fieldMap.tenant_name, fieldMap.job_address_name) || null,
     tenantEmail: pickText(fieldMap.tenant_email) || null,
     engineerName: pickText(profile?.default_engineer_name ?? null, profile?.full_name ?? null) || null,
     engineerEmail: pickText(profile?.company_email ?? null) || null,
