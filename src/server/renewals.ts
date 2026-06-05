@@ -34,6 +34,71 @@ export type RenewalSendResult =
   | { status: 'not_configured' }
   | { status: 'failed'; error?: string };
 
+export type NextRenewalToSend = {
+  jobId: string;
+  address: string;
+  renewalDue: string | null;
+  dueToSend: boolean;
+  completeHref: string;
+};
+
+/**
+ * Dashboard helper: the single soonest CP12 renewal that still needs the engineer to send a
+ * landlord request — regardless of whether it's the 8- or 4-week prompt. Best-effort: any error
+ * (missing table, RLS) resolves to null so the dashboard never breaks.
+ */
+export async function getNextRenewalToSend(): Promise<NextRenewalToSend | null> {
+  try {
+    const readClient = await supabaseServerReadOnly();
+    const user = await getSupabaseUser(readClient);
+    if (!user) return null;
+
+    const admin = await supabaseServerServiceRole();
+    const { data: reminders, error } = await admin
+      .from('reminders')
+      .select('job_id, due_date')
+      .eq('user_id', user.id)
+      .is('sent_at', null)
+      .like('kind', 'landlord_cp12_%')
+      .order('due_date', { ascending: true })
+      .limit(1);
+    if (error || !reminders?.length) return null;
+
+    const next = reminders[0];
+    if (!next?.job_id) return null;
+
+    const [{ data: job }, { data: fields }] = await Promise.all([
+      admin.from('jobs').select('id, address').eq('id', next.job_id).maybeSingle(),
+      admin.from('job_fields').select('field_key, value').eq('job_id', next.job_id),
+    ]);
+    const fieldMap = Object.fromEntries(
+      (fields ?? []).map((field) => [field.field_key ?? '', field.value ?? null]),
+    ) as Record<string, string | null>;
+
+    const address =
+      pickText(
+        joinAddress(
+          [fieldMap.job_address_line1, fieldMap.job_address_line2, fieldMap.job_address_city, fieldMap.job_postcode],
+          '',
+        ),
+        fieldMap.property_address,
+        job?.address ?? null,
+      ) || 'Property';
+    const renewalDue = pickText(fieldMap.next_inspection_due, fieldMap.next_inspection_date) || null;
+    const today = new Date().toISOString().slice(0, 10);
+
+    return {
+      jobId: next.job_id,
+      address,
+      renewalDue,
+      dueToSend: String(next.due_date).slice(0, 10) <= today,
+      completeHref: `/jobs/${next.job_id}/complete`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Engineer-triggered send: emails the landlord a renewal request for a completed CP12 job,
  * linking them to the public job page where they can confirm a date. This is the
