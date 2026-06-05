@@ -110,6 +110,17 @@ const KNOWN_MAKES = getMakes()
   .filter((make) => make.toLowerCase() !== 'other')
   .sort((a, b) => b.length - a.length);
 
+// A CP12 is valid for 12 months, so the next inspection defaults to one year after
+// completion. Returns '' for unparseable input so callers can fall back gracefully.
+const addOneYearDateOnly = (value: string | null | undefined): string => {
+  const dateOnly = String(value ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) return '';
+  const date = new Date(`${dateOnly}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+};
+
 const splitMakeModel = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return { make: '', model: '' };
@@ -154,6 +165,7 @@ type Cp12InfoState = {
   company_postcode: string;
   company_phone: string;
   engineer_phone: string;
+  tenant_email: string;
 };
 
 type Cp12JobAddressState = {
@@ -350,6 +362,9 @@ export function CertificateWizard({
   const router = useRouter();
   const { pushToast } = useToast();
   const [step, setStep] = useState(() => Math.max(startStep, 1));
+  // Step 1 ("People & location") is split into two pages to avoid a long scroll:
+  // 0 = landlord / property owner, 1 = tenant + job location + Regulation 26(9).
+  const [infoSubStep, setInfoSubStep] = useState(0);
   const [isPending, startTransition] = useTransition();
   const resolvedInitialInfo = mergeJobContextFields(initialInfo, initialJobContext);
   const [issuedJobId] = useState<string | null>(null);
@@ -416,6 +431,7 @@ export function CertificateWizard({
     company_postcode: resolvedInitialInfo.company_postcode ?? '',
     company_phone: resolvedInitialInfo.company_phone ?? '',
     engineer_phone: resolvedInitialInfo.engineer_phone ?? '',
+    tenant_email: resolvedInitialInfo.tenant_email ?? '',
   });
 
   const [jobAddress, setJobAddress] = useState<Cp12JobAddressState>({
@@ -500,6 +516,7 @@ export function CertificateWizard({
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
   const prefillAppliedRef = useRef(false);
+  const autoNextInspectionRef = useRef<string | null>(null);
   const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const prevApplianceCountRef = useRef(appliances.length);
 
@@ -521,6 +538,24 @@ export function CertificateWizard({
     setStep,
     step,
   });
+
+  // Auto-fill the next inspection date to 12 months after completion. It stays editable:
+  // we only (re)set it while the field is empty or still holds the value we last derived,
+  // so a manual edit by the engineer is never overwritten.
+  useEffect(() => {
+    if (!isCp12) return;
+    const computed = addOneYearDateOnly(completionDate);
+    if (!computed) return;
+    setEvidenceFields((prev) => {
+      const current = (prev.next_inspection_due ?? '').trim();
+      if (current === '' || current === autoNextInspectionRef.current) {
+        autoNextInspectionRef.current = computed;
+        if (current === computed) return prev;
+        return { ...prev, next_inspection_due: computed };
+      }
+      return prev;
+    });
+  }, [isCp12, completionDate]);
 
   useEffect(() => {
     if (!isCp12 || prefillAppliedRef.current) return;
@@ -719,6 +754,8 @@ export function CertificateWizard({
         job_address_city: nextJobAddress.job_address_city,
         job_postcode: nextJobAddress.job_postcode,
         job_tel: nextJobAddress.job_tel,
+        tenant_name: nextJobAddress.job_address_name,
+        tenant_email: info.tenant_email,
         emergency_control_accessible: evidenceFields.emergency_control_accessible ?? '',
         gas_tightness_satisfactory: evidenceFields.gas_tightness_satisfactory ?? '',
         pipework_visual_satisfactory: evidenceFields.pipework_visual_satisfactory ?? '',
@@ -1125,6 +1162,33 @@ export function CertificateWizard({
     } finally {
       setIsLandlordLookupPending(false);
     }
+  };
+
+  // Page 1 of step one (landlord). Validate the landlord block, then reveal the
+  // tenant + location + Regulation 26(9) page without leaving step one.
+  const handleInfoPageOneNext = () => {
+    if (!isCp12) {
+      setStep(2);
+      return;
+    }
+    if (!info.landlord_name.trim()) {
+      pushToast({ title: 'Landlord / owner name is required', variant: 'error' });
+      return;
+    }
+    if (!info.landlord_address_line1.trim()) {
+      pushToast({ title: 'Landlord address line 1 is required', variant: 'error' });
+      return;
+    }
+    if (!info.landlord_city.trim()) {
+      pushToast({ title: 'Landlord city / town is required', variant: 'error' });
+      return;
+    }
+    if (!info.landlord_postcode.trim()) {
+      pushToast({ title: 'Landlord postcode is required', variant: 'error' });
+      return;
+    }
+    setInfoSubStep(1);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
   };
 
   const handleInfoNext = () => {
@@ -1672,7 +1736,10 @@ export function CertificateWizard({
       label: 'Property reference, job address, postcode, and site telephone',
       ok: addrOk,
       hint: 'Add in People & location',
-      action: () => setStep(1),
+      action: () => {
+        setStep(1);
+        setInfoSubStep(1);
+      },
       blocking: true,
     });
 
@@ -1686,7 +1753,10 @@ export function CertificateWizard({
       label: 'Landlord / owner details complete',
       ok: landlordOk,
       hint: 'Fill in People & location',
-      action: () => setStep(1),
+      action: () => {
+        setStep(1);
+        setInfoSubStep(0);
+      },
       blocking: true,
     });
 
@@ -1722,7 +1792,10 @@ export function CertificateWizard({
       id: 'reg26',
       label: 'Regulation 26(9) confirmed',
       ok: booleanFromField(info.reg_26_9_confirmed),
-      action: () => setStep(1),
+      action: () => {
+        setStep(1);
+        setInfoSubStep(1);
+      },
       blocking: true,
     });
 
@@ -1982,18 +2055,19 @@ export function CertificateWizard({
     <WizardLayout
       step={offsetStep(1)}
       total={totalSteps}
-      title="People & location"
-      status={certificateLabel}
+      title={isCp12 && infoSubStep === 1 ? 'Tenant & location' : isCp12 ? 'Landlord / owner' : 'People & location'}
+      status={isCp12 ? `${certificateLabel} · ${infoSubStep === 1 ? '2' : '1'} of 2` : certificateLabel}
+      onBack={isCp12 && infoSubStep === 1 ? () => setInfoSubStep(0) : undefined}
       actionsHideWhenVisibleId="cp12-step1-footer-actions"
       actions={
         <button
           type="button"
-          onClick={handleInfoNext}
+          onClick={infoSubStep === 0 ? handleInfoPageOneNext : handleInfoNext}
           disabled={isPending}
           className="flex items-center gap-[5px] rounded-[20px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
           data-testid="cp12-step1-next"
         >
-          {isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next'}
+          {infoSubStep === 0 ? 'Next' : isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next'}
           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
@@ -2003,6 +2077,8 @@ export function CertificateWizard({
       {isCp12 ? (
         <div className="space-y-3">
           {offlineDraftBanner}
+          {infoSubStep === 0 ? (
+          <>
           <p className="text-[13px] text-[var(--color-text-secondary)]">Engineer and company details are pulled from account settings.</p>
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Landlord / Property owner</p>
@@ -2122,6 +2198,9 @@ export function CertificateWizard({
               />
             </div>
           </div>
+          </>
+          ) : (
+          <>
 
           <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job location</p>
@@ -2140,8 +2219,16 @@ export function CertificateWizard({
                 required
                 className="rounded-[8px]"
               />
+              <Input
+                type="email"
+                value={info.tenant_email}
+                onChange={(e) => setInfo((prev) => ({ ...prev, tenant_email: e.target.value }))}
+                placeholder="Tenant email (optional)"
+                className="rounded-[8px]"
+              />
               <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
-                Shown as &quot;Name&quot; in the Job Address section of the certificate.
+                Shown as &quot;Name&quot; in the Job Address section of the certificate. The tenant email pre-fills
+                &quot;Send to tenant&quot; on the completion page.
               </p>
               <div className="relative sm:col-span-2">
                 <Input
@@ -2226,7 +2313,13 @@ export function CertificateWizard({
             </div>
           </div>
 
-          <div className="flex items-start gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-[12px] border bg-[var(--color-background-primary)] p-3 ${
+              info.reg_26_9_confirmed
+                ? 'border-[0.5px] border-[var(--color-border-tertiary)]'
+                : 'border-[var(--color-amber)] bg-[var(--color-amber-bg)]'
+            }`}
+          >
             <input
               type="checkbox"
               className="mt-1 h-4 w-4 accent-[var(--color-action)]"
@@ -2237,20 +2330,31 @@ export function CertificateWizard({
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Regulation 26(9) confirmed</p>
               <p className="text-[12px] text-[var(--color-text-tertiary)]">Required before issuing a CP12 (see docs/specs/cp12.md).</p>
             </div>
-          </div>
+          </label>
+          </>
+          )}
         </div>
       ) : (
         <p className="text-[13px] text-[var(--color-text-tertiary)]">Non-CP12 certificates currently use the simplified flow.</p>
       )}
-      <div id="cp12-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+      <div id="cp12-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+        {isCp12 && infoSubStep === 1 ? (
+          <button
+            type="button"
+            onClick={() => setInfoSubStep(0)}
+            className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)]"
+          >
+            Back
+          </button>
+        ) : null}
         <button
           type="button"
-          onClick={handleInfoNext}
+          onClick={infoSubStep === 0 ? handleInfoPageOneNext : handleInfoNext}
           disabled={isPending}
-          className="flex h-[44px] w-full items-center justify-center gap-[6px] rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+          className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
           data-testid="cp12-step1-next"
         >
-          {isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next'}
+          {infoSubStep === 0 ? 'Next' : isPending ? 'Saving…' : prepareOnly ? 'Save & return' : 'Next'}
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
@@ -2990,6 +3094,9 @@ export function CertificateWizard({
             onChange={(e) => handleEvidenceFieldsUpdate({ next_inspection_due: e.target.value })}
             className="mt-2"
           />
+          <p className="mt-1.5 text-[12px] text-[var(--color-text-tertiary)]">
+            Auto-set to 12 months after completion. Edit if the renewal should fall on a different date.
+          </p>
         </div>
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Evidence photos (optional)</p>

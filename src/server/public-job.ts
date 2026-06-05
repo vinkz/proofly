@@ -75,7 +75,13 @@ const RenewalRequestSchema = z.object({
   tenantPhone: z.string().max(80).optional().default(''),
   accessNotes: z.string().max(1000).optional().default(''),
   preferredDates: z.string().max(500).optional().default(''),
+  preferredDate: z.string().max(20).optional().default(''),
 });
+
+const normalizeDateOnly = (value: string | null | undefined): string => {
+  const slice = String(value ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(slice) ? slice : '';
+};
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
@@ -284,6 +290,10 @@ export async function submitPublicJobRenewalRequest(input: z.infer<typeof Renewa
     .maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
   if (!job) throw new Error('Job not found');
+  const acceptedDate = normalizeDateOnly(request.preferredDate);
+  const preferredSummary =
+    [acceptedDate, request.preferredDates].map((value) => value?.trim()).filter(Boolean).join(' · ') || null;
+
   const { error } = await fromJobRequests(admin).insert({
     source_job_id: pageData.jobId,
     user_id: job.user_id,
@@ -298,12 +308,46 @@ export async function submitPublicJobRenewalRequest(input: z.infer<typeof Renewa
     tenant_name: request.tenantName || null,
     tenant_phone: request.tenantPhone || null,
     access_notes: request.accessNotes || null,
-    preferred_dates: request.preferredDates || null,
+    preferred_dates: preferredSummary,
     status: 'pending',
   });
   if (error) {
     if (error.code === '42P01') throw new Error('Renewal requests are not configured yet.');
     throw new Error(error.message);
+  }
+
+  // Handshake: tie the landlord's response back to the renewal job that was auto-created
+  // when the original CP12 was issued, so it appears in upcoming jobs with the confirmed
+  // date and access details already filled in. Best-effort — never block the request.
+  try {
+    const followUp = await admin
+      .from('job_fields')
+      .select('job_id')
+      .eq('field_key', 'follow_up_source_job_id')
+      .eq('value', pageData.jobId)
+      .limit(1)
+      .maybeSingle();
+    const followUpJobId = (followUp.data as { job_id?: string | null } | null)?.job_id ?? null;
+    if (followUpJobId) {
+      if (acceptedDate) {
+        await admin.from('jobs').update({ scheduled_for: `${acceptedDate}T09:00`, status: 'active' }).eq('id', followUpJobId);
+      }
+      const noteRows = [
+        request.tenantName ? { job_id: followUpJobId, field_key: 'tenant_name', value: request.tenantName } : null,
+        request.tenantPhone ? { job_id: followUpJobId, field_key: 'tenant_phone', value: request.tenantPhone } : null,
+        request.accessNotes ? { job_id: followUpJobId, field_key: 'access_notes', value: request.accessNotes } : null,
+      ].filter((row): row is { job_id: string; field_key: string; value: string } => Boolean(row));
+      if (noteRows.length) {
+        await admin
+          .from('job_fields')
+          .delete()
+          .eq('job_id', followUpJobId)
+          .in('field_key', noteRows.map((row) => row.field_key));
+        await admin.from('job_fields').insert(noteRows);
+      }
+    }
+  } catch (followUpError) {
+    console.error('[public-job] renewal follow-up update failed:', followUpError);
   }
 
   return {

@@ -79,9 +79,8 @@ function WhatsAppButton({ bundle, recipient }: { bundle: DeliveryBundle; recipie
 }
 
 export function SendPanel({ bundle }: { bundle: DeliveryBundle }) {
-  const [recipient, setRecipient] = useState<DeliveryRecipient>(
-    bundle.landlordEmail ? 'landlord' : bundle.tenantEmail ? 'tenant' : 'landlord',
-  );
+  // Default to sending both the landlord and tenant their copy; the engineer can narrow it.
+  const [recipient, setRecipient] = useState<DeliveryRecipient>('both');
   const [landlordEmail, setLandlordEmail] = useState(bundle.landlordEmail ?? '');
   const [tenantEmail, setTenantEmail] = useState(bundle.tenantEmail ?? '');
   const [sent, setSent] = useState(false);

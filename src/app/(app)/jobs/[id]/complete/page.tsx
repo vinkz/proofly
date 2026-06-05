@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import { getJobCompletionState, type JobCompletionChecklistItem } from '@/server/jobs';
 import { isUUID } from '@/lib/ids';
+import { RenewalSendButton } from './renewal-send-button';
 
 const formatDate = (value: string | null) => {
   if (!value) return null;
@@ -255,6 +256,20 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
           </div>
         </aside>
       </div>
+
+      {/* Renewal */}
+      {state.renewalDue ? (
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Renewal</p>
+          <p className="mt-1 text-[15px] font-semibold text-[var(--color-text-primary)]">
+            Renewal due {formatDate(state.renewalDue) ?? state.renewalDue}
+          </p>
+          <p className="mt-0.5 text-[13px] text-[var(--color-text-secondary)]">
+            We&apos;ll prompt you 8 and 4 weeks before this date. You can send the landlord a renewal request now.
+          </p>
+          <RenewalSendButton jobId={state.job.id} hasLandlordEmail={state.hasLandlordEmail} />
+        </div>
+      ) : null}
     </main>
   );
 }

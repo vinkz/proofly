@@ -1246,10 +1246,13 @@ async function scheduleCp12ReminderRows(params: {
     addYearDate(toPlainText(params.fields.completion_date ?? params.issuedAt) || params.issuedAt);
   if (!dueDate) return;
 
+  // These two renewal reminders are delivered to the ENGINEER (not the landlord) as a
+  // prompt to review and send a renewal request — see the cron handler in
+  // src/app/api/cron/reminders/route.ts. The kind names are kept for backwards
+  // compatibility with reminder rows already scheduled in the database.
   const rows = [
     { job_id: params.jobId, user_id: params.userId, kind: 'landlord_cp12_8_weeks', due_date: offsetDate(dueDate, -56) },
     { job_id: params.jobId, user_id: params.userId, kind: 'landlord_cp12_4_weeks', due_date: offsetDate(dueDate, -28) },
-    { job_id: params.jobId, user_id: params.userId, kind: 'engineer_cp12_8_weeks', due_date: offsetDate(dueDate, -56) },
   ].filter((row): row is { job_id: string; user_id: string; kind: string; due_date: string } => Boolean(row.due_date));
 
   if (!rows.length) return;

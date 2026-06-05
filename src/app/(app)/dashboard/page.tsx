@@ -18,6 +18,7 @@ import {
   listPendingJobRequestsForDashboard,
   type DashboardJobRequest,
 } from '@/server/job-requests';
+import { getNextRenewalToSend } from '@/server/renewals';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import { formatDisplayAddress } from '@/lib/address';
 import { GetStartedCard } from './_components/get-started-card';
@@ -64,11 +65,12 @@ export default async function DashboardPage({
 
   if (!user) redirect('/login');
 
-  const [{ profile }, jobGroups, jobRequests, awaitingLandlordJobs] = await Promise.all([
+  const [{ profile }, jobGroups, jobRequests, awaitingLandlordJobs, nextRenewal] = await Promise.all([
     getProfile(),
     listJobs(),
     listPendingJobRequestsForDashboard(),
     listAwaitingLandlordJobsForDashboard(),
+    getNextRenewalToSend(),
   ]);
   const activeJobs = jobGroups.active as BasicJob[];
   const completedJobs = jobGroups.completed as BasicJob[];
@@ -218,6 +220,37 @@ export default async function DashboardPage({
             signatureSaved={signatureSaved}
             hasStandardRate={hasStandardRate}
           />
+        </section>
+      ) : null}
+
+      {nextRenewal ? (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 px-0.5">
+            <h2 className="text-[13px] font-medium text-[var(--color-text-primary)]">Renewal to send</h2>
+            {nextRenewal.dueToSend ? (
+              <span className="inline-flex h-[18px] items-center justify-center rounded-[10px] bg-[var(--color-amber-bg)] px-1.5 text-[11px] font-medium text-[var(--color-amber)]">
+                Due now
+              </span>
+            ) : null}
+          </div>
+          <Link
+            href={nextRenewal.completeHref}
+            className="block overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-4 transition-colors hover:border-[var(--color-border-secondary)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">{nextRenewal.address}</p>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                  {nextRenewal.renewalDue
+                    ? `CP12 renewal due ${new Date(nextRenewal.renewalDue).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                    : 'CP12 renewal coming up'}
+                </p>
+              </div>
+              <span className="shrink-0 self-center rounded-[8px] bg-[var(--color-cta)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-cta-fg)]">
+                Send request →
+              </span>
+            </div>
+          </Link>
         </section>
       ) : null}
 

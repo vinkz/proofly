@@ -1612,6 +1612,21 @@ export type JobCompletionState = {
   missingBlockingLabels: string[];
   pdfHref: string;
   publicHref: string | null;
+  renewalDue: string | null;
+  hasLandlordEmail: boolean;
+};
+
+const dateOnlyOrEmpty = (value: unknown): string => {
+  const slice = String(value ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(slice) ? slice : '';
+};
+
+const plusOneYearDateOnly = (value: string): string => {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString().slice(0, 10);
 };
 
 const CERTIFICATE_COMPLETION_LABELS: Record<string, string> = {
@@ -1800,6 +1815,21 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
   ];
   const missingBlockingLabels = required.filter((item) => item.blocking).map((item) => item.label);
 
+  // Surface when this CP12 is due for renewal: prefer an explicit next-inspection date,
+  // otherwise fall back to one year after completion / certificate issue.
+  const fieldValue = (key: string) => {
+    const match = fields.find((field) => field.field_key === key);
+    return typeof match?.value === 'string' ? match.value : '';
+  };
+  const cp12Certificate = certificates.find((certificate) => normalizeCertType(certificate.cert_type) === 'cp12');
+  const renewalDue =
+    dateOnlyOrEmpty(fieldValue('next_inspection_due')) ||
+    dateOnlyOrEmpty(fieldValue('next_inspection_date')) ||
+    plusOneYearDateOnly(dateOnlyOrEmpty(fieldValue('completion_date')) || dateOnlyOrEmpty(fieldValue('inspection_date'))) ||
+    plusOneYearDateOnly(dateOnlyOrEmpty(cp12Certificate?.issued_at)) ||
+    null;
+  const hasLandlordEmail = Boolean(fieldValue('landlord_email').trim() || fieldValue('customer_email').trim());
+
   return {
     job: {
       id: job.id,
@@ -1818,6 +1848,8 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
     missingBlockingLabels,
     pdfHref: `/jobs/${jobId}/pdf`,
     publicHref: job.public_token ? `/j/${job.public_token}` : null,
+    renewalDue,
+    hasLandlordEmail,
   };
 }
 
