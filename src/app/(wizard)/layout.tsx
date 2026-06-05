@@ -31,6 +31,14 @@ export default async function WizardLayout({ children }: { children: ReactNode }
                 {link.label}
               </NavLink>
             ))}
+            <Link
+              href="/tools/gas-rate"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl px-3 py-2 text-gray-600 hover:bg-gray-50"
+            >
+              Gas rate calculator
+            </Link>
           </nav>
           <div className="mt-auto text-[12px] text-[var(--color-text-tertiary)]">© {new Date().getFullYear()} certnow</div>
         </aside>
@@ -58,6 +66,14 @@ export default async function WizardLayout({ children }: { children: ReactNode }
                           {link.label}
                         </NavLink>
                       ))}
+                      <Link
+                        href="/tools/gas-rate"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl px-3 py-2 text-gray-600 hover:bg-gray-50"
+                      >
+                        Gas rate calculator
+                      </Link>
                     </nav>
                   </div>
                 </details>

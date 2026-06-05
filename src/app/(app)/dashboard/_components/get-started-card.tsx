@@ -22,10 +22,17 @@ export function GetStartedCard({
 }: GetStartedCardProps) {
   const [dismissed, setDismissed] = useState(false);
   const optionalInvoiceComplete = invoiceMissingFields.length === 0;
-  const allPrereqsDone = certificateProfileComplete && optionalInvoiceComplete && signatureSaved && hasStandardRate;
+  const frictionlessSetupComplete = optionalInvoiceComplete && signatureSaved && hasStandardRate;
+  const allPrereqsDone = certificateProfileComplete && frictionlessSetupComplete;
   const canDismiss = allPrereqsDone;
   const primaryHref = certificateProfileComplete ? '/jobs/new' : '/settings';
   const primaryLabel = certificateProfileComplete ? 'Create first certificate' : 'Complete profile';
+  const invoiceDetailsMissing = invoiceMissingFields.some((field) => field !== 'CP12 standard rate');
+  const frictionlessMissingItems = [
+    invoiceDetailsMissing ? 'invoice details' : null,
+    !signatureSaved ? 'saved signature' : null,
+    !hasStandardRate ? 'standard rates' : null,
+  ].filter((item): item is string => item !== null);
 
   useEffect(() => {
     if (!canDismiss) {
@@ -36,16 +43,6 @@ export function GetStartedCard({
   }, [canDismiss]);
 
   if (canDismiss && dismissed) return null;
-
-  // Auto-number: count only incomplete items before the CP12 step
-  let stepCounter = 0;
-  const nextStep = () => { stepCounter += 1; return stepCounter; };
-
-  const step1Num = nextStep();
-  const step2Num = nextStep();
-  const step3Num = !signatureSaved ? nextStep() : null;
-  const step4Num = !hasStandardRate ? nextStep() : null;
-  const step5Num = nextStep();
 
   return (
     <div className="overflow-hidden rounded-[18px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
@@ -78,13 +75,13 @@ export function GetStartedCard({
           </div>
         </div>
         <p className="mt-2 text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
-          Start with your first CP12. Certificate details come first; invoice settings can be added now or later.
+          Complete the essentials, add time-saving defaults, then issue your first certificate.
         </p>
       </div>
 
       <div className="divide-y-[0.5px] divide-[var(--color-border-tertiary)] border-t-[0.5px] border-[var(--color-border-tertiary)]">
         <ChecklistStepLink
-          stepNumber={step1Num}
+          stepNumber={1}
           done={certificateProfileComplete}
           label="Certificate-ready profile"
           detail={
@@ -99,53 +96,25 @@ export function GetStartedCard({
           href="/settings"
         />
         <ChecklistStepLink
-          stepNumber={step2Num}
-          done={optionalInvoiceComplete}
-          label="Invoice details"
+          stepNumber={2}
+          done={frictionlessSetupComplete}
+          label="Make every job frictionless"
           detail={
-            optionalInvoiceComplete
-              ? 'Bank details and CP12 rate ready.'
-              : invoiceMissingFields.length > 0
-                ? `${invoiceMissingFields.slice(0, 2).join(', ')}${invoiceMissingFields.length > 2 ? ` +${invoiceMissingFields.length - 2} more` : ''}`
-                : 'Bank details and standard rates for invoice drafts.'
+            frictionlessSetupComplete
+              ? 'Invoice details, saved signature and standard rates ready.'
+              : `Add ${frictionlessMissingItems.join(', ')} to save time on every job.`
           }
-          statusLabel={optionalInvoiceComplete ? 'Done' : 'Optional'}
-          statusTone={optionalInvoiceComplete ? 'done' : 'optional'}
+          statusLabel={frictionlessSetupComplete ? 'Done' : 'Optional'}
+          statusTone={frictionlessSetupComplete ? 'done' : 'optional'}
           href="/settings"
-        />
-        <ChecklistStepLink
-          stepNumber={step3Num ?? step1Num}
-          done={signatureSaved}
-          label="Saved signature"
-          detail={
-            signatureSaved
-              ? 'Pre-fills on every certificate.'
-              : 'Draw once, sign never again. Pre-fills on every certificate.'
-          }
-          statusLabel={signatureSaved ? 'Done' : 'Go to Settings'}
-          statusTone={signatureSaved ? 'done' : 'optional'}
-          href="/settings#signature"
-        />
-        <ChecklistStepLink
-          stepNumber={step4Num ?? step1Num}
-          done={hasStandardRate}
-          label="Standard rates"
-          detail={
-            hasStandardRate
-              ? 'CP12 and boiler service rates set.'
-              : 'Your CP12 and boiler service rates pre-fill invoice drafts.'
-          }
-          statusLabel={hasStandardRate ? 'Done' : 'Go to Settings'}
-          statusTone={hasStandardRate ? 'done' : 'optional'}
-          href="/settings#rates"
         />
         <div className={`flex items-center gap-3 px-5 py-3.5 ${!certificateProfileComplete ? 'opacity-40' : ''}`}>
           <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-[12px] font-medium ${certificateProfileComplete ? 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'}`}>
-            {step5Num}
+            3
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Create first CP12</p>
-            <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Open the job flow and choose CP12.</p>
+            <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Create first certificate</p>
+            <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Open the job flow and choose a certificate type.</p>
           </div>
           <Link
             href={primaryHref}

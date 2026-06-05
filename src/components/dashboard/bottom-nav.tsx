@@ -18,7 +18,7 @@ const items: NavItem[] = [
   { href: '/properties', label: 'Properties', Icon: BriefcaseIcon, notificationKey: 'jobs' },
   { href: '/clients', label: 'Clients', Icon: UsersIcon },
   { href: '/jobs', label: 'Jobs', Icon: FileTextIcon },
-  { href: '/settings', label: 'Settings', Icon: SettingsIcon },
+  { href: '/invoices', label: 'Invoices', Icon: ReceiptIcon },
 ];
 
 export function BottomNav({ pendingRequestsCount = 0 }: { pendingRequestsCount?: number }) {
@@ -119,11 +119,11 @@ function FileTextIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function SettingsIcon(props: SVGProps<SVGSVGElement>) {
+function ReceiptIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...baseIconProps(props)}>
-      <circle cx="12" cy="12" r="3" />
-      <path d="m19.4 15-.8-.5a2 2 0 0 1 0-3.4l.8-.5a1 1 0 0 0 .4-1.3l-1-1.7a1 1 0 0 0-1.3-.4l-.9.4a2 2 0 0 1-2.9-1.7v-1a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v1a2 2 0 0 1-2.9 1.7l-.9-.4a1 1 0 0 0-1.3.4l-1 1.7a1 1 0 0 0 .4 1.3l.8.5a2 2 0 0 1 0 3.4l-.8.5a1 1 0 0 0-.4 1.3l1 1.7a1 1 0 0 0 1.3.4l.9-.4a2 2 0 0 1 2.9 1.7v1a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-1a2 2 0 0 1 2.9-1.7l.9.4a1 1 0 0 0 1.3-.4l1-1.7a1 1 0 0 0-.4-1.3Z" />
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
     </svg>
   );
 }

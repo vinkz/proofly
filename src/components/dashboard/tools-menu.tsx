@@ -13,7 +13,6 @@ type MenuItem = {
 const items: MenuItem[] = [
   { href: '/tools/gas-rate', label: 'Gas rate calculator', icon: FlameIcon },
   { href: '/invoices/new', label: 'Create invoice', icon: PlusSquareIcon },
-  { href: '/invoices', label: 'Invoices', icon: FileTextIcon },
 ];
 
 export function ToolsMenu() {
@@ -82,6 +81,20 @@ export function ToolsMenu() {
             <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
               Account
             </p>
+            <Link
+              href="/settings"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-[13px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-background-secondary)]"
+            >
+              <SettingsIcon
+                width={15}
+                height={15}
+                strokeWidth={1.75}
+                className="shrink-0 text-[var(--color-text-tertiary)]"
+              />
+              Settings
+            </Link>
             <form action="/logout" method="post">
               <button
                 type="submit"
@@ -140,11 +153,11 @@ function PlusSquareIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function FileTextIcon(props: SVGProps<SVGSVGElement>) {
+function SettingsIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...iconBase(props)}>
-      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
-      <path d="M14 3v6h6M8 13h8M8 17h6" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3v-4h.09A1.7 1.7 0 0 0 4.65 8.94a1.7 1.7 0 0 0-.34-1.88L4.25 7l2.83-2.83.06.06a1.7 1.7 0 0 0 1.88.34h.01A1.7 1.7 0 0 0 10.06 3H10V3h4v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 7.08l-.06.06a1.7 1.7 0 0 0-.34 1.88v.01A1.7 1.7 0 0 0 21 10.06V10h.04v4h-.09A1.7 1.7 0 0 0 19.4 15Z" />
     </svg>
   );
 }
