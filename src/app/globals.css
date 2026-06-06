@@ -206,12 +206,86 @@
     --landing-rotate: 0deg;
     animation: landing-phone-float 8.4s ease-in-out 200ms infinite;
   }
+
+  /* Brand loading screen — animates presentation only; the logo asset is untouched. */
+  @keyframes brand-loader-breathe {
+    0%,
+    100% {
+      opacity: 0.62;
+      transform: scale(0.992);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes brand-loader-shine {
+    0% {
+      background-position: -140% 0;
+    }
+    55%,
+    100% {
+      background-position: 240% 0;
+    }
+  }
+
+  @keyframes brand-loader-bar {
+    0% {
+      transform: translateX(-110%);
+    }
+    100% {
+      transform: translateX(360%);
+    }
+  }
+
+  .brand-loader-logo {
+    animation: brand-loader-breathe 2.4s ease-in-out infinite;
+  }
+
+  .brand-loader-shine {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(
+      100deg,
+      transparent 38%,
+      rgba(255, 255, 255, 0.85) 50%,
+      transparent 62%
+    );
+    background-size: 240% 100%;
+    background-repeat: no-repeat;
+    -webkit-mask: url('/certnow-logo.svg') center / contain no-repeat;
+    mask: url('/certnow-logo.svg') center / contain no-repeat;
+    mix-blend-mode: screen;
+    animation: brand-loader-shine 2.4s ease-in-out infinite;
+  }
+
+  .brand-loader-bar {
+    position: absolute;
+    inset: 0;
+    width: 38%;
+    border-radius: 999px;
+    background: #123c34;
+    animation: brand-loader-bar 1.5s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-phone-float,
   .landing-phone-float-delay,
-  .landing-phone-float-slow {
+  .landing-phone-float-slow,
+  .brand-loader-logo,
+  .brand-loader-shine,
+  .brand-loader-bar {
     animation: none !important;
+  }
+
+  .brand-loader-logo {
+    opacity: 1;
+  }
+
+  .brand-loader-shine {
+    display: none;
   }
 }
