@@ -105,7 +105,7 @@ export function ChecksStep({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Measurements</p>
+        <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Measurements</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {hasKey(values, 'co_reading_high') ? (
@@ -267,7 +267,7 @@ export function ChecksStep({
 
       {showSafetyChecks ? (
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Safety checks</p>
+          <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Safety checks</p>
           <div className="grid gap-3 sm:grid-cols-3">
             {hasKey(values, 'safety_devices_correct') ? (
               <PassFailToggle

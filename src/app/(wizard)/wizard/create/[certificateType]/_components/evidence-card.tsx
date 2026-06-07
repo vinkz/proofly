@@ -42,7 +42,7 @@ export function EvidenceCard({
           if (field.type === 'select' && field.options) {
             return (
               <div key={field.key} className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{field.label}</p>
+                <p className="text-[11px] font-semibold tracking-wide text-muted-foreground/70">{field.label}</p>
                 <select
                   className="w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]"
                   value={value}
@@ -61,7 +61,7 @@ export function EvidenceCard({
           const isMultiline = field.key.includes('notes') || field.key.includes('description');
           return (
             <div key={field.key} className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{field.label}</p>
+              <p className="text-[11px] font-semibold tracking-wide text-muted-foreground/70">{field.label}</p>
               {isMultiline ? (
                 <Textarea value={value} onChange={(e) => onChange(field.key, e.target.value)} className="min-h-[68px]" />
               ) : (

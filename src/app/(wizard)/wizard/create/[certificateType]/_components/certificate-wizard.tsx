@@ -1934,7 +1934,7 @@ export function CertificateWizard({
     return (
       <div className="mx-auto w-full max-w-2xl space-y-3 px-4 pb-16 pt-6">
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-          <p className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">CP12 issued</p>
+          <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">CP12 issued</p>
           <h1 className="mt-2 text-[22px] font-medium text-[var(--color-text-primary)]">Finish this job</h1>
           <p className="mt-2 text-[13px] text-[var(--color-text-secondary)]">
             The CP12 PDF has been generated. Confirm any boiler service and invoice action before sharing the job.
@@ -2500,7 +2500,17 @@ export function CertificateWizard({
   const inspectionComplete = appliances.every(
     (a) => !!a.flue_type && !!a.appliance_inspected && !!a.appliance_serviced,
   );
-  const readingsComplete = appliances.every((a) => !!a.operating_pressure && !!a.heat_input);
+  const readingsComplete = appliances.every((a) => {
+    if (!a.operating_pressure || !a.heat_input) return false;
+    // FGA combustion analysis is optional, but all-or-nothing: once the engineer
+    // starts entering it, both the high- and low-fire groups must carry their
+    // core CO/CO₂ values, otherwise the dot would falsely read "complete" with
+    // the low-fire group left empty.
+    const anyCombustion =
+      !!a.high_co_ppm || !!a.high_co2 || !!a.high_ratio || !!a.low_co_ppm || !!a.low_co2 || !!a.low_ratio;
+    if (!anyCombustion) return true;
+    return !!a.high_co_ppm && !!a.high_co2 && !!a.low_co_ppm && !!a.low_co2;
+  });
   const safetyComplete = appliances.every(
     (a) =>
       !!a.safety_devices_correct &&
@@ -2633,12 +2643,12 @@ export function CertificateWizard({
                 </div>
 
                 <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                  <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">Combustion readings</p>
-                  <p className="mb-3 mt-1 text-[11px] leading-[1.5] text-[rgba(255,255,255,0.28)]">Speak readings in order with small pauses between each value.</p>
+                  <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">Combustion readings</p>
+                  <p className="mb-3 mt-1 text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">Speak readings in order with small pauses between each value.</p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
                       <div className="mb-2 flex items-center justify-between">
-                        <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">High combustion reading</p>
+                        <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">High combustion reading</p>
                         {renderReadingsVoiceButton(index, 'high', 'Speak high')}
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
@@ -2664,7 +2674,7 @@ export function CertificateWizard({
                     </div>
                     <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
                       <div className="mb-2 flex items-center justify-between">
-                        <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">Low combustion reading</p>
+                        <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">Low combustion reading</p>
                         {renderReadingsVoiceButton(index, 'low', 'Speak low')}
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">

@@ -18,6 +18,7 @@ import {
 } from '@/lib/onboarding-profile';
 import { CERTIFICATIONS, TRADE_TYPES } from '@/lib/profile-options';
 import { normalizeStandardRates } from '@/lib/standard-rates';
+import { sendWelcomeEmail } from '@/server/welcome-email';
 import type { Database, Tables } from '@/lib/database.types';
 
 const TradeSchema = z.array(z.enum(TRADE_TYPES)).min(1, 'Select at least one trade');
@@ -212,13 +213,17 @@ export async function updateProfileBasics(payload: {
   const { data: currentProfile, error: currentProfileError } = await profileSb
     .from('profiles')
     .select(
-      'full_name, date_of_birth, profession, company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number',
+      'full_name, date_of_birth, profession, company_name, company_address, company_postcode, company_phone, default_engineer_name, default_engineer_id, gas_safe_number, onboarding_complete',
     )
     .eq('id', user.id)
     .maybeSingle();
   if (currentProfileError && currentProfileError.code !== 'PGRST116') {
     throw new Error(currentProfileError.message);
   }
+  // Capture the previously-persisted onboarding flag so we can fire the welcome
+  // email exactly once, on the incomplete -> complete transition.
+  const wasOnboardingComplete =
+    (currentProfile as { onboarding_complete?: boolean } | null)?.onboarding_complete === true;
 
   const profilePatch: Partial<Tables<'profiles'>> & { id?: string } = {};
   if (hasOwn('full_name')) profilePatch.full_name = parsed.full_name ?? null;
@@ -279,6 +284,17 @@ export async function updateProfileBasics(payload: {
 
   if (profileComplete !== extendedPatch.onboarding_complete) {
     await upsertProfile(profileSb, user.id, { onboarding_complete: profileComplete });
+  }
+
+  // Onboarding just became complete for the first time — send the trial welcome
+  // email. Best-effort; sendWelcomeEmail never throws.
+  if (!wasOnboardingComplete && profileComplete) {
+    await sendWelcomeEmail({
+      email: user.email,
+      fullName: (savedProfile as { full_name?: string | null } | null)?.full_name ?? parsed.full_name,
+      profileSb,
+      userId: user.id,
+    });
   }
 
   revalidatePath('/dashboard');

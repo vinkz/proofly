@@ -25,7 +25,7 @@ export function SearchableSelect({ label, value, options, onChange, placeholder 
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
+      <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">{label}</p>
       <Input
         ref={inputRef}
         list={listId}

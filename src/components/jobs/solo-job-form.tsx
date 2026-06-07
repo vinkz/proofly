@@ -976,10 +976,9 @@ export function SoloJobForm({
       setJobAddressTel(landlordTel);
       setSitePhone(landlordTel);
     }
-    if (landlordName) {
-      setJobAddressName(landlordName);
-      setPropertyName(landlordName);
-    }
+    // Intentionally do NOT copy the landlord's name into the tenant/property-name
+    // field — the tenant is not the landlord, and doing so wipes the entered
+    // tenant name (the job address only borrows the landlord's *address*).
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -1083,7 +1082,7 @@ export function SoloJobForm({
       {step === 1 ? (
         <>
           <div>
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Job type</p>
+            <p className="mb-2 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Job type</p>
             <div className="flex gap-2">
               {LAUNCH_VISIBLE_JOB_TYPES.map((type) => (
                 <button
@@ -1111,7 +1110,7 @@ export function SoloJobForm({
           </div>
 
           <div className="space-y-2">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
             <button
               type="button"
               disabled={isPending}
@@ -1180,7 +1179,7 @@ export function SoloJobForm({
       {step === 2 ? (
         <>
           <div className="space-y-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Who is this for?</p>
+            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Who is this for?</p>
             <div className="space-y-2.5">
               <div>
                 <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
@@ -1283,7 +1282,7 @@ export function SoloJobForm({
         <>
           {!path ? (
             <div className="space-y-2">
-              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
               <button
                 type="button"
                 disabled={isPending}
@@ -1374,10 +1373,10 @@ export function SoloJobForm({
           ) : null}
 
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">{partyCardTitle}</p>
+            <p className="mb-3 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">{partyCardTitle}</p>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
                 <Input
                   value={partyNameValue}
                   onChange={(event) =>
@@ -1398,7 +1397,7 @@ export function SoloJobForm({
                 ) : null}
               </div>
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
                 <Input
                   value={landlordCompany}
                   onChange={(event) => setLandlordCompany(event.target.value)}
@@ -1408,7 +1407,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                   Address line 1
                 </label>
                 <div className="relative mt-1.5">
@@ -1455,7 +1454,7 @@ export function SoloJobForm({
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                   Address line 2
                 </label>
                 <Input
@@ -1467,7 +1466,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
                 <Input
                   value={landlordCity}
                   onChange={(event) => setLandlordCity(event.target.value)}
@@ -1477,7 +1476,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
                 <Input
                   value={landlordPostcode}
                   onChange={(event) => setLandlordPostcode(event.target.value)}
@@ -1487,7 +1486,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
                 <Input
                   value={landlordTel}
                   onChange={(event) => setLandlordTel(event.target.value)}
@@ -1497,7 +1496,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</label>
                 <Input
                   value={clientEmail}
                   onChange={(event) => setClientEmail(event.target.value)}
@@ -1528,7 +1527,7 @@ export function SoloJobForm({
         <>
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Job address</p>
+              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Job address</p>
               {landlordAddressLine1 || landlordName ? (
                 <button
                   type="button"
@@ -1542,7 +1541,7 @@ export function SoloJobForm({
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                   {scheduleFieldLabel}
                 </label>
                 <Input
@@ -1557,7 +1556,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                   Tenant name
                 </label>
                 <Input
@@ -1582,7 +1581,7 @@ export function SoloJobForm({
                 ) : null}
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                   Address line 1
                 </label>
                 <div className="relative mt-1.5">
@@ -1631,7 +1630,7 @@ export function SoloJobForm({
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                   Address line 2
                 </label>
                 <Input
@@ -1643,7 +1642,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
                 <Input
                   value={jobAddressCity}
                   onChange={(event) => setJobAddressCity(event.target.value)}
@@ -1654,7 +1653,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
                 <Input
                   value={jobAddressPostcode}
                   onChange={(event) => setJobAddressPostcode(event.target.value)}
@@ -1665,7 +1664,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
+                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
                 <Input
                   value={jobAddressTel}
                   onChange={(event) => setJobAddressTel(event.target.value)}
