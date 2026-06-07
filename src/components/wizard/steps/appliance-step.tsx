@@ -311,7 +311,7 @@ export function ApplianceStep({
                     />
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model</p>
+                      <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Model</p>
                       <Input
                         value={appliance?.model ?? ''}
                         onChange={(e) => updateApplianceField(index, 'model', e.target.value)}
@@ -321,7 +321,7 @@ export function ApplianceStep({
                   )}
                   {makeIsKnown && showManualModel ? (
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model (manual)</p>
+                      <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Model (manual)</p>
                       <Input
                         value={manualModelValue}
                         onChange={(e) => updateApplianceField(index, 'model', e.target.value)}
@@ -347,7 +347,7 @@ export function ApplianceStep({
                       {showOptional ? (
                         <div className="grid gap-3 sm:grid-cols-3">
                           <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Mount type</p>
+                            <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Mount type</p>
                             <div className="flex flex-wrap gap-2">
                               {[
                                 { label: 'Wall-mounted', value: 'wall' },
@@ -367,7 +367,7 @@ export function ApplianceStep({
                             </div>
                           </div>
                           <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Gas type</p>
+                            <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Gas type</p>
                             <Select
                               value={appliance?.gasType ?? ''}
                               onChange={(e) => updateApplianceField(index, 'gasType', e.target.value)}
@@ -380,7 +380,7 @@ export function ApplianceStep({
                           </div>
                           {showYear ? (
                             <div className="space-y-2">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Year of manufacture</p>
+                              <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Year of manufacture</p>
                               <Select
                                 value={appliance?.year ?? ''}
                                 onChange={(e) => updateApplianceField(index, 'year', e.target.value)}
@@ -399,7 +399,7 @@ export function ApplianceStep({
                     </div>
                   ) : null}
                   <div className="space-y-2 sm:col-span-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number</p>
+                    <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Serial number</p>
                     <Input
                       value={appliance?.serial ?? ''}
                       onChange={(e) => updateApplianceField(index, 'serial', e.target.value)}
@@ -462,7 +462,7 @@ export function ApplianceStep({
                 />
               ) : (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model</p>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Model</p>
                   <Input
                     value={activeAppliances[editingIndex]?.model ?? ''}
                     onChange={(e) => updateApplianceField(editingIndex, 'model', e.target.value)}
@@ -472,7 +472,7 @@ export function ApplianceStep({
               )}
               {makeIsKnown && showManualModel ? (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Model (manual)</p>
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Model (manual)</p>
                   <Input
                     value={manualModelValue}
                     onChange={(e) => updateApplianceField(editingIndex, 'model', e.target.value)}
@@ -498,7 +498,7 @@ export function ApplianceStep({
                   {showOptional ? (
                     <div className="grid gap-3 sm:grid-cols-3">
                       <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Mount type</p>
+                        <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Mount type</p>
                         <div className="flex flex-wrap gap-2">
                           {[
                             { label: 'Wall-mounted', value: 'wall' },
@@ -518,7 +518,7 @@ export function ApplianceStep({
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Gas type</p>
+                        <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Gas type</p>
                         <Select
                           value={activeAppliances[editingIndex]?.gasType ?? ''}
                           onChange={(e) => updateApplianceField(editingIndex, 'gasType', e.target.value)}
@@ -531,7 +531,7 @@ export function ApplianceStep({
                       </div>
                       {showYear ? (
                         <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Year of manufacture</p>
+                          <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Year of manufacture</p>
                           <Select
                             value={activeAppliances[editingIndex]?.year ?? ''}
                             onChange={(e) => updateApplianceField(editingIndex, 'year', e.target.value)}
@@ -550,7 +550,7 @@ export function ApplianceStep({
                 </div>
               ) : null}
               <div className="space-y-2 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Serial number</p>
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Serial number</p>
                 <Input
                   value={activeAppliances[editingIndex]?.serial ?? ''}
                   onChange={(e) => updateApplianceField(editingIndex, 'serial', e.target.value)}
