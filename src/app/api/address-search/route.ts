@@ -21,6 +21,10 @@ function getProviderFallback(status: number, resource: 'search' | 'address') {
     case 401:
     case 403:
       return 'Address lookup provider rejected the API key';
+    case 402:
+      // Payment Required — provider key balance depleted. Keep this generic so
+      // the raw "key balance depleted" never reaches the user.
+      return 'Address lookup is temporarily unavailable';
     case 404:
       return resource === 'search' ? 'No addresses found' : 'Address not found';
     case 429:
@@ -31,10 +35,18 @@ function getProviderFallback(status: number, resource: 'search' | 'address') {
   }
 }
 
+// 402 (Payment Required) carries the provider's raw "key balance depleted"
+// message — never surface that. All other statuses keep their provider detail,
+// which is useful for diagnosing setup/auth issues.
+function shouldAppendProviderDetail(status: number) {
+  return status !== 402;
+}
+
 function getClientStatus(status: number) {
   switch (status) {
     case 400:
     case 401:
+    case 402:
     case 403:
     case 404:
     case 429:
@@ -47,6 +59,9 @@ function getClientStatus(status: number) {
 
 async function buildProviderError(response: Response, resource: 'search' | 'address') {
   const fallback = getProviderFallback(response.status, resource);
+  if (!shouldAppendProviderDetail(response.status)) {
+    return fallback;
+  }
   const textResponse = response.clone();
 
   try {

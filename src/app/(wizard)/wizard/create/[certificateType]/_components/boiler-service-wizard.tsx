@@ -1213,9 +1213,9 @@ export function BoilerServiceWizard({
         borderRadius: 20,
         fontSize: 12,
         fontWeight: 400,
-        background: 'rgba(255,255,255,0.04)',
-        color: 'rgba(255,255,255,0.4)',
-        border: '0.5px solid rgba(255,255,255,0.12)',
+        background: 'var(--color-background-tertiary)',
+        color: 'var(--color-text-secondary)',
+        border: '1px solid var(--color-border-primary)',
       };
     }
     return {
