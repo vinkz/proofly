@@ -23,9 +23,9 @@ const FAIL_SELECTED = {
 } as const;
 
 const UNSELECTED = {
-  background: 'rgba(255,255,255,0.04)',
-  color: 'rgba(255,255,255,0.4)',
-  border: '0.5px solid rgba(255,255,255,0.12)',
+  background: 'var(--color-background-tertiary)',
+  color: 'var(--color-text-secondary)',
+  border: '1px solid var(--color-border-primary)',
   fontWeight: 400,
 } as const;
 

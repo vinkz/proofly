@@ -50,6 +50,24 @@ const isAddressLookupUnavailable = (message: string | null) => {
   return normalized.includes('disabled') || normalized.includes('not configured');
 };
 
+const NEUTRAL_ADDRESS_FALLBACK = 'Address lookup unavailable — enter manually';
+
+// Mirror /jobs/new: never surface a raw provider error (e.g. a 402 "key balance
+// depleted") to the user. Keep the helpful inline hints, silently allow manual
+// entry when lookup is disabled/not configured, and degrade every other failure
+// (depleted balance, rate limits, network) to neutral "enter manually" guidance.
+const formatAddressLookupError = (message: string | null): string | null => {
+  if (!message) return null;
+  if (isAddressLookupUnavailable(message)) return null;
+  if (
+    message.startsWith('Type at least') ||
+    message === 'No addresses found. Try a postcode or add more detail.'
+  ) {
+    return message;
+  }
+  return NEUTRAL_ADDRESS_FALLBACK;
+};
+
 const fieldLabel = (text: string) => (
   <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">{text}</p>
 );
@@ -157,7 +175,7 @@ export function OnboardingWizard({
         const message = error instanceof Error ? error.message : 'Try another search.';
         setCompanyAddressSuggestions([]);
         setSelectedCompanyAddressMatchId(null);
-        setCompanyAddressSearchError(isAddressLookupUnavailable(message) ? null : message);
+        setCompanyAddressSearchError(formatAddressLookupError(message));
       } finally {
         if (!controller.signal.aborted) {
           setIsCompanyAddressLookupPending(false);
@@ -198,12 +216,15 @@ export function OnboardingWizard({
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Try again.';
+      const friendly = formatAddressLookupError(message);
       setSelectedCompanyAddressMatchId(null);
-      setCompanyAddressSearchError(isAddressLookupUnavailable(message) ? null : message);
-      if (!isAddressLookupUnavailable(message)) {
+      setCompanyAddressSearchError(friendly);
+      // Only toast for a genuine "couldn't find that address" — not for provider
+      // outages/balance issues, which now degrade to neutral manual-entry guidance.
+      if (friendly && friendly !== NEUTRAL_ADDRESS_FALLBACK) {
         pushToast({
           title: 'Address not found',
-          description: message,
+          description: friendly,
           variant: 'error',
         });
       }
@@ -478,7 +499,7 @@ export function OnboardingWizard({
                 </div>
               ) : null}
               {companyAddressSearchError ? (
-                <p className="mt-1.5 text-[12px] text-[var(--color-red)]">{companyAddressSearchError}</p>
+                <p className="mt-1.5 text-[12px] text-[var(--color-text-tertiary)]">{companyAddressSearchError}</p>
               ) : null}
             </div>
             <div>

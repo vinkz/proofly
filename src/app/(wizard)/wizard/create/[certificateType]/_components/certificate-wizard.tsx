@@ -2493,16 +2493,23 @@ export function CertificateWizard({
     </WizardLayout>
   );
 
+  // These sub-tab "done" dots must require the same fields the Step-4 checklist
+  // (`readingsOk`) requires, otherwise all four dots can go green while the
+  // certificate still can't be issued — the appliance #N "identity + readings
+  // complete" item stays red with no indication of which field is missing.
   const inspectionComplete = appliances.every(
-    (a) => !!a.flue_type && !!a.appliance_inspected,
+    (a) => !!a.flue_type && !!a.appliance_inspected && !!a.appliance_serviced,
   );
-  const readingsComplete = appliances.every((a) => !!a.operating_pressure);
+  const readingsComplete = appliances.every((a) => !!a.operating_pressure && !!a.heat_input);
   const safetyComplete = appliances.every(
     (a) =>
       !!a.safety_devices_correct &&
       !!a.ventilation_satisfactory &&
       !!a.flue_condition &&
-      !!a.flue_performance_test,
+      !!a.flue_performance_test &&
+      !!a.stability_test &&
+      !!a.gas_tightness_test &&
+      !!a.safety_rating,
   );
   const houseComplete =
     booleanFromField(evidenceFields.emergency_control_accessible) &&
