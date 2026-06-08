@@ -1875,6 +1875,11 @@ export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSc
       job_id: input.jobId,
       user_id: user.id,
       ...appliance,
+      // safety_classification has a DB CHECK allowing only null | 'safe' | 'ncs' | 'ar' | 'id'.
+      // The wizard/schema default is '' (e.g. before a classification is chosen, or after a
+      // safe-to-use toggle reset), which violates the constraint and 500s the whole save.
+      // Persist null instead of '' so unclassified appliances save cleanly.
+      safety_classification: appliance.safety_classification ? appliance.safety_classification : null,
     }));
     const insertPayload = rows as unknown as Database['public']['Tables']['jobs']['Insert'][];
     const { data: insData, error: insertErr } = await sb.from(CP12_APPLIANCES_TABLE).insert(insertPayload).select();
