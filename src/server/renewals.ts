@@ -198,7 +198,22 @@ export async function sendLandlordRenewalRequest(jobId: string): Promise<Renewal
       text,
       html,
     });
-    if (delivery.status === 'sent') return { status: 'sent', recipient };
+    if (delivery.status === 'sent') {
+      // Record that the engineer asked this landlord to confirm a date, so the public job
+      // page shows the confirm-a-date card even before the 60-day renewal window — otherwise
+      // the email's "Confirm a renewal date" link lands on a page with no action to take.
+      try {
+        await admin.from('job_fields').delete().eq('job_id', parsedJobId).eq('field_key', 'renewal_requested_at');
+        await admin.from('job_fields').insert({
+          job_id: parsedJobId,
+          field_key: 'renewal_requested_at',
+          value: new Date().toISOString(),
+        });
+      } catch (markError) {
+        console.error('[renewals] failed to record renewal_requested_at:', markError);
+      }
+      return { status: 'sent', recipient };
+    }
     if (delivery.status === 'not_configured') return { status: 'not_configured' };
     return { status: 'failed' };
   } catch (error) {

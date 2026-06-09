@@ -4,11 +4,28 @@ import { useState, useTransition } from 'react';
 
 import { submitPublicJobRenewalRequest } from '@/server/public-job';
 
-export function RenewalRequestForm({ token }: { token: string }) {
+const toDateOnly = (value: string) => {
+  const slice = String(value ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(slice) ? slice : '';
+};
+
+const todayDateOnly = () => new Date().toISOString().slice(0, 10);
+
+export function RenewalRequestForm({
+  token,
+  defaultDate = '',
+  confirmMode = true,
+}: {
+  token: string;
+  defaultDate?: string;
+  confirmMode?: boolean;
+}) {
   const [tenantName, setTenantName] = useState('');
   const [tenantPhone, setTenantPhone] = useState('');
   const [accessNotes, setAccessNotes] = useState('');
-  const [preferredDate, setPreferredDate] = useState('');
+  // Pre-fill the confirmation date to the next inspection due date (or today) so the landlord can
+  // accept it in one tap rather than hunting through the calendar.
+  const [preferredDate, setPreferredDate] = useState(() => toDateOnly(defaultDate) || todayDateOnly());
   const [preferredDates, setPreferredDates] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +63,9 @@ export function RenewalRequestForm({ token }: { token: string }) {
                 ? ` ${result.engineer.phone ?? result.engineer.email}`
                 : '';
             setMessage(
-              `Request sent. Your engineer has the access details and will be in touch.${contact}`,
+              result.scheduled
+                ? `Date confirmed. Your engineer has been notified and will book the visit.${contact}`
+                : `Request sent. Your engineer has the access details and will be in touch.${contact}`,
             );
           } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : 'Could not send request.');
@@ -77,7 +96,7 @@ export function RenewalRequestForm({ token }: { token: string }) {
       />
       <div>
         <label className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">
-          Preferred date
+          {confirmMode ? 'Confirm renewal date' : 'Preferred date'}
         </label>
         <input
           type="date"
@@ -98,7 +117,7 @@ export function RenewalRequestForm({ token }: { token: string }) {
         disabled={isPending}
         className="w-full rounded-[24px] bg-[#111] px-5 py-[13px] text-[15px] font-medium text-white disabled:opacity-50"
       >
-        {isPending ? 'Sending…' : 'Send to your engineer →'}
+        {isPending ? 'Sending…' : confirmMode ? 'Confirm date with your engineer →' : 'Send to your engineer →'}
       </button>
       {error ? <p className="text-[12px] text-[#a32d2d]">{error}</p> : null}
     </form>
