@@ -80,7 +80,8 @@ export default async function PublicJobPage({
   const engineerName = job.engineer.name ?? job.engineer.company ?? 'Your engineer';
   const engineerInitials = getInitials(job.engineer.name ?? job.engineer.company);
   const showRenewal =
-    !job.engineerOwnsJob && (isDueForRenewal(job.nextInspectionDue) || job.certificates.length === 0);
+    !job.engineerOwnsJob &&
+    (Boolean(job.renewalRequestedAt) || isDueForRenewal(job.nextInspectionDue) || job.certificates.length === 0);
   const showEmailCapture = !job.engineerOwnsJob && !job.landlordEmail && !showRenewal;
   const compliance = getComplianceInfo(job.nextInspectionDue, job.certificates.length > 0);
 
@@ -310,14 +311,20 @@ export default async function PublicJobPage({
           <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
             <div className="p-4">
               <p className="text-[15px] font-medium text-[var(--color-text-primary)]">
-                {job.certificates.length === 0 ? 'Request gas safety check' : 'Request renewal'}
+                {job.certificates.length === 0 ? 'Request gas safety check' : 'Confirm your renewal date'}
               </p>
               <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-                Send your access details to {engineerName} to arrange the next visit.
+                {job.certificates.length === 0
+                  ? `Send your access details to ${engineerName} to arrange the visit.`
+                  : `Pick a date that works and ${engineerName} will book the renewal visit.`}
               </p>
             </div>
             <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] p-4">
-              <RenewalRequestForm token={job.token} />
+              <RenewalRequestForm
+                token={job.token}
+                defaultDate={job.nextInspectionDue ?? ''}
+                confirmMode={job.certificates.length > 0}
+              />
             </div>
             <p className="px-4 pb-4 text-center text-[12px] text-[var(--color-text-tertiary)]">
               No account needed. Your details go directly to your engineer.
