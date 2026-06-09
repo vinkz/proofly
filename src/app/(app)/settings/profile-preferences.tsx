@@ -21,6 +21,9 @@ import { updateProfileBasics } from '@/server/profile';
 
 type ProfilePreferencesProps = {
   mode?: 'settings' | 'onboarding';
+  setupFocus?: 'certificate' | 'frictionless' | null;
+  missingProfileFields?: string[];
+  missingInvoiceFields?: string[];
   initialFullName?: string;
   initialDateOfBirth?: string;
   initialProfession?: string;
@@ -92,6 +95,9 @@ const cardBodyClass = 'flex flex-col gap-[12px] p-4';
 
 export function ProfilePreferences({
   mode = 'settings',
+  setupFocus = null,
+  missingProfileFields = [],
+  missingInvoiceFields = [],
   initialFullName = '',
   initialDateOfBirth = '',
   initialProfession = '',
@@ -242,6 +248,22 @@ export function ProfilePreferences({
 
   const saveButtonLabel = isPending ? 'Saving…' : dirty ? 'Save' : 'Saved';
   const saveButtonClass = `text-[12px] font-medium px-[14px] py-[5px] rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)] bg-transparent disabled:opacity-40 transition-colors hover:border-[var(--color-text-tertiary)]`;
+  const profileCardMissingFields = missingProfileFields.filter((field) =>
+    ['Full name', 'Date of birth', 'Profession', 'Engineer ID card number', 'Gas Safe number'].includes(field),
+  );
+  const companyCardMissingFields = missingProfileFields.filter((field) =>
+    ['Company name', 'Company address line 1', 'Company postcode', 'Company phone'].includes(field),
+  );
+  const profileSetupActive = mode === 'settings' && setupFocus === 'certificate' && profileCardMissingFields.length > 0;
+  const companySetupActive = mode === 'settings' && setupFocus === 'certificate' && companyCardMissingFields.length > 0;
+  const invoiceSetupActive = mode === 'settings' && setupFocus === 'frictionless' && missingInvoiceFields.length > 0;
+  const focusedCardClass = (active: boolean) => `${cardClass} scroll-mt-20 ${active ? 'ring-1 ring-[var(--color-amber)]' : ''}`;
+  const missingHint = (items: string[]) =>
+    items.length ? (
+      <p className="mt-1 text-[11px] text-[var(--color-amber)]">
+        Missing: {items.slice(0, 3).join(', ')}{items.length > 3 ? ` +${items.length - 3} more` : ''}
+      </p>
+    ) : null;
 
   if (mode === 'onboarding') {
     return (
@@ -366,11 +388,12 @@ export function ProfilePreferences({
   return (
     <>
       {/* Card 1: Personal & engineer details */}
-      <section className={cardClass}>
+      <section id="certificate-profile" className={focusedCardClass(profileSetupActive)}>
         <div className={cardHeaderClass}>
           <div>
             <p className={eyebrowClass}>Profile</p>
             <h2 className={cardTitleClass}>Personal & engineer details</h2>
+            {profileSetupActive ? missingHint(profileCardMissingFields) : null}
           </div>
           <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
             {saveButtonLabel}
@@ -458,11 +481,12 @@ export function ProfilePreferences({
       </section>
 
       {/* Card 2: Company details */}
-      <section className={cardClass}>
+      <section id="certificate-company" className={focusedCardClass(companySetupActive)}>
         <div className={cardHeaderClass}>
           <div>
             <p className={eyebrowClass}>Company</p>
             <h2 className={cardTitleClass}>Company details</h2>
+            {companySetupActive ? missingHint(companyCardMissingFields) : null}
           </div>
           <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
             {saveButtonLabel}
@@ -499,11 +523,12 @@ export function ProfilePreferences({
       </section>
 
       {/* Card 3: Bank transfer & rates */}
-      <section className={cardClass}>
+      <section id="invoice-details" className={focusedCardClass(invoiceSetupActive)}>
         <div className={cardHeaderClass}>
           <div>
             <p className={eyebrowClass}>Invoices</p>
             <h2 className={cardTitleClass}>Bank transfer & rates</h2>
+            {invoiceSetupActive ? missingHint(missingInvoiceFields) : null}
           </div>
           <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
             {saveButtonLabel}

@@ -25,7 +25,7 @@ export function GetStartedCard({
   const frictionlessSetupComplete = optionalInvoiceComplete && signatureSaved && hasStandardRate;
   const allPrereqsDone = certificateProfileComplete && frictionlessSetupComplete;
   const canDismiss = allPrereqsDone;
-  const primaryHref = certificateProfileComplete ? '/jobs/new' : '/settings';
+  const primaryHref = certificateProfileComplete ? '/jobs/new' : '/settings?setup=certificate';
   const primaryLabel = certificateProfileComplete ? 'Create first certificate' : 'Complete profile';
   const invoiceDetailsMissing = invoiceMissingFields.some((field) => field !== 'CP12 standard rate');
   const frictionlessMissingItems = [
@@ -93,7 +93,7 @@ export function GetStartedCard({
           }
           statusLabel={certificateProfileComplete ? 'Done' : 'Required'}
           statusTone={certificateProfileComplete ? 'done' : 'required'}
-          href="/settings"
+          href="/settings?setup=certificate"
         />
         <ChecklistStepLink
           stepNumber={2}
@@ -106,7 +106,7 @@ export function GetStartedCard({
           }
           statusLabel={frictionlessSetupComplete ? 'Done' : 'Optional'}
           statusTone={frictionlessSetupComplete ? 'done' : 'optional'}
-          href="/settings"
+          href="/settings?setup=frictionless"
         />
         <div className={`flex items-center gap-3 px-5 py-3.5 ${!certificateProfileComplete ? 'opacity-40' : ''}`}>
           <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-[12px] font-medium ${certificateProfileComplete ? 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]' : 'bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'}`}>

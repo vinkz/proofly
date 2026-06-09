@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { getProfile } from '@/server/profile';
 import { userHasPassword } from '@/server/auth';
+import { getMissingOnboardingFields } from '@/lib/onboarding-profile';
 import { normalizeStandardRates } from '@/lib/standard-rates';
 import { getBillingPageData } from '@/server/billing-page';
 import { manageSubscriptionAction } from '@/server/billing';
@@ -10,7 +11,18 @@ import { PasswordSection } from './password-section';
 import { SavedSignatureSection } from './saved-signature-section';
 import { ThemeSection } from './theme-section';
 
-export default async function SettingsPage() {
+type SetupTarget = 'certificate' | 'frictionless' | null;
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ setup?: string }>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const setupTarget: SetupTarget =
+    resolvedSearchParams?.setup === 'certificate' || resolvedSearchParams?.setup === 'frictionless'
+      ? resolvedSearchParams.setup
+      : null;
   const { profile, user } = await getProfile();
   const fullName = profile?.full_name ?? '';
   const dateOfBirth = profile?.date_of_birth ?? '';
@@ -32,6 +44,14 @@ export default async function SettingsPage() {
     (profile as { standard_rates?: unknown } | null)?.standard_rates,
   );
   const savedSignatureUrl = (profile as { saved_signature_url?: string | null } | null)?.saved_signature_url ?? null;
+  const profileMissingFields = getMissingOnboardingFields(profile);
+  const invoiceMissingFields = getInvoiceSetupMissingFields(profile);
+  const hasCp12StandardRate = !!(standardRates.cp12 && Number(standardRates.cp12) > 0);
+  const frictionlessMissingItems = [
+    ...invoiceMissingFields.map((field) => `Invoice: ${field}`),
+    !hasCp12StandardRate ? 'Standard rates: CP12 rate' : null,
+    !savedSignatureUrl ? 'Signature: saved engineer signature' : null,
+  ].filter((item): item is string => item !== null);
 
   const { hasPassword } = await userHasPassword();
   const billing = await getBillingPageData();
@@ -51,6 +71,13 @@ export default async function SettingsPage() {
         </p>
       </div>
 
+      {setupTarget ? (
+        <SetupFocusCard
+          target={setupTarget}
+          missingItems={setupTarget === 'certificate' ? profileMissingFields : frictionlessMissingItems}
+        />
+      ) : null}
+
       <ProfilePreferences
         initialFullName={fullName}
         initialDateOfBirth={dateOfBirth}
@@ -69,10 +96,18 @@ export default async function SettingsPage() {
         initialBankSortCode={bankSortCode}
         initialBankAccountNumber={bankAccountNumber}
         initialStandardRates={standardRates}
+        setupFocus={setupTarget}
+        missingProfileFields={profileMissingFields}
+        missingInvoiceFields={[...invoiceMissingFields, ...(!hasCp12StandardRate ? ['CP12 standard rate'] : [])]}
       />
 
       {/* Saved signature card */}
-      <section className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+      <section
+        id="signature"
+        className={`scroll-mt-20 overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] ${
+          setupTarget === 'frictionless' && !savedSignatureUrl ? 'ring-1 ring-[var(--color-amber)]' : ''
+        }`}
+      >
         <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] px-4 py-[14px]">
           <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Signature</p>
           <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">Saved signature</h2>
@@ -208,4 +243,46 @@ export default async function SettingsPage() {
       </section>
     </div>
   );
+}
+
+function SetupFocusCard({ target, missingItems }: { target: Exclude<SetupTarget, null>; missingItems: string[] }) {
+  const title = target === 'certificate' ? 'Finish certificate-ready profile' : 'Make every job frictionless';
+  const description =
+    target === 'certificate'
+      ? 'These details are required before certificates can be issued.'
+      : 'These defaults reduce repeated typing on site and speed up handover.';
+
+  return (
+    <section className="rounded-[16px] border-[0.5px] border-[var(--color-amber)] bg-[var(--color-amber-bg)] p-4">
+      <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{title}</p>
+      <p className="mt-1 text-[12px] leading-[1.5] text-[var(--color-text-secondary)]">{description}</p>
+      {missingItems.length ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {missingItems.map((item) => (
+            <span
+              key={item}
+              className="rounded-full bg-[var(--color-background-primary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-amber)]"
+            >
+              {item}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-[12px] font-medium text-[var(--color-action)]">This setup group is complete.</p>
+      )}
+    </section>
+  );
+}
+
+function getInvoiceSetupMissingFields(profile: unknown) {
+  const row =
+    profile && typeof profile === 'object' && !Array.isArray(profile)
+      ? (profile as Record<string, unknown>)
+      : null;
+  const missing: string[] = [];
+  const hasText = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
+  if (!hasText(row?.bank_account_name)) missing.push('Account name');
+  if (!hasText(row?.bank_sort_code)) missing.push('Sort code');
+  if (!hasText(row?.bank_account_number)) missing.push('Account number');
+  return missing;
 }

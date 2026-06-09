@@ -363,7 +363,7 @@ export function CertificateWizard({
   const { pushToast } = useToast();
   const [step, setStep] = useState(() => Math.max(startStep, 1));
   // Step 1 ("People & location") is split into two pages to avoid a long scroll:
-  // 0 = landlord / property owner, 1 = tenant + job location + Regulation 26(9).
+  // 0 = landlord / property owner, 1 = tenant + job location.
   const [infoSubStep, setInfoSubStep] = useState(0);
   const [isPending, startTransition] = useTransition();
   const resolvedInitialInfo = mergeJobContextFields(initialInfo, initialJobContext);
@@ -714,21 +714,21 @@ export function CertificateWizard({
     },
   });
 
-  const buildCp12DraftPersistencePayload = useCallback(() => {
+  const buildCp12DraftPersistencePayload = useCallback((infoOverride: Cp12InfoState = info) => {
     const nextJobAddress = { ...jobAddress };
-    const derivedAddress = deriveJobAddressFromFields(nextJobAddress, info);
+    const derivedAddress = deriveJobAddressFromFields(nextJobAddress, infoOverride);
     if (!nextJobAddress.job_address_line1.trim()) nextJobAddress.job_address_line1 = derivedAddress.line1;
     if (!nextJobAddress.job_address_line2.trim() && derivedAddress.line2) nextJobAddress.job_address_line2 = derivedAddress.line2;
     if (!nextJobAddress.job_address_city.trim() && derivedAddress.city) nextJobAddress.job_address_city = derivedAddress.city;
-    if (!nextJobAddress.job_postcode.trim()) nextJobAddress.job_postcode = info.postcode.trim();
-    if (!nextJobAddress.job_tel.trim()) nextJobAddress.job_tel = info.customer_phone.trim();
+    if (!nextJobAddress.job_postcode.trim()) nextJobAddress.job_postcode = infoOverride.postcode.trim();
+    if (!nextJobAddress.job_tel.trim()) nextJobAddress.job_tel = infoOverride.customer_phone.trim();
 
     const data = {
-      ...info,
-      inspection_date: info.inspection_date || completionDate,
+      ...infoOverride,
+      inspection_date: infoOverride.inspection_date || completionDate,
       property_address: buildPropertyAddressFromJobAddress(nextJobAddress),
-      postcode: nextJobAddress.job_postcode || info.postcode,
-      landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
+      postcode: nextJobAddress.job_postcode || infoOverride.postcode,
+      landlord_address: buildLandlordAddress(infoOverride.landlord_address_line1, infoOverride.landlord_address_line2, infoOverride.landlord_city),
     };
 
     const jobPayload = {
@@ -755,7 +755,7 @@ export function CertificateWizard({
         job_postcode: nextJobAddress.job_postcode,
         job_tel: nextJobAddress.job_tel,
         tenant_name: nextJobAddress.job_address_name,
-        tenant_email: info.tenant_email,
+        tenant_email: infoOverride.tenant_email,
         emergency_control_accessible: evidenceFields.emergency_control_accessible ?? '',
         gas_tightness_satisfactory: evidenceFields.gas_tightness_satisfactory ?? '',
         pipework_visual_satisfactory: evidenceFields.pipework_visual_satisfactory ?? '',
@@ -766,6 +766,32 @@ export function CertificateWizard({
       jobPayload,
     };
   }, [completionDate, evidenceFields, info, jobAddress, resolvedInitialInfo]);
+
+  const handleReg26ConfirmationChange = (checked: boolean) => {
+    const nextInfo = { ...info, reg_26_9_confirmed: checked };
+    setInfo(nextInfo);
+
+    if (!isOnline) return;
+
+    startTransition(async () => {
+      try {
+        const payload = buildCp12DraftPersistencePayload(nextInfo);
+        await saveCp12JobInfo({ jobId, data: payload.jobPayload });
+        setInfo(payload.data);
+        setJobAddress(payload.jobAddress);
+        markSynced(
+          { ...cp12Draft, jobAddress: payload.jobAddress, info: payload.data },
+          { ...cp12DraftSyncState, jobAddress: payload.jobAddress, info: payload.data },
+        );
+      } catch (error) {
+        pushToast({
+          title: 'Could not save Regulation 26(9) confirmation',
+          description: error instanceof Error ? error.message : 'Try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
 
   const syncCp12OfflineDraft = useCallback(async () => {
     if (!isCp12 || isOfflineDraftSyncing) return;
@@ -1165,7 +1191,7 @@ export function CertificateWizard({
   };
 
   // Page 1 of step one (landlord). Validate the landlord block, then reveal the
-  // tenant + location + Regulation 26(9) page without leaving step one.
+  // tenant + location page without leaving step one.
   const handleInfoPageOneNext = () => {
     if (!isCp12) {
       setStep(2);
@@ -1792,10 +1818,7 @@ export function CertificateWizard({
       id: 'reg26',
       label: 'Regulation 26(9) confirmed',
       ok: booleanFromField(info.reg_26_9_confirmed),
-      action: () => {
-        setStep(1);
-        setInfoSubStep(1);
-      },
+      action: () => setStep(4),
       blocking: true,
     });
 
@@ -2313,25 +2336,7 @@ export function CertificateWizard({
             </div>
           </div>
 
-          <label
-            className={`flex cursor-pointer items-start gap-3 rounded-[12px] border bg-[var(--color-background-primary)] p-3 ${
-              info.reg_26_9_confirmed
-                ? 'border-[0.5px] border-[var(--color-border-tertiary)]'
-                : 'border-[var(--color-amber)] bg-[var(--color-amber-bg)]'
-            }`}
-          >
-            <input
-              type="checkbox"
-              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
-              checked={info.reg_26_9_confirmed}
-              onChange={(e) => setInfo((prev) => ({ ...prev, reg_26_9_confirmed: e.target.checked }))}
-            />
-            <div>
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Regulation 26(9) confirmed</p>
-              <p className="text-[12px] text-[var(--color-text-tertiary)]">Required before issuing a CP12 (see docs/specs/cp12.md).</p>
-            </div>
-          </label>
-          </>
+            </>
           )}
         </div>
       ) : (
@@ -3001,6 +3006,26 @@ export function CertificateWizard({
     >
       <div className="space-y-3">
         {offlineDraftBanner}
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-[12px] border bg-[var(--color-background-primary)] p-3 ${
+            info.reg_26_9_confirmed
+              ? 'border-[0.5px] border-[var(--color-border-tertiary)]'
+              : 'border-[var(--color-amber)] bg-[var(--color-amber-bg)]'
+          }`}
+        >
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 accent-[var(--color-action)]"
+            checked={info.reg_26_9_confirmed}
+            onChange={(e) => handleReg26ConfirmationChange(e.target.checked)}
+          />
+          <div>
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Regulation 26(9) confirmed</p>
+            <p className="text-[12px] text-[var(--color-text-tertiary)]">
+              Confirm this before issuing the CP12. It is saved with the final certificate details.
+            </p>
+          </div>
+        </label>
         {cp12RequiredItemsPanel}
         {!info.landlord_email.trim() ? (
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-4 text-[13px] text-[var(--color-text-primary)]">
