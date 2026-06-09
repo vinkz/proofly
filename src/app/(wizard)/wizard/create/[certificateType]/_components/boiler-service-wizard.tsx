@@ -402,6 +402,11 @@ export function BoilerServiceWizard({
       step,
     ],
   );
+  // Signatures are intentionally excluded from the sync-dirty snapshot — they upload to
+  // storage on draw and are written to the job at issue time, never via the background
+  // sync actions. Including them stranded the issue button on "Sync first" once the
+  // required Step-4 signature was drawn (nothing re-syncs a signature change). See the
+  // matching note in certificate-wizard.tsx.
   const boilerServiceDraftSyncState = useMemo(
     () => ({
       completionDate,
@@ -409,12 +414,8 @@ export function BoilerServiceWizard({
       jobAddress,
       details,
       checks,
-      engineerSignature,
-      engineerSignaturePath,
-      customerSignature,
-      customerSignaturePath,
     }),
-    [checks, completionDate, customerSignature, customerSignaturePath, details, engineerSignature, engineerSignaturePath, jobAddress, jobInfo],
+    [checks, completionDate, details, jobAddress, jobInfo],
   );
 
   const {

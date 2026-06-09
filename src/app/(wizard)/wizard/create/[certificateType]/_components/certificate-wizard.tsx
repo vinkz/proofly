@@ -657,6 +657,12 @@ export function CertificateWizard({
       step,
     ],
   );
+  // Signatures are intentionally excluded from the sync-dirty snapshot. They are
+  // uploaded to storage the moment they are drawn (SignatureCard.onUpload) and written
+  // to the job at issue time (generateCertificatePdf) — the background sync actions
+  // (saveCp12JobInfo/saveJobFields/saveCp12Appliances) never send them. Including them
+  // here made drawing the required Step-4 signature flip hasUnsyncedChanges back to true
+  // with nothing to re-sync it, permanently stranding the issue button on "Sync first".
   const cp12DraftSyncState = useMemo(
     () => ({
       info,
@@ -665,19 +671,11 @@ export function CertificateWizard({
       appliances,
       defects,
       completionDate,
-      engineerSignature,
-      engineerSignaturePath,
-      customerSignature,
-      customerSignaturePath,
     }),
     [
       appliances,
       completionDate,
-      customerSignature,
-      customerSignaturePath,
       defects,
-      engineerSignature,
-      engineerSignaturePath,
       evidenceFields,
       info,
       jobAddress,
