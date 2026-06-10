@@ -245,6 +245,17 @@ const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+// Show the same neutral fallback as /jobs/new instead of the raw provider error
+// (e.g. the Ideal Postcodes 402 "temporarily unavailable") in alarming red. Pass through
+// the benign guidance messages; collapse everything else to a calm "enter manually" hint.
+const formatAddressError = (msg: string | null) => {
+  if (!msg) return null;
+  if (msg.startsWith('Type at least') || msg === 'No addresses found. Try a postcode or add more detail.') {
+    return msg;
+  }
+  return 'Address lookup unavailable — enter manually';
+};
+
 export function BoilerServiceWizard({
   jobId,
   initialFields,
@@ -1349,7 +1360,7 @@ export function BoilerServiceWizard({
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job Address</p>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Service date
                   </label>
                   <Input
@@ -1360,7 +1371,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Tenant name
                   </label>
                   <Input
@@ -1371,7 +1382,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div className="relative md:col-span-2">
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Address lookup / line 1
                   </label>
                   <Input
@@ -1418,10 +1429,10 @@ export function BoilerServiceWizard({
                       </div>
                     </div>
                   ) : null}
-                  {addressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-red)]">{addressSearchError}</p> : null}
+                  {addressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">{formatAddressError(addressSearchError)}</p> : null}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Address line 2
                   </label>
                   <Input
@@ -1439,7 +1450,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
                   <Input
                     value={jobAddress.job_address_city}
                     onChange={(e) => {
@@ -1455,7 +1466,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
                   <Input
                     value={jobAddress.job_postcode}
                     onChange={(e) => {
@@ -1468,7 +1479,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
                   <Input
                     value={jobAddress.job_tel}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
@@ -1498,7 +1509,7 @@ export function BoilerServiceWizard({
                 </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
                   <Input
                     value={jobInfo.customer_name}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
@@ -1507,7 +1518,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
                   <Input
                     value={jobInfo.customer_company}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_company: e.target.value }))}
@@ -1516,7 +1527,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div className="relative md:col-span-2">
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Address lookup / line 1
                   </label>
                   <Input
@@ -1559,10 +1570,10 @@ export function BoilerServiceWizard({
                       </div>
                     </div>
                   ) : null}
-                  {customerAddressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-red)]">{customerAddressSearchError}</p> : null}
+                  {customerAddressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">{formatAddressError(customerAddressSearchError)}</p> : null}
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
                     Address line 2
                   </label>
                   <Input
@@ -1573,7 +1584,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
                   <Input
                     value={jobInfo.customer_city}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_city: e.target.value }))}
@@ -1582,7 +1593,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
                   <Input
                     value={jobInfo.customer_postcode}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_postcode: e.target.value }))}
@@ -1591,7 +1602,7 @@ export function BoilerServiceWizard({
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
                   <Input
                     value={jobInfo.customer_phone}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_phone: e.target.value }))}

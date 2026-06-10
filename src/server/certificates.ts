@@ -784,6 +784,24 @@ async function createFollowUpJob(params: {
   return { jobId: followUpJobId, created: true };
 }
 
+// Insert a certificate row, recovering from a unique-violation (23505) by updating the
+// existing row in place. With the per-user (user_id, public_id) index, a duplicate means a
+// certificate for this job+type already exists (e.g. a concurrent issue, or a row a prior
+// lookup missed) — update it instead of throwing a 500 to the engineer mid-issue.
+async function insertCertificateWithDuplicateFallback(
+  sb: SupabaseClient<Database>,
+  params: { jobId: string; certificateType: CertificateType; payload: Record<string, unknown> },
+) {
+  const insertResult = await sb.from('certificates').insert(params.payload);
+  if (insertResult.error?.code !== '23505') return insertResult;
+
+  return sb
+    .from('certificates')
+    .update(params.payload)
+    .eq('job_id', params.jobId)
+    .eq('cert_type', params.certificateType);
+}
+
 async function saveCertificateRecord(
   sb: SupabaseClient<Database>,
   params: {
@@ -804,7 +822,11 @@ async function saveCertificateRecord(
     return sb.from('certificates').update(params.payload).eq('id', existingRecord.id);
   }
 
-  return sb.from('certificates').insert(params.payload);
+  return insertCertificateWithDuplicateFallback(sb, {
+    jobId: params.jobId,
+    certificateType: params.certificateType,
+    payload: params.payload,
+  });
 }
 
 async function getUserWithRetry(
@@ -2440,7 +2462,11 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   const writeCertificate = (payload: Record<string, unknown>) =>
     existingCertificate
       ? supabase.from('certificates').update(payload).eq('job_id', input.jobId).eq('cert_type', 'general_works')
-      : supabase.from('certificates').insert(payload);
+      : insertCertificateWithDuplicateFallback(supabase, {
+          jobId: input.jobId,
+          certificateType: 'general_works',
+          payload,
+        });
 
   console.log('GW: certificates write start', { jobId: input.jobId, path, previewOnly, payload: certificatePayload });
   const certRes = await writeCertificate(certificatePayload);
@@ -3526,7 +3552,11 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       };
       const writeCertificate = existingCertificate
         ? sb.from('certificates').update(certificatePayload).eq('job_id', input.jobId).eq('cert_type', input.certificateType)
-        : sb.from('certificates').insert(certificatePayload);
+        : insertCertificateWithDuplicateFallback(sb, {
+            jobId: input.jobId,
+            certificateType: input.certificateType,
+            payload: certificatePayload,
+          });
       const { error: certificateWriteErr } = await writeCertificate;
       if (certificateWriteErr) {
         console.error('CERTIFICATE write failed (non-CP12)', {

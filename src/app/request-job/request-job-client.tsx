@@ -43,6 +43,16 @@ const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+// Public-facing form: never show the raw provider error (e.g. Ideal Postcodes 402) in red.
+// Pass through benign guidance, collapse everything else to a calm "enter manually" hint.
+const formatAddressError = (msg: string | null) => {
+  if (!msg) return null;
+  if (msg.startsWith('Type at least') || msg === 'No addresses found. Try a postcode or add more detail.') {
+    return msg;
+  }
+  return 'Address lookup unavailable — enter manually';
+};
+
 const composeAddress = (...parts: Array<string | null | undefined>) =>
   parts
     .map((part) => String(part ?? '').trim())
@@ -183,7 +193,8 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
   );
 
   const copyLandlordDetailsToProperty = () => {
-    if (landlordName.trim()) setTenantName(landlordName);
+    // Copy the landlord's ADDRESS to the property — do not touch the tenant name
+    // (the tenant is a different person from the landlord/form-filler).
     if (landlordPhone.trim()) setSitePhone(landlordPhone);
     setAddressLine1(landlordAddressLine1);
     setAddressLine2(landlordAddressLine2);
@@ -516,7 +527,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
                 </div>
               ) : null}
               {addressSearchError ? (
-                <p className="mt-1.5 text-[12px] text-[var(--color-red)]">{addressSearchError}</p>
+                <p className="mt-1.5 text-[12px] text-[var(--color-text-tertiary)]">{formatAddressError(addressSearchError)}</p>
               ) : null}
             </div>
             <Input

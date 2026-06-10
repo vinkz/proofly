@@ -20,7 +20,7 @@ import {
 } from '@/server/job-requests';
 import { getNextRenewalToSend } from '@/server/renewals';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
-import { formatDisplayAddress } from '@/lib/address';
+import { formatDisplayAddress, toTitleCase } from '@/lib/address';
 import { GetStartedCard } from './_components/get-started-card';
 
 type BasicJob = {
@@ -460,6 +460,22 @@ function formatDateShort(dateString: string) {
   });
 }
 
+// Preferred dates come from a free-text field (a single ISO date from the date picker,
+// a range, or "Flexible"). Render a lone ISO date as "15 June 2026"; pass anything else through.
+function formatPreferredDates(value: string | null | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const formatted = new Date(`${trimmed}T00:00:00`).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    return formatted === 'Invalid Date' ? trimmed : formatted;
+  }
+  return trimmed;
+}
+
 function formatRelativeTime(dateString: string | null | undefined) {
   if (!dateString) return null;
   const target = new Date(dateString).getTime();
@@ -628,8 +644,9 @@ function JobRequestCard({ request }: { request: DashboardJobRequest }) {
   const badgeLabel = isRenewal ? 'Renewal' : 'New job';
   const relative = formatRelativeTime(request.createdAt);
   const address = formatDisplayAddress(request.propertyAddress) || 'Property address missing';
-  const landlordLine = request.landlordName ?? request.landlordEmail ?? null;
-  const tenantLine = request.tenantName ?? null;
+  const landlordLine = request.landlordName ? toTitleCase(request.landlordName) : request.landlordEmail ?? null;
+  const tenantLine = request.tenantName ? toTitleCase(request.tenantName) : null;
+  const preferredDatesLine = formatPreferredDates(request.preferredDates);
 
   return (
     <article className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
@@ -658,8 +675,8 @@ function JobRequestCard({ request }: { request: DashboardJobRequest }) {
           {tenantLine ? (
             <DetailRow icon={<UsersIcon />} text={`Tenant · ${tenantLine}`} />
           ) : null}
-          {request.preferredDates ? (
-            <DetailRow icon={<CalendarIcon />} text={request.preferredDates} />
+          {preferredDatesLine ? (
+            <DetailRow icon={<CalendarIcon />} text={preferredDatesLine} />
           ) : null}
           {isRenewal ? (
             <DetailRow
