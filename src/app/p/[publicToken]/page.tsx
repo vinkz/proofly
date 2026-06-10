@@ -163,13 +163,23 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
             <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">Your certificate is current. Use this form to book your next service.</p>
           )}
           <div className="mt-4">
-            {vault.hasRenewalRequest && vault.renewalRequestStatus === 'pending' ? (
+            {vault.hasRenewalRequest && vault.renewalRequestStatus === 'scheduled' ? (
+              <div className="rounded-[10px] bg-[var(--color-action-bg)] p-3">
+                <p className="text-[13px] font-medium text-[var(--color-action)]">Renewal date confirmed</p>
+                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Your engineer has been notified and will book the visit.</p>
+              </div>
+            ) : vault.hasRenewalRequest && vault.renewalRequestStatus === 'pending' ? (
               <div className="rounded-[10px] bg-[var(--color-action-bg)] p-3">
                 <p className="text-[13px] font-medium text-[var(--color-action)]">Renewal request received</p>
                 <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Your engineer has been notified and will be in touch.</p>
               </div>
             ) : (
-              <PropertyRenewalForm token={vault.token} ctaLabel={ctaLabel} />
+              <PropertyRenewalForm
+                token={vault.token}
+                ctaLabel={ctaLabel}
+                defaultDate={vault.nextServiceDue ?? ''}
+                confirmMode={vault.jobs.length > 0}
+              />
             )}
           </div>
         </section>

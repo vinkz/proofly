@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
+import { ensureRenewalJobForSource, normalizeDateOnly, notifyEngineerOfRenewalResponse } from './renewal-confirm';
 
 const PublicTokenSchema = z.string().min(16).max(128).regex(/^[a-zA-Z0-9_-]+$/);
 const RenewalRequestSchema = z.object({
@@ -11,6 +12,7 @@ const RenewalRequestSchema = z.object({
   tenantPhone: z.string().max(80).optional().default(''),
   accessNotes: z.string().max(1000).optional().default(''),
   preferredDates: z.string().max(500).optional().default(''),
+  preferredDate: z.string().max(20).optional().default(''),
 });
 
 const pickText = (...values: Array<string | null | undefined>) => {
@@ -160,21 +162,88 @@ export async function submitPropertyRenewalRequest(input: z.infer<typeof Renewal
   if (!data) throw new Error('Property not found');
 
   const admin = await supabaseServerServiceRole();
-  const { error } = await admin.from('job_requests').insert({
+  const acceptedDate = normalizeDateOnly(request.preferredDate);
+  const preferredSummary =
+    [acceptedDate, request.preferredDates].map((value) => value?.trim()).filter(Boolean).join(' · ') || null;
+
+  // Find the most relevant existing job for this property to anchor the renewal on — prefer the most
+  // recent delivered visit (its CP12 follow-up is what we schedule), falling back to the latest job.
+  // This reuses the exact same confirm-date logic as the /j/ page so the two entry points behave
+  // identically rather than drifting apart.
+  const { data: propertyJobs } = await admin
+    .from('jobs')
+    .select('id, user_id, client_id, client_name, address, delivered_at, created_at')
+    .eq('property_id', data.propertyId)
+    .order('created_at', { ascending: false });
+  const sourceJob =
+    (propertyJobs ?? []).find((job) => Boolean(job.delivered_at)) ?? (propertyJobs ?? [])[0] ?? null;
+  // The property row carries no landlord name; the anchoring job's client_name is the landlord.
+  const landlordLabel = sourceJob?.client_name?.trim() || data.name || null;
+
+  const renewalJobId = sourceJob
+    ? await ensureRenewalJobForSource(admin, {
+        sourceJob: {
+          id: sourceJob.id,
+          user_id: sourceJob.user_id ?? data.userId,
+          client_id: sourceJob.client_id ?? null,
+          client_name: sourceJob.client_name ?? data.name ?? null,
+          address: sourceJob.address ?? data.address ?? null,
+        },
+        acceptedDate,
+        tenantName: request.tenantName,
+        tenantPhone: request.tenantPhone,
+        accessNotes: request.accessNotes,
+        propertyId: data.propertyId,
+      })
+    : null;
+
+  // A confirmed date means the visit is booked, not just requested — surface it as 'scheduled' and
+  // link the job so it shows in upcoming work; otherwise it stays a 'pending' request in the inbox.
+  const requestStatus = acceptedDate ? 'scheduled' : 'pending';
+  const insertRow: Record<string, unknown> = {
     property_id: data.propertyId,
+    scheduled_job_id: renewalJobId,
+    source_job_id: sourceJob?.id ?? null,
     user_id: data.userId,
     assigned_engineer_id: data.userId,
     request_type: 'renewal',
     source: 'property_vault',
     job_type: 'safety_check',
+    landlord_name: landlordLabel,
     property_address: data.address,
     tenant_name: request.tenantName || null,
     tenant_phone: request.tenantPhone || null,
     access_notes: request.accessNotes || null,
-    preferred_dates: request.preferredDates || null,
-    status: 'pending',
-  });
-  if (error) throw new Error(error.message);
+    preferred_dates: preferredSummary,
+    status: requestStatus,
+  };
+  const { error } = await admin.from('job_requests').insert(insertRow as never);
+  if (error) {
+    // Older databases may not have scheduled_job_id/source_job_id — retry without them rather than
+    // fail the landlord's submission.
+    if (['42703', 'PGRST204'].includes(error.code ?? '')) {
+      delete insertRow.scheduled_job_id;
+      delete insertRow.source_job_id;
+      const { error: retryErr } = await admin.from('job_requests').insert(insertRow as never);
+      if (retryErr) throw new Error(retryErr.message);
+    } else {
+      throw new Error(error.message);
+    }
+  }
 
-  return { ok: true, engineer: data.engineer };
+  // Confirm back to the engineer by email so the booking doesn't only live on a dashboard list.
+  await notifyEngineerOfRenewalResponse({
+    admin,
+    engineerUserId: data.userId,
+    address: data.address,
+    landlordName: landlordLabel,
+    acceptedDate,
+    preferredDates: request.preferredDates,
+    tenantName: request.tenantName,
+    tenantPhone: request.tenantPhone,
+    accessNotes: request.accessNotes,
+    renewalJobId,
+  });
+
+  return { ok: true, engineer: data.engineer, scheduled: Boolean(acceptedDate) };
 }
