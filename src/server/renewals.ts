@@ -15,11 +15,9 @@ import {
   titleCase,
 } from '@/lib/email-templates';
 import { supabaseServerReadOnly, supabaseServerServiceRole, getSupabaseUser } from '@/lib/supabaseServer';
+import { getSiteUrl } from './renewal-confirm';
 
 const JobIdSchema = z.string().uuid();
-
-const getSiteUrl = () =>
-  (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(/\/$/, '');
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
