@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { PublicComplianceStatusRow } from '@/components/public-compliance-status';
+import { formatPublicDisplayDate, getPublicComplianceInfo } from '@/lib/public-compliance';
 import { getPublicJobByToken } from '@/server/public-job';
 import { LandlordEmailCapture } from './landlord-email-capture';
 import { RenewalRequestForm } from './renewal-request-form';
@@ -14,13 +16,6 @@ function isDueForRenewal(dateString: string | null) {
   return due - todayStart <= 60 * 24 * 60 * 60 * 1000;
 }
 
-function formatDisplayDate(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 function getInitials(name: string | null | undefined): string {
   if (!name) return '?';
   const words = name.trim().split(/\s+/);
@@ -30,42 +25,6 @@ function getInitials(name: string | null | undefined): string {
 
 function isWarningCert(label: string): boolean {
   return /warning|notice/i.test(label);
-}
-
-function getComplianceInfo(
-  nextInspectionDue: string | null,
-  hasCerts: boolean,
-): { dotColor: string; label: string; sub: string | null } {
-  if (!nextInspectionDue) {
-    return {
-      dotColor: 'var(--color-border-secondary)',
-      label: hasCerts ? 'Certificate issued' : 'No certificate on record',
-      sub: null,
-    };
-  }
-  const due = new Date(`${nextInspectionDue.slice(0, 10)}T00:00:00Z`).getTime();
-  const today = new Date();
-  const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  const days = Math.floor((due - todayMs) / 86_400_000);
-  if (days < 0) {
-    return {
-      dotColor: '#a32d2d',
-      label: 'Certificate overdue',
-      sub: `Expired ${formatDisplayDate(nextInspectionDue) ?? nextInspectionDue.slice(0, 10)}`,
-    };
-  }
-  if (days <= 45) {
-    return {
-      dotColor: '#BA7517',
-      label: `Due in ${days} day${days !== 1 ? 's' : ''}`,
-      sub: `Renewal due: ${formatDisplayDate(nextInspectionDue) ?? nextInspectionDue.slice(0, 10)}`,
-    };
-  }
-  return {
-    dotColor: '#1a7a52',
-    label: 'Certificate current',
-    sub: `Next inspection: ${formatDisplayDate(nextInspectionDue) ?? nextInspectionDue.slice(0, 10)}`,
-  };
 }
 
 export default async function PublicJobPage({
@@ -86,7 +45,7 @@ export default async function PublicJobPage({
   const showRenewal = !job.engineerOwnsJob;
   const renewalDueSoon = Boolean(job.renewalRequestedAt) || isDueForRenewal(job.nextInspectionDue);
   const showEmailCapture = !job.engineerOwnsJob && !job.landlordEmail && !showRenewal;
-  const compliance = getComplianceInfo(job.nextInspectionDue, job.certificates.length > 0);
+  const compliance = getPublicComplianceInfo(job.nextInspectionDue, job.certificates.length > 0);
 
   return (
     <div className="min-h-screen bg-[var(--color-background-secondary)]">
@@ -123,19 +82,10 @@ export default async function PublicJobPage({
               </div>
             ) : null}
           </div>
-          <div className="flex items-start gap-3 border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
-            <div
-              className="mt-1 h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: compliance.dotColor }}
-              aria-hidden="true"
-            />
-            <div>
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{compliance.label}</p>
-              {compliance.sub ? (
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">{compliance.sub}</p>
-              ) : null}
-            </div>
-          </div>
+          <PublicComplianceStatusRow
+            compliance={compliance}
+            className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3"
+          />
         </div>
 
         {/* Card 2 — Engineer */}
@@ -193,7 +143,7 @@ export default async function PublicJobPage({
                   <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">
                     Issued{' '}
                     {cert.issuedAt
-                      ? (formatDisplayDate(cert.issuedAt) ?? cert.issuedAt.slice(0, 10))
+                      ? (formatPublicDisplayDate(cert.issuedAt) ?? cert.issuedAt.slice(0, 10))
                       : 'date not recorded'}
                   </p>
                 </div>
@@ -265,7 +215,7 @@ export default async function PublicJobPage({
                   <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{cert.label}</p>
                   <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">
                     {cert.issuedAt
-                      ? (formatDisplayDate(cert.issuedAt) ?? cert.issuedAt.slice(0, 10))
+                      ? (formatPublicDisplayDate(cert.issuedAt) ?? cert.issuedAt.slice(0, 10))
                       : 'Date not recorded'}
                     {engineerName !== 'Your engineer' ? ` · ${engineerName}` : ''}
                   </p>
@@ -354,12 +304,10 @@ export default async function PublicJobPage({
           </div>
         ) : null}
 
-        {/* Engineer actions — shown only to the authenticated engineer who owns the job */}
+        {/* Engineer shortcuts — rendered only for the authenticated engineer who owns the job. */}
         {job.engineerOwnsJob ? (
-          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-              Engineer view
-            </p>
+          <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-4">
+            <p className="text-[12px] font-medium text-[var(--color-text-tertiary)]">Engineer view</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
                 href={`/invoices/new?jobId=${job.jobId}`}

@@ -270,6 +270,8 @@ export function BoilerServiceWizard({
   const [isPending, startTransition] = useTransition();
   const [isOfflineDraftSyncing, setIsOfflineDraftSyncing] = useState(false);
   const [offlineDraftSyncError, setOfflineDraftSyncError] = useState<string | null>(null);
+  const [offlineDraftSyncErrorCount, setOfflineDraftSyncErrorCount] = useState(0);
+  const [queuedIssue, setQueuedIssue] = useState(false);
   const wasOfflineRef = useRef(false);
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
   const [isAddressLookupPending, setIsAddressLookupPending] = useState(false);
@@ -415,8 +417,8 @@ export function BoilerServiceWizard({
   );
   // Signatures are intentionally excluded from the sync-dirty snapshot — they upload to
   // storage on draw and are written to the job at issue time, never via the background
-  // sync actions. Including them stranded the issue button on "Sync first" once the
-  // required Step-4 signature was drawn (nothing re-syncs a signature change). See the
+  // sync actions. Including them stranded the issue button once the required Step-4
+  // signature was drawn (nothing re-syncs a signature change). See the
   // matching note in certificate-wizard.tsx.
   const boilerServiceDraftSyncState = useMemo(
     () => ({
@@ -507,9 +509,11 @@ export function BoilerServiceWizard({
         { ...boilerServiceDraft, jobInfo: payload.info },
         { ...boilerServiceDraftSyncState, jobInfo: payload.info },
       );
+      setOfflineDraftSyncErrorCount(0);
       pushToast({ title: 'Offline draft synced', variant: 'success' });
     } catch (error) {
       setOfflineDraftSyncError(error instanceof Error ? error.message : 'Could not sync offline draft.');
+      setOfflineDraftSyncErrorCount((count) => count + 1);
     } finally {
       setIsOfflineDraftSyncing(false);
     }
@@ -1018,6 +1022,15 @@ export function BoilerServiceWizard({
   };
 
   const handleGenerate = () => {
+    if (!isOnline) {
+      setQueuedIssue(true);
+      pushToast({
+        title: 'Issue queued',
+        description: 'This boiler service record is saved on this device and will continue when you are back online.',
+        variant: 'default',
+      });
+      return;
+    }
     startTransition(async () => {
       try {
         if (boilerMissingItems.length > 0) {
@@ -1059,6 +1072,11 @@ export function BoilerServiceWizard({
       }
     });
   };
+
+  const handleGenerateRef = useRef(handleGenerate);
+  useEffect(() => {
+    handleGenerateRef.current = handleGenerate;
+  });
 
   const setCheckValue = (key: keyof BoilerServiceChecks, value: string) => {
     setChecks((prev) => ({ ...prev, [key]: value }));
@@ -1178,6 +1196,13 @@ export function BoilerServiceWizard({
     jobInfo.service_date,
   ]);
   const firstBoilerMissing = boilerMissingItems[0];
+
+  useEffect(() => {
+    if (!queuedIssue || !isOnline || isPending || boilerMissingItems.length > 0) return;
+    setQueuedIssue(false);
+    handleGenerateRef.current();
+  }, [boilerMissingItems.length, isOnline, isPending, queuedIssue]);
+
   const formatNextServiceDate = (dateStr: string) => {
     if (!dateStr) return dateStr;
     const d = new Date(`${dateStr}T00:00:00`);
@@ -1321,6 +1346,7 @@ export function BoilerServiceWizard({
       isSyncing={isOfflineDraftSyncing}
       lastSavedAt={localUpdatedAt}
       syncError={offlineDraftSyncError}
+      syncErrorCount={offlineDraftSyncErrorCount}
     />
   );
 
@@ -2007,16 +2033,20 @@ export function BoilerServiceWizard({
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={isPending || boilerMissingItems.length > 0 || !isOnline || hasUnsyncedChanges}
+              disabled={isPending || boilerMissingItems.length > 0}
               className="flex min-h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-action)] px-2 text-center text-[14px] font-medium leading-tight text-white disabled:opacity-50"
             >
-              {!isOnline || hasUnsyncedChanges
-                ? 'Sync first'
-                : firstBoilerMissing
-                  ? `Complete: ${firstBoilerMissing.label}`
-                  : isPending
-                    ? 'Generating…'
-                    : 'Generate Boiler Service'}
+              {queuedIssue
+                ? 'Issue queued'
+                : !isOnline
+                  ? 'Queue issue'
+                  : hasUnsyncedChanges || isOfflineDraftSyncing
+                    ? 'Save & generate'
+                    : firstBoilerMissing
+                      ? `Complete: ${firstBoilerMissing.label}`
+                      : isPending
+                        ? 'Generating…'
+                        : 'Generate Boiler Service'}
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>

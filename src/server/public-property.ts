@@ -1,7 +1,9 @@
 'use server';
 
+import * as Sentry from '@sentry/nextjs';
 import { z } from 'zod';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { deriveNextDueFromCertificates, normalizePublicDateOnly } from '@/lib/public-compliance';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import { ensureRenewalJobForSource, normalizeDateOnly, notifyEngineerOfRenewalResponse } from './renewal-confirm';
 
@@ -27,6 +29,8 @@ export type PropertyVaultData = {
   propertyId: string;
   address: string;
   name: string | null;
+  landlordName: string | null;
+  tenantName: string | null;
   nextServiceDue: string | null;
   userId: string | null;
   engineer: {
@@ -70,7 +74,7 @@ export async function getPublicPropertyByToken(token: string): Promise<PropertyV
   if (propErr) throw new Error(propErr.message);
   if (!property?.id) return null;
 
-  const [profileResult, jobsResult] = await Promise.all([
+  const [profileResult, jobsResult, clientResult] = await Promise.all([
     property.user_id
       ? admin
           .from('profiles')
@@ -83,10 +87,14 @@ export async function getPublicPropertyByToken(token: string): Promise<PropertyV
       .select('id, title, status, job_type, scheduled_for, created_at, client_name, address')
       .eq('property_id', property.id)
       .order('created_at', { ascending: false }),
+    property.client_id
+      ? admin.from('clients').select('name, email, phone').eq('id', property.client_id).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   const profile = profileResult.data;
   const jobs = jobsResult.data ?? [];
+  const client = clientResult.data;
   const jobIds = jobs.map((j) => j.id).filter((id): id is string => typeof id === 'string');
 
   const { data: certificateRows } = jobIds.length
@@ -116,6 +124,23 @@ export async function getPublicPropertyByToken(token: string): Promise<PropertyV
     }),
   );
 
+  const { data: fieldRows } = jobIds.length
+    ? await admin
+        .from('job_fields')
+        .select('job_id, field_key, value')
+        .in('job_id', jobIds)
+        .in('field_key', ['landlord_name', 'tenant_name', 'tenant_full_name'])
+    : { data: [] };
+
+  const latestFieldMap = new Map<string, string | null>();
+  for (const job of jobs) {
+    const fieldsForJob = (fieldRows ?? []).filter((field) => field.job_id === job.id);
+    if (fieldsForJob.length > 0) {
+      for (const field of fieldsForJob) latestFieldMap.set(field.field_key ?? '', field.value ?? null);
+      break;
+    }
+  }
+
   const { data: requestRow } = await admin
     .from('job_requests')
     .select('id, status')
@@ -127,13 +152,31 @@ export async function getPublicPropertyByToken(token: string): Promise<PropertyV
   const address = [property.address_line1, property.address_line2, property.town, property.postcode]
     .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
     .join(', ');
+  const certificateNextServiceDue = deriveNextDueFromCertificates(certificates);
+  const propertyNextServiceDue = normalizePublicDateOnly(property.next_service_due);
+  if (
+    propertyNextServiceDue &&
+    certificateNextServiceDue &&
+    propertyNextServiceDue !== certificateNextServiceDue
+  ) {
+    Sentry.captureMessage('[public-property] compliance source disagreement', {
+      level: 'warning',
+      extra: {
+        propertyId: property.id,
+        propertyNextServiceDue,
+        certificateNextServiceDue,
+      },
+    });
+  }
 
   return {
     token: parsedToken.data,
     propertyId: property.id,
     address,
     name: property.name ?? null,
-    nextServiceDue: property.next_service_due ?? null,
+    landlordName: pickText(latestFieldMap.get('landlord_name'), client?.name ?? null, jobs[0]?.client_name, property.name) || null,
+    tenantName: pickText(latestFieldMap.get('tenant_name'), latestFieldMap.get('tenant_full_name')) || null,
+    nextServiceDue: propertyNextServiceDue ?? certificateNextServiceDue,
     userId: property.user_id ?? null,
     engineer: {
       name: pickText(profile?.default_engineer_name, profile?.full_name) || null,

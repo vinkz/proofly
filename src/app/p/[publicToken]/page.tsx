@@ -1,25 +1,9 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import { PublicComplianceStatusRow } from '@/components/public-compliance-status';
+import { formatPublicDisplayDate, getPublicComplianceInfo } from '@/lib/public-compliance';
 import { getPublicPropertyByToken } from '@/server/public-property';
 import { PropertyRenewalForm } from './renewal-form';
-
-const formatDate = (value: string | null | undefined) => {
-  if (!value) return null;
-  const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-};
-
-const getComplianceBadge = (nextServiceDue: string | null) => {
-  if (!nextServiceDue) return { label: 'No cert date', badgeClass: 'bg-[var(--color-background-secondary)] text-[var(--color-text-tertiary)]', status: 'unknown' as const };
-  const due = new Date(`${nextServiceDue.slice(0, 10)}T00:00:00`).getTime();
-  const today = new Date();
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-  const daysUntil = Math.floor((due - todayStart) / 86_400_000);
-  if (daysUntil < 0) return { label: 'Overdue', badgeClass: 'bg-[var(--color-red)]/10 text-[var(--color-red)]', status: 'overdue' as const };
-  if (daysUntil <= 45) return { label: `Due in ${daysUntil}d`, badgeClass: 'bg-[var(--color-amber)]/10 text-[var(--color-amber)]', status: 'amber' as const };
-  return { label: 'Current', badgeClass: 'bg-[var(--color-action-bg)] text-[var(--color-action)]', status: 'current' as const };
-};
 
 const JOB_TYPE_LABELS: Record<string, string> = {
   safety_check: 'Gas Safety Check',
@@ -36,10 +20,10 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
   const vault = await getPublicPropertyByToken(publicToken);
   if (!vault) notFound();
 
-  const badge = getComplianceBadge(vault.nextServiceDue);
+  const compliance = getPublicComplianceInfo(vault.nextServiceDue, vault.certificates.length > 0);
   const ctaLabel = vault.jobs.length === 0
     ? 'Request Gas Safety Check'
-    : badge.status === 'overdue' || badge.status === 'amber'
+    : compliance.status === 'overdue' || compliance.status === 'due_soon'
       ? 'Request Renewal'
       : 'Book next service';
 
@@ -59,22 +43,19 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
         <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Property</p>
           <h1 className="mt-1 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-[var(--color-text-primary)]">
-            {vault.name || vault.address.split(',')[0]}
+            {vault.address}
           </h1>
-          {vault.name ? (
-            <p className="mt-0.5 text-[14px] text-[var(--color-text-secondary)]">{vault.address}</p>
-          ) : vault.address.includes(',') ? (
-            <p className="mt-0.5 text-[14px] text-[var(--color-text-secondary)]">{vault.address.split(',').slice(1).join(',').trim()}</p>
+          {vault.landlordName ? (
+            <p className="mt-1 text-[14px] text-[var(--color-text-secondary)]">Landlord: {vault.landlordName}</p>
           ) : null}
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${badge.badgeClass}`}>
-              {badge.label}
-            </span>
-            {vault.nextServiceDue ? (
-              <p className="text-[12px] text-[var(--color-text-tertiary)]">
-                Next due: {formatDate(vault.nextServiceDue)}
-              </p>
-            ) : null}
+          <div className="mt-4 rounded-[12px] bg-[var(--color-background-secondary)]">
+            <PublicComplianceStatusRow compliance={compliance} className="px-3 py-3" />
+            <div className="flex items-center justify-between gap-3 border-t-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2.5">
+              <span className="text-[12px] text-[var(--color-text-tertiary)]">Tenant</span>
+              <span className="text-right text-[12px] font-medium text-[var(--color-text-secondary)]">
+                {vault.tenantName || 'Not provided'}
+              </span>
+            </div>
           </div>
         </section>
 
@@ -88,7 +69,7 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
                   <div>
                     <p className="text-[13px] font-medium text-[var(--color-text-primary)]">{cert.label}</p>
                     {cert.issuedAt ? (
-                      <p className="text-[11px] text-[var(--color-text-tertiary)]">Issued {formatDate(cert.issuedAt)}</p>
+                      <p className="text-[11px] text-[var(--color-text-tertiary)]">Issued {formatPublicDisplayDate(cert.issuedAt)}</p>
                     ) : null}
                   </div>
                   {cert.downloadUrl ? (
@@ -136,7 +117,7 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
                     {job.title || JOB_TYPE_LABELS[job.jobType ?? ''] || 'Service visit'}
                   </p>
                   <p className="text-[11px] text-[var(--color-text-tertiary)]">
-                    {formatDate(job.scheduledFor ?? job.createdAt)}
+                    {formatPublicDisplayDate(job.scheduledFor ?? job.createdAt)}
                   </p>
                 </div>
               ))}
@@ -146,16 +127,16 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
 
         {/* Renewal / request CTA */}
         <section className={`rounded-[16px] border-[0.5px] p-4 shadow-sm ${
-          badge.status === 'overdue'
+          compliance.status === 'overdue'
             ? 'border-[var(--color-red)]/30 bg-[var(--color-red-bg)]'
-            : badge.status === 'amber'
+            : compliance.status === 'due_soon'
               ? 'border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)]'
               : 'border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]'
         }`}>
           <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">{ctaLabel}</p>
-          {badge.status === 'overdue' ? (
+          {compliance.status === 'overdue' ? (
             <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">This property&apos;s gas safety certificate has expired. Request a renewal to stay compliant.</p>
-          ) : badge.status === 'amber' ? (
+          ) : compliance.status === 'due_soon' ? (
             <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">Your certificate expires soon. Book your renewal now to avoid a gap in cover.</p>
           ) : vault.jobs.length === 0 ? (
             <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">No service history found. Send your access details and the engineer will be in touch.</p>

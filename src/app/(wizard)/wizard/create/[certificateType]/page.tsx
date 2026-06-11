@@ -72,6 +72,8 @@ const CERTIFICATE_STEP_TOTALS: Record<CertificateType, number> = {
   commissioning: 4,
 };
 
+const FINAL_JOB_STATUSES = new Set(['issued', 'delivered']);
+
 export default async function CertificateWizardPage({
   params,
   searchParams,
@@ -239,6 +241,11 @@ export default async function CertificateWizardPage({
     );
   }
 
+  const job = wizardState.job as Database['public']['Tables']['jobs']['Row'] | null;
+  if (job?.status && FINAL_JOB_STATUSES.has(String(job.status).toLowerCase())) {
+    redirect(`/jobs/${jobId}/complete`);
+  }
+
   if (normalizedType === 'gas_warning_notice') {
     let shouldRedirectToCompletion = false;
     try {
@@ -261,7 +268,6 @@ export default async function CertificateWizardPage({
     }
   }
 
-  const job = wizardState.job as Database['public']['Tables']['jobs']['Row'] | null;
   const propertySummary = pickText(
     wizardState.jobAddress?.summary ?? null,
     wizardState.fields.property_address ?? null,

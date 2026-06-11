@@ -524,6 +524,8 @@ export function CertificateWizard({
   const isBusy = isPending || isGeneratingPdf;
   const [isOfflineDraftSyncing, setIsOfflineDraftSyncing] = useState(false);
   const [offlineDraftSyncError, setOfflineDraftSyncError] = useState<string | null>(null);
+  const [offlineDraftSyncErrorCount, setOfflineDraftSyncErrorCount] = useState(0);
+  const [queuedIssue, setQueuedIssue] = useState(false);
   const wasOfflineRef = useRef(false);
   const totalSteps = (isCp12 ? 4 : 4) + stepOffset;
   const baseOffset = stepOffset;
@@ -662,7 +664,7 @@ export function CertificateWizard({
   // to the job at issue time (generateCertificatePdf) — the background sync actions
   // (saveCp12JobInfo/saveJobFields/saveCp12Appliances) never send them. Including them
   // here made drawing the required Step-4 signature flip hasUnsyncedChanges back to true
-  // with nothing to re-sync it, permanently stranding the issue button on "Sync first".
+  // with nothing to re-sync it. Issue now owns any final save/sync work.
   const cp12DraftSyncState = useMemo(
     () => ({
       info,
@@ -807,9 +809,11 @@ export function CertificateWizard({
         { ...cp12Draft, jobAddress: payload.jobAddress, info: payload.data },
         { ...cp12DraftSyncState, jobAddress: payload.jobAddress, info: payload.data },
       );
+      setOfflineDraftSyncErrorCount(0);
       pushToast({ title: 'Offline draft synced', variant: 'success' });
     } catch (error) {
       setOfflineDraftSyncError(error instanceof Error ? error.message : 'Could not sync offline draft.');
+      setOfflineDraftSyncErrorCount((count) => count + 1);
     } finally {
       setIsOfflineDraftSyncing(false);
     }
@@ -1371,6 +1375,15 @@ export function CertificateWizard({
 
   const handleGenerate = () => {
     if (isGeneratingPdf) return;
+    if (!isOnline) {
+      setQueuedIssue(true);
+      pushToast({
+        title: 'Issue queued',
+        description: 'This certificate is saved on this device and will continue when you are back online.',
+        variant: 'default',
+      });
+      return;
+    }
     setIsGeneratingPdf(true);
     void (async () => {
       try {
@@ -1442,6 +1455,11 @@ export function CertificateWizard({
       }
     })();
   };
+
+  const handleGenerateRef = useRef(handleGenerate);
+  useEffect(() => {
+    handleGenerateRef.current = handleGenerate;
+  });
 
   const handleLinkedBoilerService = () => {
     if (!issuedJobId) return;
@@ -1881,6 +1899,13 @@ export function CertificateWizard({
     router,
   ]);
   const firstBlockingMissing = checklist.items.find((item) => item.blocking !== false && !item.ok);
+
+  useEffect(() => {
+    if (!queuedIssue || !isOnline || isBusy || checklist.blockingMissing > 0) return;
+    setQueuedIssue(false);
+    handleGenerateRef.current();
+  }, [checklist.blockingMissing, isBusy, isOnline, queuedIssue]);
+
   const cp12RequiredMissingItems = checklist.items.filter((item) => item.blocking !== false && !item.ok);
   const cp12RequiredItemsPanel = cp12RequiredMissingItems.length > 0 ? (
     <div className="rounded-[16px] border-[0.5px] border-[rgba(186,117,23,0.4)] bg-[rgba(186,117,23,0.15)] p-4">
@@ -2069,6 +2094,7 @@ export function CertificateWizard({
       isSyncing={isOfflineDraftSyncing}
       lastSavedAt={localUpdatedAt}
       syncError={offlineDraftSyncError}
+      syncErrorCount={offlineDraftSyncErrorCount}
     />
   );
 
@@ -3162,26 +3188,30 @@ export function CertificateWizard({
         </button>
         <button
           type="button"
-          disabled={isBusy || !isOnline || hasUnsyncedChanges}
+          disabled={isBusy || !isOnline}
           onClick={handleCreateRemoteSignatureLink}
           className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
         >
-          {!isOnline || hasUnsyncedChanges ? 'Sync first' : isPending ? 'Preparing…' : 'Send to landlord'}
+          {!isOnline ? 'Online required' : isPending ? 'Preparing…' : 'Send to landlord'}
         </button>
         <button
           type="button"
-          disabled={isBusy || checklist.blockingMissing > 0 || !isOnline || hasUnsyncedChanges}
+          disabled={isBusy || checklist.blockingMissing > 0}
           onClick={handleGenerate}
           data-testid="cp12-issue"
           className="flex min-h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#1a7a52] px-2 text-center text-[14px] font-medium leading-tight text-white disabled:opacity-50"
         >
-          {!isOnline || hasUnsyncedChanges
-            ? 'Sync first'
-            : firstBlockingMissing
-              ? `Complete: ${firstBlockingMissing.label}`
-              : isGeneratingPdf
-                ? 'Issuing…'
-                : 'Issue CP12'}
+          {queuedIssue
+            ? 'Issue queued'
+            : !isOnline
+              ? 'Queue issue'
+              : hasUnsyncedChanges || isOfflineDraftSyncing
+                ? 'Save & issue CP12'
+                : firstBlockingMissing
+                  ? `Complete: ${firstBlockingMissing.label}`
+                  : isGeneratingPdf
+                    ? 'Issuing…'
+                    : 'Issue CP12'}
         </button>
       </div>
     </WizardLayout>

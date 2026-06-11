@@ -6,6 +6,7 @@ type OfflineDraftBannerProps = {
   isSyncing?: boolean;
   lastSavedAt?: number | null;
   syncError?: string | null;
+  syncErrorCount?: number;
 };
 
 const formatSavedTime = (value?: number | null) => {
@@ -26,38 +27,35 @@ export function OfflineDraftBanner({
   isSyncing = false,
   lastSavedAt,
   syncError,
+  syncErrorCount = 0,
 }: OfflineDraftBannerProps) {
   if (isOnline && !hasUnsyncedChanges && !isSyncing && !syncError) return null;
 
   const savedTime = formatSavedTime(lastSavedAt);
-  const status = !isOnline
-    ? 'Offline'
+  const showAttention = Boolean(syncError && syncErrorCount >= 2);
+  const status = showAttention ? 'Sync needs attention' : isSyncing ? 'Syncing' : 'Saved on this device';
+  const savedCopy = `Changes are saved on this device${savedTime ? ` at ${savedTime}` : ''}.`;
+  const message = showAttention
+    ? syncError
     : isSyncing
-      ? 'Syncing'
-      : syncError
-        ? 'Sync failed'
-        : 'Not synced';
-  const message = !isOnline
-    ? `Changes are saved on this device${savedTime ? ` at ${savedTime}` : ''}. They will sync when you are back online.`
-    : isSyncing
-      ? 'Saving your offline draft to CertNow.'
-      : syncError
-        ? syncError
-        : `Changes are saved on this device${savedTime ? ` at ${savedTime}` : ''}.`;
+      ? 'Syncing automatically to CertNow.'
+      : !isOnline
+        ? `${savedCopy} Syncs automatically when you are back online.`
+        : `${savedCopy} Syncs automatically.`;
 
   return (
     <div
       className={`rounded-[12px] border-[0.5px] px-3 py-2 text-[12px] ${
-        syncError
-          ? 'border-[var(--color-red)]/30 bg-[var(--color-red-bg)] text-[var(--color-red)]'
-          : 'border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] text-[var(--color-text-secondary)]'
+        showAttention
+          ? 'border-[var(--color-amber)]/40 bg-[var(--color-amber-bg)] text-[var(--color-text-primary)]'
+          : 'border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]'
       }`}
       role="status"
     >
       <div className="flex items-start gap-2">
         <span
           className={`mt-1 size-2 shrink-0 rounded-full ${
-            syncError ? 'bg-[var(--color-red)]' : isOnline ? 'bg-[var(--color-amber)]' : 'bg-[var(--color-text-tertiary)]'
+            showAttention ? 'bg-[var(--color-amber)]' : isOnline ? 'bg-[var(--color-action)]' : 'bg-[var(--color-text-tertiary)]'
           }`}
           aria-hidden="true"
         />
