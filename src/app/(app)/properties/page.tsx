@@ -251,25 +251,25 @@ export default async function PropertiesPage({
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
             <p className="text-[22px] font-medium text-[var(--color-text-primary)]">{allProperties.length}</p>
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">Total</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">Total</p>
           </div>
           <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
             <p className="text-[22px] font-medium" style={{ color: statsOverdue > 0 ? '#a32d2d' : 'var(--color-text-primary)' }}>
               {statsOverdue}
             </p>
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">Overdue</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">Overdue</p>
           </div>
           <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
             <p className="text-[22px] font-medium" style={{ color: statsAmber > 0 ? '#BA7517' : 'var(--color-text-primary)' }}>
               {statsAmber}
             </p>
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">Due soon</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">Due soon</p>
           </div>
           <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
             <p className="text-[22px] font-medium" style={{ color: statsCurrent > 0 ? '#1a7a52' : 'var(--color-text-primary)' }}>
               {statsCurrent}
             </p>
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">Current</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">Current</p>
           </div>
         </div>
 

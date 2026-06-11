@@ -83,7 +83,7 @@ const inputClass =
 
 const labelClass = 'text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]';
 
-const eyebrowClass = 'text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]';
+const eyebrowClass = 'text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]';
 
 const cardTitleClass = 'text-[15px] font-medium text-[var(--color-text-primary)]';
 

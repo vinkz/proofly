@@ -8,7 +8,7 @@ export default function SignupLayout({ children }: { children: ReactNode }) {
         <div className="mx-auto flex h-full max-w-md items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <span className="text-lg font-extrabold tracking-tight text-[var(--brand)]">certnow</span>
-            <span className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Signup</span>
+            <span className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Signup</span>
           </div>
           <Link href="/login" className="text-[13px] text-[var(--color-text-secondary)]">
             Already have an account?

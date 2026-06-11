@@ -57,7 +57,7 @@ export function ToolsMenu() {
           className="absolute right-0 top-11 z-50 w-52 overflow-hidden rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] shadow-[0_8px_24px_rgba(0,0,0,0.1)]"
         >
           <div className="px-1 py-1">
-            <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
               Tools
             </p>
             {items.map((item) => (
@@ -78,7 +78,7 @@ export function ToolsMenu() {
               </Link>
             ))}
             <div className="my-1 border-t-[0.5px] border-[var(--color-border-tertiary)]" />
-            <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
               Account
             </p>
             <Link

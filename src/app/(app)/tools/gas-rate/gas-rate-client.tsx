@@ -82,7 +82,7 @@ export function GasRateClient() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6">
       <div className="pt-1">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
           Tools
         </p>
         <h1 className="mt-0.5 text-[22px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
@@ -93,7 +93,7 @@ export function GasRateClient() {
       <div className="space-y-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
         {/* Meter type */}
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             Meter type
           </p>
           <div className="flex gap-1.5">
@@ -116,7 +116,7 @@ export function GasRateClient() {
 
         {/* Volume mode */}
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             Volume method
           </p>
           <div className="flex gap-1.5">
@@ -140,7 +140,7 @@ export function GasRateClient() {
         {/* Volume inputs */}
         {volumeMode === 'timed' ? (
           <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
               Volume ({volumeUnit})
             </label>
             <Input
@@ -156,7 +156,7 @@ export function GasRateClient() {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                 Start ({volumeUnit})
               </label>
               <Input
@@ -169,7 +169,7 @@ export function GasRateClient() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                 End ({volumeUnit})
               </label>
               <Input
@@ -186,7 +186,7 @@ export function GasRateClient() {
 
         {/* Duration */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             Test duration (seconds)
           </label>
           <Input
@@ -218,7 +218,7 @@ export function GasRateClient() {
           {showAdvanced ? (
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Calorific value (MJ/m³)
                 </label>
                 <Input
@@ -231,7 +231,7 @@ export function GasRateClient() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Correction factor
                 </label>
                 <Input
@@ -268,7 +268,7 @@ export function GasRateClient() {
       {/* Result */}
       {result ? (
         <div className="space-y-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             Result
           </p>
 
@@ -320,7 +320,7 @@ export function GasRateClient() {
 function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
     <div className="rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] px-3 py-3">
-      <p className="text-[10px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">
+      <p className="text-[10px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">
         {label}
       </p>
       <p className="mt-0.5 text-[18px] font-semibold leading-none text-[var(--color-text-primary)]">

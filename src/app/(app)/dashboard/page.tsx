@@ -168,7 +168,7 @@ export default async function DashboardPage({
       {/* Page header — slim greeting + primary CTA (full top nav is a future layout pass) */}
       <header className="flex items-center justify-between gap-3 pt-1">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             Welcome back
           </p>
           <h1 className="text-[18px] font-medium text-[var(--color-text-primary)]">{displayName}</h1>
@@ -414,7 +414,7 @@ export default async function DashboardPage({
 
       {/* Selected day jobs */}
       <section className="space-y-2">
-        <p className="px-1 text-[10px] font-medium uppercase tracking-[1px] text-[var(--color-text-tertiary)]">
+        <p className="px-1 text-[10px] font-medium uppercase tracking-[1px] text-[var(--color-text-eyebrow)]">
           {formatSelectedDate(selectedDate)}
         </p>
 
@@ -775,7 +775,7 @@ function DashboardJobRow({ job, leadingDate = false }: { job: BasicJob & { prepC
         </div>
         <div className="h-9 w-px bg-[var(--color-border-tertiary)]" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             {getDashboardJobTypeLabel(job.job_type)}
           </p>
           <p className="mt-0.5 truncate text-[15px] font-medium text-[var(--color-text-primary)]">

@@ -120,7 +120,7 @@ export function PrefillClient({
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-3">
-      <p className="text-[12px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">{title}</p>
+      <p className="text-[12px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">{title}</p>
       {children}
     </div>
   );

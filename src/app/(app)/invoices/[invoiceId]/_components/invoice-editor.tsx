@@ -368,7 +368,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-4">
         {/* Status card */}
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             Payment status
           </p>
           <div className="mt-3 flex gap-1 rounded-[10px] bg-[var(--color-background-secondary)] p-1">
@@ -413,7 +413,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
 
           {/* Bill to address */}
           <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3 pt-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
               Bill to
             </p>
             <div className="mt-1.5 space-y-1.5">
@@ -448,7 +448,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
 
           {/* Email */}
           <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
-            <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</p>
+            <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Email</p>
             <input
               type="email"
               inputMode="email"
@@ -462,7 +462,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
 
           {/* Phone */}
           <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
-            <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Phone</p>
+            <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Phone</p>
             <input
               type="tel"
               inputMode="tel"
@@ -476,7 +476,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
 
           {/* Due date */}
           <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Due</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Due</p>
             <input
               type="date"
               value={dueDate}
@@ -605,7 +605,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
 
         {/* Notes card */}
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             Notes (optional)
           </p>
           <textarea

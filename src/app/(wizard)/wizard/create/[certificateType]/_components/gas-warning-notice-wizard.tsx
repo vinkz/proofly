@@ -153,7 +153,7 @@ const hasValue = (value: unknown) => typeof value === 'string' && value.trim().l
 function LabeledField({ label, children, className = '' }: { label: string; children: ReactNode; className?: string }) {
   return (
     <label className={`space-y-1 ${className}`}>
-      <span className="block text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">{label}</span>
+      <span className="block text-[11px] uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">{label}</span>
       {children}
     </label>
   );

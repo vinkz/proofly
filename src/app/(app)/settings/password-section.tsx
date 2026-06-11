@@ -40,7 +40,7 @@ export function PasswordSection({ hasPassword, email }: { hasPassword: boolean; 
   return (
     <section className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
       <div className="border-b-[0.5px] border-[var(--color-border-tertiary)] px-4 py-[14px]">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Account security</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Account security</p>
         <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">Password</h2>
       </div>
 

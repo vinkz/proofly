@@ -49,7 +49,7 @@ export function GetStartedCard({
       <div className="px-5 pb-4 pt-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
               Get started with CertNow
             </p>
             <h3 className="mt-1 text-[19px] font-medium tracking-[-0.01em] text-[var(--color-text-primary)]">

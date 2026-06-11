@@ -367,7 +367,7 @@ export function Cp12VoiceReadings({
           {state === 'review' ? (
             <div className="space-y-4">
               <div className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-tertiary)]">Transcript</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-eyebrow)]">Transcript</p>
                 <div className="rounded-[16px] border border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3 text-sm text-[var(--color-text-secondary)]">
                   {transcript || 'No transcript returned.'}
                 </div>
@@ -385,7 +385,7 @@ export function Cp12VoiceReadings({
                 <div className="grid gap-3 sm:grid-cols-2">
                   {CP12_VOICE_READING_FIELDS.map((field) => (
                     <div key={field.key} className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-tertiary)]">
+                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-eyebrow)]">
                         {field.label}
                       </p>
                       <div className="flex items-center gap-2">

@@ -63,7 +63,7 @@ export default async function PublicJobPage({
         {/* Card 1 — Property */}
         <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
           <div className="p-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
               Property
             </p>
             <h1 className="mt-1 text-[18px] font-medium leading-snug text-[var(--color-text-primary)]">

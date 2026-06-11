@@ -33,7 +33,7 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
       <header className="border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
         <div className="mx-auto flex h-12 max-w-lg items-center justify-between px-4">
           <span className="text-[13px] font-semibold text-[var(--color-text-primary)]">CertNow</span>
-          <span className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Property Vault</span>
+          <span className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Property Vault</span>
         </div>
       </header>
 
@@ -41,7 +41,7 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
 
         {/* Property address */}
         <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Property</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Property</p>
           <h1 className="mt-1 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-[var(--color-text-primary)]">
             {vault.address}
           </h1>
@@ -62,7 +62,7 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
         {/* Certificates */}
         {vault.certificates.length > 0 ? (
           <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 shadow-sm">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Certificates</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Certificates</p>
             <div className="mt-3 space-y-2">
               {vault.certificates.map((cert) => (
                 <div key={cert.id} className="flex items-center justify-between gap-3 rounded-[12px] bg-[var(--color-background-secondary)] px-3 py-2.5">
@@ -91,7 +91,7 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
         {/* Engineer info */}
         {(vault.engineer.name || vault.engineer.company) ? (
           <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 shadow-sm">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Engineer</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Engineer</p>
             <p className="mt-1.5 text-[15px] font-medium text-[var(--color-text-primary)]">
               {vault.engineer.company || vault.engineer.name}
             </p>
@@ -109,7 +109,7 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
         {/* Service history */}
         {vault.jobs.length > 0 ? (
           <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 shadow-sm">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Service history</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Service history</p>
             <div className="mt-3 space-y-2">
               {vault.jobs.map((job) => (
                 <div key={job.id} className="flex items-center justify-between gap-3 rounded-[12px] bg-[var(--color-background-secondary)] px-3 py-2.5">

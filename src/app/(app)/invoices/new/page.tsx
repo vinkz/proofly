@@ -180,7 +180,7 @@ export default async function NewInvoicePage({
           </div>
         </div>
 
-        <p className="px-0.5 pt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">
+        <p className="px-0.5 pt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">
           Or invoice from a job
         </p>
 

@@ -70,7 +70,7 @@ function ResetPasswordInner() {
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
           <div className="flex flex-col gap-4">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                 New password
               </p>
               <Input
@@ -83,7 +83,7 @@ function ResetPasswordInner() {
               />
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                 Confirm new password
               </p>
               <Input

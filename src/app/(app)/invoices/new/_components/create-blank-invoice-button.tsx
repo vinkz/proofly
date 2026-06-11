@@ -37,7 +37,7 @@ export function CreateBlankInvoiceButton({ clients }: { clients: ClientOption[] 
       <div className="min-w-0 flex-1">
         <label
           htmlFor="blank-invoice-client"
-          className="text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]"
+          className="text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]"
         >
           Link a client (optional)
         </label>

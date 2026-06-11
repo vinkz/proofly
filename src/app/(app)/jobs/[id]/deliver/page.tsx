@@ -44,7 +44,7 @@ export default async function DeliverPage({ params }: { params: Promise<{ id: st
 
       {/* Header */}
       <div className="mt-4">
-        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+        <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
           Delivery
         </p>
         <h1 className="mt-1 text-[22px] font-semibold text-[var(--color-text-primary)]">
@@ -56,7 +56,7 @@ export default async function DeliverPage({ params }: { params: Promise<{ id: st
         {/* Certificates */}
         <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
           <div className="px-5 pt-4 pb-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
               Certificates included
             </p>
           </div>
@@ -135,7 +135,7 @@ export default async function DeliverPage({ params }: { params: Promise<{ id: st
 
         {/* Public link copy */}
         <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-5 py-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
             Permanent link
           </p>
           <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">

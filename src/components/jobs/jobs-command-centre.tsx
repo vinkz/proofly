@@ -168,7 +168,7 @@ export function JobsCommandCentre({ jobs }: { jobs: JobSummary[] }) {
               >
                 {stat.value}
               </p>
-              <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">
+              <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">
                 {stat.label}
               </p>
             </div>

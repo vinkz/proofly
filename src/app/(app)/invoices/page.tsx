@@ -126,7 +126,7 @@ export default async function InvoicesPage() {
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
             <p className="text-[22px] font-medium text-[var(--color-text-primary)]">{invoices.length}</p>
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">Total</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">Total</p>
           </div>
           <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
             <p
@@ -135,7 +135,7 @@ export default async function InvoicesPage() {
             >
               {unpaidInvoices.length}
             </p>
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">Unpaid</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">Unpaid</p>
           </div>
           <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
             <p
@@ -144,7 +144,7 @@ export default async function InvoicesPage() {
             >
               {paidInvoices.length}
             </p>
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">Paid</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">Paid</p>
           </div>
           <div className="rounded-[12px] bg-[var(--color-background-secondary)] px-[14px] py-3">
             <p
@@ -153,7 +153,7 @@ export default async function InvoicesPage() {
             >
               £{totalOwed.toFixed(0)}
             </p>
-            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-tertiary)]">Owed</p>
+            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.4px] text-[var(--color-text-eyebrow)]">Owed</p>
           </div>
         </div>
 

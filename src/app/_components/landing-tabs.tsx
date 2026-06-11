@@ -160,7 +160,7 @@ function EngineersContent() {
     <>
       {/* Hero */}
       <section className="px-5 pb-9 pt-11 text-center">
-        <p className="mb-[14px] text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-tertiary)]">
+        <p className="mb-[14px] text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
           For UK Gas Safe engineers
         </p>
         <h1 className="text-[30px] font-medium leading-[1.15] tracking-[-0.5px] text-[var(--color-text-primary)]">
@@ -228,7 +228,7 @@ function EngineersContent() {
 
       {/* Features */}
       <section className="bg-[var(--color-background-secondary)] px-5 py-10">
-        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-tertiary)]">
+        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
           Why engineers use it
         </p>
         <div className="flex flex-col gap-3">
@@ -251,7 +251,7 @@ function EngineersContent() {
 
       {/* How it works */}
       <section id="how-it-works" className="bg-[var(--color-background-primary)] px-5 py-10">
-        <p className="mb-6 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-tertiary)]">
+        <p className="mb-6 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
           How it works
         </p>
         <div>
@@ -276,7 +276,7 @@ function EngineersContent() {
 
       {/* Social proof */}
       <section className="bg-[var(--color-background-secondary)] px-5 py-10">
-        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-tertiary)]">
+        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
           By the numbers
         </p>
         <div className="mb-4 grid grid-cols-2 gap-3">
@@ -308,7 +308,7 @@ function EngineersContent() {
 
       {/* Comparison */}
       <section className="bg-[var(--color-background-primary)] px-5 py-10">
-        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-tertiary)]">
+        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
           How we compare
         </p>
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)]">
@@ -345,7 +345,7 @@ function EngineersContent() {
 
       {/* Pricing */}
       <section className="bg-[var(--color-background-secondary)] px-5 py-10">
-        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-tertiary)]">
+        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
           Simple pricing
         </p>
         <div className="rounded-[16px] bg-[#111] p-6">

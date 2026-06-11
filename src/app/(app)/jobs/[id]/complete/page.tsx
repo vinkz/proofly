@@ -153,7 +153,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
       <div>
         <Link
           href="/dashboard"
-          className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
+          className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)] transition-colors hover:text-[var(--color-text-secondary)]"
         >
           ← Dashboard
         </Link>
@@ -186,7 +186,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
         {/* Checklist */}
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-5 pb-4">
           <div className="pb-1 pt-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Required</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Required</p>
           </div>
           {state.required.length ? (
             state.required.map((item) => <ChecklistRow key={item.id} item={item} />)
@@ -196,7 +196,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
             </p>
           )}
           <div className="pb-1 pt-5">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Optional</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Optional</p>
           </div>
           {state.optional.map((item) => <ChecklistRow key={item.id} item={item} />)}
         </div>
@@ -260,7 +260,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
       {/* Renewal */}
       {state.renewalDue ? (
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">Renewal</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Renewal</p>
           <p className="mt-1 text-[15px] font-semibold text-[var(--color-text-primary)]">
             Renewal due {formatDate(state.renewalDue) ?? state.renewalDue}
           </p>
