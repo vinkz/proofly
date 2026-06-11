@@ -79,9 +79,12 @@ export default async function PublicJobPage({
 
   const engineerName = job.engineer.name ?? job.engineer.company ?? 'Your engineer';
   const engineerInitials = getInitials(job.engineer.name ?? job.engineer.company);
-  const showRenewal =
-    !job.engineerOwnsJob &&
-    (Boolean(job.renewalRequestedAt) || isDueForRenewal(job.nextInspectionDue) || job.certificates.length === 0);
+  // A landlord viewing their own property record can always confirm/book a renewal date — the card's
+  // copy adapts to how close the certificate is to expiry. Previously this was gated on the 60-day
+  // renewal window, which hid the action for freshly-issued certs and left landlords with no way to
+  // book the next visit.
+  const showRenewal = !job.engineerOwnsJob;
+  const renewalDueSoon = Boolean(job.renewalRequestedAt) || isDueForRenewal(job.nextInspectionDue);
   const showEmailCapture = !job.engineerOwnsJob && !job.landlordEmail && !showRenewal;
   const compliance = getComplianceInfo(job.nextInspectionDue, job.certificates.length > 0);
 
@@ -311,12 +314,18 @@ export default async function PublicJobPage({
           <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
             <div className="p-4">
               <p className="text-[15px] font-medium text-[var(--color-text-primary)]">
-                {job.certificates.length === 0 ? 'Request gas safety check' : 'Confirm your renewal date'}
+                {job.certificates.length === 0
+                  ? 'Request gas safety check'
+                  : renewalDueSoon
+                    ? 'Confirm your renewal date'
+                    : 'Book your next renewal'}
               </p>
               <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
                 {job.certificates.length === 0
                   ? `Send your access details to ${engineerName} to arrange the visit.`
-                  : `Pick a date that works and ${engineerName} will book the renewal visit.`}
+                  : renewalDueSoon
+                    ? `Pick a date that works and ${engineerName} will book the renewal visit.`
+                    : `Pick a date that works and ${engineerName} will book your next visit.`}
               </p>
             </div>
             <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] p-4">
