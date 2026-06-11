@@ -14,6 +14,7 @@ import {
   titleCase,
 } from '@/lib/email-templates';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { getSiteUrl } from '@/server/renewal-confirm';
 
 type ReminderRow = {
   id: string;
@@ -24,9 +25,6 @@ type ReminderRow = {
 };
 
 type EmailResult = 'sent' | 'failed' | 'missing_recipient';
-
-const getSiteUrl = () =>
-  (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000').replace(/\/$/, '');
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
