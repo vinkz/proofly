@@ -93,6 +93,18 @@ const ADVICE_CHECK_ITEMS: CheckItem[] = [
   { key: 'all_functional_parts_available', label: 'All functional parts available' },
 ];
 
+// Where each completion-checklist "Go" link lands focus once its step is shown.
+// Items whose field lives in a sub-component (make/model/location, address) fall
+// back to a plain step switch.
+const BOILER_CHECKLIST_FOCUS_SELECTORS: Record<string, string> = {
+  'service-date': '#boiler-service-date',
+  'service-summary': '#boiler-service-summary',
+  recommendations: '#boiler-recommendations',
+  'defects-details': '#boiler-defects-details',
+  'engineer-signature': '#boiler-signatures',
+  'customer-signature': '#boiler-signatures',
+};
+
 type BoilerServiceDraftState = {
   step: number;
   completionDate: string;
@@ -1210,13 +1222,31 @@ export function BoilerServiceWizard({
     return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   };
 
+  // Walk the engineer top-to-bottom: profile (href) items first, then by step.
+  const sortedBoilerMissing = [...boilerMissingItems].sort(
+    (a, b) => (a.href ? 0 : a.step ?? 99) - (b.href ? 0 : b.step ?? 99),
+  );
+  // After "Go" switches step, scroll + focus the field that needs attention.
+  const focusBoilerTarget = (id: string) => {
+    const selector = BOILER_CHECKLIST_FOCUS_SELECTORS[id];
+    if (!selector) return;
+    window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(selector);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const focusable = (el.matches('input, select, textarea, button')
+        ? el
+        : el.querySelector('input, select, textarea, button')) as HTMLElement | null;
+      focusable?.focus();
+    }, 90);
+  };
   const boilerRequiredItemsPanel = boilerMissingItems.length > 0 ? (
     <div className="rounded-[16px] border-[0.5px] border-[rgba(186,117,23,0.4)] bg-[rgba(186,117,23,0.15)] p-4">
       <p className="text-[13px] font-medium text-[#EF9F27]">
-        {boilerMissingItems.length} required item{boilerMissingItems.length === 1 ? '' : 's'} missing
+        {sortedBoilerMissing.length} item{sortedBoilerMissing.length === 1 ? '' : 's'} left
       </p>
       <div className="mt-3 space-y-2">
-        {boilerMissingItems.map((item) => (
+        {sortedBoilerMissing.map((item) => (
           <div key={item.id} className="flex items-center justify-between gap-3 rounded-[8px] bg-[rgba(255,255,255,0.04)] px-3 py-2 text-[13px]">
             <span className="font-medium text-[var(--color-text-primary)]">{item.label}</span>
             {item.href ? (
@@ -1224,7 +1254,14 @@ export function BoilerServiceWizard({
                 Open
               </Link>
             ) : item.step ? (
-              <button type="button" className="rounded-full px-3 py-1 text-[12px] font-medium text-[#1a7a52]" onClick={() => setStep(item.step!)}>
+              <button
+                type="button"
+                className="rounded-full px-3 py-1 text-[12px] font-medium text-[#1a7a52]"
+                onClick={() => {
+                  setStep(item.step!);
+                  focusBoilerTarget(item.id);
+                }}
+              >
                 Go
               </button>
             ) : null}
@@ -1390,6 +1427,7 @@ export function BoilerServiceWizard({
                     Service date
                   </label>
                   <Input
+                    id="boiler-service-date"
                     type="date"
                     value={jobAddress.job_visit_date || jobInfo.service_date}
                     onChange={(e) => applyServiceDate(e.target.value)}
@@ -1927,12 +1965,14 @@ export function BoilerServiceWizard({
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 <Textarea
+                  id="boiler-service-summary"
                   value={checks.service_summary}
                   onChange={(e) => setCheckValue('service_summary', e.target.value)}
                   placeholder="Service summary (required)"
                   className="min-h-[80px]"
                 />
                 <Textarea
+                  id="boiler-recommendations"
                   value={checks.recommendations}
                   onChange={(e) => setCheckValue('recommendations', e.target.value)}
                   placeholder="Recommendations (required)"
@@ -1964,6 +2004,7 @@ export function BoilerServiceWizard({
                 {defectsActive ? (
                   <div className="grid gap-3 sm:grid-cols-[1fr,1fr]">
                     <Textarea
+                      id="boiler-defects-details"
                       value={checks.defects_details}
                       onChange={(e) => setCheckValue('defects_details', e.target.value)}
                       placeholder="Defect details (required if yes)"
@@ -1995,7 +2036,7 @@ export function BoilerServiceWizard({
                 />
               </div>
             </CollapsibleSection>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div id="boiler-signatures" className="grid gap-4 sm:grid-cols-2">
               <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             </div>

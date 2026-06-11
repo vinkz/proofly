@@ -212,14 +212,19 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
               All required documents are complete. Send to landlord or tenant.
             </p>
           ) : (
-            <div className="mt-2.5 space-y-1.5">
+            <>
+              <p className="mt-2 text-[13px] font-medium text-[#EF9F27]">
+                {state.missingBlockingLabels.length} item{state.missingBlockingLabels.length === 1 ? '' : 's'} left
+              </p>
+              <div className="mt-2.5 space-y-1.5">
               {state.missingBlockingLabels.map((label) => (
                 <div key={label} className="flex items-center gap-2 text-[12px] text-white/60">
                   <span className="h-[5px] w-[5px] shrink-0 rounded-full bg-[var(--color-red)]" aria-hidden="true" />
                   {label}
                 </div>
               ))}
-            </div>
+              </div>
+            </>
           )}
 
           {state.canSend ? (

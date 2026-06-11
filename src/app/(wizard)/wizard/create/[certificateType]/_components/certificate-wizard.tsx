@@ -269,6 +269,15 @@ const BOILER_TYPE_OPTIONS = [
   { label: 'Other', value: 'other' },
 ];
 
+// Where each completion-checklist "Go" link should land focus once its step is
+// shown. Appliance items focus their card via applianceRefs instead.
+const CP12_CHECKLIST_FOCUS_SELECTORS: Record<string, string> = {
+  landlord: '[data-testid="cp12-landlord-name"]',
+  'job-address': '#cp12-job-address-name',
+  reg26: '#cp12-reg26',
+  signatures: '#cp12-signatures',
+};
+
 const CP12_SAFETY_CLASSIFICATION_OPTIONS: Array<{ label: string; value: Cp12SafetyClassification }> = [
   { label: 'Safe', value: 'safe' },
   { label: 'Not to Current Standards', value: 'ncs' },
@@ -1906,11 +1915,44 @@ export function CertificateWizard({
     handleGenerateRef.current();
   }, [checklist.blockingMissing, isBusy, isOnline, queuedIssue]);
 
-  const cp12RequiredMissingItems = checklist.items.filter((item) => item.blocking !== false && !item.ok);
+  // Order the missing items top-to-bottom in form/page order so the "Go" links
+  // always walk the engineer downward through the wizard.
+  const checklistPageOrder = (id: string) => {
+    if (id === 'installer') return 0;
+    if (id === 'landlord') return 10;
+    if (id === 'job-address') return 11;
+    if (id.startsWith('appliance-')) return 20 + (Number(id.slice('appliance-'.length)) || 0);
+    if (id === 'reg26') return 40;
+    if (id === 'signatures') return 41;
+    if (id === 'completion') return 42;
+    return 99;
+  };
+  const cp12RequiredMissingItems = checklist.items
+    .filter((item) => item.blocking !== false && !item.ok)
+    .sort((a, b) => checklistPageOrder(a.id) - checklistPageOrder(b.id));
+  // After "Go" switches step (item.action), scroll the target field into view and
+  // focus it so the engineer can type straight away — not just reveal the section.
+  const focusChecklistTarget = (id: string) => {
+    window.setTimeout(() => {
+      let el: HTMLElement | null = null;
+      if (id.startsWith('appliance-')) {
+        el = applianceRefs.current[Number(id.slice('appliance-'.length)) || 0] ?? null;
+      } else {
+        const selector = CP12_CHECKLIST_FOCUS_SELECTORS[id];
+        if (selector) el = document.querySelector<HTMLElement>(selector);
+      }
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const focusable = (el.matches('input, select, textarea, button')
+        ? el
+        : el.querySelector('input, select, textarea, button')) as HTMLElement | null;
+      focusable?.focus();
+    }, 90);
+  };
   const cp12RequiredItemsPanel = cp12RequiredMissingItems.length > 0 ? (
     <div className="rounded-[16px] border-[0.5px] border-[rgba(186,117,23,0.4)] bg-[rgba(186,117,23,0.15)] p-4">
       <p className="text-[13px] font-medium text-[#EF9F27]">
-        {cp12RequiredMissingItems.length} required item{cp12RequiredMissingItems.length === 1 ? '' : 's'} missing
+        {cp12RequiredMissingItems.length} item{cp12RequiredMissingItems.length === 1 ? '' : 's'} left
       </p>
       <div className="mt-3 space-y-2">
         {cp12RequiredMissingItems.map((item) => (
@@ -1920,7 +1962,14 @@ export function CertificateWizard({
               {item.hint ? <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">{item.hint}</p> : null}
             </div>
             {item.action ? (
-              <button type="button" className="rounded-full px-3 py-1 text-[12px] font-medium text-[#1a7a52]" onClick={item.action}>
+              <button
+                type="button"
+                className="rounded-full px-3 py-1 text-[12px] font-medium text-[#1a7a52]"
+                onClick={() => {
+                  item.action?.();
+                  focusChecklistTarget(item.id);
+                }}
+              >
                 Go
               </button>
             ) : null}
@@ -2260,6 +2309,7 @@ export function CertificateWizard({
                 className="rounded-[8px]"
               />
               <Input
+                id="cp12-job-address-name"
                 value={jobAddress.job_address_name}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
                 placeholder="Tenant name"
@@ -3072,6 +3122,7 @@ export function CertificateWizard({
           }`}
         >
           <input
+            id="cp12-reg26"
             type="checkbox"
             className="mt-1 h-4 w-4 accent-[var(--color-action)]"
             checked={info.reg_26_9_confirmed}
@@ -3096,6 +3147,7 @@ export function CertificateWizard({
             </Button>
           </div>
         ) : null}
+        <div id="cp12-signatures" className="space-y-3">
         <SignatureCard
           label="Customer"
           existingUrl={customerSignature as string}
@@ -3144,6 +3196,7 @@ export function CertificateWizard({
             });
           }}
         />
+        </div>
         {remoteSignatureLink ? (
           <div className="rounded-[16px] border-[0.5px] border-emerald-200 bg-emerald-50 p-4">
             <p className="text-[13px] font-medium text-emerald-900">Remote landlord signature link ready</p>
