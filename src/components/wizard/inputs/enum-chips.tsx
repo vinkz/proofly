@@ -48,6 +48,7 @@ export function EnumChips({ label, value, options, onChange }: EnumChipsProps) {
             <button
               key={option.value}
               type="button"
+              className="toggle-pill"
               onClick={() => onChange(option.value)}
               style={{
                 padding: '7px 18px',

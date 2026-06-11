@@ -274,6 +274,15 @@
   }
 }
 
+/* Item 7 — ensure toggle pills and Step 3 sub-tabs hit a 44px target on touch
+   devices, while staying visually compact on desktop (fine pointers). */
+@media (pointer: coarse) {
+  .toggle-pill,
+  .subtab-btn {
+    min-height: 44px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing-phone-float,
   .landing-phone-float-delay,

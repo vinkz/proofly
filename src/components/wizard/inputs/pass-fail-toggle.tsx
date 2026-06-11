@@ -36,6 +36,7 @@ export function PassFailToggle({ label, value, onChange }: PassFailToggleProps) 
       <div className="flex gap-2">
         <button
           type="button"
+          className="toggle-pill"
           onClick={() => onChange('pass')}
           style={{
             minWidth: 72,
@@ -49,6 +50,7 @@ export function PassFailToggle({ label, value, onChange }: PassFailToggleProps) 
         </button>
         <button
           type="button"
+          className="toggle-pill"
           onClick={() => onChange('fail')}
           style={{
             minWidth: 72,

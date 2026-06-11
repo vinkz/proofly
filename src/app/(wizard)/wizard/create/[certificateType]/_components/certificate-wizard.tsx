@@ -2578,7 +2578,7 @@ export function CertificateWizard({
             key={tab.id}
             type="button"
             onClick={() => setChecksTab(tab.id)}
-            className={`flex flex-1 flex-col items-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
+            className={`subtab-btn flex flex-1 flex-col items-center justify-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
           >
             <span>{tab.label}</span>
             <span
