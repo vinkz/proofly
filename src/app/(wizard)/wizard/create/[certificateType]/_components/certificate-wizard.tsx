@@ -2522,39 +2522,57 @@ export function CertificateWizard({
     </WizardLayout>
   );
 
-  // These sub-tab "done" dots must require the same fields the Step-4 checklist
-  // (`readingsOk`) requires, otherwise all four dots can go green while the
-  // certificate still can't be issued — the appliance #N "identity + readings
-  // complete" item stays red with no indication of which field is missing.
-  const inspectionComplete = appliances.every(
-    (a) => !!a.flue_type && !!a.appliance_inspected && !!a.appliance_serviced,
-  );
-  const readingsComplete = appliances.every((a) => {
-    if (!a.operating_pressure || !a.heat_input) return false;
-    // FGA combustion analysis is optional, but all-or-nothing: once the engineer
-    // starts entering it, both the high- and low-fire groups must carry their
-    // core CO/CO₂ values, otherwise the dot would falsely read "complete" with
-    // the low-fire group left empty.
-    const anyCombustion =
-      !!a.high_co_ppm || !!a.high_co2 || !!a.high_ratio || !!a.low_co_ppm || !!a.low_co2 || !!a.low_ratio;
-    if (!anyCombustion) return true;
-    return !!a.high_co_ppm && !!a.high_co2 && !!a.low_co_ppm && !!a.low_co2;
+  // These sub-tab dots count the SAME required fields the Step-4 checklist
+  // (`readingsOk`) requires, so an all-green dot always means issue-ready. The
+  // count is three-valued (none filled → grey ring, some → amber, all → green)
+  // so a partially-filled tab can no longer masquerade as complete — e.g. the
+  // readings dot only goes green once both FGA groups carry their core CO/CO₂
+  // values, not when just the high-fire group is filled.
+  const countRequired = (...values: unknown[]) => ({
+    filled: values.filter(Boolean).length,
+    total: values.length,
   });
-  const safetyComplete = appliances.every(
-    (a) =>
-      !!a.safety_devices_correct &&
-      !!a.ventilation_satisfactory &&
-      !!a.flue_condition &&
-      !!a.flue_performance_test &&
-      !!a.stability_test &&
-      !!a.gas_tightness_test &&
-      !!a.safety_rating,
+  const sumCounts = (...parts: Array<{ filled: number; total: number }>) =>
+    parts.reduce(
+      (acc, part) => ({ filled: acc.filled + part.filled, total: acc.total + part.total }),
+      { filled: 0, total: 0 },
+    );
+  const inspectionCount = sumCounts(
+    ...appliances.map((a) => countRequired(a.flue_type, a.appliance_inspected, a.appliance_serviced)),
   );
-  const houseComplete =
-    booleanFromField(evidenceFields.emergency_control_accessible) &&
-    booleanFromField(evidenceFields.gas_tightness_satisfactory) &&
-    booleanFromField(evidenceFields.pipework_visual_satisfactory) &&
-    booleanFromField(evidenceFields.equipotential_bonding_satisfactory);
+  const readingsCount = sumCounts(
+    ...appliances.map((a) => {
+      // FGA combustion analysis is optional, but all-or-nothing: once the
+      // engineer starts entering it, both the high- and low-fire groups must
+      // carry their core CO/CO₂ values before the tab can read complete.
+      const anyCombustion =
+        !!a.high_co_ppm || !!a.high_co2 || !!a.high_ratio || !!a.low_co_ppm || !!a.low_co2 || !!a.low_ratio;
+      return anyCombustion
+        ? countRequired(a.operating_pressure, a.heat_input, a.high_co_ppm, a.high_co2, a.low_co_ppm, a.low_co2)
+        : countRequired(a.operating_pressure, a.heat_input);
+    }),
+  );
+  const safetyCount = sumCounts(
+    ...appliances.map((a) =>
+      countRequired(
+        a.safety_devices_correct,
+        a.ventilation_satisfactory,
+        a.flue_condition,
+        a.flue_performance_test,
+        a.stability_test,
+        a.gas_tightness_test,
+        a.safety_rating,
+      ),
+    ),
+  );
+  const houseCount = countRequired(
+    booleanFromField(evidenceFields.emergency_control_accessible),
+    booleanFromField(evidenceFields.gas_tightness_satisfactory),
+    booleanFromField(evidenceFields.pipework_visual_satisfactory),
+    booleanFromField(evidenceFields.equipotential_bonding_satisfactory),
+  );
+  const checkDotState = ({ filled, total }: { filled: number; total: number }) =>
+    total > 0 && filled >= total ? 'all' : filled > 0 ? 'some' : 'none';
 
   const StepThree = (
     <WizardLayout
@@ -2568,24 +2586,40 @@ export function CertificateWizard({
       <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
         {(
           [
-            { id: 'inspection', label: 'Inspection', done: inspectionComplete },
-            { id: 'readings', label: 'Readings', done: readingsComplete },
-            { id: 'safety', label: 'Safety', done: safetyComplete },
-            { id: 'house', label: 'Property', done: houseComplete },
-          ] as { id: 'inspection' | 'readings' | 'safety' | 'house'; label: string; done: boolean }[]
-        ).map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setChecksTab(tab.id)}
-            className={`subtab-btn flex flex-1 flex-col items-center justify-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
-          >
-            <span>{tab.label}</span>
-            <span
-              className={`h-[6px] w-[6px] rounded-full ${tab.done ? 'bg-[var(--color-action)]' : 'bg-[var(--color-border-secondary)]'}`}
-            />
-          </button>
-        ))}
+            { id: 'inspection', label: 'Inspection', count: inspectionCount },
+            { id: 'readings', label: 'Readings', count: readingsCount },
+            { id: 'safety', label: 'Safety', count: safetyCount },
+            { id: 'house', label: 'Property', count: houseCount },
+          ] as {
+            id: 'inspection' | 'readings' | 'safety' | 'house';
+            label: string;
+            count: { filled: number; total: number };
+          }[]
+        ).map((tab) => {
+          const dotState = checkDotState(tab.count);
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setChecksTab(tab.id)}
+              aria-label={`${tab.label}, ${tab.count.filled} of ${tab.count.total} complete`}
+              className={`subtab-btn flex flex-1 flex-col items-center justify-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
+            >
+              <span>{tab.label}</span>
+              <span
+                aria-hidden="true"
+                className="h-[8px] w-[8px] rounded-full"
+                style={
+                  dotState === 'all'
+                    ? { background: '#1a7a52' }
+                    : dotState === 'some'
+                      ? { background: '#EF9F27' }
+                      : { border: '1.5px solid var(--color-border-primary)', background: 'transparent' }
+                }
+              />
+            </button>
+          );
+        })}
       </div>
 
       {checksTab === 'inspection' && (
