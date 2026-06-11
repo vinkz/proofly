@@ -53,7 +53,7 @@ export function SignatureCard({ label, existingUrl, onUpload }: SignatureCardPro
       <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">Draw a signature below.</p>
       <div className="mt-3 touch-none rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-3">
         <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Draw signature</p>
-        <div className="mt-2 h-28 w-full touch-none overscroll-contain rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]">
+        <div className="mt-2 h-40 min-h-[160px] w-full touch-none overscroll-contain rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)]">
           <canvas
             ref={pad.canvasRef}
             className="h-full w-full touch-none rounded-2xl"
