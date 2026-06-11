@@ -3,9 +3,11 @@ import Link from 'next/link';
 
 import RequireAuth from './_components/require-auth';
 import { PageFade } from './_components/page-fade';
+import { HideDuringOnboarding } from './_components/hide-during-onboarding';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { ToolsMenu } from '@/components/dashboard/tools-menu';
 import { listPendingJobRequestsForDashboard } from '@/server/job-requests';
+import { getProfile } from '@/server/profile';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   let pendingRequestsCount = 0;
@@ -14,6 +16,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     pendingRequestsCount = requests.length;
   } catch {
     pendingRequestsCount = 0;
+  }
+
+  // While onboarding is still incomplete, the /onboarding route renders as a
+  // focused task with no global nav (see HideDuringOnboarding).
+  let onboardingIncomplete = false;
+  try {
+    const { profile } = await getProfile();
+    onboardingIncomplete =
+      (profile as { onboarding_complete?: boolean | null } | null)?.onboarding_complete !== true;
+  } catch {
+    onboardingIncomplete = false;
   }
 
   return (
@@ -26,7 +39,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
                 certnow
               </span>
             </Link>
-            <ToolsMenu />
+            <HideDuringOnboarding active={onboardingIncomplete}>
+              <ToolsMenu />
+            </HideDuringOnboarding>
           </div>
         </header>
 
@@ -34,7 +49,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <PageFade>{children}</PageFade>
         </main>
 
-        <BottomNav pendingRequestsCount={pendingRequestsCount} />
+        <HideDuringOnboarding active={onboardingIncomplete}>
+          <BottomNav pendingRequestsCount={pendingRequestsCount} />
+        </HideDuringOnboarding>
       </div>
     </RequireAuth>
   );

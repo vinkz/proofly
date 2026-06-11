@@ -586,14 +586,6 @@ export function OnboardingWizard({
         >
           Back
         </button>
-        <button
-          type="button"
-          onClick={() => saveStep('later')}
-          disabled={isPending}
-          className="flex h-11 flex-1 items-center justify-center rounded-full text-[14px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)]"
-        >
-          Save for later
-        </button>
         <Button
           variant="primary"
           onClick={() => saveStep(step === steps.length ? 'finish' : 'next')}
@@ -602,6 +594,16 @@ export function OnboardingWizard({
         >
           {isPending ? 'Saving…' : step === steps.length ? 'Finish setup' : 'Save and continue'}
         </Button>
+      </div>
+      <div className="mt-2.5 flex justify-center">
+        <button
+          type="button"
+          onClick={() => saveStep('later')}
+          disabled={isPending}
+          className="text-[13px] text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)] disabled:opacity-40"
+        >
+          Save for later
+        </button>
       </div>
     </div>
   );
