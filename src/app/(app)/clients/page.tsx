@@ -312,7 +312,7 @@ export default async function ClientsPage({
           <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-6 text-center">
             <p className="text-[15px] font-medium text-[var(--color-text-primary)]">No clients yet</p>
             <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-              Clients are created when you start jobs or receive landlord requests.
+              Clients appear here automatically after your first delivered job — nothing to set up.
             </p>
             <Link
               href="/jobs/new"

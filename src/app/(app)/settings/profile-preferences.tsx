@@ -371,6 +371,7 @@ export function ProfilePreferences({
               <div>
                 <label className={labelClass}>Engineer name</label>
                 <input value={toTitleCase(engineerName)} onChange={(e) => setEngineerName(e.target.value)} className={inputClass} disabled={isPending} placeholder="As it appears on certificates" />
+                <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">Defaults to your full name on certificates if left blank.</p>
               </div>
               <div>
                 <label className={labelClass}>Company name</label>
@@ -461,6 +462,8 @@ export function ProfilePreferences({
             <div>
               <label className={labelClass}>Engineer name</label>
               <input value={toTitleCase(engineerName)} onChange={(e) => setEngineerName(e.target.value)} className={inputClass} disabled={isPending} placeholder="As on certificates" />
+              {/* TODO(Codex): wire the actual PDF fallback to full name when this is blank. */}
+              <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">Defaults to your full name on certificates if left blank.</p>
             </div>
           </div>
           {professionChoice === 'Other' ? (

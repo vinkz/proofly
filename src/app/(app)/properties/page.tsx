@@ -362,7 +362,7 @@ export default async function PropertiesPage({
           <div className="rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] p-8 text-center">
             <p className="text-[15px] font-medium text-[var(--color-text-primary)]">No properties yet</p>
             <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-              Properties appear automatically when you deliver jobs.
+              Properties appear here automatically after your first delivered job — nothing to set up.
             </p>
             <Link
               href="/jobs/new"

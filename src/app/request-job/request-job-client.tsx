@@ -355,30 +355,42 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       {step === 1 ? (
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
           {scopedEngineer ? (
-            <div className="rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-4 py-3">
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
-                {scopedEngineer.companyName ?? scopedEngineer.engineerName ?? 'Your selected engineer'}
-              </p>
-              {[
-                scopedEngineer.engineerName,
-                scopedEngineer.gasSafeNumber ? `Gas Safe ${scopedEngineer.gasSafeNumber}` : null,
-              ]
-                .filter(Boolean)
-                .join(' · ') ? (
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
-                  {[
-                    scopedEngineer.engineerName,
-                    scopedEngineer.gasSafeNumber ? `Gas Safe ${scopedEngineer.gasSafeNumber}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+            <div className="flex items-center gap-3 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-4 py-3">
+              <span className="flex h-[38px] w-[38px] flex-shrink-0 items-center justify-center rounded-full bg-[#edf7f2] text-[14px] font-semibold text-[#1a7a52]">
+                {(scopedEngineer.companyName ?? scopedEngineer.engineerName ?? 'E')
+                  .trim()
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .map((word) => word[0])
+                  .slice(0, 2)
+                  .join('')
+                  .toUpperCase() || 'E'}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+                  {scopedEngineer.companyName ?? scopedEngineer.engineerName ?? 'Your selected engineer'}
                 </p>
-              ) : null}
-              {[scopedEngineer.email, scopedEngineer.phone].filter(Boolean).join(' · ') ? (
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">
-                  {[scopedEngineer.email, scopedEngineer.phone].filter(Boolean).join(' · ')}
-                </p>
-              ) : null}
+                {[
+                  scopedEngineer.engineerName,
+                  scopedEngineer.gasSafeNumber ? `Gas Safe ${scopedEngineer.gasSafeNumber}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') ? (
+                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                    {[
+                      scopedEngineer.engineerName,
+                      scopedEngineer.gasSafeNumber ? `Gas Safe ${scopedEngineer.gasSafeNumber}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                ) : null}
+                {[scopedEngineer.email, scopedEngineer.phone].filter(Boolean).join(' · ') ? (
+                  <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">
+                    {[scopedEngineer.email, scopedEngineer.phone].filter(Boolean).join(' · ')}
+                  </p>
+                ) : null}
+              </div>
             </div>
           ) : (
             <>
