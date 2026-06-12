@@ -176,7 +176,7 @@ export default async function DashboardPage({
         <div className="flex items-center gap-2">
           <Link
             href="/jobs/new"
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--color-cta)] px-4 text-[13px] font-medium text-[var(--color-cta-fg)] transition-colors hover:bg-[var(--color-text-primary)]"
+            className="hidden h-9 items-center justify-center gap-1.5 rounded-[20px] bg-[var(--color-cta)] px-4 text-[13px] font-medium text-[var(--color-cta-fg)] transition-colors hover:bg-[var(--color-text-primary)] lg:inline-flex"
           >
             <PlusIcon />
             New job
@@ -440,6 +440,18 @@ export default async function DashboardPage({
         <StatCard label="Awaiting signatures" value={awaitingSignatures} />
         <StatCard label="Total this month" value={calendarMonth.monthJobs.length} />
       </section>
+
+      {/* Item 13 — thumb-reach New job pill on mobile; sits above the bottom tab
+          bar (h-14 = 56px) + 12px. Sticky within the page scroll, not fixed. */}
+      <div className="pointer-events-none sticky bottom-[68px] z-40 flex justify-end lg:hidden">
+        <Link
+          href="/jobs/new"
+          className="pointer-events-auto inline-flex h-11 items-center justify-center gap-1.5 rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-cta)] px-[18px] text-[14px] font-medium text-[var(--color-cta-fg)]"
+        >
+          <PlusIcon />
+          New job
+        </Link>
+      </div>
     </div>
   );
 }
