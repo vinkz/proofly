@@ -82,6 +82,8 @@ export function RenewalRequestForm({
       />
       <input
         type="tel"
+        inputMode="tel"
+        autoComplete="off"
         value={tenantPhone}
         onChange={(event) => setTenantPhone(event.target.value)}
         placeholder="Tenant phone"

@@ -299,7 +299,7 @@ export function ProfilePreferences({
             <div className="grid grid-cols-2 gap-[10px]">
               <div>
                 <label className={labelClass}>Full name</label>
-                <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} disabled={isPending} />
+                <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} disabled={isPending} autoComplete="name" />
               </div>
               <div>
                 <label className={labelClass}>Date of birth</label>
@@ -374,12 +374,12 @@ export function ProfilePreferences({
               </div>
               <div>
                 <label className={labelClass}>Company name</label>
-                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} disabled={isPending} />
+                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} disabled={isPending} autoComplete="organization" />
               </div>
             </div>
             <div>
               <label className={labelClass}>Address line 1</label>
-              <input value={companyAddressLine1} onChange={(e) => setCompanyAddressLine1(e.target.value)} className={inputClass} disabled={isPending} />
+              <input value={companyAddressLine1} onChange={(e) => setCompanyAddressLine1(e.target.value)} className={inputClass} disabled={isPending} autoComplete="address-line1" />
             </div>
             <div className="grid grid-cols-2 gap-[10px]">
               <div>
@@ -388,12 +388,12 @@ export function ProfilePreferences({
               </div>
               <div>
                 <label className={labelClass}>Postcode</label>
-                <input value={displayPostcode(companyPostcode)} onChange={(e) => setCompanyPostcode(e.target.value)} className={inputClass} disabled={isPending} />
+                <input value={displayPostcode(companyPostcode)} onChange={(e) => setCompanyPostcode(e.target.value)} className={inputClass} disabled={isPending} autoComplete="postal-code" />
               </div>
             </div>
             <div>
               <label className={labelClass}>Phone</label>
-              <input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} className={inputClass} disabled={isPending} type="tel" />
+              <input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} className={inputClass} disabled={isPending} type="tel" inputMode="tel" autoComplete="tel" />
             </div>
           </div>
         </div>
@@ -427,7 +427,7 @@ export function ProfilePreferences({
           <div className="grid grid-cols-2 gap-[10px]">
             <div>
               <label className={labelClass}>Full name</label>
-              <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} disabled={isPending} />
+              <input value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} disabled={isPending} autoComplete="name" />
             </div>
             <div>
               <label className={labelClass}>Date of birth</label>
@@ -517,11 +517,11 @@ export function ProfilePreferences({
         <div className={cardBodyClass}>
           <div>
             <label className={labelClass}>Company name</label>
-            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} disabled={isPending} />
+            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} disabled={isPending} autoComplete="organization" />
           </div>
           <div>
             <label className={labelClass}>Address line 1</label>
-            <input value={companyAddressLine1} onChange={(e) => setCompanyAddressLine1(e.target.value)} className={inputClass} disabled={isPending} />
+            <input value={companyAddressLine1} onChange={(e) => setCompanyAddressLine1(e.target.value)} className={inputClass} disabled={isPending} autoComplete="address-line1" />
           </div>
           <div>
             <label className={labelClass}>Address line 2</label>
@@ -534,12 +534,12 @@ export function ProfilePreferences({
             </div>
             <div>
               <label className={labelClass}>Postcode</label>
-              <input value={displayPostcode(companyPostcode)} onChange={(e) => setCompanyPostcode(e.target.value)} className={inputClass} disabled={isPending} />
+              <input value={displayPostcode(companyPostcode)} onChange={(e) => setCompanyPostcode(e.target.value)} className={inputClass} disabled={isPending} autoComplete="postal-code" />
             </div>
           </div>
           <div>
             <label className={labelClass}>Phone</label>
-            <input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} className={inputClass} disabled={isPending} type="tel" />
+            <input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} className={inputClass} disabled={isPending} type="tel" inputMode="tel" autoComplete="tel" />
           </div>
         </div>
       </section>
@@ -568,11 +568,11 @@ export function ProfilePreferences({
           <div className="grid grid-cols-2 gap-[10px]">
             <div>
               <label className={labelClass}>Sort code</label>
-              <input value={displaySortCode(bankSortCode)} onChange={(e) => setBankSortCode(e.target.value)} className={inputClass} disabled={isPending} placeholder="20-02-02" />
+              <input value={displaySortCode(bankSortCode)} onChange={(e) => setBankSortCode(e.target.value)} className={inputClass} disabled={isPending} placeholder="20-02-02" inputMode="numeric" autoComplete="off" />
             </div>
             <div>
               <label className={labelClass}>Account number</label>
-              <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className={inputClass} disabled={isPending} placeholder="12345678" />
+              <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} className={inputClass} disabled={isPending} placeholder="12345678" inputMode="numeric" autoComplete="off" />
             </div>
           </div>
 
@@ -592,6 +592,7 @@ export function ProfilePreferences({
                   <span className="border-r-[0.5px] border-[var(--color-border-secondary)] px-[8px] text-[13px] text-[var(--color-text-tertiary)]">£</span>
                   <input
                     type="number"
+                    inputMode="decimal"
                     min="0"
                     step="0.01"
                     value={standardRates[key]}

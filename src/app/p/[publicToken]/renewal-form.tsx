@@ -76,7 +76,7 @@ export function PropertyRenewalForm({
       }}
     >
       <input type="text" placeholder="Tenant name" value={tenantName} onChange={(e) => setTenantName(e.target.value)} className={inputClass} />
-      <input type="tel" placeholder="Tenant phone" value={tenantPhone} onChange={(e) => setTenantPhone(e.target.value)} className={inputClass} />
+      <input type="tel" inputMode="tel" autoComplete="off" placeholder="Tenant phone" value={tenantPhone} onChange={(e) => setTenantPhone(e.target.value)} className={inputClass} />
       <textarea placeholder="Access notes (key box, parking, etc.)" value={accessNotes} onChange={(e) => setAccessNotes(e.target.value)} rows={2} className={`${inputClass} resize-none`} />
       <div>
         <label className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">

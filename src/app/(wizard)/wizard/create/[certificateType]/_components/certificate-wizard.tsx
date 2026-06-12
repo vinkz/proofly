@@ -2267,12 +2267,16 @@ export function CertificateWizard({
                 className="rounded-[8px]"
               />
               <Input
+                autoComplete="off"
                 value={info.landlord_postcode}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_postcode: e.target.value }))}
                 placeholder="Postcode"
                 className="rounded-[8px]"
               />
               <Input
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
                 value={info.landlord_tel}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_tel: e.target.value }))}
                 placeholder="Tel. No. (optional)"
@@ -2280,6 +2284,8 @@ export function CertificateWizard({
               />
               <Input
                 type="tel"
+                inputMode="tel"
+                autoComplete="off"
                 value={info.landlord_mobile}
                 onChange={(e) => setInfo((prev) => ({ ...prev, landlord_mobile: e.target.value }))}
                 placeholder="Mobile number (optional)"
@@ -2388,6 +2394,7 @@ export function CertificateWizard({
               />
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
+                  autoComplete="off"
                   value={jobAddress.job_postcode}
                   onChange={(e) => {
                     const value = e.target.value;
@@ -2399,6 +2406,9 @@ export function CertificateWizard({
                 />
               </div>
               <Input
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
                 value={jobAddress.job_tel}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
                 placeholder="Site telephone number"

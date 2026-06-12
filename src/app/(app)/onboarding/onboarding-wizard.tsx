@@ -388,6 +388,7 @@ export function OnboardingWizard({
             <div>
               {fieldLabel('Full name')}
               <Input
+                autoComplete="name"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
                 className="mt-1.5"
@@ -449,6 +450,7 @@ export function OnboardingWizard({
             <div>
               {fieldLabel('Company name')}
               <Input
+                autoComplete="organization"
                 value={companyName}
                 onChange={(event) => setCompanyName(event.target.value)}
                 className="mt-1.5"
@@ -458,6 +460,7 @@ export function OnboardingWizard({
             <div className="relative">
               {fieldLabel('Address line 1')}
               <Input
+                autoComplete="off"
                 value={companyAddressSearchQuery}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -505,6 +508,7 @@ export function OnboardingWizard({
             <div>
               {fieldLabel('Address line 2')}
               <Input
+                autoComplete="address-line2"
                 value={companyAddressLine2}
                 onChange={(event) => setCompanyAddressLine2(event.target.value)}
                 className="mt-1.5"
@@ -514,6 +518,7 @@ export function OnboardingWizard({
             <div>
               {fieldLabel('Town / city')}
               <Input
+                autoComplete="address-level2"
                 value={companyTown}
                 onChange={(event) => setCompanyTown(event.target.value)}
                 className="mt-1.5"
@@ -523,6 +528,7 @@ export function OnboardingWizard({
             <div>
               {fieldLabel('Postcode')}
               <Input
+                autoComplete="postal-code"
                 value={companyPostcode}
                 onChange={(event) => setCompanyPostcode(event.target.value)}
                 className="mt-1.5"
@@ -532,6 +538,9 @@ export function OnboardingWizard({
             <div>
               {fieldLabel('Phone')}
               <Input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
                 value={companyPhone}
                 onChange={(event) => setCompanyPhone(event.target.value)}
                 className="mt-1.5"

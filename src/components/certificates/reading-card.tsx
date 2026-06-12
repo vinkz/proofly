@@ -25,6 +25,7 @@ export function ReadingCard({ label, value, note, onChange, onVoiceRequest }: Re
       <div className="mt-3 grid gap-3 sm:grid-cols-[1.5fr,1fr]">
         <Input
           type="text"
+          inputMode="decimal"
           value={value ?? ''}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Enter value"

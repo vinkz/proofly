@@ -1532,6 +1532,7 @@ export function BoilerServiceWizard({
                 <div>
                   <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
                   <Input
+                    autoComplete="off"
                     value={jobAddress.job_postcode}
                     onChange={(e) => {
                       const value = e.target.value;
@@ -1545,6 +1546,9 @@ export function BoilerServiceWizard({
                 <div className="md:col-span-2">
                   <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
                   <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="off"
                     value={jobAddress.job_tel}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
                     placeholder="020 7946 0958"
@@ -1659,6 +1663,7 @@ export function BoilerServiceWizard({
                 <div>
                   <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
                   <Input
+                    autoComplete="off"
                     value={jobInfo.customer_postcode}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_postcode: e.target.value }))}
                     placeholder="SW1A 1AA"
@@ -1668,6 +1673,9 @@ export function BoilerServiceWizard({
                 <div className="md:col-span-2">
                   <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
                   <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="off"
                     value={jobInfo.customer_phone}
                     onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_phone: e.target.value }))}
                     placeholder="Optional"

@@ -414,44 +414,53 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
           <div className="grid gap-3">
             <Input
+              autoComplete="name"
               value={landlordName}
               onChange={(e) => setLandlordName(e.target.value)}
               placeholder="Your name"
             />
             <Input
+              autoComplete="organization"
               value={landlordCompany}
               onChange={(e) => setLandlordCompany(e.target.value)}
               placeholder="Company (optional)"
             />
             <Input
               type="email"
+              autoComplete="email"
               value={landlordEmail}
               onChange={(e) => setLandlordEmail(e.target.value)}
               placeholder="Email address"
             />
             <Input
               type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               value={landlordPhone}
               onChange={(e) => setLandlordPhone(e.target.value)}
               placeholder="Phone number"
             />
             <Input
+              autoComplete="address-line1"
               value={landlordAddressLine1}
               onChange={(e) => setLandlordAddressLine1(e.target.value)}
               placeholder="Your address line 1"
             />
             <Input
+              autoComplete="address-line2"
               value={landlordAddressLine2}
               onChange={(e) => setLandlordAddressLine2(e.target.value)}
               placeholder="Your address line 2"
             />
             <div className="grid grid-cols-2 gap-3">
               <Input
+                autoComplete="address-level2"
                 value={landlordCity}
                 onChange={(e) => setLandlordCity(e.target.value)}
                 placeholder="City"
               />
               <Input
+                autoComplete="postal-code"
                 value={landlordPostcode}
                 onChange={(e) => setLandlordPostcode(e.target.value)}
                 placeholder="Postcode"
@@ -483,6 +492,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
               </Button>
             </div>
             <Input
+              autoComplete="off"
               value={tenantName}
               onChange={(e) => setTenantName(e.target.value)}
               placeholder="Tenant name"
@@ -490,6 +500,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
             {/* Address autocomplete */}
             <div className="relative">
               <Input
+                autoComplete="off"
                 value={addressLine1}
                 onChange={(e) => {
                   setAddressLine1(e.target.value);
@@ -531,17 +542,20 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
               ) : null}
             </div>
             <Input
+              autoComplete="off"
               value={addressLine2}
               onChange={(e) => setAddressLine2(e.target.value)}
               placeholder="Address line 2"
             />
             <div className="grid grid-cols-2 gap-3">
               <Input
+                autoComplete="off"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="City"
               />
               <Input
+                autoComplete="off"
                 value={postcode}
                 onChange={(e) => setPostcode(e.target.value)}
                 placeholder="Postcode"
@@ -549,6 +563,8 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
             </div>
             <Input
               type="tel"
+              inputMode="tel"
+              autoComplete="off"
               value={sitePhone}
               onChange={(e) => setSitePhone(e.target.value)}
               placeholder="Tenant / site phone"

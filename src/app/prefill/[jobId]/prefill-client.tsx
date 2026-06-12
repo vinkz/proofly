@@ -59,32 +59,32 @@ export function PrefillClient({
     >
       <FormSection title="Job address">
         <div className="grid gap-2.5 sm:grid-cols-2">
-          <Input name="jobAddressName" placeholder="Property name / reference" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressLine1" required placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressLine2" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressCity" required placeholder="City / town" className="rounded-[10px]" />
-          <Input name="jobPostcode" required placeholder="Postcode" className="rounded-[10px]" />
-          <Input name="jobTel" placeholder="Site telephone" className="rounded-[10px]" />
+          <Input name="jobAddressName" autoComplete="off" placeholder="Property name / reference" className="rounded-[10px] sm:col-span-2" />
+          <Input name="jobAddressLine1" required autoComplete="off" placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
+          <Input name="jobAddressLine2" autoComplete="off" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
+          <Input name="jobAddressCity" required autoComplete="off" placeholder="City / town" className="rounded-[10px]" />
+          <Input name="jobPostcode" required autoComplete="off" placeholder="Postcode" className="rounded-[10px]" />
+          <Input name="jobTel" type="tel" inputMode="tel" autoComplete="off" placeholder="Site telephone" className="rounded-[10px]" />
         </div>
       </FormSection>
 
       <FormSection title="Landlord / property owner">
         <div className="grid gap-2.5 sm:grid-cols-2">
-          <Input name="landlordName" required placeholder="Name" className="rounded-[10px]" />
-          <Input name="landlordCompany" placeholder="Company (optional)" className="rounded-[10px]" />
-          <Input name="landlordEmail" type="email" placeholder="Email" className="rounded-[10px]" />
-          <Input name="landlordTel" type="tel" placeholder="Phone" className="rounded-[10px]" />
-          <Input name="landlordAddressLine1" required placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
-          <Input name="landlordAddressLine2" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
-          <Input name="landlordCity" required placeholder="City / town" className="rounded-[10px]" />
-          <Input name="landlordPostcode" required placeholder="Postcode" className="rounded-[10px]" />
+          <Input name="landlordName" required autoComplete="name" placeholder="Name" className="rounded-[10px]" />
+          <Input name="landlordCompany" autoComplete="organization" placeholder="Company (optional)" className="rounded-[10px]" />
+          <Input name="landlordEmail" type="email" autoComplete="email" placeholder="Email" className="rounded-[10px]" />
+          <Input name="landlordTel" type="tel" inputMode="tel" autoComplete="tel" placeholder="Phone" className="rounded-[10px]" />
+          <Input name="landlordAddressLine1" required autoComplete="address-line1" placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
+          <Input name="landlordAddressLine2" autoComplete="address-line2" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
+          <Input name="landlordCity" required autoComplete="address-level2" placeholder="City / town" className="rounded-[10px]" />
+          <Input name="landlordPostcode" required autoComplete="postal-code" placeholder="Postcode" className="rounded-[10px]" />
         </div>
       </FormSection>
 
       <FormSection title="Access details">
         <div className="grid gap-2.5 sm:grid-cols-2">
-          <Input name="tenantName" placeholder="Tenant name (optional)" className="rounded-[10px]" />
-          <Input name="tenantPhone" placeholder="Tenant phone (optional)" className="rounded-[10px]" />
+          <Input name="tenantName" autoComplete="off" placeholder="Tenant name (optional)" className="rounded-[10px]" />
+          <Input name="tenantPhone" type="tel" inputMode="tel" autoComplete="off" placeholder="Tenant phone (optional)" className="rounded-[10px]" />
           <Input name="preferredDates" type="date" className="rounded-[10px]" />
           <Input name="accessNotes" placeholder="Access notes" className="rounded-[10px] sm:col-span-2" />
         </div>
