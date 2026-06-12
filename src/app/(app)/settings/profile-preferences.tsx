@@ -227,27 +227,53 @@ export function ProfilePreferences({
     });
   };
 
-  const dirty =
+  // Per-section dirty state, compared against the values last loaded/saved, so a
+  // section's badge only flips to "Unsaved changes" when that section is edited.
+  const profileDirty =
     fullName !== initialFullName ||
     dateOfBirth !== initialDateOfBirth ||
     profession !== initialProfession ||
     engineerName !== initialEngineerName ||
+    gasSafeNumber !== initialGasSafeNumber ||
+    engineerId !== initialEngineerId;
+  const companyDirty =
     companyName !== initialCompanyName ||
     companyAddressLine1 !== initialCompanyAddressLine1 ||
     companyAddressLine2 !== initialCompanyAddressLine2 ||
     companyAddressLine3 !== initialCompanyAddressLine3 ||
     companyPostcode !== initialCompanyPostcode ||
-    companyPhone !== initialCompanyPhone ||
-    gasSafeNumber !== initialGasSafeNumber ||
-    engineerId !== initialEngineerId ||
+    companyPhone !== initialCompanyPhone;
+  const invoiceDirty =
     bankName !== initialBankName ||
     bankAccountName !== initialBankAccountName ||
     bankSortCode !== initialBankSortCode ||
     bankAccountNumber !== initialBankAccountNumber ||
     STANDARD_RATE_KEYS.some((key) => standardRates[key] !== initialRateInputs[key]);
+  const dirty = profileDirty || companyDirty || invoiceDirty;
 
-  const saveButtonLabel = isPending ? 'Saving…' : dirty ? 'Save' : 'Saved';
-  const saveButtonClass = `text-[12px] font-medium px-[14px] py-[5px] rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)] bg-transparent disabled:opacity-40 transition-colors hover:border-[var(--color-text-tertiary)]`;
+  const savedBadgeClass =
+    'text-[11px] font-medium px-[10px] py-[3px] rounded-full bg-[var(--color-action-bg)] text-[var(--color-action)]';
+  const unsavedBadgeClass =
+    'text-[11px] font-medium px-[10px] py-[3px] rounded-full bg-[#faeeda] text-[#BA7517] border-[0.5px] border-[#EF9F27]';
+  const saveQuietClass =
+    'text-[12px] font-medium px-[14px] py-[5px] rounded-full border-[0.5px] border-[var(--color-border-secondary)] text-[var(--color-text-secondary)] bg-transparent disabled:opacity-40 transition-colors hover:border-[var(--color-text-tertiary)]';
+  const savePrimaryClass =
+    'text-[12px] font-medium px-[14px] py-[5px] rounded-full bg-[var(--color-cta)] text-[var(--color-cta-fg)] border-[0.5px] border-[var(--color-cta)] disabled:opacity-40 transition-opacity hover:opacity-90';
+  const renderSaveControl = (sectionDirty: boolean) => (
+    <div className="flex items-center gap-2">
+      <span className={sectionDirty ? unsavedBadgeClass : savedBadgeClass}>
+        {sectionDirty ? 'Unsaved changes' : 'Saved'}
+      </span>
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={isPending || !sectionDirty}
+        className={sectionDirty ? savePrimaryClass : saveQuietClass}
+      >
+        {isPending ? 'Saving…' : 'Save'}
+      </button>
+    </div>
+  );
   const profileCardMissingFields = missingProfileFields.filter((field) =>
     ['Full name', 'Date of birth', 'Profession', 'Engineer ID card number', 'Gas Safe number'].includes(field),
   );
@@ -395,9 +421,7 @@ export function ProfilePreferences({
             <h2 className={cardTitleClass}>Personal & engineer details</h2>
             {profileSetupActive ? missingHint(profileCardMissingFields) : null}
           </div>
-          <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
-            {saveButtonLabel}
-          </button>
+          {renderSaveControl(profileDirty)}
         </div>
         <div className={cardBodyClass}>
           <div className="grid grid-cols-2 gap-[10px]">
@@ -488,9 +512,7 @@ export function ProfilePreferences({
             <h2 className={cardTitleClass}>Company details</h2>
             {companySetupActive ? missingHint(companyCardMissingFields) : null}
           </div>
-          <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
-            {saveButtonLabel}
-          </button>
+          {renderSaveControl(companyDirty)}
         </div>
         <div className={cardBodyClass}>
           <div>
@@ -530,9 +552,7 @@ export function ProfilePreferences({
             <h2 className={cardTitleClass}>Bank transfer & rates</h2>
             {invoiceSetupActive ? missingHint(missingInvoiceFields) : null}
           </div>
-          <button type="button" onClick={handleSave} disabled={isPending || !dirty} className={saveButtonClass}>
-            {saveButtonLabel}
-          </button>
+          {renderSaveControl(invoiceDirty)}
         </div>
         <div className={cardBodyClass}>
           <div className="grid grid-cols-2 gap-[10px]">
