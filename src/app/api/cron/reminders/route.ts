@@ -119,6 +119,172 @@ const reminderCopy = (kind: string | null, address: string, publicUrl: string) =
   };
 };
 
+type RenewalPropertyRow = {
+  id: string;
+  user_id: string | null;
+  name: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  town: string | null;
+  postcode: string | null;
+  next_service_due: string | null;
+  renewal_requested_at: string | null;
+  renewal_last_reminded_at: string | null;
+};
+
+const RENEWAL_WINDOW_DAYS = 56; // begin nudging ~8 weeks before due
+const RENEWAL_GRACE_DAYS = 30; // stop nudging once more than 30 days overdue
+const RENEWAL_CADENCE_DAYS = 7; // at most one nudge per property per week
+
+const shiftDateOnly = (base: Date, days: number) => {
+  const d = new Date(base);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * State-driven CP12 renewal nudges (replaces the old fixed 8/4-week reminder rows). Emails the
+ * engineer for any property that is due-soon-or-overdue, not yet booked, and not nudged within the
+ * cadence window — stopping automatically once the landlord books (renewal_booked_at) or a new
+ * certificate advances next_service_due (which clears the lifecycle on delivery).
+ */
+async function sendRenewalNudgesForProperties(
+  admin: Awaited<ReturnType<typeof supabaseServerServiceRole>>,
+) {
+  const counts = { processed: 0, sent: 0, failed: 0, skipped: 0 };
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const windowEnd = shiftDateOnly(now, RENEWAL_WINDOW_DAYS);
+  const overdueFloor = shiftDateOnly(now, -RENEWAL_GRACE_DAYS);
+  const cadenceCutoff = new Date(now.getTime() - RENEWAL_CADENCE_DAYS * 86_400_000).toISOString();
+
+  const { data, error } = await admin
+    .from('properties')
+    .select(
+      'id, user_id, name, address_line1, address_line2, town, postcode, next_service_due, renewal_requested_at, renewal_last_reminded_at',
+    )
+    .is('renewal_booked_at', null)
+    .not('next_service_due', 'is', null)
+    .lte('next_service_due', windowEnd)
+    .gte('next_service_due', overdueFloor)
+    .limit(100);
+  if (error) {
+    // Table or renewal columns not migrated yet — nothing to do.
+    if (error.code === '42P01' || error.code === '42703') return counts;
+    throw new Error(error.message);
+  }
+
+  for (const property of (data ?? []) as unknown as RenewalPropertyRow[]) {
+    counts.processed += 1;
+    if (!property.user_id || !property.next_service_due) {
+      counts.skipped += 1;
+      continue;
+    }
+    // Throttle: skip if nudged within the cadence window (ISO timestamps compare lexically).
+    if (property.renewal_last_reminded_at && property.renewal_last_reminded_at >= cadenceCutoff) {
+      counts.skipped += 1;
+      continue;
+    }
+
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('default_engineer_name, full_name, company_name, company_email')
+      .eq('id', property.user_id)
+      .maybeSingle();
+    let recipient = pickText(profile?.company_email ?? null);
+    if (!recipient) {
+      const { data: authUser } = await admin.auth.admin.getUserById(property.user_id);
+      recipient = pickText(authUser?.user?.email);
+    }
+    if (!recipient) {
+      counts.skipped += 1;
+      continue;
+    }
+
+    // The most recent job on the property anchors the landlord name and the in-app link.
+    const { data: latestJob } = await admin
+      .from('jobs')
+      .select('id, client_name')
+      .eq('property_id', property.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const address =
+      pickText(
+        [property.address_line1, property.address_line2, property.town, property.postcode]
+          .filter(Boolean)
+          .join(', '),
+        property.name,
+      ) || 'the property';
+    const landlordName = titleCase(pickText(latestJob?.client_name ?? null, property.name) || 'Not provided');
+    const appUrl = latestJob?.id ? `${getSiteUrl()}/jobs/${latestJob.id}/complete` : `${getSiteUrl()}/dashboard`;
+    const overdue = property.next_service_due < today;
+    const alreadyRequested = Boolean(property.renewal_requested_at);
+    const subject = overdue ? `Renewal overdue — ${address}` : `Renewal due soon — ${address}`;
+
+    let delivery;
+    try {
+      delivery = await sendEmail({
+        to: recipient,
+        replyTo: profile?.company_email ?? undefined,
+        subject,
+        text: [
+          overdue
+            ? 'A gas safety certificate you issued is now overdue for renewal.'
+            : 'A gas safety certificate you issued is due for renewal soon.',
+          '',
+          `Property: ${address}`,
+          `Landlord: ${landlordName}`,
+          `Renewal due: ${formatDate(property.next_service_due)}`,
+          '',
+          alreadyRequested
+            ? 'You have already sent the landlord a request — this is a reminder to follow up.'
+            : 'Review the job and send the landlord a renewal request.',
+          appUrl,
+        ].join('\n'),
+        html: baseEmail(
+          [
+            emailTitle(overdue ? 'Renewal overdue' : 'Renewal due soon'),
+            emailSubtitle(
+              overdue
+                ? `A gas safety certificate you issued for ${address} is overdue for renewal. Send the landlord a renewal request.`
+                : `A gas safety certificate you issued for ${address} is due for renewal soon. Review the job and send the landlord a renewal request.`,
+            ),
+            infoCard('Renewal', [
+              { label: 'Property', value: address },
+              { label: 'Landlord', value: landlordName },
+              { label: 'Renewal due', value: formatDate(property.next_service_due) },
+              ...(alreadyRequested ? [{ label: 'Status', value: 'Request already sent — follow up' }] : []),
+            ]),
+            ctaButton('Review & send renewal request', appUrl, 'green'),
+            note('Nothing is sent to the landlord until you choose to send it.'),
+          ].join(''),
+          { subject },
+        ),
+      });
+    } catch (sendError) {
+      console.error('[cron/reminders] renewal nudge failed:', sendError);
+      delivery = { status: 'failed' as const };
+    }
+
+    if (delivery.status === 'sent') {
+      counts.sent += 1;
+      try {
+        await admin
+          .from('properties')
+          .update({ renewal_last_reminded_at: new Date().toISOString() } as never)
+          .eq('id', property.id);
+      } catch (markErr) {
+        console.error('[cron/reminders] failed to set renewal_last_reminded_at:', markErr);
+      }
+    } else {
+      counts.failed += 1;
+    }
+  }
+  return counts;
+}
+
 export async function GET(request: Request) {
   const configuredSecret = process.env.CRON_SECRET?.trim();
   if (configuredSecret) {
@@ -163,6 +329,12 @@ export async function GET(request: Request) {
       continue;
     }
 
+    // CP12 renewals are now driven by property state (sendRenewalNudgesForProperties below),
+    // so any legacy CP12 reminder rows are skipped here to avoid double-sending.
+    if (reminder.kind?.startsWith('landlord_cp12_') || reminder.kind?.startsWith('engineer_cp12_')) {
+      continue;
+    }
+
     const { data: job } = await admin
       .from('jobs')
       .select('id, user_id, client_id, client_name, address, public_token')
@@ -191,7 +363,14 @@ export async function GET(request: Request) {
     // the engineer reviews the job and chooses to send the landlord a renewal request.
     const appJobUrl = `${getSiteUrl()}/jobs/${job.id}/complete`;
     const engineerName = pickText(profile?.default_engineer_name, profile?.full_name, profile?.company_name);
-    const recipient = pickText(profile?.company_email ?? null);
+    let recipient = pickText(profile?.company_email ?? null);
+    const engineerUserId = job.user_id ?? reminder.user_id ?? null;
+    if (!recipient && engineerUserId) {
+      // company_email is rarely set (not exposed in the UI), so fall back to the engineer's
+      // login email — otherwise these reminders silently never send.
+      const { data: authUser } = await admin.auth.admin.getUserById(engineerUserId);
+      recipient = pickText(authUser?.user?.email);
+    }
 
     if (!recipient) {
       results.missing_recipient += 1;
@@ -294,11 +473,15 @@ export async function GET(request: Request) {
     if (updateErr) throw new Error(updateErr.message);
   }
 
+  const renewal = await sendRenewalNudgesForProperties(admin);
+
   return NextResponse.json({
-    processed: rows.length,
-    sent: results.sent,
-    failed: results.failed,
+    processed: rows.length + renewal.processed,
+    sent: results.sent + renewal.sent,
+    failed: results.failed + renewal.failed,
     missingRecipient: results.missing_recipient,
+    renewalSent: renewal.sent,
+    renewalSkipped: renewal.skipped,
     delivery: 'resend',
   });
 }
