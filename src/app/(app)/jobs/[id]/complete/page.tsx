@@ -267,12 +267,21 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
           <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Renewal</p>
           <p className="mt-1 text-[15px] font-semibold text-[var(--color-text-primary)]">
-            Renewal due {formatDate(state.renewalDue) ?? state.renewalDue}
+            {state.renewalBookedDate
+              ? 'Renewal booked'
+              : `Renewal due ${formatDate(state.renewalDue) ?? state.renewalDue}`}
           </p>
           <p className="mt-0.5 text-[13px] text-[var(--color-text-secondary)]">
-            We&apos;ll prompt you 8 and 4 weeks before this date. You can send the landlord a renewal request now.
+            {state.renewalBookedDate
+              ? 'The landlord has confirmed a date and the renewal job is scheduled.'
+              : 'We’ll remind you as the date approaches and stop once the landlord books. You can send a renewal request now.'}
           </p>
-          <RenewalSendButton jobId={state.job.id} hasLandlordEmail={state.hasLandlordEmail} />
+          <RenewalSendButton
+            jobId={state.job.id}
+            hasLandlordEmail={state.hasLandlordEmail}
+            bookedDate={state.renewalBookedDate}
+            requestedAt={state.renewalRequestedAt}
+          />
         </div>
       ) : null}
     </main>

@@ -52,45 +52,56 @@ export async function getNextRenewalToSend(): Promise<NextRenewalToSend | null> 
     if (!user) return null;
 
     const admin = await supabaseServerServiceRole();
-    const { data: reminders, error } = await admin
-      .from('reminders')
-      .select('job_id, due_date')
+    const today = new Date().toISOString().slice(0, 10);
+    const windowEnd = (() => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() + 56);
+      return d.toISOString().slice(0, 10);
+    })();
+
+    // State-driven (mirrors the cron): the soonest due-and-not-booked property for this engineer.
+    const { data, error } = await admin
+      .from('properties')
+      .select('id, name, address_line1, address_line2, town, postcode, next_service_due')
       .eq('user_id', user.id)
-      .is('sent_at', null)
-      .like('kind', 'landlord_cp12_%')
-      .order('due_date', { ascending: true })
+      .is('renewal_booked_at', null)
+      .not('next_service_due', 'is', null)
+      .lte('next_service_due', windowEnd)
+      .order('next_service_due', { ascending: true })
       .limit(1);
-    if (error || !reminders?.length) return null;
+    if (error || !data?.length) return null;
+    const property = data[0] as unknown as {
+      id: string;
+      name: string | null;
+      address_line1: string | null;
+      address_line2: string | null;
+      town: string | null;
+      postcode: string | null;
+      next_service_due: string | null;
+    };
 
-    const next = reminders[0];
-    if (!next?.job_id) return null;
-
-    const [{ data: job }, { data: fields }] = await Promise.all([
-      admin.from('jobs').select('id, address').eq('id', next.job_id).maybeSingle(),
-      admin.from('job_fields').select('field_key, value').eq('job_id', next.job_id),
-    ]);
-    const fieldMap = Object.fromEntries(
-      (fields ?? []).map((field) => [field.field_key ?? '', field.value ?? null]),
-    ) as Record<string, string | null>;
+    // The latest job on the property anchors the in-app link the engineer acts from.
+    const { data: latestJob } = await admin
+      .from('jobs')
+      .select('id')
+      .eq('property_id', property.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const jobId = (latestJob as { id?: string } | null)?.id ?? '';
 
     const address =
       pickText(
-        joinAddress(
-          [fieldMap.job_address_line1, fieldMap.job_address_line2, fieldMap.job_address_city, fieldMap.job_postcode],
-          '',
-        ),
-        fieldMap.property_address,
-        job?.address ?? null,
+        joinAddress([property.address_line1, property.address_line2, property.town, property.postcode], ''),
+        property.name,
       ) || 'Property';
-    const renewalDue = pickText(fieldMap.next_inspection_due, fieldMap.next_inspection_date) || null;
-    const today = new Date().toISOString().slice(0, 10);
 
     return {
-      jobId: next.job_id,
+      jobId,
       address,
-      renewalDue,
-      dueToSend: String(next.due_date).slice(0, 10) <= today,
-      completeHref: `/jobs/${next.job_id}/complete`,
+      renewalDue: property.next_service_due,
+      dueToSend: Boolean(property.next_service_due && property.next_service_due <= today),
+      completeHref: jobId ? `/jobs/${jobId}/complete` : '/dashboard',
     };
   } catch {
     return null;

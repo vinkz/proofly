@@ -1614,6 +1614,10 @@ export type JobCompletionState = {
   publicHref: string | null;
   renewalDue: string | null;
   hasLandlordEmail: boolean;
+  // Renewal lifecycle on the job's property (when promoted): drives the engineer-facing
+  // "Booked / Request sent" labels and gates the send button.
+  renewalBookedDate: string | null;
+  renewalRequestedAt: string | null;
 };
 
 const dateOnlyOrEmpty = (value: unknown): string => {
@@ -1687,7 +1691,7 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
   const { sb, user } = await requireUser();
   const { data: job, error: jobErr } = await sb
     .from('jobs')
-    .select('id, title, client_name, address, status, job_type, certificate_type, cert_types, public_token, user_id')
+    .select('id, title, client_name, address, status, job_type, certificate_type, cert_types, public_token, user_id, property_id')
     .eq('id', jobId as JobRow['id'])
     .maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
@@ -1830,6 +1834,24 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
     null;
   const hasLandlordEmail = Boolean(fieldValue('landlord_email').trim() || fieldValue('customer_email').trim());
 
+  // Renewal lifecycle from the job's property (best-effort; columns may not be migrated yet).
+  let renewalBookedDate: string | null = null;
+  let renewalRequestedAt: string | null = null;
+  if (job.property_id) {
+    try {
+      const { data: propertyRenewal } = await admin
+        .from('properties')
+        .select('renewal_booked_date, renewal_requested_at')
+        .eq('id', job.property_id)
+        .maybeSingle();
+      const row = propertyRenewal as { renewal_booked_date?: string | null; renewal_requested_at?: string | null } | null;
+      renewalBookedDate = row?.renewal_booked_date ?? null;
+      renewalRequestedAt = row?.renewal_requested_at ?? null;
+    } catch {
+      // ignore — pre-migration or RLS
+    }
+  }
+
   return {
     job: {
       id: job.id,
@@ -1850,6 +1872,8 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
     publicHref: job.public_token ? `/j/${job.public_token}` : null,
     renewalDue,
     hasLandlordEmail,
+    renewalBookedDate,
+    renewalRequestedAt,
   };
 }
 
