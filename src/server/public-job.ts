@@ -54,6 +54,9 @@ export type PublicJobPageData = {
   invoice: PublicInvoice | null;
   nextInspectionDue: string | null;
   renewalRequestedAt: string | null;
+  // Public token of the property this job belongs to, when promoted. Booking is consolidated on
+  // the property vault (/p), so /j links here instead of hosting its own booking form.
+  propertyToken: string | null;
   landlordEmail: string | null;
   landlordHasMultipleJobs: boolean;
   landlordName: string | null;
@@ -118,11 +121,22 @@ export async function getPublicJobByToken(token: string): Promise<PublicJobPageD
 
   const { data: job, error: jobErr } = await admin
     .from('jobs')
-    .select('id, user_id, client_id, client_name, address, title, status, job_type, scheduled_for, created_at, public_token')
+    .select('id, user_id, client_id, client_name, address, title, status, job_type, scheduled_for, created_at, public_token, property_id')
     .eq('public_token', parsedToken.data)
     .maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
   if (!job) return null;
+
+  // Resolve the property vault token so /j can defer booking to /p (the single booking surface).
+  let propertyToken: string | null = null;
+  if (job.property_id) {
+    const { data: propertyRow } = await admin
+      .from('properties')
+      .select('public_token')
+      .eq('id', job.property_id)
+      .maybeSingle();
+    propertyToken = (propertyRow as { public_token?: string | null } | null)?.public_token ?? null;
+  }
 
   const [{ data: fields }, { data: certificates }, { data: profile }, { data: client }, { data: invoice }, { data: requestRow }] = await Promise.all([
     admin.from('job_fields').select('field_key, value').eq('job_id', job.id),
@@ -236,6 +250,7 @@ export async function getPublicJobByToken(token: string): Promise<PublicJobPageD
     invoice: publicInvoice,
     nextInspectionDue: resolveNextInspectionDue(fieldMap, certRows),
     renewalRequestedAt: pickText(fieldMap.renewal_requested_at) || null,
+    propertyToken,
     landlordEmail,
     landlordHasMultipleJobs: landlordJobCount > 1,
     landlordName: pickText(fieldMap.landlord_name, client?.name ?? null, job.client_name) || null,

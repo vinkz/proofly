@@ -264,29 +264,47 @@ export default async function PublicJobPage({
           <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
             <div className="p-4">
               <p className="text-[15px] font-medium text-[var(--color-text-primary)]">
-                {job.certificates.length === 0
-                  ? 'Request gas safety check'
-                  : renewalDueSoon
-                    ? 'Confirm your renewal date'
-                    : 'Book your next renewal'}
+                {job.propertyToken
+                  ? 'Book your next service'
+                  : job.certificates.length === 0
+                    ? 'Request gas safety check'
+                    : renewalDueSoon
+                      ? 'Confirm your renewal date'
+                      : 'Book your next renewal'}
               </p>
               <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-                {job.certificates.length === 0
-                  ? `Send your access details to ${engineerName} to arrange the visit.`
-                  : renewalDueSoon
-                    ? `Pick a date that works and ${engineerName} will book the renewal visit.`
-                    : `Pick a date that works and ${engineerName} will book your next visit.`}
+                {job.propertyToken
+                  ? `Open your property record to book your next visit with ${engineerName} and see all your certificates in one place.`
+                  : job.certificates.length === 0
+                    ? `Send your access details to ${engineerName} to arrange the visit.`
+                    : renewalDueSoon
+                      ? `Pick a date that works and ${engineerName} will book the renewal visit.`
+                      : `Pick a date that works and ${engineerName} will book your next visit.`}
               </p>
             </div>
             <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] p-4">
-              <RenewalRequestForm
-                token={job.token}
-                defaultDate={job.nextInspectionDue ?? ''}
-                confirmMode={job.certificates.length > 0}
-              />
+              {/* Booking is consolidated on the property vault (/p) so there's a single source of
+                  truth for the renewal/booked state. /j only hosts its own form when this job has
+                  no property record yet (rare — pre-promotion). */}
+              {job.propertyToken ? (
+                <Link
+                  href={`/p/${job.propertyToken}`}
+                  className="block w-full rounded-[24px] bg-[#111] px-5 py-[13px] text-center text-[15px] font-medium text-white"
+                >
+                  Book your next service →
+                </Link>
+              ) : (
+                <RenewalRequestForm
+                  token={job.token}
+                  defaultDate={job.nextInspectionDue ?? ''}
+                  confirmMode={job.certificates.length > 0}
+                />
+              )}
             </div>
             <p className="px-4 pb-4 text-center text-[12px] text-[var(--color-text-tertiary)]">
-              No account needed. Your details go directly to your engineer.
+              {job.propertyToken
+                ? 'Manage and book everything for this property in one place.'
+                : 'No account needed. Your details go directly to your engineer.'}
             </p>
           </div>
         ) : null}
