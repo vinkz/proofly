@@ -112,7 +112,7 @@ export async function sendLandlordRenewalRequest(jobId: string): Promise<Renewal
   const admin = await supabaseServerServiceRole();
   const { data: job, error: jobErr } = await admin
     .from('jobs')
-    .select('id, user_id, client_id, client_name, address, public_token')
+    .select('id, user_id, client_id, client_name, address, public_token, property_id')
     .eq('id', parsedJobId)
     .maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
@@ -207,6 +207,14 @@ export async function sendLandlordRenewalRequest(jobId: string): Promise<Renewal
           field_key: 'renewal_requested_at',
           value: new Date().toISOString(),
         });
+        // Mirror onto the property so the state-driven cron / engineer UX can read it without
+        // walking job_fields. Best-effort; never fail the send over a marker write.
+        if (job.property_id) {
+          await admin
+            .from('properties')
+            .update({ renewal_requested_at: new Date().toISOString() } as never)
+            .eq('id', job.property_id);
+        }
       } catch (markError) {
         console.error('[renewals] failed to record renewal_requested_at:', markError);
       }

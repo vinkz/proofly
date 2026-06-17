@@ -288,7 +288,7 @@ export async function submitPublicJobRenewalRequest(input: z.infer<typeof Renewa
   const admin = await supabaseServerServiceRole();
   const { data: job, error: jobErr } = await admin
     .from('jobs')
-    .select('id, user_id, client_id, client_name, address')
+    .select('id, user_id, client_id, client_name, address, property_id')
     .eq('public_token', request.token)
     .maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
@@ -298,12 +298,14 @@ export async function submitPublicJobRenewalRequest(input: z.infer<typeof Renewa
     [acceptedDate, request.preferredDates].map((value) => value?.trim()).filter(Boolean).join(' · ') || null;
 
   // Ensure a real, pre-filled renewal job exists and (when a date was confirmed) schedule it.
+  // Pass the property so the future job is linked to the existing property record (same as /p).
   const renewalJobId = await ensureRenewalJobForSource(admin, {
     sourceJob: job,
     acceptedDate,
     tenantName: request.tenantName,
     tenantPhone: request.tenantPhone,
     accessNotes: request.accessNotes,
+    propertyId: job.property_id ?? null,
   });
 
   // A confirmed date means the visit is booked, not just requested — surface it as 'scheduled'
@@ -345,6 +347,18 @@ export async function submitPublicJobRenewalRequest(input: z.infer<typeof Renewa
     await admin.from('job_fields').delete().eq('job_id', pageData.jobId).eq('field_key', 'renewal_requested_at');
   } catch (clearError) {
     console.error('[public-job] failed to clear renewal_requested_at:', clearError);
+  }
+
+  // A confirmed date books the renewal on the property (reminder stop-condition). Best-effort.
+  if (acceptedDate && job.property_id) {
+    try {
+      await admin
+        .from('properties')
+        .update({ renewal_booked_at: new Date().toISOString(), renewal_booked_date: acceptedDate } as never)
+        .eq('id', job.property_id);
+    } catch (bookedErr) {
+      console.error('[public-job] failed to set renewal_booked state:', bookedErr);
+    }
   }
 
   // Confirm back to the engineer by email so the booking doesn't only live on a dashboard list.

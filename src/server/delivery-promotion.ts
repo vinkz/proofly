@@ -252,6 +252,24 @@ async function upsertProperty(params: {
       .select('id, user_id, client_id, public_token, name, address_line1, address_line2, town, postcode, phone, next_service_due, created_at, updated_at')
       .single();
     if (error) throw new Error(error.message);
+    // A newer next_service_due means a fresh certificate cycle, so the previous renewal lifecycle
+    // (requested/booked/reminded) is satisfied — clear it so reminders start over for the new
+    // period. Best-effort; cast because these columns aren't in the generated types yet.
+    if (nextServiceDue && (!existing.next_service_due || nextServiceDue > existing.next_service_due)) {
+      try {
+        await sb
+          .from('properties')
+          .update({
+            renewal_booked_at: null,
+            renewal_booked_date: null,
+            renewal_requested_at: null,
+            renewal_last_reminded_at: null,
+          } as never)
+          .eq('id', existing.id);
+      } catch (resetErr) {
+        console.error('[delivery-promotion] failed to reset renewal lifecycle:', resetErr);
+      }
+    }
     return data;
   }
 

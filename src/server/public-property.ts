@@ -274,6 +274,19 @@ export async function submitPropertyRenewalRequest(input: z.infer<typeof Renewal
     }
   }
 
+  // A confirmed date books the renewal: record it on the property so the reminder cron stops
+  // nudging and the engineer-facing UX flips to "Booked". Best-effort — never block the landlord.
+  if (acceptedDate) {
+    try {
+      await admin
+        .from('properties')
+        .update({ renewal_booked_at: new Date().toISOString(), renewal_booked_date: acceptedDate } as never)
+        .eq('id', data.propertyId);
+    } catch (bookedErr) {
+      console.error('[public-property] failed to set renewal_booked state:', bookedErr);
+    }
+  }
+
   // Confirm back to the engineer by email so the booking doesn't only live on a dashboard list.
   await notifyEngineerOfRenewalResponse({
     admin,
