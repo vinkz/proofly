@@ -4,6 +4,7 @@ import Link from 'next/link';
 import RequireAuth from './_components/require-auth';
 import { PageFade } from './_components/page-fade';
 import { HideDuringOnboarding } from './_components/hide-during-onboarding';
+import { AppSidebar } from '@/components/dashboard/app-sidebar';
 import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { ToolsMenu } from '@/components/dashboard/tools-menu';
 import { listPendingJobRequestsForDashboard } from '@/server/job-requests';
@@ -31,26 +32,37 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <RequireAuth>
-      <div className="min-h-screen bg-[var(--color-background-secondary)] text-[var(--color-text-primary)]">
-        <header className="sticky top-0 z-30 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
-          <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
-            <Link href="/dashboard" className="flex items-center">
-              <span className="text-xl font-extrabold tracking-tight text-[var(--brand)]">
-                certnow
-              </span>
-            </Link>
-            <HideDuringOnboarding active={onboardingIncomplete}>
-              <ToolsMenu />
-            </HideDuringOnboarding>
-          </div>
-        </header>
-
-        <main className="pb-14">
-          <PageFade>{children}</PageFade>
-        </main>
-
+      <div className="min-h-screen bg-[var(--color-background-secondary)] text-[var(--color-text-primary)] lg:flex">
+        {/* Desktop (>=1024px): sidebar nav. Hidden while onboarding (focused flow). */}
         <HideDuringOnboarding active={onboardingIncomplete}>
-          <BottomNav pendingRequestsCount={pendingRequestsCount} />
+          <AppSidebar pendingRequestsCount={pendingRequestsCount} />
+        </HideDuringOnboarding>
+
+        <div className="flex min-h-screen flex-1 flex-col">
+          {/* Mobile (<1024px) only: brand + tools header. Desktop uses the sidebar instead. */}
+          <header className="sticky top-0 z-30 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] lg:hidden">
+            <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
+              <Link href="/dashboard" className="flex items-center">
+                <span className="text-xl font-extrabold tracking-tight text-[var(--brand)]">
+                  certnow
+                </span>
+              </Link>
+              <HideDuringOnboarding active={onboardingIncomplete}>
+                <ToolsMenu />
+              </HideDuringOnboarding>
+            </div>
+          </header>
+
+          <main className="pb-14 lg:pb-0">
+            <PageFade>{children}</PageFade>
+          </main>
+        </div>
+
+        {/* Mobile (<1024px) only: bottom tab bar. */}
+        <HideDuringOnboarding active={onboardingIncomplete}>
+          <div className="lg:hidden">
+            <BottomNav pendingRequestsCount={pendingRequestsCount} />
+          </div>
         </HideDuringOnboarding>
       </div>
     </RequireAuth>
