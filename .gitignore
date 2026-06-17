@@ -49,3 +49,6 @@ next-env.d.ts
 
 # claude code worktrees
 .claude/worktrees/
+
+# saved auth/session state from QA runs — never commit (contains credentials)
+audit/.auth/
