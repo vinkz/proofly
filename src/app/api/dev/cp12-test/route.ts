@@ -50,7 +50,9 @@ export async function GET(request: Request) {
     jobId,
     appliances: [
       {
-        appliance_type: 'Boiler',
+        appliance_type: 'boiler',
+        appliance_subtype: 'combi',
+        cooker_stability: '',
         landlords_appliance: 'Yes',
         appliance_inspected: 'Yes',
         location: 'Kitchen',

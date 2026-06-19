@@ -43,7 +43,13 @@ export type Cp12SafetyClassification = 'safe' | 'ncs' | 'ar' | 'id';
 
 export type Cp12Appliance = {
   id?: string;
+  // appliance_type holds the appliance CATEGORY (boiler | hob_cooker | gas_fire |
+  // water_heater | other). See src/lib/cp12/applianceConfig.ts.
   appliance_type: string;
+  // Boiler-only subtype (combi/system/regular/other); '' for non-boilers.
+  appliance_subtype: string;
+  // Free-standing cooker stability check; only used for hob/cooker category.
+  cooker_stability: string;
   landlords_appliance: string;
   appliance_inspected: string;
   location: string;

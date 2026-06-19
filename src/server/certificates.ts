@@ -1838,6 +1838,8 @@ const Cp12ApplianceSchema = z.object({
     z.object({
       id: z.string().uuid().optional(),
       appliance_type: optionalText,
+      appliance_subtype: optionalText,
+      cooker_stability: optionalText,
       landlords_appliance: optionalText,
       appliance_inspected: optionalText,
       location: optionalText,

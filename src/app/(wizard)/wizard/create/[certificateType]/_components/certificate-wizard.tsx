@@ -44,6 +44,16 @@ import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
 import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
+import {
+  CP12_APPLIANCE_CATEGORIES,
+  CP12_BOILER_SUBTYPES,
+  DEFAULT_CP12_CATEGORY,
+  cp12FieldVisible,
+  cp12FieldVisibility,
+  resolveCp12Category,
+  resolveCp12Subtype,
+  type Cp12ApplianceCategory,
+} from '@/lib/cp12/applianceConfig';
 
 type WizardProps = {
   jobId: string;
@@ -66,7 +76,9 @@ type WizardProps = {
 };
 
 const emptyAppliance: Cp12Appliance = {
-  appliance_type: '',
+  appliance_type: DEFAULT_CP12_CATEGORY,
+  appliance_subtype: '',
+  cooker_stability: '',
   landlords_appliance: 'Yes',
   appliance_inspected: 'Yes',
   location: '',
@@ -462,7 +474,13 @@ export function CertificateWizard({
     ),
   );
   const sanitizeAppliance = (appliance: Cp12Appliance): Cp12Appliance => ({
-    appliance_type: appliance.appliance_type ?? '',
+    appliance_type: resolveCp12Category(appliance.appliance_type),
+    appliance_subtype: resolveCp12Subtype(
+      resolveCp12Category(appliance.appliance_type),
+      appliance.appliance_subtype,
+      appliance.appliance_type,
+    ),
+    cooker_stability: appliance.cooker_stability ?? '',
     landlords_appliance: appliance.landlords_appliance ?? 'Yes',
     appliance_inspected: appliance.appliance_inspected ?? 'Yes',
     location: appliance.location ?? '',

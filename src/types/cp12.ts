@@ -184,7 +184,9 @@ export const CP12_DEMO_INFO = {
 } as const;
 
 export const CP12_DEMO_APPLIANCE = {
-  appliance_type: 'combi boiler',
+  appliance_type: 'boiler',
+  appliance_subtype: 'combi',
+  cooker_stability: '',
   landlords_appliance: 'Yes',
   appliance_inspected: 'Yes',
   location: 'kitchen cupboard',
