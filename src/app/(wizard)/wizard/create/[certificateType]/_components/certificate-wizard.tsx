@@ -52,7 +52,6 @@ import {
   cp12FieldVisibility,
   resolveCp12Category,
   resolveCp12Subtype,
-  type Cp12ApplianceCategory,
 } from '@/lib/cp12/applianceConfig';
 
 type WizardProps = {
@@ -273,13 +272,6 @@ const CP12_DEMO_PHOTO_NOTES: Record<string, string> = {
 };
 
 const FINAL_EVIDENCE_DEFAULT: PhotoCategory = 'site';
-
-const BOILER_TYPE_OPTIONS = [
-  { label: 'Combi', value: 'combi' },
-  { label: 'System', value: 'system' },
-  { label: 'Regular', value: 'regular' },
-  { label: 'Other', value: 'other' },
-];
 
 // Where each completion-checklist "Go" link should land focus once its step is
 // shown. Appliance items focus their card via applianceRefs instead.
@@ -542,6 +534,9 @@ export function CertificateWizard({
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
+  // For categories where combustion analysis is opt-in (gas fires / water heaters),
+  // track which appliance indices the engineer has chosen to add it for.
+  const [combustionOptIn, setCombustionOptIn] = useState<Record<number, boolean>>({});
   const prefillAppliedRef = useRef(false);
   const autoNextInspectionRef = useRef<string | null>(null);
   const applianceRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -1726,7 +1721,12 @@ export function CertificateWizard({
       (appliances.length ? appliances : [emptyAppliance]).map((appliance) => {
         const { make, model } = splitMakeModel(appliance.make_model ?? '');
         return {
-          type: appliance.appliance_type ?? '',
+          type: resolveCp12Category(appliance.appliance_type),
+          subtype: resolveCp12Subtype(
+            resolveCp12Category(appliance.appliance_type),
+            appliance.appliance_subtype,
+            appliance.appliance_type,
+          ),
           make,
           model,
           location: appliance.location ?? '',
@@ -1741,9 +1741,13 @@ export function CertificateWizard({
     setAppliances(
       normalizedProfiles.map((profile, index) => {
         const current = appliances[index] ?? { ...emptyAppliance };
+        const category = resolveCp12Category(profile.type);
         return {
           ...current,
-          appliance_type: profile.type ?? '',
+          appliance_type: category,
+          // Subtype only applies to boilers; cooker stability only to hobs/cookers.
+          appliance_subtype: category === 'boiler' ? (profile.subtype ?? current.appliance_subtype ?? '') : '',
+          cooker_stability: category === 'hob_cooker' ? (current.cooker_stability ?? '') : '',
           location: profile.location ?? '',
           make_model: combineMakeModel(profile.make ?? '', profile.model ?? ''),
         };
@@ -2497,7 +2501,10 @@ export function CertificateWizard({
         <ApplianceStep
           appliances={applianceProfiles}
           onAppliancesChange={handleApplianceProfilesChange}
-          typeOptions={BOILER_TYPE_OPTIONS}
+          typeOptions={CP12_APPLIANCE_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))}
+          subtypeOptions={CP12_BOILER_SUBTYPES.map((s) => ({ label: s.label, value: s.value }))}
+          subtypeLabel="Boiler type"
+          showSubtypeWhen={(type) => resolveCp12Category(type) === 'boiler'}
           allowMultiple
           showExtendedFields={false}
           showYear={false}
@@ -2616,7 +2623,15 @@ export function CertificateWizard({
       { filled: 0, total: 0 },
     );
   const inspectionCount = sumCounts(
-    ...appliances.map((a) => countRequired(a.flue_type, a.appliance_inspected, a.appliance_serviced)),
+    ...appliances.map((a) => {
+      const cat = resolveCp12Category(a.appliance_type);
+      // Flue type only counts toward completion for flued categories (hidden for hobs).
+      return countRequired(
+        ...(cp12FieldVisible(cat, 'flue_type') ? [a.flue_type] : []),
+        a.appliance_inspected,
+        a.appliance_serviced,
+      );
+    }),
   );
   const readingsCount = sumCounts(
     ...appliances.map((a) => {
@@ -2631,17 +2646,19 @@ export function CertificateWizard({
     }),
   );
   const safetyCount = sumCounts(
-    ...appliances.map((a) =>
-      countRequired(
+    ...appliances.map((a) => {
+      const cat = resolveCp12Category(a.appliance_type);
+      // Flue checks count only for flued categories; cooker stability only for hobs/cookers.
+      return countRequired(
         a.safety_devices_correct,
         a.ventilation_satisfactory,
-        a.flue_condition,
-        a.flue_performance_test,
-        a.stability_test,
+        ...(cp12FieldVisible(cat, 'flue_condition') ? [a.flue_condition] : []),
+        ...(cp12FieldVisible(cat, 'flue_performance_test') ? [a.flue_performance_test] : []),
+        ...(cp12FieldVisible(cat, 'cooker_stability') ? [a.cooker_stability] : []),
         a.gas_tightness_test,
         a.safety_rating,
-      ),
-    ),
+      );
+    }),
   );
   const houseCount = countRequired(
     booleanFromField(evidenceFields.emergency_control_accessible),
@@ -2702,7 +2719,9 @@ export function CertificateWizard({
 
       {checksTab === 'inspection' && (
         <div className="space-y-4">
-          {appliances.map((appliance, index) => (
+          {appliances.map((appliance, index) => {
+            const category = resolveCp12Category(appliance.appliance_type);
+            return (
             <div
               key={`checks-${index}`}
               ref={(el) => {
@@ -2712,13 +2731,15 @@ export function CertificateWizard({
             >
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1}</p>
               <div className="mt-4 space-y-3">
-                <SearchableSelect
-                  label={`Appliance ${index + 1} flue type`}
-                  value={appliance.flue_type ?? ''}
-                  options={[...CP12_FLUE_TYPES]}
-                  placeholder="Select or type"
-                  onChange={(val) => setApplianceField(index, 'flue_type', val)}
-                />
+                {cp12FieldVisible(category, 'flue_type') ? (
+                  <SearchableSelect
+                    label={`Appliance ${index + 1} flue type`}
+                    value={appliance.flue_type ?? ''}
+                    options={[...CP12_FLUE_TYPES]}
+                    placeholder="Select or type"
+                    onChange={(val) => setApplianceField(index, 'flue_type', val)}
+                  />
+                ) : null}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                     <EnumChips
@@ -2747,13 +2768,23 @@ export function CertificateWizard({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {checksTab === 'readings' && (
         <div className="space-y-4">
-          {appliances.map((appliance, index) => (
+          {appliances.map((appliance, index) => {
+            const category = resolveCp12Category(appliance.appliance_type);
+            const combustionVis = cp12FieldVisibility(category, 'combustion');
+            const hasCombustionValues =
+              !!appliance.high_co_ppm || !!appliance.high_co2 || !!appliance.high_ratio ||
+              !!appliance.low_co_ppm || !!appliance.low_co2 || !!appliance.low_ratio;
+            const showCombustion =
+              combustionVis === 'shown' ||
+              (combustionVis === 'optional' && (combustionOptIn[index] || hasCombustionValues));
+            return (
             <div
               key={`checks-${index}`}
               ref={(el) => {
@@ -2783,6 +2814,7 @@ export function CertificateWizard({
                   </div>
                 </div>
 
+                {showCombustion ? (
                 <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                   <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">Combustion readings</p>
                   <p className="mb-3 mt-1 text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">Speak readings in order with small pauses between each value.</p>
@@ -2880,15 +2912,26 @@ export function CertificateWizard({
                     />
                   </div>
                 </div>
+                ) : combustionVis === 'optional' ? (
+                  <button
+                    type="button"
+                    onClick={() => setCombustionOptIn((prev) => ({ ...prev, [index]: true }))}
+                    className="w-full rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                  >
+                    + Add combustion readings (optional for this appliance)
+                  </button>
+                ) : null}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {checksTab === 'safety' && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
+            const category = resolveCp12Category(appliance.appliance_type);
             const classification = getApplianceSafetyClassification(appliance);
             const safeToUse = getApplianceSafeToUse(appliance);
             const showUnsafeFields = classification === 'ar' || classification === 'id';
@@ -2913,21 +2956,27 @@ export function CertificateWizard({
                       value={(appliance.ventilation_satisfactory ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.ventilation_satisfactory ?? '').toLowerCase() === 'fail' ? 'fail' : null}
                       onChange={(val) => setApplianceField(index, 'ventilation_satisfactory', val ?? '')}
                     />
-                    <PassFailToggle
-                      label="Visual condition of flue and termination satisfactory"
-                      value={(appliance.flue_condition ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_condition ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'flue_condition', val ?? '')}
-                    />
-                    <PassFailToggle
-                      label="Flue performance test"
-                      value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
-                    />
-                    <PassFailToggle
-                      label="Stability test"
-                      value={(appliance.stability_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.stability_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'stability_test', val ?? '')}
-                    />
+                    {cp12FieldVisible(category, 'flue_condition') ? (
+                      <PassFailToggle
+                        label="Visual condition of flue and termination satisfactory"
+                        value={(appliance.flue_condition ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_condition ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                        onChange={(val) => setApplianceField(index, 'flue_condition', val ?? '')}
+                      />
+                    ) : null}
+                    {cp12FieldVisible(category, 'flue_performance_test') ? (
+                      <PassFailToggle
+                        label="Flue performance test"
+                        value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                        onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
+                      />
+                    ) : null}
+                    {cp12FieldVisible(category, 'cooker_stability') ? (
+                      <PassFailToggle
+                        label="Cooker stability (bracket/chain)"
+                        value={(appliance.cooker_stability ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.cooker_stability ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                        onChange={(val) => setApplianceField(index, 'cooker_stability', val ?? '')}
+                      />
+                    ) : null}
                     <PassFailToggle
                       label="Gas tightness test"
                       value={(appliance.gas_tightness_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.gas_tightness_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}

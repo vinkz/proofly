@@ -30,6 +30,11 @@ type ApplianceStepProps = {
   appliance?: ApplianceStepValues;
   onApplianceChange?: (next: ApplianceStepValues) => void;
   typeOptions: EnumChipOption[];
+  // Optional secondary picker (e.g. boiler subtype) shown only when showSubtypeWhen
+  // returns true for the current type. Category-aware CP12 flow uses this.
+  subtypeOptions?: EnumChipOption[];
+  subtypeLabel?: string;
+  showSubtypeWhen?: (type: string) => boolean;
   makeOptions?: SearchableSelectOption[];
   locationOptions?: SearchableSelectOption[];
   allowMultiple?: boolean;
@@ -50,6 +55,7 @@ type ApplianceStepProps = {
 
 const emptyAppliance: ApplianceStepValues = {
   type: '',
+  subtype: '',
   make: '',
   model: '',
   location: '',
@@ -80,6 +86,9 @@ export function ApplianceStep({
   appliance,
   onApplianceChange,
   typeOptions,
+  subtypeOptions,
+  subtypeLabel = 'Subtype',
+  showSubtypeWhen,
   makeOptions,
   locationOptions = DEFAULT_LOCATIONS,
   allowMultiple = true,
@@ -294,6 +303,14 @@ export function ApplianceStep({
                     options={typeOptions}
                     onChange={(val) => updateApplianceField(index, 'type', val)}
                   />
+                  {subtypeOptions && (showSubtypeWhen ? showSubtypeWhen(appliance?.type ?? '') : true) ? (
+                    <EnumChips
+                      label={subtypeLabel}
+                      value={appliance?.subtype ?? ''}
+                      options={subtypeOptions}
+                      onChange={(val) => updateApplianceField(index, 'subtype', val)}
+                    />
+                  ) : null}
                   <SearchableSelect
                     label="Make"
                     value={makeValue}
@@ -445,6 +462,14 @@ export function ApplianceStep({
                 options={typeOptions}
                 onChange={(val) => updateApplianceField(editingIndex, 'type', val)}
               />
+              {subtypeOptions && (showSubtypeWhen ? showSubtypeWhen(activeAppliances[editingIndex]?.type ?? '') : true) ? (
+                <EnumChips
+                  label={subtypeLabel}
+                  value={activeAppliances[editingIndex]?.subtype ?? ''}
+                  options={subtypeOptions}
+                  onChange={(val) => updateApplianceField(editingIndex, 'subtype', val)}
+                />
+              ) : null}
               <SearchableSelect
                 label="Make"
                 value={makeValue}

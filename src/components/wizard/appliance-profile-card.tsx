@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 
 export type ApplianceProfile = {
   type?: string;
+  // Boiler-only subtype (combi/system/regular); only used by category-aware callers.
+  subtype?: string;
   make?: string;
   model?: string;
   location?: string;
