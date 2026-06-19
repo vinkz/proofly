@@ -40,6 +40,7 @@ import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 import { useWizardStepHistory } from '@/hooks/use-wizard-step-history';
 import { getMakes } from '@/lib/applianceCatalog/ukBoilers';
+import { getApplianceCatalog } from '@/lib/applianceCatalog/ukAppliances';
 import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
@@ -2505,6 +2506,7 @@ export function CertificateWizard({
           subtypeOptions={CP12_BOILER_SUBTYPES.map((s) => ({ label: s.label, value: s.value }))}
           subtypeLabel="Boiler type"
           showSubtypeWhen={(type) => resolveCp12Category(type) === 'boiler'}
+          resolveCatalog={(type) => getApplianceCatalog(resolveCp12Category(type))}
           allowMultiple
           showExtendedFields={false}
           showYear={false}

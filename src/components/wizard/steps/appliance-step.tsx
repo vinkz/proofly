@@ -11,6 +11,7 @@ import { EnumChips, type EnumChipOption } from '@/components/wizard/inputs/enum-
 import { PrefillBadge } from '@/components/wizard/inputs/prefill-badge';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/wizard/inputs/searchable-select';
 import { getEntry, getMakes, getModelsForMake, type BoilerType, type GasType, type MountType } from '@/lib/applianceCatalog/ukBoilers';
+import type { ApplianceCatalogApi } from '@/lib/applianceCatalog/ukAppliances';
 
 const DEFAULT_LOCATIONS: SearchableSelectOption[] = [
   { label: 'Kitchen', value: 'Kitchen' },
@@ -35,6 +36,9 @@ type ApplianceStepProps = {
   subtypeOptions?: EnumChipOption[];
   subtypeLabel?: string;
   showSubtypeWhen?: (type: string) => boolean;
+  // Resolve the make/model catalog for a given appliance type. When omitted, the
+  // boiler catalog is used (current behaviour for boiler-service wizards).
+  resolveCatalog?: (type: string) => ApplianceCatalogApi;
   makeOptions?: SearchableSelectOption[];
   locationOptions?: SearchableSelectOption[];
   allowMultiple?: boolean;
@@ -89,6 +93,7 @@ export function ApplianceStep({
   subtypeOptions,
   subtypeLabel = 'Subtype',
   showSubtypeWhen,
+  resolveCatalog,
   makeOptions,
   locationOptions = DEFAULT_LOCATIONS,
   allowMultiple = true,
@@ -106,14 +111,31 @@ export function ApplianceStep({
   showTopAddButton = true,
   renderInlineHeaderAction,
 }: ApplianceStepProps) {
-  const catalogMakes = useMemo(() => getMakes().filter((make) => make.toLowerCase() !== 'other'), []);
-  const resolvedMakeOptions = useMemo(() => {
-    if (makeOptions?.length) return makeOptions;
-    return catalogMakes.map((make) => ({
-      label: make,
-      value: make,
-    }));
-  }, [catalogMakes, makeOptions]);
+  // Boiler catalog is the default when no resolver is supplied (other wizards).
+  const DEFAULT_CATALOG: ApplianceCatalogApi = useMemo(
+    () => ({ getMakes, getModelsForMake, getEntry }),
+    [],
+  );
+  const getCatalog = useCallback(
+    (type?: string): ApplianceCatalogApi => (resolveCatalog ? resolveCatalog(type ?? '') : DEFAULT_CATALOG),
+    [resolveCatalog, DEFAULT_CATALOG],
+  );
+  const makesFor = useCallback(
+    (catalog: ApplianceCatalogApi) => catalog.getMakes().filter((make) => make.toLowerCase() !== 'other'),
+    [],
+  );
+  const makeOptionsFor = useCallback(
+    (catalog: ApplianceCatalogApi): SearchableSelectOption[] => {
+      if (makeOptions?.length) return makeOptions;
+      return makesFor(catalog).map((make) => ({ label: make, value: make }));
+    },
+    [makeOptions, makesFor],
+  );
+  const isKnownMakeIn = useCallback(
+    (catalog: ApplianceCatalogApi, make: string) =>
+      makesFor(catalog).map((item) => item.toLowerCase()).includes(make.trim().toLowerCase()),
+    [makesFor],
+  );
   const yearOptions = useMemo(() => {
     const current = new Date().getFullYear();
     const years: string[] = [];
@@ -177,7 +199,6 @@ export function ApplianceStep({
     setIsEditorOpen(true);
   };
 
-  const isKnownMake = (make: string) => catalogMakes.map((item) => item.toLowerCase()).includes(make.trim().toLowerCase());
   const isBoilerTypeOptions = typeOptions.every((option) =>
     BOILER_TYPE_VALUES.includes(option.value as BoilerType),
   );
@@ -216,14 +237,21 @@ export function ApplianceStep({
       if (key === 'serial') {
         updated.serial = normalizeSerial(value);
       }
+      // In category-aware mode, changing the appliance type switches catalogs, so a
+      // make/model from the old category no longer applies — clear them.
+      if (key === 'type' && resolveCatalog) {
+        updated.make = '';
+        updated.model = '';
+      }
+      const catalog = getCatalog(updated.type);
       if (key === 'make') {
-        const models = getModelsForMake(value);
+        const models = catalog.getModelsForMake(value);
         if (updated.model && models.length && !models.includes(updated.model)) {
           updated.model = '';
         }
       }
       if (key === 'model' || key === 'make') {
-        const entry = getEntry(updated.make ?? '', updated.model ?? '');
+        const entry = catalog.getEntry(updated.make ?? '', updated.model ?? '');
         return applyEntryDefaults(updated, entry);
       }
       return updated;
@@ -247,9 +275,9 @@ export function ApplianceStep({
   const canContinue = activeAppliances.length > 0 && getRequiredComplete(activeAppliances[0], requiredKeys);
   const modelOptions = useMemo(() => {
     const make = activeAppliances[editingIndex]?.make ?? '';
-    const models = getModelsForMake(make);
+    const models = getCatalog(activeAppliances[editingIndex]?.type).getModelsForMake(make);
     return [...models, 'Not listed'].map((model) => ({ label: model, value: model }));
-  }, [activeAppliances, editingIndex]);
+  }, [activeAppliances, editingIndex, getCatalog]);
   const showTopActions = Boolean(prefillText) || (allowMultiple && showTopAddButton);
 
   return (
@@ -268,10 +296,11 @@ export function ApplianceStep({
       <div className="space-y-3">
         {inlineEditor ? (
           activeAppliances.map((appliance, index) => {
+            const catalog = getCatalog(appliance?.type);
             const makeValue = appliance?.make ?? '';
-            const makeIsKnown = isKnownMake(makeValue);
+            const makeIsKnown = isKnownMakeIn(catalog, makeValue);
             const modelValue = appliance?.model ?? '';
-            const modelsForMake = getModelsForMake(makeValue);
+            const modelsForMake = catalog.getModelsForMake(makeValue);
             const modelIsKnown = modelsForMake.includes(modelValue);
             const modelSelectValue = modelIsKnown ? modelValue : modelValue ? 'Not listed' : '';
             const showManualModel = modelSelectValue === 'Not listed';
@@ -314,7 +343,7 @@ export function ApplianceStep({
                   <SearchableSelect
                     label="Make"
                     value={makeValue}
-                    options={resolvedMakeOptions}
+                    options={makeOptionsFor(catalog)}
                     placeholder="Select or type"
                     onChange={(val) => updateApplianceField(index, 'make', val)}
                   />
@@ -445,10 +474,11 @@ export function ApplianceStep({
         <Sheet open={isEditorOpen} onOpenChange={setIsEditorOpen}>
           <SheetContent side="bottom" title="Appliance profile" description="Add core appliance details.">
             {(() => {
+              const catalog = getCatalog(activeAppliances[editingIndex]?.type);
               const makeValue = activeAppliances[editingIndex]?.make ?? '';
-              const makeIsKnown = isKnownMake(makeValue);
+              const makeIsKnown = isKnownMakeIn(catalog, makeValue);
               const modelValue = activeAppliances[editingIndex]?.model ?? '';
-              const modelsForMake = getModelsForMake(makeValue);
+              const modelsForMake = catalog.getModelsForMake(makeValue);
               const modelIsKnown = modelsForMake.includes(modelValue);
               const modelSelectValue = modelIsKnown ? modelValue : modelValue ? 'Not listed' : '';
               const showManualModel = modelSelectValue === 'Not listed';
@@ -473,7 +503,7 @@ export function ApplianceStep({
               <SearchableSelect
                 label="Make"
                 value={makeValue}
-                options={resolvedMakeOptions}
+                options={makeOptionsFor(catalog)}
                 placeholder="Select or type"
                 onChange={(val) => updateApplianceField(editingIndex, 'make', val)}
               />
