@@ -23,6 +23,7 @@ import type { GeneralWorksPhotoCategory } from '@/types/general-works';
 import { GENERAL_WORKS_PHOTO_CATEGORIES, GENERAL_WORKS_REQUIRED_FIELDS } from '@/types/general-works';
 import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
 import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import { cp12ApplianceTypeLabel, resolveCp12Category, resolveCp12Subtype } from '@/lib/cp12/applianceConfig';
 import {
   renderGasServicePdf,
   type ApplianceInput as GasServiceApplianceInput,
@@ -3070,12 +3071,16 @@ async function generateCp12CertificateForJob(params: {
     const lowCo2 = toText(app.low_co2 ?? '');
     const lowRatio = toText(app.low_ratio ?? '');
     const applianceSafe = formatCp12ApplianceSafeToUse(app);
+    const category = resolveCp12Category(app.appliance_type);
+    const subtype = resolveCp12Subtype(category, app.appliance_subtype, app.appliance_type);
+    const typeLabel = cp12ApplianceTypeLabel(category, subtype);
     return {
-      description: toText(app.make_model ?? appExtras.appliance_make_model ?? app.appliance_type ?? ''),
+      description: toText(app.make_model ?? appExtras.appliance_make_model ?? '') || typeLabel,
       landlordAppliance: toText(app.landlords_appliance ?? ''),
       applianceInspected: toText(app.appliance_inspected ?? ''),
       location: toText(app.location ?? ''),
-      type: toText(app.appliance_type ?? ''),
+      type: typeLabel,
+      category,
       flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
       operatingPressure: toText(app.operating_pressure ?? ''),
       heatInput: toText(app.heat_input ?? ''),

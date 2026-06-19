@@ -4,11 +4,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { Database } from '@/lib/database.types';
 import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import { cp12ApplianceTypeLabel, resolveCp12Category, resolveCp12Subtype } from '@/lib/cp12/applianceConfig';
 import { getCustomerById } from '@/server/customer-service';
 
 type JobRow = Database['public']['Tables']['jobs']['Row'];
 type Cp12ApplianceRow = {
   appliance_type?: string | null;
+  appliance_subtype?: string | null;
+  cooker_stability?: string | null;
   landlords_appliance?: string | null;
   appliance_inspected?: string | null;
   location?: string | null;
@@ -215,12 +218,16 @@ export async function generateCp12FromJob(jobId: string, currentUserId: string):
     const lowCo2 = toText(row.low_co2 ?? '');
     const lowRatio = toText(row.low_ratio ?? '');
     const applianceSafe = formatCp12ApplianceSafeToUse(row);
+    const category = resolveCp12Category(row.appliance_type);
+    const subtype = resolveCp12Subtype(category, row.appliance_subtype, row.appliance_type);
+    const typeLabel = cp12ApplianceTypeLabel(category, subtype);
     return {
-      description: toText(row.make_model ?? row.appliance_type ?? ''),
+      description: toText(row.make_model ?? '') || typeLabel,
       landlordAppliance: toText(row.landlords_appliance ?? ''),
       applianceInspected: toText(row.appliance_inspected ?? ''),
       location: toText(row.location ?? ''),
-      type: toText(row.appliance_type ?? ''),
+      type: typeLabel,
+      category,
       flueType: toText(row.flue_type ?? row.ventilation_provision ?? ''),
       operatingPressure: toText(row.operating_pressure ?? ''),
       heatInput: toText(row.heat_input ?? ''),

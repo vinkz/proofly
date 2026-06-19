@@ -6,11 +6,20 @@ import path from 'node:path';
 import { PDFCheckBox, PDFDict, PDFDocument, PDFName, PDFRadioGroup, PDFTextField, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
+import {
+  CP12_NOT_APPLICABLE,
+  cp12FieldVisibility,
+  resolveCp12Category,
+  type Cp12CheckField,
+} from '@/lib/cp12/applianceConfig';
 
 export type ApplianceInput = {
   description: string;
   location: string;
   type: string;
+  // Appliance category (boiler | hob_cooker | gas_fire | water_heater | other).
+  // Drives which grid cells render "N/A" because the field does not apply.
+  category?: string;
   flueType?: string;
   operatingPressure?: string;
   heatInput?: string;
@@ -182,6 +191,7 @@ function getApplianceFieldNames(index: number): Record<keyof ApplianceInput, For
     description: [`appliance_${i}.make`, `appliance_${i}.model`],
     location: `appliance_${i}.location`,
     type: `appliance_${i}.type`,
+    category: null,
     flueType: `appliance_${i}.flue_type`,
     operatingPressure: `appliance_${i}.operating_pressure`,
     heatInput: `appliance_${i}.heat_input`,
@@ -871,7 +881,18 @@ async function drawAppliances(
     return legacy ?? '';
   };
 
+  // Grid columns that map to a category-gated check field. When the field does not
+  // apply to the appliance's category, the cell renders "N/A" instead of blank — a
+  // blank cell on a CP12 reads as "not checked / fail".
+  const NA_COLUMN_FIELD: Partial<Record<ApplianceColumnKey, Cp12CheckField>> = {
+    flueType: 'flue_type',
+    flueTerminationSatisfactory: 'flue_condition',
+    combustionHigh: 'combustion',
+    combustionLow: 'combustion',
+  };
+
   const writeRow = (appliance: ApplianceInput) => {
+    const category = resolveCp12Category(appliance.category ?? appliance.type);
     const drawCell = (field: ApplianceColumnKey) => {
       const colCfg = columns[field];
       if (!colCfg) return;
@@ -882,6 +903,15 @@ async function drawAppliances(
         value = formatCombustion(appliance, 'low');
       } else {
         value = appliance[field] as string | undefined;
+      }
+      const naField = NA_COLUMN_FIELD[field];
+      if (naField) {
+        const visibility = cp12FieldVisibility(category, naField);
+        // 'hidden' never applies to this category; 'optional' applies only if the
+        // engineer actually opted in (filled a value) — otherwise it is N/A.
+        if (visibility === 'hidden' || (visibility === 'optional' && !String(value ?? '').trim())) {
+          value = CP12_NOT_APPLICABLE;
+        }
       }
       if (!value) return;
       const text = String(value);
@@ -1111,7 +1141,13 @@ export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput
 
   if (useFormAppliances) {
     const rows = (input.appliances ?? []).slice(0, APPLIANCE_TABLE.maxRowsPerPage);
+    // Form-field keys that read "N/A" when the check does not apply to the category.
+    const formNaField: Partial<Record<keyof ApplianceInput, Cp12CheckField>> = {
+      flueType: 'flue_type',
+      flueTerminationSatisfactory: 'flue_condition',
+    };
     rows.forEach((appliance, index) => {
+      const category = resolveCp12Category(appliance.category ?? appliance.type);
       const names = getApplianceFieldNames(index);
       (Object.keys(names) as (keyof ApplianceInput)[]).forEach((key) => {
         if (key === 'description') {
@@ -1133,15 +1169,30 @@ export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput
           });
           return;
         }
+        const naField = formNaField[key];
+        const rawValue = appliance[key];
+        const value =
+          naField && cp12FieldVisibility(category, naField) === 'hidden'
+            ? CP12_NOT_APPLICABLE
+            : rawValue;
         setFormValue({
           form,
           fieldNames: formFieldNames,
           fieldName: names[key],
-          value: appliance[key],
+          value,
           filledFields,
         });
       });
     });
+
+    // The template has 6 appliance rows. Properties with more (e.g. HMOs) used to lose the
+    // extras silently — render them on appended continuation pages so nothing is dropped.
+    const overflowAppliances = (input.appliances ?? []).slice(APPLIANCE_TABLE.maxRowsPerPage);
+    if (overflowAppliances.length) {
+      const [continuationPage] = await pdfDoc.copyPages(templateDoc, [0]);
+      pdfDoc.addPage(continuationPage);
+      await drawAppliances(pdfDoc, templateDoc, continuationPage, regularFont, overflowAppliances);
+    }
   } else {
     await drawAppliances(pdfDoc, templateDoc, page, regularFont, input.appliances ?? []);
   }
