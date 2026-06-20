@@ -88,6 +88,88 @@ function IconCheck({ size = 16 }: { size?: number }) {
   );
 }
 
+function IconFiles({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M15 3v4a1 1 0 0 0 1 1h4" />
+      <path d="M18 17h-7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4l5 5v7a2 2 0 0 1-2 2Z" />
+      <path d="M16 17v2a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h2" />
+    </svg>
+  );
+}
+
+function IconCircleCheck({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+
+function IconShare({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="18" cy="18" r="3" />
+      <path d="m8.7 10.7 6.6-3.4M8.7 13.3l6.6 3.4" />
+    </svg>
+  );
+}
+
+function IconShieldCheck({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3 5 6v5c0 4.2 2.8 7.5 7 9 4.2-1.5 7-4.8 7-9V6l-7-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+
+const landlordBenefits = [
+  {
+    icon: <IconFiles />,
+    title: "A digital trail of every certificate",
+    body: "CP12s, boiler services and warning notices for a property all live on one permanent link — nothing lost in an inbox or a folder.",
+  },
+  {
+    icon: <IconCircleCheck />,
+    title: "The details are right, first time",
+    body: "You enter the property, tenant and access details yourself, so the certificate is accurate — not copied wrong on site.",
+  },
+  {
+    icon: <IconBellRinging />,
+    title: "Renewal reminders before you expire",
+    body: "You're reminded ahead of time and can re-book your engineer in a couple of taps, so a CP12 never lapses by accident.",
+  },
+  {
+    icon: <IconShare />,
+    title: "Share with tenants and agents instantly",
+    body: "Send the same link to a tenant before move-in or to a letting agent on request — no digging out PDFs.",
+  },
+  {
+    icon: <IconShieldCheck />,
+    title: "Issued by your Gas Safe engineer",
+    body: "You keep your own trusted engineer. Their Gas Safe registration is on every certificate they issue through CertNow.",
+  },
+];
+
+const landlordSteps = [
+  {
+    title: "Send your engineer the details",
+    body: "Enter your engineer's details and the property, tenant and access info — once, accurately.",
+  },
+  {
+    title: "Your engineer arranges the visit",
+    body: "They get the request with everything pre-filled and book in the gas safety check.",
+  },
+  {
+    title: "Your certificate lands on your link",
+    body: "The CP12 arrives on your permanent link — and stays there for every future renewal.",
+  },
+];
+
 const features = [
   {
     icon: <IconFileCheck />,
@@ -408,17 +490,105 @@ function EngineersContent() {
 
 function LandlordsContent() {
   return (
-    <section className="flex flex-col items-center px-5 py-[60px] text-center">
-      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-background-secondary)]">
-        <IconBuilding size={24} />
-      </div>
-      <h2 className="mb-3 text-[18px] font-medium text-[var(--color-text-primary)]">
-        Coming soon for landlords
-      </h2>
-      <p className="max-w-[300px] text-[14px] leading-[1.6] text-[var(--color-text-secondary)]">
-        Your compliance dashboard is on its way. Engineers using CertNow will share your certificates here automatically.
-      </p>
-    </section>
+    <>
+      {/* Hero */}
+      <section className="px-5 pb-9 pt-11 text-center">
+        <p className="mb-[14px] text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
+          For landlords
+        </p>
+        <h1 className="text-[30px] font-medium leading-[1.15] tracking-[-0.5px] text-[var(--color-text-primary)]">
+          Stay gas safe{" "}
+          <span className="text-[var(--color-action)]">without the chasing.</span>
+        </h1>
+        <p className="mx-auto mb-7 mt-4 max-w-[320px] text-[15px] leading-[1.65] text-[var(--color-text-secondary)]">
+          Send your engineer the right details once, and keep every CP12 and service record on a single permanent link — accurate, organised, and always to hand.
+        </p>
+        <div className="flex flex-col gap-3">
+          <Link
+            href="/request"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-[26px] bg-[var(--color-cta)] px-6 text-[15px] font-medium text-[var(--color-cta-fg)]"
+          >
+            Request a visit from your engineer
+            <IconArrowRight />
+          </Link>
+        </div>
+        <p className="mt-3 text-[12px] text-[var(--color-text-tertiary)]">
+          No account needed · takes under 2 minutes
+        </p>
+      </section>
+
+      {/* Why landlords use it */}
+      <section className="bg-[var(--color-background-secondary)] px-5 py-10">
+        <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
+          Why landlords use it
+        </p>
+        <div className="flex flex-col gap-3">
+          {landlordBenefits.map((b) => (
+            <div
+              key={b.title}
+              className="flex gap-[14px] rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px]"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-action-bg)] text-[var(--color-action)]">
+                {b.icon}
+              </div>
+              <div>
+                <p className="text-[15px] font-medium text-[var(--color-text-primary)]">{b.title}</p>
+                <p className="mt-1 text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">{b.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="bg-[var(--color-background-primary)] px-5 py-10">
+        <p className="mb-6 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
+          How it works
+        </p>
+        <div>
+          {landlordSteps.map((step, i) => (
+            <div key={step.title}>
+              <div className="flex gap-4">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-cta)] text-[12px] font-medium text-[var(--color-cta-fg)]">
+                  {i + 1}
+                </div>
+                <div className="pb-1">
+                  <p className="text-[15px] font-medium text-[var(--color-text-primary)]">{step.title}</p>
+                  <p className="mt-1 text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">{step.body}</p>
+                </div>
+              </div>
+              {i < landlordSteps.length - 1 && (
+                <div className="ml-[13px] my-1 h-4 w-px bg-[var(--color-border-secondary)]" />
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Closing CTA */}
+      <section className="bg-[var(--color-background-secondary)] px-5 py-11 text-center">
+        <h2 className="mb-[10px] text-[24px] font-medium tracking-[-0.3px] text-[var(--color-text-primary)]">
+          Ready to get your property compliant?
+        </h2>
+        <Link
+          href="/request"
+          className="mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[28px] bg-[var(--color-cta)] text-[16px] font-medium text-[var(--color-cta-fg)]"
+        >
+          Request a visit from your engineer
+          <IconArrowRight />
+        </Link>
+        <p className="mx-auto mt-5 max-w-[330px] text-[13px] leading-[1.65] text-[var(--color-text-secondary)]">
+          Already have a CertNow link from your engineer?{" "}
+          {/* TODO: no landlord-facing lookup route exists for an existing /p/[token]
+              property vault link, so this points at the request flow for now.
+              A property-link lookup could go here once built. */}
+          <Link href="/request" className="text-[var(--color-action)]">
+            Open it here
+          </Link>{" "}
+          to view certificates or book a renewal.
+        </p>
+      </section>
+    </>
   );
 }
 
