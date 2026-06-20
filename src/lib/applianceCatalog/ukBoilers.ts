@@ -95,8 +95,84 @@ export const UK_BOILER_CATALOG: BoilerModelEntry[] = [
 
   combi('Glow-worm', 'Energy 25kW'),
   combi('Glow-worm', 'Energy 30kW'),
+  combi('Glow-worm', 'Easicom 3 28kW'),
+  combi('Glow-worm', 'Betacom 4 30kW'),
+  combi('Glow-worm', 'Flexicom 30cx'),
   regular('Glow-worm', 'Ultimate3 24kW'),
   regular('Glow-worm', 'Ultimate3 30kW'),
+
+  // --- Additional ranges for existing makes (commonly found on CP12 inspections) ---
+  combi('Worcester Bosch', 'Greenstar 1000 30kW'),
+  combi('Worcester Bosch', 'Greenstar 2000 30kW'),
+  combi('Worcester Bosch', 'Greenstar 30Si Compact'),
+  combi('Worcester Bosch', 'Greenstar CDi Classic 30kW'),
+  combi('Worcester Bosch', 'Greenstar 8000 Style 30kW'),
+  regular('Worcester Bosch', 'Greenstar Ri 24kW'),
+
+  combi('Ideal', 'Vogue Gen2 Combi C40'),
+  system('Ideal', 'Vogue Gen2 System S32'),
+  combi('Ideal', 'Logic Max Heat 24'),
+  regular('Ideal', 'Logic Heat 18'),
+  combi('Ideal', 'Mexico HE 24'),
+
+  combi('Baxi', '800 Combi 2 28kW'),
+  combi('Baxi', 'Duo-tec Compact 24kW'),
+  combi('Baxi', 'Duo-tec Compact 28kW'),
+  combi('Baxi', 'Platinum Combi 33kW'),
+  combi('Baxi', 'EcoBlue Combi 28kW'),
+  system('Baxi', 'Megaflo System 24kW'),
+
+  combi('Vaillant', 'ecoTEC pro 28kW'),
+  system('Vaillant', 'ecoTEC plus 415 system'),
+
+  // --- Makes previously missing entirely ---
+  combi('Potterton', 'Promax Combi 24kW'),
+  combi('Potterton', 'Promax Combi 28kW'),
+  combi('Potterton', 'Promax Ultra 33kW'),
+  combi('Potterton', 'Gold Combi 28kW'),
+  regular('Potterton', 'Suprima 50'),
+
+  combi('Vokera', 'Compact 25A'),
+  combi('Vokera', 'Compact 29A'),
+  combi('Vokera', 'Evolve C 28kW'),
+  combi('Vokera', 'Unica i28kW'),
+  combi('Vokera', 'Mynute i28'),
+
+  combi('Main', 'Eco Compact 24kW'),
+  combi('Main', 'Eco Compact 30kW'),
+  combi('Main', 'Eco Elite 30kW'),
+
+  combi('Ferroli', 'Modena 32C'),
+  combi('Ferroli', 'Optimax HE 31C'),
+  system('Ferroli', 'Optimax HE 25S'),
+
+  combi('Intergas', 'Xtreme 30kW'),
+  combi('Intergas', 'Rapid 32kW'),
+  system('Intergas', 'ECO RF 36kW'),
+
+  combi('ATAG', 'iC Economiser 27kW'),
+  combi('ATAG', 'iC 40kW'),
+  system('ATAG', 'iS 24kW'),
+  regular('ATAG', 'iR 15kW'),
+
+  combi('Ariston', 'Clas ONE 30'),
+  combi('Ariston', 'E-Combi ONE 30'),
+  combi('Biasi', 'Advance Plus 30C'),
+  combi('Biasi', 'Riva Advance'),
+  combi('Ravenheat', 'CSI 85 T'),
+  combi('Ravenheat', 'WH 80'),
+  combi('Halstead', 'Ace High 30'),
+  combi('Halstead', 'Eden SB'),
+  combi('Heatline', 'Capriz2 28'),
+  combi('Heatline', 'Vizo 30'),
+  system('Keston', 'C36 Combi'),
+  regular('Keston', 'Heat 55'),
+  regular('Johnson & Starley', 'WarmCair C26'),
+  combi('Johnson & Starley', 'QuanTec 28C'),
+  combi('Saunier Duval', 'Themaclassic C30'),
+  combi('Chaffoteaux', 'Britony Combi'),
+  combi('Sime', 'Murelle HE 30'),
+  system('Remeha', 'Avanta 28s'),
 
   { make: 'Other', model: 'Other', types: ['other'], defaultType: 'other', mountTypes: ['unknown'], defaultMount: 'unknown', fuels: ['unknown'], defaultFuel: 'unknown' },
 ];
