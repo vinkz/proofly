@@ -1024,6 +1024,94 @@ function configureCertNumberFieldAppearance(params: {
   }
 }
 
+type WidgetRect = { x: number; y: number; width: number; height: number };
+
+// Appliance check fields that must read "N/A" when they do not apply to the
+// appliance category — mirrors the page-1 form-fill logic so continuation pages
+// stay consistent with the first page.
+const OVERFLOW_NA_FIELD: Partial<Record<keyof ApplianceInput, Cp12CheckField>> = {
+  flueType: 'flue_type',
+  flueTerminationSatisfactory: 'flue_condition',
+};
+
+// Resolve the on-page rectangle of a template form field so we can draw text into
+// the exact same cell the AcroForm uses on page 1. Returns the first widget rect of
+// the first matching field name.
+function getApplianceSlotRect(
+  form: ReturnType<PDFDocument['getForm']>,
+  fieldNames: Set<string>,
+  fieldName: FormFieldName,
+): WidgetRect | null {
+  for (const name of toFieldNameList(fieldName)) {
+    if (!fieldNames.has(name)) continue;
+    try {
+      const widgets = form.getField(name).acroField.getWidgets();
+      if (widgets.length) {
+        const r = widgets[0].getRectangle();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }
+    } catch {
+      // Ignore missing/non-widget fields.
+    }
+  }
+  return null;
+}
+
+function drawApplianceCellText(page: PDFPage, font: PDFFont, rect: WidgetRect, value: string | undefined) {
+  const text = normalizeText(value);
+  if (!text) return;
+  const padding = 2;
+  const maxWidth = Math.max(4, rect.width - padding * 2);
+  const size = getFittedFontSize({ text, font, maxWidth, preferredSize: 7, minSize: 4 });
+  // rect.y is the cell's bottom edge; centre the baseline vertically within the cell.
+  const baseline = rect.y + Math.max(1, (rect.height - size) / 2 + 1);
+  page.drawText(text, { x: rect.x + padding, y: baseline, size, font, color: rgb(0, 0, 0) });
+}
+
+// Appliances beyond the template's 6 rows are rendered on appended copies of the
+// template page. We draw into the template's OWN field rectangles (not the stale
+// hand-tuned APPLIANCE_TABLE offsets) so the continuation rows line up exactly with
+// the printed grid, and we draw text rather than filling fields to avoid colliding
+// with page 1's identically-named fields.
+async function renderOverflowAppliancePages(params: {
+  pdfDoc: PDFDocument;
+  templateDoc: PDFDocument;
+  form: ReturnType<PDFDocument['getForm']>;
+  fieldNames: Set<string>;
+  font: PDFFont;
+  overflowAppliances: ApplianceInput[];
+}) {
+  const { pdfDoc, templateDoc, form, fieldNames, font, overflowAppliances } = params;
+  const perPage = APPLIANCE_TABLE.maxRowsPerPage;
+  for (let start = 0; start < overflowAppliances.length; start += perPage) {
+    const chunk = overflowAppliances.slice(start, start + perPage);
+    const [continuationPage] = await pdfDoc.copyPages(templateDoc, [0]);
+    pdfDoc.addPage(continuationPage);
+    chunk.forEach((appliance, slot) => {
+      const category = resolveCp12Category(appliance.category ?? appliance.type);
+      const names = getApplianceFieldNames(slot);
+      (Object.keys(names) as (keyof ApplianceInput)[]).forEach((key) => {
+        if (key === 'description') {
+          const [makeName, modelName] = toFieldNameList(names.description);
+          const { make, model } = splitApplianceMakeModel(appliance.description);
+          const makeRect = getApplianceSlotRect(form, fieldNames, makeName ?? null);
+          const modelRect = getApplianceSlotRect(form, fieldNames, modelName ?? null);
+          if (makeRect) drawApplianceCellText(continuationPage, font, makeRect, make);
+          if (modelRect) drawApplianceCellText(continuationPage, font, modelRect, model);
+          return;
+        }
+        const rect = getApplianceSlotRect(form, fieldNames, names[key]);
+        if (!rect) return;
+        const naField = OVERFLOW_NA_FIELD[key];
+        const rawValue = appliance[key] as string | undefined;
+        const value =
+          naField && cp12FieldVisibility(category, naField) === 'hidden' ? CP12_NOT_APPLICABLE : rawValue;
+        drawApplianceCellText(continuationPage, font, rect, value);
+      });
+    });
+  }
+}
+
 export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput): Promise<Uint8Array> {
   const templateBytes = await loadCp12TemplateBytes();
 
@@ -1189,9 +1277,14 @@ export async function renderCp12CertificatePdf(input: RenderCp12CertificateInput
     // extras silently — render them on appended continuation pages so nothing is dropped.
     const overflowAppliances = (input.appliances ?? []).slice(APPLIANCE_TABLE.maxRowsPerPage);
     if (overflowAppliances.length) {
-      const [continuationPage] = await pdfDoc.copyPages(templateDoc, [0]);
-      pdfDoc.addPage(continuationPage);
-      await drawAppliances(pdfDoc, templateDoc, continuationPage, regularFont, overflowAppliances);
+      await renderOverflowAppliancePages({
+        pdfDoc,
+        templateDoc,
+        form,
+        fieldNames: formFieldNames,
+        font: regularFont,
+        overflowAppliances,
+      });
     }
   } else {
     await drawAppliances(pdfDoc, templateDoc, page, regularFont, input.appliances ?? []);

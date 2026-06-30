@@ -52,3 +52,6 @@ next-env.d.ts
 
 # saved auth/session state from QA runs — never commit (contains credentials)
 audit/.auth/
+
+# local render-harness output (CP12 render audit test writes here)
+/tmp/
