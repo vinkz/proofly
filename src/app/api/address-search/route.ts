@@ -6,6 +6,7 @@ import {
   type IdealAutocompleteResponse,
   type IdealResolveResponse,
 } from '@/lib/address-lookup';
+import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 const getApiKey = () => process.env.IDEAL_POSTCODES_API_KEY?.trim() || '';
 const isAddressLookupDisabled = () =>
@@ -99,6 +100,43 @@ async function fetchJson(url: URL) {
   });
 }
 
+// Lookups proxy a paid provider, so unauthenticated traffic (the public landlord
+// request forms) is restricted to same-site browser requests and rate limited per
+// IP. Signed-in engineers skip both checks. The bucket map is per-instance, which
+// is best-effort on serverless but still blocks sustained single-source draining.
+const ANON_RATE_LIMIT_WINDOW_MS = 60_000;
+const ANON_RATE_LIMIT_MAX = 30;
+const anonRateBuckets = new Map<string, { count: number; resetAt: number }>();
+
+function isAnonRateLimited(key: string) {
+  const now = Date.now();
+  const bucket = anonRateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    if (anonRateBuckets.size > 10_000) anonRateBuckets.clear();
+    anonRateBuckets.set(key, { count: 1, resetAt: now + ANON_RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > ANON_RATE_LIMIT_MAX;
+}
+
+async function checkAnonAccess(request: Request): Promise<NextResponse | null> {
+  const supabase = await supabaseServerReadOnly();
+  const user = await getSupabaseUser(supabase).catch(() => null);
+  if (user) return null;
+
+  const fetchSite = request.headers.get('sec-fetch-site');
+  if (fetchSite && fetchSite !== 'same-origin' && fetchSite !== 'same-site') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (isAnonRateLimited(ip)) {
+    return NextResponse.json({ error: 'Address lookup rate limit reached' }, { status: 429 });
+  }
+  return null;
+}
+
 export async function GET(request: Request) {
   if (isAddressLookupDisabled()) {
     return NextResponse.json({ error: 'Address lookup disabled' }, { status: 403 });
@@ -108,6 +146,9 @@ export async function GET(request: Request) {
   if (!apiKey) {
     return NextResponse.json({ error: 'Address lookup is not configured' }, { status: 500 });
   }
+
+  const denied = await checkAnonAccess(request);
+  if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q')?.trim() ?? '';

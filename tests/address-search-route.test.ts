@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// The route treats callers as signed-in engineers; anonymous access controls
+// (same-site + rate limit) are bypassed for an authenticated user.
+vi.mock('@/lib/supabaseServer', () => ({
+  supabaseServerReadOnly: vi.fn(async () => ({})),
+  getSupabaseUser: vi.fn(async () => ({ id: 'user-1' })),
+}));
+
 import { GET } from '@/app/api/address-search/route';
 
 describe('address-search route', () => {

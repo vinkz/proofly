@@ -19,7 +19,11 @@ export function LoginClient() {
   const [authMode, setAuthMode] = useState<'password' | 'magic'>('password');
   const [isPending, startTransition] = useTransition();
   const nextPathParam = searchParams.get('next');
-  const nextPath = nextPathParam?.startsWith('/') && !nextPathParam.startsWith('//') ? nextPathParam : '/';
+  // Backslashes are rejected because URL parsing treats "\" as "/" ("/\evil.com" → external origin).
+  const nextPath =
+    nextPathParam?.startsWith('/') && !nextPathParam.startsWith('//') && !nextPathParam.includes('\\')
+      ? nextPathParam
+      : '/';
 
   const handlePasswordLogin = () => {
     startTransition(async () => {

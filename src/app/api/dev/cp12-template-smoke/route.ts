@@ -9,6 +9,10 @@ import { createJob, generateCertificatePdf, saveCp12Appliances, saveCp12JobInfo,
 import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
 
 export async function GET(request: Request) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const supabase = await supabaseServerReadOnly();
   const {
     data: { user },
