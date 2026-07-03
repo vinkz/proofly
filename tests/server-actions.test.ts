@@ -43,6 +43,7 @@ vi.mock('@/server/job-fields', () => ({
 
 vi.mock('@/lib/resend', () => ({
   sendEmail: sendEmailMock,
+  isEmailConfigured: vi.fn(() => true),
 }));
 
 const openaiMock = {
@@ -447,7 +448,7 @@ describe('server actions', () => {
       expect.objectContaining({
         client_id: 'client-2',
         client_name: 'Sam Patel',
-        title: 'CP12 for Sam Patel',
+        title: 'Landlord safety check for Sam Patel',
         job_type: 'safety_check',
         scheduled_for: '2026-04-01T09:00',
       }),
@@ -510,6 +511,17 @@ describe('server actions', () => {
     const jobSelect = vi.fn().mockReturnValue({ single: jobSingle });
     const jobInsert = vi.fn().mockReturnValue({ select: jobSelect });
 
+    const profileMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        default_engineer_name: 'Alex Jones',
+        full_name: 'Alex Jones',
+        company_name: 'Jones Gas Services',
+        company_email: 'alex@jonesgas.example.com',
+      },
+      error: null,
+    });
+    const profileEq = vi.fn().mockReturnValue({ maybeSingle: profileMaybeSingle });
+
     supabase.from.mockImplementation((table: string) => {
       if (table === 'clients') {
         return {
@@ -523,6 +535,11 @@ describe('server actions', () => {
           insert: jobInsert,
         };
       }
+      if (table === 'profiles') {
+        return {
+          select: vi.fn().mockReturnValue({ eq: profileEq }),
+        };
+      }
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -533,6 +550,7 @@ describe('server actions', () => {
         clientId: '123e4567-e89b-12d3-a456-426614174000',
         jobType: 'safety_check',
         landlordEmail: 'landlord@example.com',
+        scheduledFor: '',
       }),
     ).resolves.toEqual(
       expect.objectContaining({
@@ -549,13 +567,13 @@ describe('server actions', () => {
         status: 'awaiting_landlord',
         job_type: 'safety_check',
         cert_types: ['cp12'],
-        data_collection_status: 'awaiting_landlord',
+        data_collection_status: 'awaiting_landlord_input',
       }),
     );
     expect(sendEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'landlord@example.com',
-        subject: 'Please send your job details to CertNow',
+        subject: 'Alex Jones needs your property details',
         text: expect.stringContaining('/prefill/job-prefill-1?token='),
       }),
     );

@@ -47,7 +47,12 @@ export async function GET(request: Request) {
 
   const onboardingComplete = (profile as { onboarding_complete?: boolean | null } | null)?.onboarding_complete ?? null;
   const needsOnboarding = onboardingComplete !== true || !isOnboardingProfileComplete(profile as Record<string, unknown>);
-  const safeNext = typeof next === 'string' && next.startsWith('/') && !next.startsWith('//') ? next : null;
+  // Reject backslashes too: the URL parser treats "\" as "/", so "/\evil.com"
+  // would otherwise resolve to an external origin (open redirect).
+  const safeNext =
+    typeof next === 'string' && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\')
+      ? next
+      : null;
   const destination = needsOnboarding
     ? `/onboarding?step=${getOnboardingStep(profile as Record<string, unknown>)}`
     : safeNext ?? '/dashboard';

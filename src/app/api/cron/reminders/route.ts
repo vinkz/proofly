@@ -286,12 +286,15 @@ async function sendRenewalNudgesForProperties(
 }
 
 export async function GET(request: Request) {
+  // Fail closed: without a configured secret this endpoint must not be callable,
+  // otherwise anyone can trigger reminder sends against the whole database.
   const configuredSecret = process.env.CRON_SECRET?.trim();
-  if (configuredSecret) {
-    const header = request.headers.get('authorization') ?? '';
-    if (header !== `Bearer ${configuredSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!configuredSecret) {
+    return NextResponse.json({ error: 'Cron secret not configured' }, { status: 401 });
+  }
+  const header = request.headers.get('authorization') ?? '';
+  if (header !== `Bearer ${configuredSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   if (!isEmailConfigured()) {
