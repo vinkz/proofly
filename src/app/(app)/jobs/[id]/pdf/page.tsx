@@ -81,15 +81,19 @@ export default async function JobPdfPage({
   let pdfUrl: string | null = null;
   let pdfError: string | null = null;
 
+  // We validate that a PDF exists / the user is authorized via the signed-URL
+  // helpers, but hand the browser a same-origin proxy path (/api/jobs/[id]/pdf/file)
+  // so the raw *.supabase.co token URL is never exposed in the iframe or the
+  // "Share" action. The proxy re-derives and streams the bytes server-side.
   if (qs.url) {
     pdfUrl = qs.url;
   } else if (selectedCertificateType) {
     try {
-      const signed = await getCertificatePdfSignedUrl({
+      await getCertificatePdfSignedUrl({
         jobId: id,
         certificateType: selectedCertificateType,
       });
-      pdfUrl = signed.url;
+      pdfUrl = `/api/jobs/${id}/pdf/file?type=${encodeURIComponent(selectedCertificateType)}`;
     } catch (error) {
       pdfError = error instanceof Error ? error.message : 'Unable to load PDF.';
     }
@@ -97,21 +101,16 @@ export default async function JobPdfPage({
     const certificateState = await getCertificateState(certificate ?? null);
     if (!certificateError && certificateState !== 'missing') {
       try {
-        const signed = await getCertificatePdfSignedUrl({
+        await getCertificatePdfSignedUrl({
           jobId: id,
           certificateType: selectedCertificateType ?? undefined,
         });
-        pdfUrl = signed.url;
+        pdfUrl = `/api/jobs/${id}/pdf/file`;
       } catch (error) {
         pdfError = error instanceof Error ? error.message : 'Unable to load PDF.';
       }
     } else if (report?.storage_path) {
-      const { data, error } = await supabase.storage.from('reports').createSignedUrl(report.storage_path, 60 * 10);
-      if (error || !data?.signedUrl) {
-        pdfError = error?.message ?? 'Unable to load PDF.';
-      } else {
-        pdfUrl = data.signedUrl;
-      }
+      pdfUrl = `/api/jobs/${id}/pdf/file?source=report`;
     } else {
       pdfError = certificateError?.message ?? reportError?.message ?? 'No PDF found for this job';
     }

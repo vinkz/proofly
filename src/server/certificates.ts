@@ -3943,6 +3943,93 @@ export async function getCertificatePdfSignedUrl(payload: z.infer<typeof GetCert
   return { url: signed.signedUrl };
 }
 
+/**
+ * Downloads the certificate PDF bytes for a job so they can be streamed through
+ * our own domain (see /api/jobs/[id]/pdf/file). Mirrors the auth/ownership checks
+ * in getCertificatePdfSignedUrl but returns the raw bytes instead of a Supabase
+ * signed URL, so the long *.supabase.co token URL never reaches the browser.
+ */
+export async function getCertificatePdfFile(
+  payload: z.infer<typeof GetCertificatePdfSignedUrlSchema> | string,
+): Promise<{ bytes: Uint8Array; filename: string }> {
+  const input = typeof payload === 'string' ? { jobId: payload } : payload;
+  const { jobId, certificateType } = GetCertificatePdfSignedUrlSchema.parse(input);
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'getCertificatePdfFile');
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const sb = await supabaseServerServiceRole();
+  const { data: job, error: jobErr } = await sb.from('jobs').select('user_id').eq('id', jobId).maybeSingle();
+  if (jobErr) throw new Error(jobErr.message);
+  if (!job) throw new Error('Job not found');
+  if (job.user_id !== user.id) {
+    throw new Error('RLS mismatch: job owner does not match auth user');
+  }
+
+  const certificate = await findCertificateRecord(sb, {
+    jobId,
+    certificateType,
+    columns: 'job_id, cert_type, pdf_path, pdf_url, created_at',
+  });
+  if (!certificate) {
+    throw new Error(
+      certificateType
+        ? `No PDF found for this job and certificate type: ${certificateType}`
+        : 'No PDF found for this job',
+    );
+  }
+
+  const pdfPath = certificate.pdf_path ?? certificate.pdf_url;
+  if (!pdfPath || typeof pdfPath !== 'string') throw new Error('No PDF found for this job');
+
+  const filename = `${(certificate.cert_type as string | null) ?? certificateType ?? 'certificate'}.pdf`;
+
+  if (pdfPath.startsWith('http')) {
+    const res = await fetch(pdfPath);
+    if (!res.ok) throw new Error('Unable to fetch certificate PDF');
+    return { bytes: new Uint8Array(await res.arrayBuffer()), filename };
+  }
+
+  const { data, error: dlErr } = await sb.storage.from('certificates').download(pdfPath);
+  if (dlErr || !data) throw new Error(dlErr?.message ?? 'Unable to load certificate PDF');
+  return { bytes: new Uint8Array(await data.arrayBuffer()), filename };
+}
+
+/**
+ * Downloads the report PDF bytes for a job (the `reports` bucket fallback used
+ * when a job has a stored report rather than a certificate). Same purpose as
+ * getCertificatePdfFile: keep the Supabase storage URL server-side.
+ */
+export async function getReportPdfFile(jobId: string): Promise<{ bytes: Uint8Array; filename: string }> {
+  const parsedJobId = z.string().uuid().parse(jobId);
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'getReportPdfFile');
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const sb = await supabaseServerServiceRole();
+  const { data: job, error: jobErr } = await sb.from('jobs').select('user_id').eq('id', parsedJobId).maybeSingle();
+  if (jobErr) throw new Error(jobErr.message);
+  if (!job) throw new Error('Job not found');
+  if (job.user_id !== user.id) {
+    throw new Error('RLS mismatch: job owner does not match auth user');
+  }
+
+  const { data: report, error: reportErr } = await sb
+    .from('reports')
+    .select('storage_path')
+    .eq('job_id', parsedJobId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (reportErr) throw new Error(reportErr.message);
+  const storagePath = report?.storage_path;
+  if (!storagePath) throw new Error('No PDF found for this job');
+
+  const { data, error: dlErr } = await sb.storage.from('reports').download(storagePath);
+  if (dlErr || !data) throw new Error(dlErr?.message ?? 'Unable to load report PDF');
+  return { bytes: new Uint8Array(await data.arrayBuffer()), filename: 'report.pdf' };
+}
+
 const SendPdfSchema = z.object({
   jobId: z.string().uuid(),
 });

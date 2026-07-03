@@ -166,12 +166,7 @@ export async function POST(
 
   await anyAdmin.from('invoices').update({ pdf_path: storagePath }).eq('id', invoiceId);
 
-  const { data: signed, error: signedErr } = await anyAdmin.storage
-    .from('invoices')
-    .createSignedUrl(storagePath, 60 * 60 * 24);
-  if (signedErr || !signed?.signedUrl) {
-    return NextResponse.json({ error: signedErr?.message ?? 'Unable to create link' }, { status: 500 });
-  }
-
-  return NextResponse.json({ pdfUrl: signed.signedUrl, storagePath });
+  // Hand back a same-origin proxy path (see ./file/route.ts) rather than a raw
+  // *.supabase.co signed URL, so the browser only ever shows our own domain.
+  return NextResponse.json({ pdfUrl: `/api/invoices/${invoiceId}/pdf/file`, storagePath });
 }
