@@ -1671,8 +1671,8 @@ export function SoloJobForm({
                   placeholder="020 7946 0958"
                   className="mt-1"
                   disabled={isPending}
-                  required={isCp12Upcoming}
                 />
+                <p className="mt-1 text-[11px] text-[var(--color-text-tertiary)]">Optional</p>
               </div>
             </div>
           </div>
