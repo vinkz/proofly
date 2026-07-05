@@ -84,7 +84,7 @@ export default async function BlogArticlePage({ params }: PageProps) {
   if (!post) notFound();
 
   return (
-    <article className="mx-auto max-w-[68ch] px-5 pb-16">
+    <article className="mx-auto w-full max-w-[68ch] px-5 pb-16">
       {buildJsonLd(post).map((schema, i) => (
         <script
           key={i}
@@ -96,20 +96,23 @@ export default async function BlogArticlePage({ params }: PageProps) {
       {/* Header */}
       <header className="pb-8 pt-11">
         <nav className="mb-[14px] text-[12px] text-[var(--color-text-tertiary)]">
-          <Link href="/blog" className="hover:text-[var(--color-text-secondary)]">
+          <Link
+            href="/blog"
+            className="transition-colors hover:text-[var(--color-text-secondary)]"
+          >
             Blog
           </Link>
           <span aria-hidden> / </span>
           <span>{post.title}</span>
         </nav>
-        <h1 className="text-[30px] font-medium leading-[1.2] tracking-[-0.5px] text-[var(--color-text-primary)]">
+        <h1 className="text-[30px] font-medium leading-[1.15] tracking-[-0.5px] text-[var(--color-text-primary)]">
           {post.title}
         </h1>
-        <p className="mt-4 text-[16px] leading-[1.65] text-[var(--color-text-secondary)]">
+        <p className="mt-4 text-[15px] leading-[1.65] text-[var(--color-text-secondary)]">
           {post.description}
         </p>
-        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-[var(--color-text-tertiary)]">
-          <span className="font-medium text-[var(--color-text-secondary)]">{post.author}</span>
+        <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--color-text-tertiary)]">
+          <span>{post.author}</span>
           <span aria-hidden>·</span>
           <time dateTime={post.date.toISOString().slice(0, 10)}>
             {format(post.date, 'd MMMM yyyy')}
@@ -123,7 +126,7 @@ export default async function BlogArticlePage({ params }: PageProps) {
       {post.headings.length > 1 && (
         <nav
           aria-label="Table of contents"
-          className="mb-9 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-5"
+          className="mb-9 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px]"
         >
           <p className="mb-3 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
             On this page
@@ -133,7 +136,7 @@ export default async function BlogArticlePage({ params }: PageProps) {
               <li key={heading.id}>
                 <a
                   href={`#${heading.id}`}
-                  className="text-[14px] leading-[1.5] text-[var(--color-text-secondary)] hover:text-[var(--color-action)]"
+                  className="text-[14px] leading-[1.5] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
                 >
                   {heading.text}
                 </a>
@@ -151,7 +154,7 @@ export default async function BlogArticlePage({ params }: PageProps) {
         <section aria-labelledby="faq-heading" className="mt-12">
           <h2
             id="faq-heading"
-            className="mb-4 text-[22px] font-medium leading-[1.25] tracking-[-0.4px] text-[var(--color-text-primary)]"
+            className="mb-4 text-[24px] font-medium tracking-[-0.3px] text-[var(--color-text-primary)]"
           >
             Frequently asked questions
           </h2>
@@ -172,7 +175,7 @@ export default async function BlogArticlePage({ params }: PageProps) {
                     </span>
                   </span>
                 </summary>
-                <p className="mt-3 text-[14px] leading-[1.7] text-[var(--color-text-secondary)]">
+                <p className="mt-3 text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
                   {entry.answer}
                 </p>
               </details>
@@ -182,11 +185,8 @@ export default async function BlogArticlePage({ params }: PageProps) {
       )}
 
       {/* Back link */}
-      <p className="mt-12">
-        <Link
-          href="/blog"
-          className="text-[14px] font-medium text-[var(--color-action)] hover:underline"
-        >
+      <p className="mt-12 text-center">
+        <Link href="/blog" className="text-[14px] text-[var(--color-action)] hover:underline">
           ← All articles
         </Link>
       </p>
