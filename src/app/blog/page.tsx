@@ -8,12 +8,12 @@ import { getAllPosts, SITE_URL } from '@/lib/blog';
 export const metadata: Metadata = {
   title: 'Blog | CertNow',
   description:
-    'Guides on gas safety compliance for UK Gas Safe engineers and landlords — CP12s, boiler services, renewals, and running a paperwork-free trade business.',
+    'Guides on gas safety compliance for UK Gas Safe engineers and landlords: CP12s, boiler services, renewals, and running a paperwork-free trade business.',
   alternates: { canonical: `${SITE_URL}/blog` },
   openGraph: {
     title: 'CertNow blog',
     description:
-      'Guides on gas safety compliance for UK Gas Safe engineers and landlords — CP12s, boiler services, renewals, and running a paperwork-free trade business.',
+      'Guides on gas safety compliance for UK Gas Safe engineers and landlords: CP12s, boiler services, renewals, and running a paperwork-free trade business.',
     url: `${SITE_URL}/blog`,
     siteName: 'CertNow',
     type: 'website',
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'CertNow blog',
     description:
-      'Guides on gas safety compliance for UK Gas Safe engineers and landlords — CP12s, boiler services, renewals, and running a paperwork-free trade business.',
+      'Guides on gas safety compliance for UK Gas Safe engineers and landlords: CP12s, boiler services, renewals, and running a paperwork-free trade business.',
   },
 };
 
@@ -41,14 +41,14 @@ export default function BlogIndexPage() {
           Gas safety, <span className="text-[var(--color-action)]">without the paperwork.</span>
         </h1>
         <p className="mx-auto mt-4 max-w-[320px] text-[15px] leading-[1.65] text-[var(--color-text-secondary)]">
-          Practical guides on CP12s, boiler services, and staying compliant — for Gas Safe
+          Practical guides on CP12s, boiler services, and staying compliant, written for Gas Safe
           engineers and the landlords they work for.
         </p>
       </section>
 
       {posts.length === 0 ? (
         <p className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px] text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
-          No posts yet — check back soon.
+          No posts yet. Check back soon.
         </p>
       ) : (
         <div className="flex flex-col gap-3">
