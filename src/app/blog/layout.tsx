@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { MarketingFooter, MarketingHeader } from './_components/marketing-chrome';
+import { MarketingFooter, MarketingHeader } from '../_components/marketing-chrome';
 
 export default function BlogLayout({ children }: { children: ReactNode }) {
   return (

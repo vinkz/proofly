@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { format } from 'date-fns';
 
+import { Badge } from '@/components/ui/badge';
 import { getAllPosts, SITE_URL } from '@/lib/blog';
 
 export const metadata: Metadata = {
@@ -30,22 +31,23 @@ export default function BlogIndexPage() {
   const posts = getAllPosts();
 
   return (
-    <div className="mx-auto max-w-[720px] px-5 pb-16">
-      <section className="pb-8 pt-11">
+    <div className="mx-auto w-full max-w-[640px] px-5 pb-16">
+      {/* Hero — landing-page hero pattern */}
+      <section className="pb-9 pt-11 text-center">
         <p className="mb-[14px] text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
           CertNow blog
         </p>
         <h1 className="text-[30px] font-medium leading-[1.15] tracking-[-0.5px] text-[var(--color-text-primary)]">
-          Gas safety, without the paperwork
+          Gas safety, <span className="text-[var(--color-action)]">without the paperwork.</span>
         </h1>
-        <p className="mt-4 max-w-[460px] text-[15px] leading-[1.65] text-[var(--color-text-secondary)]">
-          Practical guides on CP12s, boiler services, and staying compliant — for Gas Safe engineers
-          and the landlords they work for.
+        <p className="mx-auto mt-4 max-w-[320px] text-[15px] leading-[1.65] text-[var(--color-text-secondary)]">
+          Practical guides on CP12s, boiler services, and staying compliant — for Gas Safe
+          engineers and the landlords they work for.
         </p>
       </section>
 
       {posts.length === 0 ? (
-        <p className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-6 text-[14px] text-[var(--color-text-secondary)]">
+        <p className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px] text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
           No posts yet — check back soon.
         </p>
       ) : (
@@ -54,30 +56,27 @@ export default function BlogIndexPage() {
             <Link
               key={post.slug}
               href={`/blog/${post.slug}`}
-              className="group rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px] transition-colors hover:border-[var(--color-border-primary)]"
+              className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px] transition-colors hover:bg-[var(--color-background-tertiary)]"
             >
-              <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[var(--color-text-tertiary)]">
+              <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--color-text-tertiary)]">
                 <time dateTime={post.date.toISOString().slice(0, 10)}>
                   {format(post.date, 'd MMM yyyy')}
                 </time>
                 <span aria-hidden>·</span>
                 <span>{post.readMinutes} min read</span>
               </div>
-              <h2 className="text-[18px] font-medium leading-[1.3] tracking-[-0.3px] text-[var(--color-text-primary)] group-hover:text-[var(--color-action)]">
+              <h2 className="text-[15px] font-medium text-[var(--color-text-primary)]">
                 {post.title}
               </h2>
-              <p className="mt-2 text-[14px] leading-[1.65] text-[var(--color-text-secondary)]">
+              <p className="mt-1 text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
                 {post.description}
               </p>
               {post.tags.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {post.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-[var(--color-background-tertiary)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-text-secondary)]"
-                    >
+                    <Badge key={tag} variant="muted">
                       {tag}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               )}
