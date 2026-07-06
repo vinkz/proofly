@@ -10,7 +10,7 @@ const copy = {
   engineer: {
     eyebrow: 'For Gas Safe engineers',
     title: 'Finish the CP12 before you reach the van.',
-    body: 'Fill in the certificate as you work — sign, issue the PDF, and send it to the landlord in one flow. £12.99/month, unlimited certificates.',
+    body: 'Fill in the certificate as you work: sign, issue the PDF, and send it to the landlord in one flow. £12.99/month, unlimited certificates.',
     href: '/signup/step1',
     cta: 'Start free trial',
     note: 'No card required. Full access from day one.',
@@ -18,7 +18,7 @@ const copy = {
   landlord: {
     eyebrow: 'For landlords',
     title: 'Get your gas safety certificate sorted.',
-    body: 'Send your engineer the property and tenant details once, and your CP12 lands on a permanent link — with renewal reminders before it expires.',
+    body: 'Send your engineer the property and tenant details once, and your CP12 lands on a permanent link, with renewal reminders before it expires.',
     href: '/request',
     cta: 'Request a visit from your engineer',
     note: 'No account needed · takes under 2 minutes',
