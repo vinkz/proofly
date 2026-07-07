@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { submitPrefillForm } from '@/server/jobs';
+import { AddressAutocompleteField } from '@/components/address/address-autocomplete-field';
 import { Input } from '@/components/ui/input';
 
 export function PrefillClient({
@@ -15,6 +16,28 @@ export function PrefillClient({
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Address blocks are controlled so the lookup can fill the sibling fields;
+  // the name attributes keep them visible to the FormData submit below.
+  const [jobAddressLine1, setJobAddressLine1] = useState('');
+  const [jobAddressLine2, setJobAddressLine2] = useState('');
+  const [jobAddressCity, setJobAddressCity] = useState('');
+  const [jobPostcode, setJobPostcode] = useState('');
+  const [landlordAddressLine1, setLandlordAddressLine1] = useState('');
+  const [landlordAddressLine2, setLandlordAddressLine2] = useState('');
+  const [landlordCity, setLandlordCity] = useState('');
+  const [landlordPostcode, setLandlordPostcode] = useState('');
+
+  const resetAddressFields = () => {
+    setJobAddressLine1('');
+    setJobAddressLine2('');
+    setJobAddressCity('');
+    setJobPostcode('');
+    setLandlordAddressLine1('');
+    setLandlordAddressLine2('');
+    setLandlordCity('');
+    setLandlordPostcode('');
+  };
 
   return (
     <form
@@ -51,6 +74,7 @@ export function PrefillClient({
             });
             setMessage('Details sent. Your engineer has been notified and can prepare the job.');
             event.currentTarget.reset();
+            resetAddressFields();
           } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : 'Could not submit details.');
           }
@@ -60,10 +84,23 @@ export function PrefillClient({
       <FormSection title="Job address">
         <div className="grid gap-2.5 sm:grid-cols-2">
           <Input name="jobAddressName" autoComplete="off" placeholder="Property name / reference" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressLine1" required autoComplete="off" placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressLine2" autoComplete="off" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressCity" required autoComplete="off" placeholder="City / town" className="rounded-[10px]" />
-          <Input name="jobPostcode" required autoComplete="off" placeholder="Postcode" className="rounded-[10px]" />
+          <AddressAutocompleteField
+            name="jobAddressLine1"
+            required
+            value={jobAddressLine1}
+            onValueChange={setJobAddressLine1}
+            onAddressSelect={(address) => {
+              setJobAddressLine2(address.line2 || '');
+              setJobAddressCity(address.city || '');
+              setJobPostcode(address.postcode || '');
+            }}
+            placeholder="Address line 1"
+            className="sm:col-span-2"
+            inputClassName="rounded-[10px]"
+          />
+          <Input name="jobAddressLine2" autoComplete="off" value={jobAddressLine2} onChange={(e) => setJobAddressLine2(e.target.value)} placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
+          <Input name="jobAddressCity" required autoComplete="off" value={jobAddressCity} onChange={(e) => setJobAddressCity(e.target.value)} placeholder="City / town" className="rounded-[10px]" />
+          <Input name="jobPostcode" required autoComplete="off" value={jobPostcode} onChange={(e) => setJobPostcode(e.target.value)} placeholder="Postcode" className="rounded-[10px]" />
           <Input name="jobTel" type="tel" inputMode="tel" autoComplete="off" placeholder="Site telephone" className="rounded-[10px]" />
         </div>
       </FormSection>
@@ -74,10 +111,24 @@ export function PrefillClient({
           <Input name="landlordCompany" autoComplete="organization" placeholder="Company (optional)" className="rounded-[10px]" />
           <Input name="landlordEmail" type="email" autoComplete="email" placeholder="Email" className="rounded-[10px]" />
           <Input name="landlordTel" type="tel" inputMode="tel" autoComplete="tel" placeholder="Phone" className="rounded-[10px]" />
-          <Input name="landlordAddressLine1" required autoComplete="address-line1" placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
-          <Input name="landlordAddressLine2" autoComplete="address-line2" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
-          <Input name="landlordCity" required autoComplete="address-level2" placeholder="City / town" className="rounded-[10px]" />
-          <Input name="landlordPostcode" required autoComplete="postal-code" placeholder="Postcode" className="rounded-[10px]" />
+          <AddressAutocompleteField
+            name="landlordAddressLine1"
+            required
+            autoComplete="address-line1"
+            value={landlordAddressLine1}
+            onValueChange={setLandlordAddressLine1}
+            onAddressSelect={(address) => {
+              setLandlordAddressLine2(address.line2 || '');
+              setLandlordCity(address.city || '');
+              setLandlordPostcode(address.postcode || '');
+            }}
+            placeholder="Address line 1"
+            className="sm:col-span-2"
+            inputClassName="rounded-[10px]"
+          />
+          <Input name="landlordAddressLine2" autoComplete="address-line2" value={landlordAddressLine2} onChange={(e) => setLandlordAddressLine2(e.target.value)} placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
+          <Input name="landlordCity" required autoComplete="address-level2" value={landlordCity} onChange={(e) => setLandlordCity(e.target.value)} placeholder="City / town" className="rounded-[10px]" />
+          <Input name="landlordPostcode" required autoComplete="postal-code" value={landlordPostcode} onChange={(e) => setLandlordPostcode(e.target.value)} placeholder="Postcode" className="rounded-[10px]" />
         </div>
       </FormSection>
 

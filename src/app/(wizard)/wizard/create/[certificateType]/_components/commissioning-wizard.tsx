@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { Textarea } from '@/components/ui/textarea';
+import { AddressAutocompleteField } from '@/components/address/address-autocomplete-field';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -457,11 +458,20 @@ export function CommissioningWizard({
                 placeholder="Job address name"
                 className="rounded-2xl sm:col-span-2"
               />
-              <Input
+              <AddressAutocompleteField
                 value={fields.job_address_line1}
-                onChange={(e) => setFields((prev) => ({ ...prev, job_address_line1: e.target.value }))}
+                onValueChange={(value) => setFields((prev) => ({ ...prev, job_address_line1: value }))}
+                onAddressSelect={(address) => {
+                  setFields((prev) => ({
+                    ...prev,
+                    job_address_line2: address.line2 || '',
+                    job_address_city: address.city || '',
+                    job_postcode: address.postcode || '',
+                  }));
+                }}
                 placeholder="Job address line 1"
-                className="rounded-2xl sm:col-span-2"
+                className="sm:col-span-2"
+                inputClassName="rounded-2xl"
               />
               <Input
                 value={fields.job_address_line2}

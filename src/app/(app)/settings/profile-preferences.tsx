@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { AddressAutocompleteField } from '@/components/address/address-autocomplete-field';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -524,7 +525,19 @@ export function ProfilePreferences({
           </div>
           <div>
             <label className={labelClass}>Address line 1</label>
-            <input value={companyAddressLine1} onChange={(e) => setCompanyAddressLine1(e.target.value)} className={inputClass} disabled={isPending} autoComplete="address-line1" />
+            <AddressAutocompleteField
+              variant="bare"
+              value={companyAddressLine1}
+              onValueChange={setCompanyAddressLine1}
+              onAddressSelect={(address) => {
+                setCompanyAddressLine2(address.line2 || '');
+                setCompanyAddressLine3(address.city || '');
+                setCompanyPostcode(address.postcode || '');
+              }}
+              inputClassName={inputClass}
+              disabled={isPending}
+              autoComplete="address-line1"
+            />
           </div>
           <div>
             <label className={labelClass}>Address line 2</label>
