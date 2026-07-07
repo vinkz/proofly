@@ -79,6 +79,24 @@ export function ToolsMenu() {
             ))}
             <div className="my-1 border-t-[0.5px] border-[var(--color-border-tertiary)]" />
             <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
+              Resources
+            </p>
+            <Link
+              href="/blog"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-[13px] font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-background-secondary)]"
+            >
+              <BookOpenIcon
+                width={15}
+                height={15}
+                strokeWidth={1.75}
+                className="shrink-0 text-[var(--color-text-tertiary)]"
+              />
+              Blog
+            </Link>
+            <div className="my-1 border-t-[0.5px] border-[var(--color-border-tertiary)]" />
+            <p className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
               Account
             </p>
             <Link
@@ -149,6 +167,15 @@ function PlusSquareIcon(props: SVGProps<SVGSVGElement>) {
     <svg {...iconBase(props)}>
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M12 8v8M8 12h8" />
+    </svg>
+  );
+}
+
+function BookOpenIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconBase(props)}>
+      <path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z" />
+      <path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z" />
     </svg>
   );
 }
