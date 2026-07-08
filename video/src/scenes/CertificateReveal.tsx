@@ -75,11 +75,12 @@ export const CertificateReveal: React.FC<{ caption: string; accentWord?: string;
   image,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
 
   const rev = entrance(frame, fps, { feel: 1.0 });
   const rot = interpolate(rev, [0, 1], [8, 0]);
-  const scale = popScale(rev, 0.86);
+  const push = interpolate(frame, [0, durationInFrames], [1, 1.07], { extrapolateRight: 'clamp' });
+  const scale = popScale(rev, 0.86) * push;
   const cap = entrance(frame, fps, { delay: 0.35, feel: 0.8 });
   // light sweep across the document
   const sweep = interpolate(frame, [Math.round(1.2 * fps), Math.round(2.4 * fps)], [-100, 200], {
@@ -90,10 +91,10 @@ export const CertificateReveal: React.FC<{ caption: string; accentWord?: string;
   return (
     <AbsoluteFill style={{ background: colors.cta }}>
       <AbsoluteFill style={{ background: `radial-gradient(55% 40% at 50% 55%, ${colors.action}22 0%, rgba(0,0,0,0) 70%)` }} />
-      <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center', perspective: 1800, paddingTop: 120 }}>
-        <div style={{ transform: `rotateX(${rot}deg) rotateZ(-2deg) scale(${scale})`, boxShadow: '0 50px 100px rgba(0,0,0,0.55)', borderRadius: radius.banner, position: 'relative', overflow: 'hidden' }}>
+      <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center', perspective: 1800, paddingTop: 180 }}>
+        <div style={{ transform: `rotateX(${rot}deg) rotateZ(-1.5deg) scale(${scale})`, boxShadow: '0 50px 100px rgba(0,0,0,0.55)', borderRadius: radius.banner, position: 'relative', overflow: 'hidden' }}>
           {image ? (
-            <Img src={staticFile(`assets/${image}`)} style={{ width: 760, borderRadius: radius.banner }} />
+            <Img src={staticFile(`assets/${image}`)} style={{ width: 1020, borderRadius: radius.banner, display: 'block' }} />
           ) : (
             <CP12Doc />
           )}

@@ -27,16 +27,16 @@ export type LaunchProps = {
   close: { wordmark: string; tagline: string; url: string };
 };
 
-// scene timings (30fps) — total 1350 frames = 45s
+// scene timings (30fps) — total 1365 frames = 45.5s
 export const TIMINGS = {
   coldOpen: { from: 0, dur: 75 },
-  fasterWay: { from: 75, dur: 60 },
-  hero: { from: 135, dur: 465 },
-  landlord: { from: 600, dur: 140 },
-  whatsapp: { from: 740, dur: 165 },
-  certificate: { from: 905, dur: 150 },
-  dashboard: { from: 1055, dur: 140 },
-  close: { from: 1195, dur: 155 },
+  fasterWay: { from: 75, dur: 75 },
+  hero: { from: 150, dur: 465 },
+  landlord: { from: 615, dur: 140 },
+  whatsapp: { from: 755, dur: 165 },
+  certificate: { from: 920, dur: 150 },
+  dashboard: { from: 1070, dur: 140 },
+  close: { from: 1210, dur: 155 },
 } as const;
 
 export const CertNowLaunch: React.FC<LaunchProps> = (props) => {

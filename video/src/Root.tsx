@@ -3,7 +3,7 @@ import { Composition } from 'remotion';
 import { CertNowLaunch, LaunchProps } from './CertNowLaunch';
 
 const FPS = 30;
-const TOTAL = 1350; // 45s
+const TOTAL = 1365; // 45.5s
 
 // All copy is prop-driven so variants are possible later. Assets are the real
 // captured production screenshots in public/assets.
@@ -20,14 +20,13 @@ const defaultProps: LaunchProps = {
       { t: 'certificate.', size: 160, hero: true },
     ],
   },
-  fasterWay: { pre: 'A', accent: 'faster', post: 'way.' },
+  fasterWay: { pre: 'There should be a', accent: 'faster', post: 'way.' },
   hero: {
     screens: [
-      { panel: 'newJob', durationInFrames: 96, caption: 'Reuse saved details, or ask the landlord' },
-      { panel: 'clientReuse', durationInFrames: 84, caption: 'Auto-filled from the last visit' },
-      { panel: 'appliance', durationInFrames: 90, caption: 'Appliances in seconds' },
-      { panel: 'checks', durationInFrames: 90, caption: 'Guided safety checks' },
-      { panel: 'issue', durationInFrames: 105 },
+      { panel: 'newJob', durationInFrames: 120, caption: 'Reuse saved details, or ask the landlord' },
+      { panel: 'clientReuse', durationInFrames: 105, caption: 'Auto-filled from the last visit' },
+      { panel: 'appliance', durationInFrames: 120, caption: 'Appliances in seconds' },
+      { panel: 'checks', durationInFrames: 120 },
     ],
   },
   landlord: { caption: 'No chasing landlords. Ever.', accentWord: 'Ever' },
@@ -39,7 +38,7 @@ const defaultProps: LaunchProps = {
     caption: 'Send it in a tap.',
     accentWord: 'tap',
   },
-  certificate: { caption: 'A proper CP12, on the spot.', accentWord: 'CP12' }, // set `image: 'cp12-page1.png'` to use a real PDF page
+  certificate: { caption: 'A proper CP12, on the spot.', accentWord: 'CP12', image: 'cp12-page1.png' }, // real CP12 PDF page 1
   dashboard: { caption: 'Every property. One glance.', accentWord: 'glance' },
   close: { wordmark: 'certnow', tagline: 'Done before you leave the driveway.', url: 'certnow.uk' },
 };

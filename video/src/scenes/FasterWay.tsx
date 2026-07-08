@@ -22,12 +22,12 @@ export const FasterWay: React.FC<{ pre: string; accent: string; post: string }> 
       <div
         style={{
           fontFamily,
-          fontSize: 150,
+          fontSize: 116,
           fontWeight: weight.medium,
           letterSpacing: '-2px',
-          lineHeight: 1.02,
+          lineHeight: 1.06,
           textAlign: 'center',
-          maxWidth: 900,
+          maxWidth: 880,
           color: colors.white,
         }}
       >

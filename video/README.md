@@ -35,9 +35,9 @@ the TikTok safe-zone overlay on (middle-75% box + bottom-250px / right-120px ban
 
 The product screens are **stylised recreations** in the landing-page style (`src/ui/mock.tsx`),
 not screenshots — self-contained, on-brand, and free of real-data artefacts (messy fields,
-sparse dashboards, missing PDFs). The CP12 in the certificate scene is a faithful recreation;
-to show a **real** PDF page instead, drop an image into `public/assets/` and set
-`certificate.image` in `Root.tsx`.
+sparse dashboards). The certificate scene shows the **real** CP12 (`public/assets/cp12-page1.png`,
+rasterised from `cp12.pdf` via `qlmanage`); `certificate.image` in `Root.tsx` points at it.
+Set `certificate.image` to `undefined` to fall back to the stylised recreation.
 
 `public/assets/*.png` (real captured screens) and `scripts/capture-screens.mjs` remain in the
 repo as an optional real-screenshot path (`DeviceFrame src=…`), but are **not used** by the
