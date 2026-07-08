@@ -1,19 +1,29 @@
 # CertNow launch video (Remotion)
 
 Self-contained 2.5D launch video. **No Three.js / R3F / 3D** — pure Remotion + DOM.
-1080×1920 vertical, 30fps, 35s (`CertNowLaunch`).
+1080×1920 vertical, 30fps, ~33s (`CertNowLaunch`).
 
 ## Scripts (run from this `/video` dir)
 
 | Script | What |
 | --- | --- |
 | `npm run video:preview` | Open Remotion Studio |
-| `npm run video:render:draft` | Half-res h264 draft → `out/certnow-launch-draft.mp4` |
-| `npm run video:render` | Full-quality h264 (crf 16, 16M) → `out/certnow-launch.mp4` |
+| `npm run video:render:draft` | Half-res draft → `out/certnow-launch-draft.{mp4\|webm}` |
+| `npm run video:render` | Full-quality → `out/certnow-launch.{mp4\|webm}` |
 | `npm run video:cover` | Export frame 0 PNG (upload cover) → `out/cover.png` |
 
-Renders pass `--muted` (the video has no audio; this also avoids a macOS-version
-mismatch in Remotion's silent-audio step on older macOS).
+### Rendering (important — SIGABRT workaround)
+
+Remotion's platform **compositor binary is built for macOS 15**; on older macOS it
+**SIGABRTs at the video-mux step** (`Symbol not found: _AVCaptureDeviceTypeContinuityCamera`).
+Frame rendering itself is fine, so `video:render` uses `scripts/render.mjs`: it renders a
+**frame sequence** (headless Chrome) and muxes with a real ffmpeg, auto-picking output:
+
+- **system `ffmpeg` with libx264 → h264 `.mp4`** (preferred). Get it with `brew install ffmpeg`.
+- **else Playwright's bundled ffmpeg → VP8 `.webm`** (fallback, no install needed).
+
+So for a proper **MP4**: `brew install ffmpeg` once, then `npm run video:render`.
+On macOS 15 you can also use the direct path: `npm run video:render:native`.
 
 In Studio, the **`CertNowLaunch-SafeZones`** composition renders the same video with
 the TikTok safe-zone overlay on (middle-75% box + bottom-250px / right-120px bands).
