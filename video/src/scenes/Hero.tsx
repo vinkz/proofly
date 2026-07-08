@@ -2,7 +2,6 @@ import React from 'react';
 import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
 import { colors, fontFamily, weight, radius } from '../theme';
 import { DeviceFrame } from '../components/DeviceFrame';
-import { CountUpTimer } from '../components/CountUpTimer';
 import { entrance, popScale, riseY } from '../anim';
 import { PANELS, PanelKey } from '../ui/mock';
 
@@ -67,20 +66,17 @@ const FramedScreen: React.FC<{ panel: PanelKey }> = ({ panel }) => {
 
 /**
  * Hero. Real wizard screenshots in sequence inside a tilted device frame with
- * per-screen push-in, benefit callouts, hard cuts, and spring-in entrances. A
- * timer counts up and locks at 2:47 on the final (delivered) screen.
+ * per-screen push-in, benefit callouts, hard cuts, and spring-in entrances.
+ * (The count-up timer is a global overlay in CertNowLaunch so it can run on
+ * into the certificate reveal, where it locks at 2:47.)
  */
 export const Hero: React.FC<{ screens: HeroScreen[] }> = ({ screens }) => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
   let acc = 0;
   const starts = screens.map((s) => {
     const start = acc;
     acc += s.durationInFrames;
     return start;
   });
-  const lockFrame = starts[starts.length - 1] + 4;
 
   return (
     <AbsoluteFill style={{ background: colors.cta }}>
@@ -93,9 +89,6 @@ export const Hero: React.FC<{ screens: HeroScreen[] }> = ({ screens }) => {
           {s.caption ? <BenefitCaption text={s.caption} /> : null}
         </Sequence>
       ))}
-      <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'center', paddingTop: 250 }}>
-        <CountUpTimer frame={frame} fps={fps} startFrame={0} lockFrame={lockFrame} />
-      </AbsoluteFill>
     </AbsoluteFill>
   );
 };
