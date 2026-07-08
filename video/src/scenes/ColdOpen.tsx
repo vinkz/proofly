@@ -1,16 +1,16 @@
 import React from 'react';
-import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
 import { colors, fontFamily, weight } from '../theme';
 import { entrance, riseY } from '../anim';
 
 export type Row = { t: string; size: number; hero?: boolean; accent?: boolean };
 
 /**
- * 0–3s cold open. Kinetic type, hard cuts, white on the dark shade. An eyebrow
- * names the audience up front (UK gas engineers), so frame 1 — the thumbnail —
- * makes it immediately obvious who this is for. Frame 1 is NOT black.
+ * 0–2.4s cold open — a single page. An eyebrow names the audience (UK gas
+ * engineers) and the pain sits under it ("40 minutes per CP12"). Frame 1 — the
+ * thumbnail — makes it immediately obvious who this is for, and is NOT black.
  */
-const Beat: React.FC<{ rows: Row[]; eyebrow?: string }> = ({ rows, eyebrow }) => {
+export const ColdOpen: React.FC<{ audience: string; rows: Row[] }> = ({ audience, rows }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const p = entrance(frame, fps, { feel: 0.65 });
@@ -18,24 +18,20 @@ const Beat: React.FC<{ rows: Row[]; eyebrow?: string }> = ({ rows, eyebrow }) =>
   const scale = interpolate(p, [0, 1], [1.05, 1]);
 
   return (
-    <AbsoluteFill
-      style={{ justifyContent: 'center', alignItems: 'center', transform: `translateY(${y}px) scale(${scale})` }}
-    >
-      <div style={{ textAlign: 'center', fontFamily, lineHeight: 0.94 }}>
-        {eyebrow ? (
-          <div
-            style={{
-              fontSize: 40,
-              fontWeight: weight.medium,
-              textTransform: 'uppercase',
-              letterSpacing: '4px',
-              color: colors.action,
-              marginBottom: 34,
-            }}
-          >
-            {eyebrow}
-          </div>
-        ) : null}
+    <AbsoluteFill style={{ background: colors.cta, justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ textAlign: 'center', fontFamily, lineHeight: 0.96, transform: `translateY(${y}px) scale(${scale})` }}>
+        <div
+          style={{
+            fontSize: 40,
+            fontWeight: weight.medium,
+            textTransform: 'uppercase',
+            letterSpacing: '4px',
+            color: colors.action,
+            marginBottom: 34,
+          }}
+        >
+          {audience}
+        </div>
         {rows.map((r, i) => (
           <div
             key={i}
@@ -45,6 +41,7 @@ const Beat: React.FC<{ rows: Row[]; eyebrow?: string }> = ({ rows, eyebrow }) =>
               letterSpacing: r.hero ? '-4px' : '-1px',
               color: r.accent ? colors.action : colors.white,
               opacity: r.hero ? 1 : 0.82,
+              marginTop: r.hero ? 0 : 8,
             }}
           >
             {r.t}
@@ -54,19 +51,3 @@ const Beat: React.FC<{ rows: Row[]; eyebrow?: string }> = ({ rows, eyebrow }) =>
     </AbsoluteFill>
   );
 };
-
-export const ColdOpen: React.FC<{ audience: string; beat1: Row[]; beat2: Row[]; cutFrame?: number }> = ({
-  audience,
-  beat1,
-  beat2,
-  cutFrame = 48,
-}) => (
-  <AbsoluteFill style={{ background: colors.cta }}>
-    <Sequence durationInFrames={cutFrame} layout="none">
-      <Beat rows={beat1} eyebrow={audience} />
-    </Sequence>
-    <Sequence from={cutFrame} layout="none">
-      <Beat rows={beat2} />
-    </Sequence>
-  </AbsoluteFill>
-);

@@ -16,7 +16,7 @@ const BenefitCaption: React.FC<{ text: string }> = ({ text }) => {
   const { fps } = useVideoConfig();
   const p = entrance(frame, fps, { delay: 0.15, feel: 0.7 });
   return (
-    <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 275 }}>
+    <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 360 }}>
       <div
         style={{
           transform: `translateY(${riseY(p, 30)}px)`,

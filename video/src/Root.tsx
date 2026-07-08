@@ -3,7 +3,7 @@ import { Composition } from 'remotion';
 import { CertNowLaunch, LaunchProps } from './CertNowLaunch';
 
 const FPS = 30;
-const TOTAL = 1115; // ~37s
+const TOTAL = 1077; // ~36s
 
 // All copy is prop-driven so variants are possible later. Assets are the real
 // captured production screenshots in public/assets.
@@ -12,13 +12,9 @@ const defaultProps: LaunchProps = {
   grain: true,
   coldOpen: {
     audience: 'For UK gas engineers',
-    beat1: [
-      { t: '40', size: 440, hero: true },
-      { t: 'minutes.', size: 150 },
-    ],
-    beat2: [
-      { t: 'per', size: 130 },
-      { t: 'CP12.', size: 240, hero: true },
+    rows: [
+      { t: '40', size: 380, hero: true },
+      { t: 'minutes per CP12.', size: 100 },
     ],
   },
   fasterWay: { pre: 'There should be a', accent: 'faster', post: 'way.' },

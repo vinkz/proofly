@@ -6,8 +6,8 @@ import { LandlordVault } from '../ui/mock';
 import { entrance, popScale, riseY } from '../anim';
 
 /**
- * 17–24s. Landlord property vault (stylised UI) in a tilted device frame, with
- * a caption over it. Text stays inside the middle-75% safe zone.
+ * Landlord property vault (stylised UI) in a tilted device frame. Caption above,
+ * device below, the pair vertically centred. Text stays in the middle-75% safe zone.
  */
 export const LandlordLink: React.FC<{ caption: string; accentWord?: string }> = ({ caption, accentWord }) => {
   const frame = useCurrentFrame();
@@ -15,24 +15,20 @@ export const LandlordLink: React.FC<{ caption: string; accentWord?: string }> = 
 
   const dev = entrance(frame, fps, { feel: 0.9 });
   const devScale = popScale(dev, 0.92);
-  const drift = interpolate(frame, [0, 210], [0, -26]);
-  const cap = entrance(frame, fps, { delay: 0.25, feel: 0.8 });
+  const cap = entrance(frame, fps, { delay: 0.2, feel: 0.8 });
 
   return (
     <AbsoluteFill style={{ background: colors.cta }}>
-      <AbsoluteFill style={{ background: `radial-gradient(55% 40% at 50% 60%, ${colors.action}22 0%, rgba(0,0,0,0) 70%)` }} />
-      <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', perspective: 1700, paddingBottom: 150 }}>
-        <div style={{ transform: `rotateX(6deg) rotateZ(-2deg) scale(${devScale}) translateY(${drift}px)` }}>
-          <DeviceFrame content={<LandlordVault />} width={600} />
-        </div>
-      </AbsoluteFill>
-      <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'center', paddingTop: 250 }}>
+      <AbsoluteFill style={{ background: `radial-gradient(55% 45% at 50% 50%, ${colors.action}22 0%, rgba(0,0,0,0) 70%)` }} />
+      <AbsoluteFill
+        style={{ perspective: 1700, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 56 }}
+      >
         <div
           style={{
             transform: `translateY(${riseY(cap, 40)}px)`,
             opacity: interpolate(cap, [0, 0.5], [0, 1], { extrapolateRight: 'clamp' }),
             fontFamily,
-            fontSize: 104,
+            fontSize: 96,
             fontWeight: weight.medium,
             letterSpacing: '-2px',
             lineHeight: 1.04,
@@ -48,6 +44,9 @@ export const LandlordLink: React.FC<{ caption: string; accentWord?: string }> = 
               </span>
             );
           })}
+        </div>
+        <div style={{ transform: `rotateX(6deg) rotateZ(-2deg) scale(${devScale})` }}>
+          <DeviceFrame content={<LandlordVault />} width={560} />
         </div>
       </AbsoluteFill>
     </AbsoluteFill>

@@ -12,12 +12,12 @@ import { CountUpTimer } from './components/CountUpTimer';
 import { Grain } from './components/Grain';
 import { Vignette } from './components/Vignette';
 import { SafeZone } from './components/SafeZone';
-import { fontFamily } from './theme';
+import { fontFamily, colors, weight } from './theme';
 
 export type LaunchProps = {
   showSafeZones: boolean;
   grain: boolean;
-  coldOpen: { audience: string; beat1: Row[]; beat2: Row[] };
+  coldOpen: { audience: string; rows: Row[] };
   fasterWay: { pre: string; accent: string; post: string };
   hero: { screens: HeroScreen[] };
   certificate: { caption: string; accentWord?: string; image?: string };
@@ -26,15 +26,15 @@ export type LaunchProps = {
   close: { wordmark: string; tagline: string; url: string };
 };
 
-// scene timings (30fps) — total 1115 frames ≈ 37s
+// scene timings (30fps) — total 1077 frames ≈ 36s
 export const TIMINGS = {
-  coldOpen: { from: 0, dur: 90 },
-  fasterWay: { from: 90, dur: 75 },
-  hero: { from: 165, dur: 330 },
-  certificate: { from: 495, dur: 165 },
-  landlord: { from: 660, dur: 135 },
-  whatsapp: { from: 795, dur: 165 },
-  close: { from: 960, dur: 155 },
+  coldOpen: { from: 0, dur: 72 },
+  fasterWay: { from: 72, dur: 55 },
+  hero: { from: 127, dur: 330 },
+  certificate: { from: 457, dur: 165 },
+  landlord: { from: 622, dur: 135 },
+  whatsapp: { from: 757, dur: 165 },
+  close: { from: 922, dur: 155 },
 } as const;
 
 // The count-up timer runs across the hero and locks at 2:47 as the CP12 reveals.
@@ -72,6 +72,11 @@ export const CertNowLaunch: React.FC<LaunchProps> = (props) => {
         <TimerOverlay />
       </Sequence>
 
+      {/* subtle brand footer on every scene except the close (which shows it big) */}
+      <Sequence from={0} durationInFrames={TIMINGS.close.from} layout="none">
+        <BrandFooter />
+      </Sequence>
+
       {/* global overlays */}
       <Vignette strength={0.32} />
       <Grain enabled={props.grain} opacity={0.04} />
@@ -79,6 +84,14 @@ export const CertNowLaunch: React.FC<LaunchProps> = (props) => {
     </AbsoluteFill>
   );
 };
+
+const BrandFooter: React.FC = () => (
+  <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 285, pointerEvents: 'none' }}>
+    <span style={{ fontFamily, fontSize: 30, fontWeight: weight.medium, letterSpacing: '1px', color: colors.white, opacity: 0.4 }}>
+      certnow.uk
+    </span>
+  </AbsoluteFill>
+);
 
 const TimerOverlay: React.FC = () => {
   return (

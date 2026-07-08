@@ -28,7 +28,7 @@ const Tick: React.FC<{ blue?: boolean }> = ({ blue }) => (
 );
 
 const Phone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const w = 660;
+  const w = 560;
   const h = Math.round((w * 2850) / 1320);
   return (
     <div style={{ width: w + 40, height: h + 40, borderRadius: 56, background: colors.cta, padding: 20, boxShadow: '0 40px 90px rgba(0,0,0,0.45)' }}>
@@ -61,8 +61,8 @@ export const WhatsAppShare: React.FC<{
 
   return (
     <AbsoluteFill style={{ background: colors.cta }}>
-      <AbsoluteFill style={{ background: `radial-gradient(55% 40% at 50% 60%, #25D36622 0%, rgba(0,0,0,0) 70%)` }} />
-      <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 130 }}>
+      <AbsoluteFill style={{ background: `radial-gradient(55% 45% at 50% 55%, #25D36622 0%, rgba(0,0,0,0) 70%)` }} />
+      <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center', perspective: 1700 }}>
         <div style={{ transform: `rotateX(6deg) rotateZ(-2deg) scale(${popScale(dev, 0.92)})` }}>
           <Phone>
             {/* header */}
@@ -121,13 +121,13 @@ export const WhatsAppShare: React.FC<{
         </div>
       </AbsoluteFill>
       {/* caption */}
-      <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'center', paddingTop: 250 }}>
+      <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'center', paddingTop: 150 }}>
         <div
           style={{
             transform: `translateY(${riseY(cap, 40)}px)`,
             opacity: interpolate(cap, [0, 0.5], [0, 1], { extrapolateRight: 'clamp' }),
             fontFamily,
-            fontSize: 100,
+            fontSize: 86,
             fontWeight: weight.medium,
             letterSpacing: '-2px',
             lineHeight: 1.04,
