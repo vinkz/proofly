@@ -1,0 +1,40 @@
+{
+  "name": "video",
+  "version": "1.0.0",
+  "description": "My Remotion video",
+  "repository": {},
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@remotion/cli": "4.0.486",
+    "@remotion/google-fonts": "^4.0.486",
+    "@remotion/tailwind-v4": "4.0.486",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.486",
+    "tailwindcss": "4.0.0"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.486",
+    "@types/react": "19.2.7",
+    "@types/web": "0.0.166",
+    "eslint": "9.19.0",
+    "playwright": "^1.61.1",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "dev": "remotion studio",
+    "build": "remotion bundle",
+    "upgrade": "remotion upgrade",
+    "lint": "eslint src && tsc",
+    "video:preview": "remotion studio",
+    "video:render:draft": "node scripts/render.mjs draft",
+    "video:render": "node scripts/render.mjs full",
+    "video:render:native": "remotion render CertNowLaunch out/certnow-launch.mp4 --codec=h264 --crf=16 --video-bitrate=16M --muted",
+    "video:cover": "remotion still CertNowLaunch out/cover.png --frame=0"
+  },
+  "sideEffects": [
+    "*.css"
+  ]
+}
