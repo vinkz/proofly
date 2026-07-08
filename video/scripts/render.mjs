@@ -60,44 +60,49 @@ function playwrightFfmpeg() {
   const bin = path.join(base, dir, 'ffmpeg-mac');
   return fs.existsSync(bin) ? bin : null;
 }
+// Optional prebuilt ffmpeg (has libx264) — `npm i -D ffmpeg-static`. A quick
+// download, no compiling — the fast route to an MP4 on machines without brew ffmpeg.
+function staticFfmpeg() {
+  for (const p of ['node_modules/ffmpeg-static/ffmpeg', 'node_modules/.bin/ffmpeg']) {
+    if (fs.existsSync(p) && hasLibx264(p)) return p;
+  }
+  return null;
+}
 
+// Prefer any ffmpeg with libx264 (→ MP4); fall back to Playwright's VP8 (→ WebM).
+const x264bin = (hasLibx264('ffmpeg') && 'ffmpeg') || staticFfmpeg();
 let bin, codec, outFile;
-if (hasLibx264('ffmpeg')) {
-  bin = 'ffmpeg';
+if (x264bin) {
+  bin = x264bin;
   codec = 'h264';
   outFile = path.join('out', draft ? 'certnow-launch-draft.mp4' : 'certnow-launch.mp4');
 } else {
   const pw = playwrightFfmpeg();
   if (!pw) {
-    console.error('No ffmpeg found. Install one with `brew install ffmpeg` for an MP4.');
+    console.error('No ffmpeg found. `npm i -D ffmpeg-static` (fast) or `brew install ffmpeg` for an MP4.');
     process.exit(1);
   }
   bin = pw;
   codec = 'vp8';
   outFile = path.join('out', draft ? 'certnow-launch-draft.webm' : 'certnow-launch.webm');
-  console.log('ℹ no system ffmpeg with libx264 — encoding WebM. `brew install ffmpeg` for an MP4.');
+  console.log('ℹ no ffmpeg with libx264 — encoding WebM. For MP4: `npm i -D ffmpeg-static`, then re-run.');
 }
 
 const inCodec = ext === 'png' ? 'png' : 'mjpeg';
 console.log(`▶ muxing → ${outFile} (${codec}) …`);
 
-if (codec === 'h264') {
-  // system ffmpeg: read the numbered files directly (image2 demuxer)
-  const crf = draft ? 23 : 17;
-  execSync(
-    `ffmpeg -y -framerate 30 -i "${seqDir}/element-%04d.${ext}" ` +
-      `-c:v libx264 -preset slow -crf ${crf} -pix_fmt yuv420p -movflags +faststart "${outFile}"`,
-    { stdio: 'inherit' },
-  );
-} else {
-  // playwright ffmpeg is minimal — pipe frames via image2pipe
-  execSync(
-    `find "${seqDir}" -name 'element-*.${ext}' -print0 | sort -z | xargs -0 cat | ` +
-      `"${bin}" -y -f image2pipe -framerate 30 -c:v ${inCodec} -i pipe:0 ` +
-      `-c:v libvpx -b:v ${draft ? '4M' : '8M'} -auto-alt-ref 0 -pix_fmt yuv420p -an "${outFile}"`,
-    { stdio: 'inherit', shell: '/bin/bash' },
-  );
-}
+// Pipe frames in via image2pipe for BOTH codecs — padding-agnostic (Remotion's
+// zero-pad width depends on frame count, e.g. 3 digits under 1000 frames) and
+// works with both ffmpeg-static and Playwright's minimal ffmpeg.
+const encodeArgs =
+  codec === 'h264'
+    ? `-c:v libx264 -preset slow -crf ${draft ? 23 : 17} -pix_fmt yuv420p -movflags +faststart`
+    : `-c:v libvpx -b:v ${draft ? '4M' : '8M'} -auto-alt-ref 0 -pix_fmt yuv420p -an`;
+execSync(
+  `find "${seqDir}" -name 'element-*.${ext}' -print0 | sort -z | xargs -0 cat | ` +
+    `"${bin}" -y -f image2pipe -framerate 30 -c:v ${inCodec} -i pipe:0 ${encodeArgs} "${outFile}"`,
+  { stdio: 'inherit', shell: '/bin/bash' },
+);
 
 fs.rmSync(seqDir, { recursive: true, force: true });
 console.log(`✔ done → ${outFile}`);

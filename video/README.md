@@ -32,6 +32,8 @@ Frame rendering itself is fine, so `video:render` uses `scripts/render.mjs`: it 
 **frame sequence** (headless Chrome) and muxes with a real ffmpeg, auto-picking output:
 
 - **system `ffmpeg` with libx264 → h264 `.mp4`** (preferred). Get it with `brew install ffmpeg`.
+- **`ffmpeg-static` (prebuilt, has libx264) → h264 `.mp4`** — the fast route on macOS where
+  Homebrew compiles ffmpeg from source. Install once: `npm i -D ffmpeg-static`.
 - **else Playwright's bundled ffmpeg → VP8 `.webm`** (fallback, no install needed).
 
 So for a proper **MP4**: `brew install ffmpeg` once, then `npm run video:render`.
