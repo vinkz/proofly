@@ -16,6 +16,14 @@ import path from 'node:path';
 
 const mode = (process.argv[2] || 'full').toLowerCase();
 const draft = mode === 'draft';
+
+// Guard: this project has its own pinned Remotion in /video/node_modules. If it
+// isn't installed, `npx remotion` resolves the parent repo's Remotion and fails
+// with "Cannot find module '@remotion/tailwind-v4'". Make the fix obvious.
+if (!fs.existsSync('node_modules/@remotion/cli')) {
+  console.error('\n✖ Dependencies not installed in /video.\n  Run `npm install` in this directory first, then re-run the render.\n');
+  process.exit(1);
+}
 const COMP = 'CertNowLaunch';
 const scale = draft ? '0.5' : '1';
 const imgFormat = draft ? 'jpeg' : 'png';

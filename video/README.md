@@ -3,6 +3,18 @@
 Self-contained 2.5D launch video. **No Three.js / R3F / 3D** — pure Remotion + DOM.
 1080×1920 vertical, 30fps, ~33s (`CertNowLaunch`).
 
+## First run
+
+This project is **self-contained** with its own pinned Remotion — it is NOT part of the
+parent repo's install. Before anything else:
+
+```bash
+cd video && npm install
+```
+
+(Skipping this makes `npx remotion` resolve the parent repo's Remotion and fail with
+`Cannot find module '@remotion/tailwind-v4'`.)
+
 ## Scripts (run from this `/video` dir)
 
 | Script | What |
