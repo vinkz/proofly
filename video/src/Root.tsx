@@ -3,7 +3,7 @@ import { Composition } from 'remotion';
 import { CertNowLaunch, LaunchProps } from './CertNowLaunch';
 
 const FPS = 30;
-const TOTAL = 1077; // ~36s
+const TOTAL = 987; // ~33s
 
 // All copy is prop-driven so variants are possible later. Assets are the real
 // captured production screenshots in public/assets.
@@ -20,9 +20,9 @@ const defaultProps: LaunchProps = {
   fasterWay: { pre: 'There should be a', accent: 'faster', post: 'way.' },
   hero: {
     screens: [
-      { panel: 'newJob', durationInFrames: 120, caption: 'Reuse saved details, or ask the landlord' },
-      { panel: 'clientReuse', durationInFrames: 100, caption: 'Auto-filled from the last visit' },
-      { panel: 'appliance', durationInFrames: 110, caption: 'Appliances in seconds' },
+      { panel: 'newJob', durationInFrames: 84, caption: 'Reuse or ask.' },
+      { panel: 'clientReuse', durationInFrames: 72, caption: 'Auto-filled.' },
+      { panel: 'appliance', durationInFrames: 84, caption: 'Appliances, fast.' },
     ],
   },
   landlord: { caption: 'No chasing landlords. Ever.', accentWord: 'Ever' },

@@ -14,7 +14,7 @@ export type HeroScreen = {
 const BenefitCaption: React.FC<{ text: string }> = ({ text }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const p = entrance(frame, fps, { delay: 0.15, feel: 0.7 });
+  const p = entrance(frame, fps, { delay: 0.04, feel: 0.45 });
   return (
     <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 360 }}>
       <div

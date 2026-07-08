@@ -26,15 +26,15 @@ export type LaunchProps = {
   close: { wordmark: string; tagline: string; url: string };
 };
 
-// scene timings (30fps) — total 1077 frames ≈ 36s
+// scene timings (30fps) — total 987 frames ≈ 33s
 export const TIMINGS = {
   coldOpen: { from: 0, dur: 72 },
   fasterWay: { from: 72, dur: 55 },
-  hero: { from: 127, dur: 330 },
-  certificate: { from: 457, dur: 165 },
-  landlord: { from: 622, dur: 135 },
-  whatsapp: { from: 757, dur: 165 },
-  close: { from: 922, dur: 155 },
+  hero: { from: 127, dur: 240 },
+  certificate: { from: 367, dur: 165 },
+  landlord: { from: 532, dur: 135 },
+  whatsapp: { from: 667, dur: 165 },
+  close: { from: 832, dur: 155 },
 } as const;
 
 // The count-up timer runs across the hero and locks at 2:47 as the CP12 reveals.
