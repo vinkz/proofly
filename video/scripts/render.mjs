@@ -26,8 +26,11 @@ if (!fs.existsSync('node_modules/@remotion/cli')) {
 }
 const COMP = 'CertNowLaunch';
 const scale = draft ? '0.5' : '1';
-const imgFormat = draft ? 'jpeg' : 'png';
-const ext = imgFormat;
+// JPEG frames keep the temp sequence small (~10x smaller than PNG) — important
+// on low-free-disk machines. High quality (92) is indistinguishable after h264.
+const imgFormat = 'jpeg';
+const ext = 'jpeg';
+const jpegQuality = draft ? 80 : 92;
 
 fs.mkdirSync('out', { recursive: true });
 const seqDir = path.join('out', `seq-${mode}`);
@@ -35,9 +38,10 @@ fs.rmSync(seqDir, { recursive: true, force: true });
 fs.mkdirSync(seqDir, { recursive: true });
 
 console.log(`▶ rendering frames (${mode}, scale ${scale}, ${imgFormat}) …`);
-execSync(`npx remotion render ${COMP} ${seqDir} --sequence --scale=${scale} --image-format=${imgFormat}`, {
-  stdio: 'inherit',
-});
+execSync(
+  `npx remotion render ${COMP} ${seqDir} --sequence --scale=${scale} --image-format=${imgFormat} --jpeg-quality=${jpegQuality}`,
+  { stdio: 'inherit' },
+);
 
 // ---- choose an ffmpeg ----
 function hasLibx264(bin) {
