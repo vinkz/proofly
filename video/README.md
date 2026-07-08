@@ -63,9 +63,13 @@ sparse dashboards). The certificate scene shows the **real** CP12 (`public/asset
 rasterised from `cp12.pdf` via `qlmanage`); `certificate.image` in `Root.tsx` points at it.
 Set `certificate.image` to `undefined` to fall back to the stylised recreation.
 
-`public/assets/*.png` (real captured screens) and `scripts/capture-screens.mjs` remain in the
-repo as an optional real-screenshot path (`DeviceFrame src=…`), but are **not used** by the
-current render.
+## Making variations
+
+Everything visible is prop-driven from `defaultProps` in `src/Root.tsx` — copy for each scene,
+the hero panel sequence + benefit captions, WhatsApp text, tagline/URL, plus `grain` and
+`showSafeZones` toggles. Edit those (or register another `<Composition>` with different
+`defaultProps`) to spin up variants. Scene durations live in `TIMINGS` (`CertNowLaunch.tsx`);
+the stylised screens are in `src/ui/mock.tsx`.
 
 ## Adding R3F hero scenes later
 
