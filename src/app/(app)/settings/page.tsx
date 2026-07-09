@@ -241,6 +241,16 @@ export default async function SettingsPage({
           </form>
         </div>
       </section>
+
+      {/* Discreet resources footer */}
+      <div className="flex items-center gap-4 px-1 pt-1 text-[12px] text-[var(--color-text-tertiary)]">
+        <Link href="/blog" className="transition-colors hover:text-[var(--color-text-secondary)]">
+          Blog
+        </Link>
+        <a href="mailto:general@certnow.uk" className="transition-colors hover:text-[var(--color-text-secondary)]">
+          Contact support
+        </a>
+      </div>
     </div>
   );
 }

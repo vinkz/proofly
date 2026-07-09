@@ -57,7 +57,12 @@ export function AppSidebar({ pendingRequestsCount = 0 }: { pendingRequestsCount?
           Gas rate calculator
         </Link>
       </nav>
-      <div className="mt-auto text-[12px] text-[var(--color-text-tertiary)]">© {new Date().getFullYear()} certnow</div>
+      <div className="mt-auto flex flex-col gap-2 text-[12px] text-[var(--color-text-tertiary)]">
+        <Link href="/blog" className="transition-colors hover:text-[var(--color-text-secondary)]">
+          Blog
+        </Link>
+        <span>© {new Date().getFullYear()} certnow</span>
+      </div>
     </aside>
   );
 }
