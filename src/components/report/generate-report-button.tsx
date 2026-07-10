@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { finalizeJobReport } from '@/server/jobs';
 import type { ReportKind } from '@/types/reports';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { useToast } from '@/components/ui/use-toast';
 
 export function GenerateReportButton({ jobId, reportKind }: { jobId: string; reportKind: ReportKind }) {
@@ -16,6 +17,7 @@ export function GenerateReportButton({ jobId, reportKind }: { jobId: string; rep
     startTransition(async () => {
       try {
         const { signedUrl } = await finalizeJobReport(jobId, reportKind);
+        track(ANALYTICS_EVENTS.reportGenerated, { report_kind: reportKind });
         pushToast({ title: 'Report generated', variant: 'success' });
         router.refresh();
         router.push(`/jobs/${jobId}/pdf`);

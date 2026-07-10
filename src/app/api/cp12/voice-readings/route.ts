@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { parseCp12VoiceReadings, type Cp12VoiceReadingScope } from '@/lib/cp12/voice-readings';
 import { getOpenAIClient } from '@/lib/openai';
+import { getPostHogClient } from '@/lib/posthog-server';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 export const runtime = 'nodejs';
@@ -49,19 +50,47 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 });
   }
 
+  const model = getTranscriptionModel();
+  const start = Date.now();
+
   try {
     const transcription = await getOpenAIClient().audio.transcriptions.create({
       file: audio,
-      model: getTranscriptionModel(),
+      model,
       prompt:
         'Gas engineer reading appliance values. Preserve numbers exactly, including decimals, leading zeros, and small pauses. The engineer may speak only numbers in order. Pressure scope order: operating pressure, heat input. Combustion scope order: CO ppm, CO2 percent, ratio. Likely phrases include operating pressure, working pressure, burner pressure, heat input, heat in put, heating put, input, gas rate, rated input, rated output, appliance rating, high rate, full rate, high fire, low rate, low fire, load rate, CO ppm, CO2 percent, carbon monoxide, carbon dioxide, ratio, CO/CO2 ratio, CO over CO2 ratio, CO2 ratio.',
       response_format: 'json',
+    });
+
+    getPostHogClient()?.capture({
+      distinctId: user.id,
+      event: '$ai_generation',
+      properties: {
+        $ai_trace_id: String(jobId),
+        $ai_span_name: 'voice_transcription',
+        $ai_model: model,
+        $ai_provider: 'openai',
+        $ai_latency: (Date.now() - start) / 1000,
+      },
     });
 
     const result = parseCp12VoiceReadings(transcription.text ?? '', { scope });
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Voice transcription failed';
+    getPostHogClient()?.capture({
+      distinctId: user.id,
+      event: '$ai_generation',
+      properties: {
+        $ai_trace_id: String(jobId),
+        $ai_span_name: 'voice_transcription',
+        $ai_model: model,
+        $ai_provider: 'openai',
+        $ai_latency: (Date.now() - start) / 1000,
+        $ai_is_error: true,
+        $ai_error: message,
+      },
+    });
     const status = /OPENAI_API_KEY/i.test(message) ? 503 : 500;
     return NextResponse.json({ error: message }, { status });
   }

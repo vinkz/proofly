@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 
 import { stripe } from '@/lib/stripe';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { getPostHogClient } from '@/lib/posthog-server';
 
 type UntypedQuery = {
   update: (payload: Record<string, unknown>) => UntypedQuery;
@@ -62,6 +63,17 @@ export async function POST(req: NextRequest) {
           .eq('stripe_customer_id', customerId);
         if (error) throw new Error(error.message);
 
+        if (subscription.status === 'active' || subscription.status === 'trialing') {
+          getPostHogClient()?.capture({
+            distinctId: customerId,
+            event: 'subscription_activated',
+            properties: {
+              interval: interval ?? 'unknown',
+              status: subscription.status,
+            },
+          });
+        }
+
         console.log('[Stripe webhook] subscription updated:', customerId, subscription.status);
         break;
       }
@@ -80,6 +92,11 @@ export async function POST(req: NextRequest) {
           .eq('stripe_customer_id', customerId);
         if (error) throw new Error(error.message);
 
+        getPostHogClient()?.capture({
+          distinctId: customerId,
+          event: 'subscription_cancelled',
+        });
+
         console.log('[Stripe webhook] subscription deleted:', customerId);
         break;
       }
@@ -92,6 +109,11 @@ export async function POST(req: NextRequest) {
           .update({ subscription_status: 'past_due' })
           .eq('stripe_customer_id', customerId);
         if (error) throw new Error(error.message);
+
+        getPostHogClient()?.capture({
+          distinctId: customerId,
+          event: 'payment_failed',
+        });
 
         console.log('[Stripe webhook] payment failed:', customerId);
         break;

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import {
   sendDeliveryBundle,
   updateDeliveryRecipientEmails,
@@ -120,6 +121,7 @@ export function SendPanel({ bundle }: { bundle: DeliveryBundle }) {
         }
         const result = await sendDeliveryBundle(bundle.jobId, recipient, 'email');
         if (result.ok) {
+          track(ANALYTICS_EVENTS.certificateSent, { recipient_type: recipient });
           setSent(true);
           setSentTo(result.recipientsSent);
         } else {

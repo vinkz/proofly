@@ -2,9 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { z } from 'zod';
 
+import posthog from 'posthog-js';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
+import { supabaseBrowser } from '@/lib/supabaseClient';
 import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +31,11 @@ export default function SignupStep1Page() {
     password: '',
     confirm: '',
   });
+
+  // Funnel step 2: visitor reached the signup screen.
+  useEffect(() => {
+    track(ANALYTICS_EVENTS.signupStarted);
+  }, []);
 
   const update = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) =>
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
@@ -60,6 +68,12 @@ export default function SignupStep1Page() {
           return;
         }
 
+        // Funnel step 3: account created with a live session (email path).
+        const { data: { user } } = await supabaseBrowser().auth.getUser();
+        if (user) {
+          posthog.identify(user.id, { email: user.email });
+        }
+        track(ANALYTICS_EVENTS.signupCompleted, { method: 'email' });
         pushToast({
           title: result.existingAccount ? 'Signed in' : 'Account created',
           description: result.existingAccount

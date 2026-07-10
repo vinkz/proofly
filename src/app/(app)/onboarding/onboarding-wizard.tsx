@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
@@ -342,6 +343,9 @@ export function OnboardingWizard({
           return;
         }
 
+        if (mode === 'finish') {
+          track(ANALYTICS_EVENTS.onboardingCompleted);
+        }
         pushToast({
           title: mode === 'finish' ? 'Setup complete' : 'Progress saved',
           description:

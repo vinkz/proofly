@@ -4,7 +4,10 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+import posthog from 'posthog-js';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { signInWithPassword, signInWithMagicLink } from '@/server/auth';
+import { supabaseBrowser } from '@/lib/supabaseClient';
 import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +28,11 @@ export function LoginClient() {
     startTransition(async () => {
       try {
         await signInWithPassword({ email, password });
+        const { data: { user } } = await supabaseBrowser().auth.getUser();
+        if (user) {
+          posthog.identify(user.id, { email: user.email });
+        }
+        track(ANALYTICS_EVENTS.userLoggedIn, { method: 'password' });
         router.push(nextPath);
       } catch (error) {
         pushToast({
@@ -40,6 +48,7 @@ export function LoginClient() {
     startTransition(async () => {
       try {
         await signInWithMagicLink(email, nextPath);
+        track(ANALYTICS_EVENTS.userLoggedIn, { method: 'magic_link' });
         pushToast({
           title: 'Check your email',
           description: 'Magic link sent. Open it to continue.',
