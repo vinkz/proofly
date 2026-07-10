@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import posthog from 'posthog-js';
 import { useToast } from '@/components/ui/use-toast';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { supabaseBrowser } from '@/lib/supabaseClient';
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
@@ -99,6 +101,19 @@ export function GoogleAuthButton({
           nonce: rawNonce,
         });
         if (error) throw error;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          posthog.identify(user.id, { email: user.email });
+        }
+        // Funnel step 3: account created via Google. Only count this on the signup
+        // flow (nextPath into signup), not ordinary Google sign-ins on /login.
+        // posthog flushes queued events via sendBeacon on pagehide, so the event
+        // survives the window.location redirect below.
+        if (nextPath?.includes('signup')) {
+          track(ANALYTICS_EVENTS.signupCompleted, { method: 'google' });
+        } else {
+          track(ANALYTICS_EVENTS.userLoggedIn, { method: 'google' });
+        }
         // Session cookies are now set by the SSR browser client; reuse the existing
         // callback route for onboarding/next routing (it no-ops without a `code`).
         const dest = new URL('/auth/callback', window.location.origin);

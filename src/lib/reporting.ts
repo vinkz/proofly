@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { JobChecklistItem } from '@/types/job-detail';
 import { getOpenAIClient } from '@/lib/openai';
+import { getPostHogClient } from '@/lib/posthog-server';
 
 type ChecklistSummaryItem = Pick<JobChecklistItem, 'label' | 'result' | 'note'>;
 
@@ -31,7 +32,7 @@ export interface PdfPayload {
   assets: PdfAsset[];
 }
 
-export async function generateReport(data: ReportJobPayload): Promise<string> {
+export async function generateReport(data: ReportJobPayload, distinctId = 'system'): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   const checklistSummary = data.checklist.map((item) => ({
     label: item.label,
@@ -43,23 +44,58 @@ export async function generateReport(data: ReportJobPayload): Promise<string> {
     return 'Inspection completed. (AI summary unavailable – set OPENAI_API_KEY to enable.)';
   }
 
+  const model = 'gpt-4o-mini';
   const openai = getOpenAIClient();
-  const completion = await openai.responses.create({
-    model: 'gpt-4o-mini',
-    input: [
-      {
-        role: 'system',
-        content: `You are certnow, an assistant who produces factual, professional compliance summaries for plumbing jobs. 
+  const start = Date.now();
+
+  let completion: Awaited<ReturnType<typeof openai.responses.create>>;
+  try {
+    completion = await openai.responses.create({
+      model,
+      input: [
+        {
+          role: 'system',
+          content: `You are certnow, an assistant who produces factual, professional compliance summaries for plumbing jobs.
 Return 3-4 sentences that highlight severity of failed checks and next steps.`,
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            job: data.job,
+            checklist: checklistSummary,
+          }),
+        },
+      ],
+    });
+  } catch (error) {
+    getPostHogClient()?.capture({
+      distinctId,
+      event: '$ai_generation',
+      properties: {
+        $ai_trace_id: data.job.id,
+        $ai_span_name: 'generate_report',
+        $ai_model: model,
+        $ai_provider: 'openai',
+        $ai_latency: (Date.now() - start) / 1000,
+        $ai_is_error: true,
+        $ai_error: error instanceof Error ? error.message : String(error),
       },
-      {
-        role: 'user',
-        content: JSON.stringify({
-          job: data.job,
-          checklist: checklistSummary,
-        }),
-      },
-    ],
+    });
+    throw error;
+  }
+
+  getPostHogClient()?.capture({
+    distinctId,
+    event: '$ai_generation',
+    properties: {
+      $ai_trace_id: data.job.id,
+      $ai_span_name: 'generate_report',
+      $ai_model: model,
+      $ai_provider: 'openai',
+      $ai_input_tokens: completion.usage?.input_tokens,
+      $ai_output_tokens: completion.usage?.output_tokens,
+      $ai_latency: (Date.now() - start) / 1000,
+    },
   });
 
   return completion.output_text?.trim() || 'Inspection completed. All systems verified.';

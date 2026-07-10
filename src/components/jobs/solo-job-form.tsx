@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useState, useTransition, type For
 import { useRouter } from 'next/navigation';
 
 import { createSoloJob, requestLandlordJobPrefill } from '@/server/jobs';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import type { JobRequestPrefill } from '@/server/job-requests';
 import type { ClientListItem } from '@/types/client';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
@@ -1022,6 +1023,10 @@ export function SoloJobForm({
           requestId: initialRequest?.id,
         });
         clearDraft();
+        // Funnel step 4: job created. PostHog's funnel uses the first occurrence
+        // per person, so this doubles as "first job created". job_type is a
+        // low-cardinality category — no PII.
+        track(ANALYTICS_EVENTS.jobCreated, { job_type: jobType, client_mode: clientMode });
         pushToast({
           title: submitMode === 'continue' ? 'Job created, opening next step' : 'Job created',
           variant: 'success',

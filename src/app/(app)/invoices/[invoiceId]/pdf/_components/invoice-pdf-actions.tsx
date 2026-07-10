@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { useToast } from '@/components/ui/use-toast';
 
 export function InvoicePdfActions({ invoiceId }: { invoiceId: string }) {
@@ -20,6 +21,7 @@ export function InvoicePdfActions({ invoiceId }: { invoiceId: string }) {
         }
         const payload = (await response.json()) as { pdfUrl?: string };
         setPdfUrl(payload.pdfUrl ?? null);
+        track(ANALYTICS_EVENTS.invoicePdfGenerated);
         pushToast({ title: 'PDF generated', variant: 'success' });
         if (payload.pdfUrl) {
           window.open(payload.pdfUrl, '_blank');

@@ -3,6 +3,7 @@
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { createInvoiceForJob } from '@/server/invoices';
 
 export function CreateInvoiceButton({ jobId, returnTo }: { jobId: string; returnTo?: string }) {
@@ -13,6 +14,7 @@ export function CreateInvoiceButton({ jobId, returnTo }: { jobId: string; return
     startTransition(async () => {
       try {
         const invoice = await createInvoiceForJob(jobId);
+        track(ANALYTICS_EVENTS.invoiceCreated);
         const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : '';
         router.push(`/invoices/${invoice.id}${query}`);
       } catch {

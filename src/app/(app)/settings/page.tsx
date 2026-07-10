@@ -10,6 +10,7 @@ import { ProfilePreferences } from './profile-preferences';
 import { PasswordSection } from './password-section';
 import { SavedSignatureSection } from './saved-signature-section';
 import { ThemeSection } from './theme-section';
+import { LogoutButton } from './logout-button';
 
 type SetupTarget = 'certificate' | 'frictionless' | null;
 
@@ -231,14 +232,7 @@ export default async function SettingsPage({
         </div>
         <div className="p-4">
           <p className="mb-3 text-[13px] text-[var(--color-text-secondary)]">You will be returned to the login screen.</p>
-          <form action="/logout" method="post">
-            <button
-              type="submit"
-              className="rounded-full border-[0.5px] border-[#f09595] bg-[#fcebeb] px-[12px] py-[5px] text-[12px] font-medium text-[#a32d2d]"
-            >
-              Sign out
-            </button>
-          </form>
+          <LogoutButton />
         </div>
       </section>
 

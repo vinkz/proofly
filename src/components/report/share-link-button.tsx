@@ -3,6 +3,7 @@
 import { useTransition } from 'react';
 
 import { createReportSignedUrl } from '@/server/jobs';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { useToast } from '@/components/ui/use-toast';
 
 export function ShareReportLinkButton({ jobId }: { jobId: string }) {
@@ -13,6 +14,7 @@ export function ShareReportLinkButton({ jobId }: { jobId: string }) {
     startTransition(async () => {
       try {
         const url = await createReportSignedUrl(jobId);
+        track(ANALYTICS_EVENTS.certificateShared);
         try {
           if (navigator.clipboard && navigator.clipboard.writeText) {
             await navigator.clipboard.writeText(url);
