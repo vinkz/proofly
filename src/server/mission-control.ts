@@ -97,6 +97,93 @@ export async function getSentryIssues(): Promise<SentryPanel> {
 
 export type PulseStat = { last24h: number; last7d: number };
 
+export type TrafficStats = {
+  pageviews: PulseStat;
+  visitors: PulseStat;
+  signups: PulseStat;
+  jobs: PulseStat;
+};
+
+export type TrafficPanel =
+  | { configured: false }
+  | { configured: true; error: string; stats: null; dashboardUrl: string }
+  | { configured: true; error: null; stats: TrafficStats; dashboardUrl: string };
+
+// PostHog project + API host. The ingest host (eu.i.posthog.com) differs from
+// the app/API host (eu.posthog.com); default to the EU app host and let it be
+// overridden for US/self-hosted. Reads via process.env (like getSentryIssues)
+// since these are server-only and not part of the typed env.
+const POSTHOG_PROJECT_ID = process.env.POSTHOG_PROJECT_ID ?? '220662';
+const POSTHOG_API_HOST = (process.env.POSTHOG_API_HOST ?? 'https://eu.posthog.com').replace(/\/$/, '');
+const POSTHOG_DASHBOARD_ID = process.env.POSTHOG_DASHBOARD_ID ?? '808798';
+
+function posthogDashboardUrl() {
+  return `${POSTHOG_API_HOST}/project/${POSTHOG_PROJECT_ID}/dashboard/${POSTHOG_DASHBOARD_ID}`;
+}
+
+const num = (value: unknown) => {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export async function getTraffic(): Promise<TrafficPanel> {
+  const token = process.env.POSTHOG_PERSONAL_API_KEY;
+  const dashboardUrl = posthogDashboardUrl();
+  if (!token) return { configured: false };
+
+  // One HogQL query returns all six-plus aggregates via conditional counts, so
+  // the panel costs a single round-trip. person_id powers unique visitors.
+  const hogql = `
+    SELECT
+      countIf(event = '$pageview' AND timestamp > now() - INTERVAL 1 DAY) AS pv24,
+      countIf(event = '$pageview' AND timestamp > now() - INTERVAL 7 DAY) AS pv7,
+      uniqIf(person_id, event = '$pageview' AND timestamp > now() - INTERVAL 1 DAY) AS uv24,
+      uniqIf(person_id, event = '$pageview' AND timestamp > now() - INTERVAL 7 DAY) AS uv7,
+      countIf(event = 'signup_completed' AND timestamp > now() - INTERVAL 1 DAY) AS su24,
+      countIf(event = 'signup_completed' AND timestamp > now() - INTERVAL 7 DAY) AS su7,
+      countIf(event = 'job_created' AND timestamp > now() - INTERVAL 1 DAY) AS jc24,
+      countIf(event = 'job_created' AND timestamp > now() - INTERVAL 7 DAY) AS jc7
+    FROM events
+    WHERE timestamp > now() - INTERVAL 7 DAY
+  `;
+
+  try {
+    const response = await fetch(`${POSTHOG_API_HOST}/api/projects/${POSTHOG_PROJECT_ID}/query/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: { kind: 'HogQLQuery', query: hogql } }),
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      return {
+        configured: true,
+        error: `PostHog API returned ${response.status}`,
+        stats: null,
+        dashboardUrl,
+      };
+    }
+    const payload = (await response.json()) as { results?: unknown[][] };
+    const row = payload.results?.[0] ?? [];
+    return {
+      configured: true,
+      error: null,
+      stats: {
+        pageviews: { last24h: num(row[0]), last7d: num(row[1]) },
+        visitors: { last24h: num(row[2]), last7d: num(row[3]) },
+        signups: { last24h: num(row[4]), last7d: num(row[5]) },
+        jobs: { last24h: num(row[6]), last7d: num(row[7]) },
+      },
+      dashboardUrl,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown PostHog error';
+    return { configured: true, error: message, stats: null, dashboardUrl };
+  }
+}
+
 export type TrialEndingSoon = {
   name: string;
   trialEndsAt: string;
@@ -277,6 +364,7 @@ export function getHealthChecks(input: {
   sentry: SentryPanel;
   pulse: BusinessPulse;
   money: MoneyPanel;
+  traffic: TrafficPanel;
 }): HealthCheck[] {
   const checks: HealthCheck[] = [];
 
@@ -286,6 +374,14 @@ export function getHealthChecks(input: {
     checks.push({ label: 'Error tracking', status: 'down', detail: input.sentry.error });
   } else {
     checks.push({ label: 'Error tracking', status: 'ok', detail: 'Sentry connected' });
+  }
+
+  if (!input.traffic.configured) {
+    checks.push({ label: 'Analytics', status: 'warn', detail: 'POSTHOG_PERSONAL_API_KEY not set' });
+  } else if (input.traffic.error) {
+    checks.push({ label: 'Analytics', status: 'down', detail: input.traffic.error });
+  } else {
+    checks.push({ label: 'Analytics', status: 'ok', detail: 'PostHog connected' });
   }
 
   checks.push(

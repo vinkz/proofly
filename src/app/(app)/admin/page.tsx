@@ -7,10 +7,12 @@ import {
   getHealthChecks,
   getMoney,
   getSentryIssues,
+  getTraffic,
   isAdminEmail,
   type HealthCheck,
   type PulseStat,
   type SentryPanel,
+  type TrafficPanel,
 } from '@/server/mission-control';
 import { Card, CardContent } from '@/components/ui/card';
 import { AutoRefresh } from './_components/auto-refresh';
@@ -129,6 +131,67 @@ function ErrorsPanel({ sentry }: { sentry: SentryPanel }) {
   );
 }
 
+function TrafficPanel({ traffic }: { traffic: TrafficPanel }) {
+  if (!traffic.configured) {
+    return (
+      <Card>
+        <CardContent className="pt-4">
+          <p className="text-[15px] font-medium text-[var(--color-text-primary)]">
+            Traffic analytics is not connected yet
+          </p>
+          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+            Event capture is already live — this panel just needs a read-only key to pull the
+            numbers back in.
+          </p>
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
+            <li>
+              In PostHog: Settings → Personal API keys → Create key, with the{' '}
+              <span className="font-medium">Query Read</span> scope.
+            </li>
+            <li>
+              In Vercel, add env var POSTHOG_PERSONAL_API_KEY (the key). Optional:
+              POSTHOG_PROJECT_ID (defaults to 220662) and POSTHOG_API_HOST (defaults to
+              https://eu.posthog.com).
+            </li>
+            <li>Redeploy — traffic then loads into this panel automatically.</li>
+          </ol>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (traffic.error !== null) {
+    return (
+      <Card>
+        <CardContent className="pt-4">
+          <p className="text-[13px] text-[var(--color-red)]">
+            Could not load traffic from PostHog: {traffic.error}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2.5">
+        <StatTile label="Pageviews" stat={traffic.stats.pageviews} />
+        <StatTile label="Unique visitors" stat={traffic.stats.visitors} />
+        <StatTile label="Signups completed" stat={traffic.stats.signups} />
+        <StatTile label="Jobs created" stat={traffic.stats.jobs} />
+      </div>
+      <a
+        href={traffic.dashboardUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-block text-[12px] font-medium text-[var(--color-action)]"
+      >
+        Open funnel dashboard in PostHog →
+      </a>
+    </>
+  );
+}
+
 const HEALTH_TONES: Record<HealthCheck['status'], { pill: string; label: string }> = {
   ok: { pill: 'bg-[var(--color-action-bg)] text-[var(--color-action)]', label: 'OK' },
   warn: { pill: 'bg-[var(--color-amber-bg)] text-[var(--color-amber)]', label: 'Setup' },
@@ -141,12 +204,13 @@ export default async function AdminMissionControlPage() {
   if (!user) redirect('/login');
   if (!isAdminEmail(user.email)) redirect('/dashboard');
 
-  const [sentry, pulse, money] = await Promise.all([
+  const [sentry, pulse, money, traffic] = await Promise.all([
     getSentryIssues(),
     getBusinessPulse(),
     getMoney(),
+    getTraffic(),
   ]);
-  const health = getHealthChecks({ sentry, pulse, money });
+  const health = getHealthChecks({ sentry, pulse, money, traffic });
   const mrr = money.mrrPence === null ? null : (money.mrrPence / 100).toFixed(2);
 
   return (
@@ -167,6 +231,11 @@ export default async function AdminMissionControlPage() {
       <section className="space-y-2.5">
         <SectionLabel>Errors · last 24h</SectionLabel>
         <ErrorsPanel sentry={sentry} />
+      </section>
+
+      <section className="space-y-2.5">
+        <SectionLabel>Traffic · 24h / 7d</SectionLabel>
+        <TrafficPanel traffic={traffic} />
       </section>
 
       <section className="space-y-2.5">
