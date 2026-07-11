@@ -49,7 +49,9 @@ function isUnsafe(appliance: Cp12TierOneAppliance) {
 
 /** The authoritative statutory-minimum issue gate. Draft persistence remains permissive. */
 export function validateCp12TierOne(input: Cp12TierOneInput): string[] {
-  const { fields, appliances, requireCustomerSignature = true } = input;
+  // Customer / received-by signature is optional by default (HSE: only the
+  // engineer must sign). Callers may opt in by passing requireCustomerSignature.
+  const { fields, appliances, requireCustomerSignature = false } = input;
   const errors: string[] = [];
 
   (['inspection_date', 'property_address', 'landlord_name', 'engineer_name', 'gas_safe_number'] as const).forEach((key) => {

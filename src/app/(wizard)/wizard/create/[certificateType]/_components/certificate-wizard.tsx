@@ -1376,7 +1376,9 @@ export function CertificateWizard({
 
   const validateCurrentCp12 = (options: { requireCustomerSignature?: boolean } = {}) => {
     if (!isCp12) return [];
-    const requireCustomerSignature = options.requireCustomerSignature ?? true;
+    // Customer / received-by signature is optional (HSE: only the engineer must
+    // sign). Callers may still opt in, but the default gate no longer requires it.
+    const requireCustomerSignature = options.requireCustomerSignature ?? false;
     const normalizedInfo = {
       ...info,
       inspection_date: info.inspection_date || completionDate,
@@ -1790,27 +1792,42 @@ export function CertificateWizard({
     const companyPostcode = resolvedInitialInfo.company_postcode || '';
     const companyPhone = resolvedInitialInfo.company_phone || '';
 
+    // Tier 1 (legally required) items are `blocking` and form the spine of the
+    // flow. Tier 2 (conventional) items are non-blocking: the engineer can skip
+    // them and they are simply omitted from the certificate. See
+    // src/lib/cp12/field-config.ts for the authoritative classification.
+
+    // Tier 1 — engineer identity (Reg 36(3)(h)/(i)).
     items.push({
       id: 'installer',
-      label: 'Engineer & company details present',
-      ok:
-        hasValue(engineerName) &&
-        hasValue(gasSafeNumber) &&
-        hasValue(companyName) &&
-        hasValue(engineerIdCard) &&
-        hasValue(companyAddress) &&
-        hasValue(companyPostcode) &&
-        hasValue(companyPhone),
+      label: 'Engineer name & Gas Safe registration',
+      ok: hasValue(engineerName) && hasValue(gasSafeNumber),
       hint: 'Set in Settings',
       action: () => router.push('/settings'),
       blocking: true,
     });
 
-    const addrOk =
-      hasValue(jobAddress.job_address_name) && hasValue(jobAddress.job_address_line1) && hasValue(jobAddress.job_postcode) && hasValue(jobAddress.job_tel);
+    // Tier 2 — business/company details. Optional: omitted from the PDF if blank.
+    items.push({
+      id: 'business-details',
+      label: 'Business details (optional)',
+      ok:
+        hasValue(companyName) &&
+        hasValue(companyAddress) &&
+        hasValue(companyPostcode) &&
+        hasValue(companyPhone) &&
+        hasValue(engineerIdCard),
+      hint: 'Optional — set in Settings; omitted from the certificate if left blank',
+      action: () => router.push('/settings'),
+      blocking: false,
+    });
+
+    // Tier 1 — premises address (Reg 36(3)(b)). Property reference + site tel are
+    // conventional and tracked as a non-blocking reminder below.
+    const addrOk = hasValue(jobAddress.job_address_line1) && hasValue(jobAddress.job_postcode);
     items.push({
       id: 'job-address',
-      label: 'Property reference, job address, postcode, and site telephone',
+      label: 'Property address & postcode',
       ok: addrOk,
       hint: 'Add in People & location',
       action: () => {
@@ -1820,6 +1837,7 @@ export function CertificateWizard({
       blocking: true,
     });
 
+    // Tier 1 — landlord / agent name and address (Reg 36(3)(c)).
     const landlordOk =
       hasValue(info.landlord_name) &&
       hasValue(info.landlord_address_line1) &&
@@ -1837,8 +1855,11 @@ export function CertificateWizard({
       blocking: true,
     });
 
-    const applianceChecks: ChecklistItem[] = appliances.map((app, index) => {
+    // Per appliance: identity + location + Reg 26(9) are Tier 1 (blocking);
+    // readings/checks are Tier 2 (non-blocking, recorded-if-done).
+    const applianceChecks: ChecklistItem[] = appliances.flatMap((app, index) => {
       const identityOk = hasValue(app.location) && hasValue(app.appliance_type) && hasValue(app.make_model);
+      const reg26Ok = Boolean(app.reg_26_9_confirmed);
       const readingsOk =
         hasValue(app.operating_pressure) &&
         hasValue(app.heat_input) &&
@@ -1848,23 +1869,45 @@ export function CertificateWizard({
         hasValue(app.safety_devices_correct) &&
         hasValue(app.flue_performance_test) &&
         hasValue(app.appliance_serviced) &&
-        hasValue(app.safety_rating) &&
-        Boolean(app.reg_26_9_confirmed);
-      const ok = identityOk && readingsOk;
-      return {
-        id: `appliance-${index}`,
-        label: `Appliance #${index + 1}: identity + readings complete`,
-        ok,
-        hint: ok
-          ? undefined
-          : !identityOk
-            ? 'Edit identity in Photos'
-            : 'Add checks in Appliance checks',
-        action: () => setStep(identityOk ? 3 : 2),
-        blocking: true,
-      };
+        hasValue(app.safety_rating);
+      const tierOneOk = identityOk && reg26Ok;
+      return [
+        {
+          id: `appliance-${index}`,
+          label: `Appliance #${index + 1}: description, location & Reg 26(9)`,
+          ok: tierOneOk,
+          hint: tierOneOk ? undefined : !identityOk ? 'Edit identity in Photos' : 'Confirm Reg 26(9) in Appliance checks',
+          action: () => setStep(identityOk ? 3 : 2),
+          blocking: true,
+        },
+        {
+          id: `appliance-${index}-readings`,
+          label: `Appliance #${index + 1}: readings & checks (optional)`,
+          ok: readingsOk,
+          hint: 'Optional — only the checks you record appear on the certificate',
+          action: () => setStep(3),
+          blocking: false,
+        },
+      ];
     });
     items.push(...applianceChecks);
+
+    // Tier 1 — defect + remedial action are mandated when any appliance is unsafe.
+    const anyUnsafe = appliances.some((app) =>
+      ['ar', 'id', 'at risk', 'immediately dangerous'].includes(
+        String(app.safety_rating ?? app.safety_classification ?? '').trim().toLowerCase(),
+      ),
+    );
+    if (anyUnsafe) {
+      items.push({
+        id: 'defects',
+        label: 'Defect & remedial action recorded',
+        ok: hasValue(defects.defect_description) && hasValue(defects.remedial_action),
+        hint: 'Required when an appliance is At Risk / Immediately Dangerous',
+        action: () => setStep(4),
+        blocking: true,
+      });
+    }
 
     items.push({
       id: 'reg26',
@@ -1874,10 +1917,11 @@ export function CertificateWizard({
       blocking: true,
     });
 
+    // Tier 1 — only the engineer signature is mandatory (HSE).
     items.push({
       id: 'signatures',
-      label: 'Engineer and customer signatures',
-      ok: hasValue(engineerSignature) && hasValue(customerSignature),
+      label: 'Engineer signature',
+      ok: hasValue(engineerSignature),
       action: () => setStep(4),
       blocking: true,
     });
@@ -1889,19 +1933,27 @@ export function CertificateWizard({
       blocking: true,
     });
 
-    // Non-blocking reminders for fields not yet captured in UI
+    // Tier 2 / 3 — non-blocking reminders.
+    items.push({
+      id: 'customer-signature',
+      label: 'Customer / received-by signature (optional)',
+      ok: hasValue(customerSignature),
+      hint: 'Optional — for acknowledgement; not legally required',
+      action: () => setStep(4),
+      blocking: false,
+    });
     items.push({
       id: 'co-alarms',
-      label: 'CO alarms fitted & tested',
+      label: 'CO alarms fitted & tested (optional)',
       ok: hasValue(evidenceFields.co_alarm_fitted) && hasValue(evidenceFields.co_alarm_tested),
-      hint: 'Not captured in app yet',
+      hint: 'Optional — omitted from the certificate if not recorded',
       blocking: false,
     });
     items.push({
       id: 'next-inspection',
       label: 'Next inspection due date',
       ok: hasValue(evidenceFields.next_inspection_due) || hasValue(evidenceFields.next_inspection_date) || hasValue(completionDate),
-      hint: 'Defaults to completion date',
+      hint: 'Defaults to 12 months from the inspection date',
       blocking: false,
     });
 
@@ -1910,6 +1962,8 @@ export function CertificateWizard({
   }, [
     appliances,
     completionDate,
+    defects.defect_description,
+    defects.remedial_action,
     resolvedInitialInfo.company_address,
     resolvedInitialInfo.company_phone,
     resolvedInitialInfo.company_postcode,
@@ -3137,15 +3191,18 @@ export function CertificateWizard({
               />
             </div>
           </div>
-          <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Comments (optional)</p>
+          <details className="group rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4" open={hasValue(evidenceFields.comments)}>
+            <summary className="flex cursor-pointer list-none items-center justify-between text-[13px] font-medium text-[var(--color-text-primary)]">
+              <span>Comments (optional)</span>
+              <span className="text-[12px] text-[var(--color-text-secondary)] group-open:hidden">Add note</span>
+            </summary>
             <Textarea
               className="mt-3 min-h-[90px]"
               value={evidenceFields.comments ?? ''}
               onChange={(e) => handleEvidenceFieldsUpdate({ comments: e.target.value })}
               placeholder="Site notes or comments that appear on the CP12"
             />
-          </div>
+          </details>
         </div>
       )}
 

@@ -2013,7 +2013,8 @@ function validateCp12ForIssue(
   return validateCp12TierOne({
     fields: fieldMap,
     appliances,
-    requireCustomerSignature: options.requireCustomerSignature ?? true,
+    // Customer / received-by signature is optional (HSE: only the engineer must sign).
+    requireCustomerSignature: options.requireCustomerSignature ?? false,
   });
 }
 

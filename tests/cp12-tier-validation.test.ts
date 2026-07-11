@@ -44,4 +44,20 @@ describe('validateCp12TierOne', () => {
   it('accepts a complete tier-one record', () => {
     expect(validateCp12TierOne({ fields: validFields, appliances: [validAppliance] })).toEqual([]);
   });
+
+  it('accepts a record with no customer signature (customer signature is optional)', () => {
+    const errors = validateCp12TierOne({
+      fields: { ...validFields, customer_signature_path: '', customer_signature: '', customer_signature_url: '' },
+      appliances: [validAppliance],
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it('still blocks a missing engineer signature', () => {
+    const errors = validateCp12TierOne({
+      fields: { ...validFields, engineer_signature_path: '', engineer_signature: '', engineer_signature_url: '' },
+      appliances: [validAppliance],
+    });
+    expect(errors).toContain('Engineer signature is required');
+  });
 });
