@@ -65,6 +65,7 @@ export type Cp12Appliance = {
   co_reading_high: string;
   co_reading_low: string;
   flue_type: string;
+  flue_location: string;
   ventilation_provision: string;
   ventilation_satisfactory: string;
   flue_condition: string;
@@ -84,4 +85,5 @@ export type Cp12Appliance = {
   warning_notice_issued: boolean;
   appliance_disconnected: boolean;
   danger_do_not_use_attached: boolean;
+  reg_26_9_confirmed: boolean;
 };

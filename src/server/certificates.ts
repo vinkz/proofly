@@ -22,8 +22,11 @@ import { GAS_WARNING_REQUIRED_FOR_ISSUE } from '@/types/gas-warning-notice';
 import type { GeneralWorksPhotoCategory } from '@/types/general-works';
 import { GENERAL_WORKS_PHOTO_CATEGORIES, GENERAL_WORKS_REQUIRED_FIELDS } from '@/types/general-works';
 import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
-import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import { type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import { renderCp12CertificateV2Pdf } from '@/server/pdf/renderCp12CertificateV2';
 import { cp12ApplianceTypeLabel, resolveCp12Category, resolveCp12Subtype } from '@/lib/cp12/applianceConfig';
+import { CP12_TEMPLATE_VERSION } from '@/lib/cp12/field-config';
+import { validateCp12TierOne } from '@/lib/cp12/validation';
 import {
   renderGasServicePdf,
   type ApplianceInput as GasServiceApplianceInput,
@@ -1856,6 +1859,7 @@ const Cp12ApplianceSchema = z.object({
       co_reading_high: optionalText,
       co_reading_low: optionalText,
       flue_type: optionalText,
+      flue_location: optionalText,
       ventilation_provision: optionalText,
       ventilation_satisfactory: optionalText,
       flue_condition: optionalText,
@@ -1875,6 +1879,7 @@ const Cp12ApplianceSchema = z.object({
       warning_notice_issued: z.boolean().optional().default(false),
       appliance_disconnected: z.boolean().optional().default(false),
       danger_do_not_use_attached: z.boolean().optional().default(false),
+      reg_26_9_confirmed: z.boolean().optional().default(false),
     }),
   )
     .min(0),
@@ -1925,25 +1930,8 @@ export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSc
   return { ok: true };
 }
 
-const CP12_REQUIRED_FIELDS = [
-  'property_address',
-  'inspection_date',
-  'landlord_name',
-  'landlord_address',
-  'engineer_name',
-  'gas_safe_number',
-];
-
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
-
-function hasSignatureValue(fieldMap: Record<string, unknown>, role: 'engineer' | 'customer') {
-  const keys =
-    role === 'engineer'
-      ? ['engineer_signature_path', 'engineer_signature', 'engineer_signature_url']
-      : ['customer_signature_path', 'customer_signature', 'customer_signature_url'];
-  return keys.some((key) => hasValue(fieldMap[key]));
-}
 
 function resolveGasWarningCustomerPresent(fields: GasWarningNoticeFields | Record<string, unknown>) {
   const explicit = fields.customer_present;
@@ -2022,70 +2010,11 @@ function validateCp12ForIssue(
   appliances: Cp12Appliance[],
   options: { requireCustomerSignature?: boolean } = {},
 ) {
-  const requireCustomerSignature = options.requireCustomerSignature ?? true;
-  const errors: string[] = [];
-  CP12_REQUIRED_FIELDS.forEach((key) => {
-    if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
+  return validateCp12TierOne({
+    fields: fieldMap,
+    appliances,
+    requireCustomerSignature: options.requireCustomerSignature ?? true,
   });
-
-  const landlordLine1 = String(fieldMap.landlord_address_line1 ?? '').trim();
-  const landlordLine2 = String(fieldMap.landlord_address_line2 ?? '').trim();
-  const landlordCity = String(fieldMap.landlord_city ?? fieldMap.landlord_town ?? '').trim();
-  const landlordAddress =
-    String(fieldMap.landlord_address ?? '').trim() ||
-    [landlordLine1, landlordLine2, landlordCity].filter((part) => part.length > 0).join(', ');
-  const landlordPostcode = String(fieldMap.landlord_postcode ?? '').trim();
-  if (!landlordAddress) {
-    errors.push('Landlord address is required');
-  }
-  if (!landlordPostcode && !String(fieldMap.landlord_address ?? '').trim()) {
-    errors.push('Landlord postcode is required');
-  }
-  if (!booleanFromField(fieldMap.reg_26_9_confirmed)) {
-    errors.push('Regulation 26(9) confirmation is required');
-  }
-
-  const applianceRows = (appliances ?? []).filter(
-    (app) => hasValue(app?.appliance_type) || hasValue(app?.location),
-  );
-  if (!applianceRows.length) {
-    errors.push('At least one appliance with location and description is required');
-  } else if (applianceRows.some((app) => !hasValue(app?.location) || !hasValue(app?.appliance_type))) {
-    errors.push('Each appliance must include location and description');
-  }
-  applianceRows.forEach((app) => {
-    if (hasValue(app.classification_code) && (app.safety_rating ?? '').toLowerCase() === 'safe') {
-      errors.push('Classification code should only be set when safety rating is not safe');
-    }
-  });
-
-  const warningSelection = String(fieldMap.warning_notice_issued ?? '').trim().toUpperCase();
-  const hasDefectText = hasValue(fieldMap.defect_description) || hasValue(fieldMap.remedial_action);
-  const unsafeAppliances = applianceRows.filter((app) => {
-    const rating = (app.safety_rating ?? '').toLowerCase().trim();
-    const classification = (app.safety_classification ?? '').toLowerCase().trim();
-    return (rating.length > 0 && rating !== 'safe') || (classification.length > 0 && classification !== 'safe');
-  });
-  const hasStructuredDefectText = unsafeAppliances.some(
-    (app) => hasValue(app.defect_notes) || hasValue(app.actions_taken) || hasValue(app.actions_required),
-  );
-  const hasStructuredWarningSelection = unsafeAppliances.some((app) => typeof app.warning_notice_issued === 'boolean');
-  const requiresDefectDetails = unsafeAppliances.length > 0 || hasDefectText || warningSelection === 'YES';
-  if (requiresDefectDetails) {
-    if (!hasValue(fieldMap.defect_description) && !hasStructuredDefectText) {
-      errors.push('Defect description is required when an appliance is unsafe');
-    }
-    if (!warningSelection && !hasStructuredWarningSelection) {
-      errors.push('Confirm whether a warning notice was issued');
-    }
-  }
-
-  if (!hasSignatureValue(fieldMap, 'engineer')) errors.push('Engineer signature is required');
-  if (requireCustomerSignature && !hasSignatureValue(fieldMap, 'customer')) {
-    errors.push('Customer signature is required');
-  }
-
-  return errors;
 }
 
 function buildRemoteCp12SigningPath(token: string) {
@@ -2951,7 +2880,14 @@ async function generateCp12CertificateForJob(params: {
     property_address: propertyAddress.summary || mergedFieldMap.property_address,
     postcode: propertyAddress.postcode || mergedFieldMap.postcode,
   };
-  const validationErrors = previewOnly ? [] : validateCp12ForIssue(validationFieldMap, appliances);
+  // Historic appliances pre-date the per-appliance declaration. Their existing
+  // record-level confirmation remains valid; newly saved rows persist their own.
+  const appliancesForIssue = appliances.map((appliance) => ({
+    ...appliance,
+    flue_location: appliance.flue_location ?? appliance.location ?? '',
+    reg_26_9_confirmed: appliance.reg_26_9_confirmed ?? booleanFromField(mergedFieldMap.reg_26_9_confirmed),
+  }));
+  const validationErrors = previewOnly ? [] : validateCp12ForIssue(validationFieldMap, appliancesForIssue);
   if (validationErrors.length) {
     throw new Error(`CP12 validation failed: ${validationErrors.join('; ')}`);
   }
@@ -3062,7 +2998,7 @@ async function generateCp12CertificateForJob(params: {
     equipotentialBondingSatisfactory: toText(mergedFieldMap.equipotential_bonding_satisfactory ?? ''),
   };
 
-  const applianceInputs: ApplianceInput[] = (appliances ?? []).map((app) => {
+  const applianceInputs: ApplianceInput[] = appliancesForIssue.map((app) => {
     const appExtras = app as Cp12Appliance & { appliance_make_model?: string };
     const highCoPpm = toText(app.high_co_ppm ?? app.co_reading_high ?? '');
     const highCo2 = toText(app.high_co2 ?? '');
@@ -3082,6 +3018,7 @@ async function generateCp12CertificateForJob(params: {
       type: typeLabel,
       category,
       flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
+      flueLocation: toText(app.flue_location ?? app.location ?? ''),
       operatingPressure: toText(app.operating_pressure ?? ''),
       heatInput: toText(app.heat_input ?? ''),
       safetyDevice: toText(app.safety_devices_correct ?? app.stability_test ?? ''),
@@ -3100,15 +3037,17 @@ async function generateCp12CertificateForJob(params: {
       combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? '')),
       combustionNotes: toText(app.combustion_notes ?? ''),
       applianceServiced: toText(app.appliance_serviced ?? ''),
+      reg26Confirmed: Boolean(app.reg_26_9_confirmed),
     };
   });
 
-  const pdfBytes = await renderCp12CertificatePdf({
+  const pdfBytes = await renderCp12CertificateV2Pdf({
     fields: cp12Fields,
     appliances: applianceInputs,
     issuedAt,
     recordId: jobId,
   });
+  console.info('CP12 PDF rendered', { jobId, templateVersion: CP12_TEMPLATE_VERSION, previewOnly });
   const cp12PdfHash8 = createHash('sha256').update(pdfBytes).digest('hex').slice(0, 8);
   const cp12DebugMode = process.env.CP12_PDF_DEBUG === '1';
   const appendCacheBust = (url: string, token: string) =>
@@ -3137,6 +3076,7 @@ async function generateCp12CertificateForJob(params: {
     cert_type: 'cp12',
     public_id: publicId,
     user_id: userId,
+    template_version: CP12_TEMPLATE_VERSION,
   };
   const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
   const { error: certErr } = await saveCertificateRecord(admin, {

@@ -43,6 +43,7 @@ import { getMakes } from '@/lib/applianceCatalog/ukBoilers';
 import { getApplianceCatalog } from '@/lib/applianceCatalog/ukAppliances';
 import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
+import { validateCp12TierOne } from '@/lib/cp12/validation';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
 import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 import {
@@ -94,6 +95,7 @@ const emptyAppliance: Cp12Appliance = {
   co_reading_high: '',
   co_reading_low: '',
   flue_type: '',
+  flue_location: '',
   ventilation_provision: '',
   ventilation_satisfactory: '',
   flue_condition: '',
@@ -113,6 +115,7 @@ const emptyAppliance: Cp12Appliance = {
   warning_notice_issued: false,
   appliance_disconnected: false,
   danger_do_not_use_attached: false,
+  reg_26_9_confirmed: false,
 };
 
 const MAX_APPLIANCES = 5;
@@ -489,6 +492,7 @@ export function CertificateWizard({
     co_reading_high: appliance.co_reading_high ?? '',
     co_reading_low: appliance.co_reading_low ?? '',
     flue_type: appliance.flue_type ?? '',
+    flue_location: appliance.flue_location ?? appliance.location ?? '',
     ventilation_provision: appliance.ventilation_provision ?? '',
     ventilation_satisfactory: appliance.ventilation_satisfactory ?? '',
     flue_condition: appliance.flue_condition ?? '',
@@ -510,6 +514,7 @@ export function CertificateWizard({
     warning_notice_issued: appliance.warning_notice_issued ?? false,
     appliance_disconnected: appliance.appliance_disconnected ?? false,
     danger_do_not_use_attached: appliance.danger_do_not_use_attached ?? false,
+    reg_26_9_confirmed: appliance.reg_26_9_confirmed ?? false,
   });
 
   const [appliances, setAppliances] = useState<Cp12Appliance[]>(
@@ -1377,23 +1382,21 @@ export function CertificateWizard({
       inspection_date: info.inspection_date || completionDate,
       landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
     };
-    return validateCp12AgainstSpec(
-      normalizedInfo,
-      appliances,
-      defects,
-      engineerSignature,
-      requireCustomerSignature ? customerSignature : '',
-      {
-        engineerName: resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '',
-        gasSafeNumber: resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '',
-        engineerIdCard: resolvedInitialInfo.engineer_id_card_number || '',
-        companyName: resolvedInitialInfo.company_name || CP12_DEMO_INFO.company_name || '',
-        companyAddress: resolvedInitialInfo.company_address || CP12_DEMO_INFO.company_address || '',
-        companyPostcode: resolvedInitialInfo.company_postcode || CP12_DEMO_INFO.company_postcode || '',
-        companyPhone: resolvedInitialInfo.company_phone || CP12_DEMO_INFO.company_phone || '',
+    return validateCp12TierOne({
+      fields: {
+        ...normalizedInfo,
+        engineer_name: resolvedInitialInfo.engineer_name || CP12_DEMO_INFO.engineer_name || '',
+        gas_safe_number: resolvedInitialInfo.gas_safe_number || CP12_DEMO_INFO.gas_safe_number || '',
+        engineer_signature: engineerSignature,
+        engineer_signature_path: engineerSignaturePath,
+        customer_signature: customerSignature,
+        customer_signature_path: customerSignaturePath,
+        defect_description: defects.defect_description,
+        remedial_action: defects.remedial_action,
       },
-      { requireCustomerSignature },
-    );
+      appliances,
+      requireCustomerSignature,
+    });
   };
 
   const handleGenerate = () => {
@@ -1845,7 +1848,8 @@ export function CertificateWizard({
         hasValue(app.safety_devices_correct) &&
         hasValue(app.flue_performance_test) &&
         hasValue(app.appliance_serviced) &&
-        hasValue(app.safety_rating);
+        hasValue(app.safety_rating) &&
+        Boolean(app.reg_26_9_confirmed);
       const ok = identityOk && readingsOk;
       return {
         id: `appliance-${index}`,
@@ -2480,7 +2484,7 @@ export function CertificateWizard({
       step={offsetStep(2)}
       total={totalSteps}
       title="Appliance details"
-      status="Identity & photos"
+      status="Tier one · appliance identity"
       onBack={goBackOneStep}
       actionsHideWhenVisibleId="cp12-step2-footer-actions"
       actions={
@@ -2734,13 +2738,23 @@ export function CertificateWizard({
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1}</p>
               <div className="mt-4 space-y-3">
                 {cp12FieldVisible(category, 'flue_type') ? (
-                  <SearchableSelect
-                    label={`Appliance ${index + 1} flue type`}
-                    value={appliance.flue_type ?? ''}
-                    options={[...CP12_FLUE_TYPES]}
-                    placeholder="Select or type"
-                    onChange={(val) => setApplianceField(index, 'flue_type', val)}
-                  />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SearchableSelect
+                      label={`Appliance ${index + 1} flue type`}
+                      value={appliance.flue_type ?? ''}
+                      options={[...CP12_FLUE_TYPES]}
+                      placeholder="Select or type"
+                      onChange={(val) => setApplianceField(index, 'flue_type', val)}
+                    />
+                    <label className="space-y-1.5">
+                      <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Flue location (if different)</span>
+                      <Input
+                        value={appliance.flue_location ?? ''}
+                        placeholder={appliance.location || 'Defaults to appliance location'}
+                        onChange={(event) => setApplianceField(index, 'flue_location', event.target.value)}
+                      />
+                    </label>
+                  </div>
                 ) : null}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
@@ -2751,6 +2765,15 @@ export function CertificateWizard({
                       onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
                     />
                   </div>
+                  <label className="flex items-start gap-2 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3 text-[13px] text-[var(--color-text-primary)]">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-[var(--color-action)]"
+                      checked={appliance.reg_26_9_confirmed ?? false}
+                      onChange={(event) => setApplianceBooleanField(index, 'reg_26_9_confirmed', event.target.checked)}
+                    />
+                    <span>Regulation 26(9) checks completed for this appliance or flue</span>
+                  </label>
                   <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                     <EnumChips
                       label="Appliance inspected"
@@ -3393,102 +3416,5 @@ export function CertificateWizard({
   return <>{StepFour}{limitModal}</>;
 }
 
-const CP12_REQUIRED_FIELDS = ['property_address', 'inspection_date', 'landlord_name'] as const;
-
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
-
-// Client-side guardrails that mirror docs/specs/cp12.md; server enforces the same before PDF generation.
-function validateCp12AgainstSpec(
-  info: Cp12InfoState,
-  appliances: Cp12Appliance[],
-  defects: { defect_description?: string | null; remedial_action?: string | null; warning_notice_issued?: string | null },
-  engineerSignature: string,
-  customerSignature: string,
-  profileDefaults: {
-    engineerName?: string;
-    gasSafeNumber?: string;
-    engineerIdCard?: string;
-    companyName?: string;
-    companyAddress?: string;
-    companyPostcode?: string;
-    companyPhone?: string;
-  },
-  options: { requireCustomerSignature?: boolean } = {},
-) {
-  const requireCustomerSignature = options.requireCustomerSignature ?? true;
-  const errors: string[] = [];
-  CP12_REQUIRED_FIELDS.forEach((key) => {
-    if (!hasValue(info[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
-  });
-  if (!hasValue(info.landlord_address_line1)) {
-    errors.push('landlord address line 1 is required');
-  }
-  if (!hasValue(info.landlord_city)) {
-    errors.push('landlord city is required');
-  }
-  if (!hasValue(info.landlord_postcode)) {
-    errors.push('landlord postcode is required');
-  }
-  if (!hasValue(profileDefaults.engineerName)) {
-    errors.push('Engineer name is required (set it in Settings)');
-  }
-  if (!hasValue(profileDefaults.gasSafeNumber)) {
-    errors.push('Gas Safe registration number is required (set it in Settings)');
-  }
-  if (!hasValue(profileDefaults.engineerIdCard)) {
-    errors.push('Engineer ID card number is required (set it in Settings)');
-  }
-  if (!hasValue(profileDefaults.companyName)) {
-    errors.push('Company name is required (set it in Settings)');
-  }
-  if (!hasValue(profileDefaults.companyAddress)) {
-    errors.push('Company address is required (set it in Settings)');
-  }
-  if (!hasValue(profileDefaults.companyPostcode)) {
-    errors.push('Company postcode is required (set it in Settings)');
-  }
-  if (!hasValue(profileDefaults.companyPhone)) {
-    errors.push('Company phone is required (set it in Settings)');
-  }
-  // Engineer/company details are sourced from account settings and signatures; no field entry required here.
-  if (!booleanFromField(info.reg_26_9_confirmed)) {
-    errors.push('Regulation 26(9) confirmation is required');
-  }
-  if ((appliances ?? []).length > MAX_APPLIANCES) {
-    errors.push(`Only ${MAX_APPLIANCES} appliances can be added to a single CP12`);
-  }
-
-  const applianceRows = (appliances ?? []).filter(
-    (app) => hasValue(app?.appliance_type) || hasValue(app?.location),
-  );
-  if (!applianceRows.length) {
-    errors.push('At least one appliance with location and description is required');
-  } else if (applianceRows.some((app) => !hasValue(app?.location) || !hasValue(app?.appliance_type))) {
-    errors.push('Each appliance must include location and description');
-  }
-  applianceRows.forEach((app, index) => {
-    const missing: string[] = [];
-    if (!hasValue(app.landlords_appliance)) missing.push("landlord's appliance");
-    if (!hasValue(app.appliance_inspected)) missing.push('appliance inspected');
-    if (!hasValue(app.operating_pressure)) missing.push('operating pressure');
-    if (!hasValue(app.heat_input)) missing.push('heat input');
-    if (!hasValue(app.safety_devices_correct)) missing.push('safety devices check');
-    if (!hasValue(app.ventilation_satisfactory)) missing.push('ventilation check');
-    if (!hasValue(app.flue_condition)) missing.push('visual flue condition');
-    if (!hasValue(app.flue_performance_test)) missing.push('flue performance test');
-    if (!hasValue(app.appliance_serviced)) missing.push('appliance serviced');
-    if (!getApplianceSafetyClassification(app)) missing.push('appliance safe to use');
-    if (!hasValue(app.gas_tightness_test)) missing.push('gas tightness');
-    if (!hasValue(app.stability_test)) missing.push('stability test');
-    if (missing.length) errors.push(`Appliance #${index + 1}: ${missing.join(', ')} required`);
-  });
-  applianceRows.forEach((app) => {
-    if (hasValue(app.classification_code) && (app.safety_rating ?? '').toLowerCase() === 'safe') {
-      errors.push('Classification code should only be set when safety classification is not safe');
-    }
-  });
-  if (!hasValue(engineerSignature)) errors.push('Engineer signature is required');
-  if (requireCustomerSignature && !hasValue(customerSignature)) errors.push('Customer signature is required');
-  return errors;
-}
