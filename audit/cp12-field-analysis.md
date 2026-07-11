@@ -57,6 +57,31 @@ The refactor distinguishes these tier-one issue blockers from conventional detai
 ### Phase 4 — wizard restructuring
 
 - ✅ The wizard preserves address lookup, request-prefill paths and voice readings while adding the appliance-level declaration and flue-location capture needed by the tiered model.
+- ✅ The issue checklist is now tier-aligned: only Tier-1 items block issue; Tier-2 (business details, appliance readings/checks) are non-blocking and omitted from the certificate when blank; defect + remedial action block only when an appliance is At Risk / Immediately Dangerous.
+- ✅ Customer / received-by signature is optional across the wizard, `validateCp12ForIssue` and the `validateCp12TierOne` default; only the engineer signature is mandatory. Regression tests cover both.
+- ✅ Tier-3 comments are collapsed by default.
+- ✅ v2 PDF redesigned to the CertNow house style (monochrome + status badges), restoring the readings the from-scratch v2 had dropped (combustion, ventilation, flue condition/termination, spillage, servicing) as render-if-captured.
+- ✅ Live DB migration applied 2026-07-11: `cp12_appliances.flue_location` (text) and `reg_26_9_confirmed` (boolean) now exist on project `qjxsudknqhtwhipwkfpq`.
+
+## Recommendations (deferred — documented, not yet implemented)
+
+### R-A — Company/engineer logo on the certificate
+
+The engineer's uploaded logo (`profiles.logo_url`, set in Settings/onboarding). The v2 renderer already accepts `companyLogoBytes` and draws it in the header when present; the wrapper `renderCp12CertificatePdf` forwards it. The missing link is the **caller**: `src/server/certificates.ts` (and `generateCp12FromJob.ts` if revived) does not fetch the profile logo and pass `companyLogoBytes`.
+
+**Recommended wiring:** in the CP12 issue path in `certificates.ts`, resolve `profile.logo_url` → download bytes (mirror the invoice renderer's logo handling / Supabase storage fetch) → pass `companyLogoBytes` into `renderCp12CertificatePdf`. Guard failures silently (a missing/oversized logo must never block issue). Low risk, no schema change. Recommend doing this as a small standalone change.
+
+### R-B — Physical card reorder
+
+The Phase-4 change tier-aligned the **gate logic** (what blocks issue), which is the high-value, low-risk part; the physical order of the wizard cards is unchanged (engineer → appliance details → appliance checks tabs → comments → signatures), and that order already reads reasonably.
+
+**Recommendation: do not do a full DOM reorder now** — it is high-risk (3.4k-line component; touches Path A/C prefill, address lookup, voice readings anchors, the checklist `action()` `setStep` targets) for low incremental benefit now that the gate enforces tiers. If pursued later, prefer *labelling over moving*: mark the Tier-2 tabs/sections as “optional” inline (e.g. “Readings (optional)”) and, within the “Appliance checks” tabs, order the Tier-1 field (Reg 26(9) confirm) before the optional readings. Reserve any card-level DOM reordering for a dedicated PR with full click-through QA.
+
+### R-C — Contextual remedial prompts
+
+Today, a note box appears when a check fails / CO alarm = No. Record-level defect + remedial flow through `defects.defect_description` / `defects.remedial_action` (Tier-1, rendered on the PDF); per-appliance capture uses `defect_notes` / `actions_taken` / `actions_required`.
+
+**Recommendation:** keep the mechanism, and make two things explicit: (1) route contextual failed-check notes into the **defect/remedial** fields (Tier-1, always rendered), never into the now-collapsed Tier-3 `comments`; (2) when an appliance is marked At Risk / Immediately Dangerous, require its defect + remedial fields (the checklist already blocks on this) and keep the existing automatic warning-notice follow-up job wiring. Suggest a short follow-up task to audit that every contextual prompt writes to a Tier-1 defect/remedial field rather than `comments`.
 
 ## Regression requirements
 
