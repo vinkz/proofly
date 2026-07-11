@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { Buffer } from 'node:buffer';
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 
 import { CP12_TEMPLATE_VERSION, cp12FieldShouldRender } from '@/lib/cp12/field-config';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
@@ -12,11 +12,54 @@ type RenderCp12V2Input = {
   appliances: ApplianceInput[];
   recordId: string;
   issuedAt: Date;
+  companyLogoBytes?: Uint8Array;
 };
 
-const PAGE = { width: 595.28, height: 841.89, margin: 42, footer: 30 };
+// ---------------------------------------------------------------------------
+// House style — matches renderInvoicePdf.ts: monochrome greys, colored status
+// badges. A4 portrait.
+// ---------------------------------------------------------------------------
+const hex = (value: string) => {
+  const n = parseInt(value.replace('#', ''), 16);
+  return rgb((n >> 16) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255);
+};
+const C = {
+  black: hex('#111111'),
+  dark: hex('#333333'),
+  mid: hex('#555555'),
+  muted: hex('#888888'),
+  border: hex('#e0e0e0'),
+  rule: hex('#f0f0f0'),
+  panel: hex('#f8f8f8'),
+  safeBg: hex('#e7f4ec'),
+  safeFg: hex('#1a6d44'),
+  warnBg: hex('#fbeecd'),
+  warnFg: hex('#8a5a10'),
+  dangerBg: hex('#fbe3e3'),
+  dangerFg: hex('#9b2020'),
+};
+const PAGE = { w: 595.28, h: 841.89, margin: 42, footer: 34 };
+
 const text = (value: unknown) => String(value ?? '').trim();
-const affirmative = (value: unknown) => value === true || ['true', 'yes', 'pass', 'confirmed'].includes(text(value).toLowerCase());
+const affirmative = (value: unknown) => value === true || ['true', 'yes', 'pass', 'confirmed', 'satisfactory'].includes(text(value).toLowerCase());
+
+/** Safe | At Risk / ID (unsafe) | neutral, derived from the safe-to-use verdict. */
+function applianceStatus(app: ApplianceInput): 'safe' | 'unsafe' | 'neutral' {
+  const v = text(app.applianceSafeToUse).toLowerCase();
+  if (!v) return 'neutral';
+  if (/(^|\b)(no|at risk|immediately dangerous|\bid\b|not safe|unsafe)/.test(v)) return 'unsafe';
+  if (/(yes|safe|to current standards)/.test(v)) return 'safe';
+  return 'neutral';
+}
+
+function addMonths(dmy: string, months: number): string | null {
+  const m = dmy.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  if (Number.isNaN(d.getTime())) return null;
+  d.setMonth(d.getMonth() + months);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
 
 async function fetchSignatureBytes(url: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
   if (!url) return null;
@@ -39,142 +82,293 @@ async function fetchSignatureBytes(url: string): Promise<{ bytes: Uint8Array; mi
   }
 }
 
-function wrap(font: PDFFont, value: string, size: number, width: number) {
-  const words = value.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let line = '';
-  words.forEach((word) => {
-    const candidate = line ? `${line} ${word}` : word;
-    if (line && font.widthOfTextAtSize(candidate, size) > width) {
-      lines.push(line);
-      line = word;
-    } else line = candidate;
-  });
-  if (line) lines.push(line);
-  return lines.length ? lines : [''];
-}
-
 export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
-  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const muted = rgb(0.33, 0.36, 0.39);
-  const green = rgb(0.10, 0.40, 0.27);
-  let page = pdf.addPage([PAGE.width, PAGE.height]);
-  let y = PAGE.height - PAGE.margin;
 
-  const footer = (target: PDFPage, number: number) => {
-    target.drawLine({ start: { x: PAGE.margin, y: PAGE.footer + 14 }, end: { x: PAGE.width - PAGE.margin, y: PAGE.footer + 14 }, thickness: 0.5, color: rgb(0.8, 0.82, 0.83) });
-    target.drawText(`Ref: ${input.recordId} · ${CP12_TEMPLATE_VERSION} · Page ${number}`, { x: PAGE.margin, y: PAGE.footer, size: 8, font: regular, color: muted });
+  let logo: PDFImage | null = null;
+  if (input.companyLogoBytes?.length) {
+    try {
+      logo = await pdf.embedPng(input.companyLogoBytes);
+    } catch {
+      try { logo = await pdf.embedJpg(input.companyLogoBytes); } catch { logo = null; }
+    }
+  }
+
+  const M = PAGE.margin;
+  const CONTENT_W = PAGE.w - M * 2;
+  let page = pdf.addPage([PAGE.w, PAGE.h]);
+  let y = PAGE.h - M;
+
+  // --- low-level primitives ------------------------------------------------
+  const draw = (s: string, x: number, yy: number, size: number, f: PDFFont, color = C.dark) =>
+    page.drawText(s, { x, y: yy, size, font: f, color });
+  const width = (s: string, size: number, f: PDFFont) => f.widthOfTextAtSize(s, size);
+
+  const footer = (target: PDFPage, n: number) => {
+    target.drawLine({ start: { x: M, y: PAGE.footer + 12 }, end: { x: PAGE.w - M, y: PAGE.footer + 12 }, thickness: 0.5, color: C.border });
+    target.drawText(`Ref: ${input.recordId}`, { x: M, y: PAGE.footer, size: 7.5, font, color: C.muted });
+    const right = `${CP12_TEMPLATE_VERSION} · Page ${n}`;
+    target.drawText(right, { x: PAGE.w - M - width(right, 7.5, font), y: PAGE.footer, size: 7.5, font, color: C.muted });
   };
   const newPage = () => {
     footer(page, pdf.getPageCount());
-    page = pdf.addPage([PAGE.width, PAGE.height]);
-    y = PAGE.height - PAGE.margin;
+    page = pdf.addPage([PAGE.w, PAGE.h]);
+    y = PAGE.h - M;
   };
-  const ensure = (height: number) => { if (y - height < PAGE.footer + 28) newPage(); };
-  const title = (value: string) => {
-    ensure(28);
-    page.drawText(value, { x: PAGE.margin, y, size: 11, font: bold, color: green });
+  const ensure = (need: number) => { if (y - need < PAGE.footer + 24) newPage(); };
+
+  const wrap = (s: string, size: number, f: PDFFont, maxW: number) => {
+    const words = s.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let line = '';
+    for (const w of words) {
+      const candidate = line ? `${line} ${w}` : w;
+      if (line && width(candidate, size, f) > maxW) { lines.push(line); line = w; } else line = candidate;
+    }
+    if (line) lines.push(line);
+    return lines.length ? lines : [''];
+  };
+
+  const badge = (label: string, x: number, yy: number, bg: ReturnType<typeof hex>, fg: ReturnType<typeof hex>) => {
+    const size = 8;
+    const padX = 7;
+    const w = width(label, size, bold) + padX * 2;
+    page.drawRectangle({ x, y: yy - 3, width: w, height: size + 7, color: bg });
+    page.drawText(label, { x: x + padX, y: yy, size, font: bold, color: fg });
+    return w;
+  };
+
+  // Section heading with guaranteed space-before + underline.
+  const section = (label: string) => {
+    ensure(34);
     y -= 18;
-    page.drawLine({ start: { x: PAGE.margin, y }, end: { x: PAGE.width - PAGE.margin, y }, thickness: 0.6, color: rgb(0.78, 0.82, 0.8) });
-    y -= 11;
-  };
-  const block = (label: string, value: string) => {
-    const lines = wrap(regular, value || '—', 9, PAGE.width - PAGE.margin * 2 - 112);
-    ensure(14 + lines.length * 12);
-    page.drawText(label, { x: PAGE.margin, y, size: 9, font: bold });
-    lines.forEach((line, index) => page.drawText(line, { x: PAGE.margin + 112, y: y - index * 12, size: 9, font: regular }));
-    y -= Math.max(16, lines.length * 12 + 4);
-  };
-  const note = (value: string) => {
-    const lines = wrap(regular, value, 9, PAGE.width - PAGE.margin * 2);
-    ensure(lines.length * 12 + 8);
-    lines.forEach((line) => { page.drawText(line, { x: PAGE.margin, y, size: 9, font: regular }); y -= 12; });
-    y -= 3;
-  };
-  const optionalBlock = (key: Parameters<typeof cp12FieldShouldRender>[0], label: string, value: unknown) => {
-    if (cp12FieldShouldRender(key, value)) block(label, text(value));
+    draw(label.toUpperCase(), M, y, 10, bold, C.black);
+    y -= 7;
+    page.drawLine({ start: { x: M, y }, end: { x: PAGE.w - M, y }, thickness: 0.8, color: C.dark });
+    y -= 14;
   };
 
-  page.drawText('Landlord Gas Safety Record', { x: PAGE.margin, y, size: 19, font: bold, color: rgb(0.07, 0.08, 0.08) });
-  y -= 20;
-  page.drawText('CP12 · Gas Safety (Installation and Use) Regulations 1998', { x: PAGE.margin, y, size: 9, font: regular, color: muted });
-  y -= 29;
+  // label:value row (two columns) — only rendered when value present.
+  const LABEL_W = 132;
+  const kv = (label: string, value: string, x = M, colW = CONTENT_W) => {
+    if (!value) return;
+    const lines = wrap(value, 9.5, font, colW - LABEL_W);
+    ensure(lines.length * 12 + 2);
+    draw(label, x, y, 9.5, bold, C.dark);
+    lines.forEach((ln, i) => draw(ln, x + LABEL_W, y - i * 12, 9.5, font, C.dark));
+    y -= Math.max(15, lines.length * 12 + 3);
+  };
 
-  title('Record and property');
-  block('Certificate reference', text(input.fields.certNumber) || input.recordId);
-  block('Inspection date', text(input.fields.issueDate) || input.issuedAt.toLocaleDateString('en-GB'));
-  block('Property', [input.fields.propertyAddressName, input.fields.propertyAddressLine1, input.fields.propertyAddressLine2, input.fields.propertyTown, input.fields.propertyPostcode].map(text).filter(Boolean).join(', '));
+  // full-width statement (no label column) — for long confirmations.
+  const statement = (value: string, size = 9.5, color = C.dark) => {
+    const lines = wrap(value, size, font, CONTENT_W);
+    ensure(lines.length * (size + 3) + 2);
+    lines.forEach((ln) => { draw(ln, M, y, size, font, color); y -= size + 3; });
+    y -= 4;
+  };
 
-  title('Landlord or agent');
-  block('Name', text(input.fields.landlordName));
-  block('Correspondence address', [input.fields.landlordAddressLine1, input.fields.landlordAddressLine2, input.fields.landlordTown, input.fields.landlordPostcode].map(text).filter(Boolean).join(', '));
-  optionalBlock('company_details', 'Company', input.fields.landlordCompany);
-  optionalBlock('company_details', 'Telephone', input.fields.landlordTel);
+  // ------------------------------------------------------------------ header
+  const headerTop = y;
+  let leftY = headerTop;
+  if (logo) {
+    const dims = logo.scaleToFit(150, 46);
+    page.drawImage(logo, { x: M, y: headerTop - dims.height + 8, width: dims.width, height: dims.height });
+    leftY = headerTop - dims.height - 4;
+  }
+  const businessName = text(input.fields.companyName);
+  if (businessName) { draw(businessName, M, leftY, 13, bold, C.black); leftY -= 16; }
+  const bizLines = [
+    [input.fields.companyAddressLine1, input.fields.companyAddressLine2, input.fields.companyTown, input.fields.companyPostcode].map(text).filter(Boolean).join(', '),
+    [input.fields.companyPhone, input.fields.companyEmail].map(text).filter(Boolean).join('  ·  '),
+  ].filter(Boolean);
+  bizLines.forEach((ln) => { draw(ln, M, leftY, 9, font, C.mid); leftY -= 12; });
 
-  title('Engineer');
-  block('Engineer', text(input.fields.engineerName));
-  block('Gas Safe registration', text(input.fields.gasSafeRegistrationNumber));
-  optionalBlock('company_details', 'Business', input.fields.companyName);
-  optionalBlock('company_details', 'Business address', [input.fields.companyAddressLine1, input.fields.companyAddressLine2, input.fields.companyTown, input.fields.companyPostcode].map(text).filter(Boolean).join(', '));
-  optionalBlock('company_details', 'Business contact', [input.fields.companyPhone, input.fields.companyEmail].map(text).filter(Boolean).join(' · '));
+  // right column — document identity
+  const rX = PAGE.w - M - 200;
+  let rY = headerTop;
+  draw('LANDLORD GAS SAFETY RECORD', rX, rY, 9, bold, C.black); rY -= 13;
+  draw('CP12 · Gas Safety (Installation and Use) Regulations 1998', rX, rY, 6.8, font, C.muted); rY -= 16;
+  const ref = text(input.fields.certNumber) || input.recordId;
+  draw('Certificate', rX, rY, 8.5, font, C.muted); draw(ref, rX + 66, rY, 9.5, bold, C.black); rY -= 14;
+  const inspDate = text(input.fields.issueDate) || input.issuedAt.toLocaleDateString('en-GB');
+  draw('Inspection', rX, rY, 8.5, font, C.muted); draw(inspDate, rX + 66, rY, 9.5, bold, C.black); rY -= 16;
 
-  title('Appliances and flues checked');
-  input.appliances.forEach((appliance, index) => {
-    const details = [
-      `Location: ${text(appliance.location) || '—'}`,
-      `Type: ${text(appliance.type) || '—'}`,
-      text(appliance.flueType) ? `Flue: ${text(appliance.flueType)}${text(appliance.flueLocation) ? ` (${text(appliance.flueLocation)})` : ''}` : '',
-      text(appliance.operatingPressure) ? `Operating pressure: ${text(appliance.operatingPressure)}` : '',
-      text(appliance.heatInput) ? `Heat input: ${text(appliance.heatInput)}` : '',
-      text(appliance.applianceSafeToUse) ? `Safe to use: ${text(appliance.applianceSafeToUse)}` : '',
-    ].filter(Boolean).join(' · ');
-    ensure(54);
-    page.drawText(`Appliance ${index + 1}: ${text(appliance.description) || '—'}`, { x: PAGE.margin, y, size: 9, font: bold });
-    y -= 13;
-    note(details);
-    block('Regulation 26(9)', affirmative(appliance.reg26Confirmed) ? 'Confirmed for this appliance or flue' : 'Not confirmed');
-    if (text(appliance.remedialActionTaken)) block('Appliance defect/action', text(appliance.remedialActionTaken));
+  // record-level status badge
+  const anyUnsafe = input.appliances.some((a) => applianceStatus(a) === 'unsafe');
+  const anyDefect = Boolean(text(input.fields.defectsIdentified)) || anyUnsafe;
+  if (anyDefect) badge('DEFECTS IDENTIFIED', rX, rY, C.warnBg, C.warnFg);
+  else badge('SATISFACTORY', rX, rY, C.safeBg, C.safeFg);
+  rY -= 4;
+
+  y = Math.min(leftY, rY) - 6;
+  page.drawLine({ start: { x: M, y }, end: { x: PAGE.w - M, y }, thickness: 1, color: C.dark });
+  y -= 4;
+
+  // next-inspection callout (conventional but wanted; auto +12mo fallback)
+  const nextDue = text(input.fields.nextInspectionDue) || addMonths(inspDate, 12) || '';
+  if (nextDue) {
+    ensure(24);
+    const label = `Next inspection due by ${nextDue}`;
+    page.drawRectangle({ x: M, y: y - 17, width: CONTENT_W, height: 20, color: C.panel });
+    draw(label, M + 8, y - 12, 9.5, bold, C.dark);
+    y -= 26;
+  }
+
+  // ------------------------------------------------- property + landlord (2 col)
+  section('Property & landlord');
+  const colGap = 18;
+  const colW = (CONTENT_W - colGap) / 2;
+  const startY = y;
+  const propLines = [
+    input.fields.propertyAddressName,
+    input.fields.propertyAddressLine1,
+    input.fields.propertyAddressLine2,
+    input.fields.propertyTown,
+    input.fields.propertyPostcode,
+  ].map(text).filter(Boolean);
+  const landLines = [
+    input.fields.landlordName,
+    input.fields.landlordCompany,
+    input.fields.landlordAddressLine1,
+    input.fields.landlordAddressLine2,
+    input.fields.landlordTown,
+    input.fields.landlordPostcode,
+  ].map(text).filter(Boolean);
+  const col = (heading: string, lines: string[], x: number) => {
+    let cy = startY;
+    draw(heading, x, cy, 8.5, bold, C.muted); cy -= 13;
+    (lines.length ? lines : ['—']).forEach((ln) => { draw(ln, x, cy, 9.5, font, C.dark); cy -= 12; });
+    return cy;
+  };
+  const propEnd = col('PROPERTY ADDRESS', propLines, M);
+  const landEnd = col('LANDLORD / AGENT', landLines, M + colW + colGap);
+  y = Math.min(propEnd, landEnd) - 4;
+  kv('Landlord tel', text(input.fields.landlordTel));
+
+  // ------------------------------------------------------------- engineer
+  section('Engineer');
+  kv('Engineer', text(input.fields.engineerName));
+  kv('Gas Safe reg. no.', text(input.fields.gasSafeRegistrationNumber));
+  kv('ID card no.', text(input.fields.engineerIdNumber));
+
+  // ------------------------------------------------------------- appliances
+  section('Appliances & flues checked');
+  input.appliances.forEach((app, i) => {
+    ensure(70);
+    const status = applianceStatus(app);
+    const heading = `Appliance ${i + 1}: ${text(app.description) || text(app.type) || '—'}`;
+    draw(heading, M, y, 10, bold, C.black);
+    if (status !== 'neutral') {
+      const label = status === 'safe' ? 'SAFE' : 'AT RISK / ID';
+      const [bg, fg] = status === 'safe' ? [C.safeBg, C.safeFg] : [C.dangerBg, C.dangerFg];
+      const bw = width(label, 8, bold) + 14;
+      badge(label, PAGE.w - M - bw, y, bg, fg);
+    }
+    y -= 15;
+
+    // captured attributes as a compact two-column grid — render-if-present only
+    const attrs: Array<[string, string]> = [];
+    const push = (label: string, v?: string) => { const t = text(v); if (t) attrs.push([label, t]); };
+    push('Location', app.location);
+    push('Type', app.type);
+    push('Flue type', app.flueType);
+    push('Flue location', app.flueLocation);
+    push('Operating pressure', app.operatingPressure);
+    push('Heat input', app.heatInput);
+    push('Safety device', app.safetyDevice);
+    push('Ventilation', app.ventilationSatisfactory);
+    push('Flue termination', app.flueTerminationSatisfactory);
+    push('Spillage test', app.spillageTest);
+    push('Serviced', app.applianceServiced);
+    push('Safe to use', app.applianceSafeToUse);
+    const aColW = (CONTENT_W - colGap) / 2;
+    const aLabelW = 108;
+    for (let r = 0; r < attrs.length; r += 2) {
+      ensure(13);
+      const row = attrs.slice(r, r + 2);
+      row.forEach(([label, v], c) => {
+        const x = M + c * (aColW + colGap);
+        draw(label, x, y, 8.5, font, C.muted);
+        const vLines = wrap(v, 9, font, aColW - aLabelW);
+        draw(vLines[0] + (vLines.length > 1 ? '…' : ''), x + aLabelW, y, 9, font, C.dark);
+      });
+      y -= 13;
+    }
+    // Combustion readings render full-width so CO/CO₂/ratio are never truncated.
+    const combHigh = [app.combustionHighCoPpm && `CO ${text(app.combustionHighCoPpm)}ppm`, app.combustionHighCo2 && `CO2 ${text(app.combustionHighCo2)}%`, app.combustionHighRatio && `ratio ${text(app.combustionHighRatio)}`].filter(Boolean).join('  /  ') || text(app.combustionHigh);
+    const combLow = [app.combustionLowCoPpm && `CO ${text(app.combustionLowCoPpm)}ppm`, app.combustionLowCo2 && `CO2 ${text(app.combustionLowCo2)}%`, app.combustionLowRatio && `ratio ${text(app.combustionLowRatio)}`].filter(Boolean).join('  /  ') || text(app.combustionLow);
+    const combLabelW = 128;
+    [['Combustion (high)', combHigh], ['Combustion (low)', combLow]].forEach(([label, v]) => {
+      if (!v) return;
+      ensure(13);
+      draw(label, M, y, 8.5, font, C.muted);
+      draw(v, M + combLabelW, y, 9, font, C.dark);
+      y -= 13;
+    });
+    // per-appliance Reg 26(9) — reflects the actual captured flag
+    const reg = affirmative(app.reg26Confirmed) ? 'Reg 26(9): confirmed for this appliance/flue' : 'Reg 26(9): not confirmed';
+    draw(reg, M, y, 8.5, bold, affirmative(app.reg26Confirmed) ? C.safeFg : C.dangerFg); y -= 13;
+    if (text(app.remedialActionTaken)) { statement(`Action: ${text(app.remedialActionTaken)}`, 9, C.dark); }
+    if (i < input.appliances.length - 1) { page.drawLine({ start: { x: M, y: y + 2 }, end: { x: PAGE.w - M, y: y + 2 }, thickness: 0.5, color: C.rule }); y -= 8; }
   });
 
-  title('Defects and remedial action');
-  block('Defects identified', text(input.fields.defectsIdentified) || 'None identified');
-  block('Remedial action taken', text(input.fields.remedialWorksRequired) || 'None required');
-  block('Regulation 26(9) record confirmation', 'Confirmed: the required safety checks were completed for each listed appliance or flue.');
-  optionalBlock('notes', 'Additional notes', input.fields.additionalNotes);
+  // ------------------------------------------------ defects & remedial (always)
+  section('Defects & remedial action');
+  kv('Defects identified', text(input.fields.defectsIdentified) || 'None identified');
+  kv('Remedial action taken', text(input.fields.remedialWorksRequired) || 'None required');
+  if (cp12FieldShouldRender('notes', input.fields.warningNoticeIssued)) kv('Warning notice', text(input.fields.warningNoticeIssued));
+  // Reg 26(9) record-level confirmation — always present, full width (no overlap).
+  const regRecord = input.appliances.length && input.appliances.every((a) => affirmative(a.reg26Confirmed))
+    ? 'Regulation 26(9) confirmation: the safety checks required by Reg 26(9)(a)-(d) were completed for each appliance and flue listed above.'
+    : 'Regulation 26(9) confirmation: recorded per appliance above.';
+  statement(regRecord, 9, C.mid);
+  if (cp12FieldShouldRender('notes', input.fields.additionalNotes)) kv('Additional notes', text(input.fields.additionalNotes));
 
-  const coAlarm = [input.fields.coAlarmFitted, input.fields.coAlarmTested, input.fields.coAlarmSatisfactory].map(text).filter(Boolean).join(' · ');
-  if (coAlarm || [input.fields.emergencyControlAccessible, input.fields.gasTightnessSatisfactory, input.fields.pipeworkVisualSatisfactory, input.fields.equipotentialBondingSatisfactory].some(Boolean)) {
-    title('Additional checks');
-    optionalBlock('co_alarms', 'CO alarms', coAlarm);
-    optionalBlock('whole_house_checks', 'Whole-house checks', [
-      text(input.fields.emergencyControlAccessible) && `Emergency control: ${text(input.fields.emergencyControlAccessible)}`,
-      text(input.fields.gasTightnessSatisfactory) && `Tightness: ${text(input.fields.gasTightnessSatisfactory)}`,
-      text(input.fields.pipeworkVisualSatisfactory) && `Pipework: ${text(input.fields.pipeworkVisualSatisfactory)}`,
-      text(input.fields.equipotentialBondingSatisfactory) && `Bonding: ${text(input.fields.equipotentialBondingSatisfactory)}`,
-    ].filter(Boolean).join(' · '));
+  // ------------------------------------------------ additional checks (optional)
+  const coAlarm = [
+    input.fields.coAlarmFitted && `Fitted: ${text(input.fields.coAlarmFitted)}`,
+    input.fields.coAlarmTested && `Tested: ${text(input.fields.coAlarmTested)}`,
+    input.fields.coAlarmSatisfactory && `Satisfactory: ${text(input.fields.coAlarmSatisfactory)}`,
+  ].filter(Boolean).join('  ·  ');
+  const house = [
+    input.fields.emergencyControlAccessible && `Emergency control: ${text(input.fields.emergencyControlAccessible)}`,
+    input.fields.gasTightnessSatisfactory && `Tightness: ${text(input.fields.gasTightnessSatisfactory)}`,
+    input.fields.pipeworkVisualSatisfactory && `Pipework: ${text(input.fields.pipeworkVisualSatisfactory)}`,
+    input.fields.equipotentialBondingSatisfactory && `Bonding: ${text(input.fields.equipotentialBondingSatisfactory)}`,
+  ].filter(Boolean).join('  ·  ');
+  if (coAlarm || house) {
+    section('Additional checks');
+    if (coAlarm) kv('CO alarms', coAlarm);
+    if (house) kv('Whole-house', house);
   }
 
-  title('Signatures');
-  block('Engineer', text(input.fields.engineerSignatureText) || text(input.fields.engineerName));
-  const signatureY = y - 28;
-  if (signatureY < PAGE.footer + 30) newPage();
-  const drawSignature = async (url: string | undefined, x: number) => {
-    const signature = await fetchSignatureBytes(url ?? '');
-    if (!signature) return;
-    try {
-      const image = signature.mime.includes('png') ? await pdf.embedPng(signature.bytes) : await pdf.embedJpg(signature.bytes);
-      const size = image.scaleToFit(190, 38);
-      page.drawImage(image, { x, y: y - 42, width: size.width, height: size.height });
-    } catch { /* text signature remains a valid visible fallback */ }
+  // -------------------------------------------------------------- signatures
+  section('Signatures');
+  ensure(70);
+  const sigColW = (CONTENT_W - colGap) / 2;
+  const sigBaseY = y;
+  const drawSig = async (heading: string, name: string, url: string | undefined, x: number) => {
+    draw(heading, x, sigBaseY, 8.5, bold, C.muted);
+    const sig = url ? await fetchSignatureBytes(url) : null;
+    if (sig) {
+      try {
+        const img = sig.mime.includes('png') ? await pdf.embedPng(sig.bytes) : await pdf.embedJpg(sig.bytes);
+        const dims = img.scaleToFit(sigColW - 10, 34);
+        page.drawImage(img, { x, y: sigBaseY - 44, width: dims.width, height: dims.height });
+      } catch { /* fall back to typed name */ }
+    }
+    page.drawLine({ start: { x, y: sigBaseY - 48 }, end: { x: x + sigColW - 10, y: sigBaseY - 48 }, thickness: 0.5, color: C.border });
+    draw(name || '—', x, sigBaseY - 60, 9.5, font, C.dark);
   };
-  await drawSignature(input.fields.engineerSignatureUrl, PAGE.margin);
+  await drawSig('ENGINEER', text(input.fields.engineerSignatureText) || text(input.fields.engineerName), input.fields.engineerSignatureUrl, M);
+  // customer/received-by — optional, only when captured
   if (text(input.fields.responsiblePersonName) || input.fields.responsiblePersonSignatureUrl) {
-    block('Responsible person acknowledgement', text(input.fields.responsiblePersonName));
-    await drawSignature(input.fields.responsiblePersonSignatureUrl, PAGE.margin);
+    await drawSig('RECEIVED BY', text(input.fields.responsiblePersonName), input.fields.responsiblePersonSignatureUrl, M + sigColW + colGap);
   }
-  y -= 52;
+  y = sigBaseY - 72;
+
   footer(page, pdf.getPageCount());
   return new Uint8Array(await pdf.save());
 }
