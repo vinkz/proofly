@@ -2281,7 +2281,7 @@ export function CertificateWizard({
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Landlord / Property owner</p>
             <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
-              Required for CP12. This is the property owner, not the billable agent.
+              Required for CP12. The landlord&apos;s (or agent&apos;s) name and correspondence address — where they receive documents. This is usually different from the property being inspected.
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <Input
@@ -2311,7 +2311,7 @@ export function CertificateWizard({
                       landlord_address: buildLandlordAddress(value, prev.landlord_address_line2, prev.landlord_city),
                     }));
                   }}
-                  placeholder="Start typing address or postcode"
+                  placeholder="Landlord's correspondence address or postcode"
                   className="rounded-[8px]"
                 />
                 {isLandlordLookupPending && !landlordAddressSuggestions.length ? (
@@ -2407,7 +2407,10 @@ export function CertificateWizard({
           <>
 
           <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job location</p>
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Property &amp; inspection location</p>
+            <p className="text-[12px] text-[var(--color-text-tertiary)]">
+              The address where the inspection is taking place — the property being certified. It appears as the Property Address on the certificate, separate from the landlord&apos;s correspondence address.
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
                 type="date"
@@ -2449,7 +2452,7 @@ export function CertificateWizard({
                       property_address: buildPropertyAddressFromJobAddress({ ...jobAddress, job_address_line1: value }),
                     }));
                   }}
-                  placeholder="Start typing address or postcode"
+                  placeholder="Property address being inspected — or postcode"
                   className="rounded-[8px]"
                 />
                 {isPostcodeLookupPending && !postcodeSuggestions.length ? (
