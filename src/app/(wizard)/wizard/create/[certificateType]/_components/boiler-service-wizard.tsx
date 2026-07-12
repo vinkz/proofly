@@ -1177,22 +1177,33 @@ export function BoilerServiceWizard({
     add('boiler-make', 'Boiler make', hasValue(details.boiler_make), 2);
     add('boiler-model', 'Boiler model', hasValue(details.boiler_model), 2);
     add('boiler-location', 'Boiler location', hasValue(details.boiler_location), 2);
-    add('service-summary', 'Service summary', hasValue(checks.service_summary), 4);
-    add('recommendations', 'Recommendations', hasValue(checks.recommendations), 4);
-    if (checks.defects_found === 'yes') {
+    // Reg 26(9) safety-examination outcomes — the only tier-1 "checks" for a
+    // service (audit/gas-service-field-analysis.md). Everything else is optional.
+    const reg26Ok = (keys: Array<keyof typeof checks>) => keys.some((k) => hasValue(checks[k] ?? ''));
+    add('reg26-flue', 'Flue safety result (Reg 26(9))', reg26Ok(['appliance_flueing_safe', 'service_flue_checked']), 3);
+    add('reg26-ventilation', 'Ventilation result (Reg 26(9))', reg26Ok(['appliance_ventilation_safe', 'service_ventilation_checked']), 3);
+    add('reg26-pressure', 'Operating pressure (Reg 26(9))', reg26Ok(['operating_pressure_mbar']), 3);
+    add('reg26-heat-input', 'Heat input (Reg 26(9))', reg26Ok(['heat_input']), 3);
+    add('reg26-safe', 'Safe-functioning result (Reg 26(9))', reg26Ok(['appliance_safe', 'appliance_operating_correctly', 'boiler_working_correctly']), 3);
+    if (checks.defects_found === 'yes' || ['no', 'fail', 'unsafe'].includes(String(checks.appliance_safe ?? '').toLowerCase())) {
       add('defects-details', 'Defect details', hasValue(checks.defects_details), 4);
     }
+    // Engineer signature required; customer / received-by signature is optional (HSE).
     add('engineer-signature', 'Engineer signature', hasValue(engineerSignature) || hasValue(engineerSignaturePath), 4);
-    add('customer-signature', 'Customer signature', hasValue(customerSignature) || hasValue(customerSignaturePath), 4);
     return items;
   }, [
+    checks.appliance_flueing_safe,
+    checks.appliance_operating_correctly,
+    checks.appliance_safe,
+    checks.appliance_ventilation_safe,
+    checks.boiler_working_correctly,
     checks.defects_details,
     checks.defects_found,
-    checks.recommendations,
-    checks.service_summary,
+    checks.heat_input,
+    checks.operating_pressure_mbar,
+    checks.service_flue_checked,
+    checks.service_ventilation_checked,
     completionDate,
-    customerSignature,
-    customerSignaturePath,
     details.boiler_location,
     details.boiler_make,
     details.boiler_model,

@@ -16,7 +16,8 @@ import type { CertificateType, PhotoCategory, Cp12Appliance } from '@/types/cert
 import { CERTIFICATE_TYPES, PHOTO_CATEGORIES, CERTIFICATE_LABELS } from '@/types/certificates';
 import { DEFAULT_JOB_TYPE, type JobType } from '@/types/job-records';
 import type { BoilerServicePhotoCategory } from '@/types/boiler-service';
-import { BOILER_SERVICE_PHOTO_CATEGORIES, BOILER_SERVICE_REQUIRED_FOR_ISSUE } from '@/types/boiler-service';
+import { BOILER_SERVICE_PHOTO_CATEGORIES } from '@/types/boiler-service';
+import { validateGasServiceForIssue } from '@/lib/gas-service/validation';
 import type { GasWarningNoticeFields } from '@/types/gas-warning-notice';
 import { validateGwnForIssue } from '@/lib/gwn/validation';
 import type { GeneralWorksPhotoCategory } from '@/types/general-works';
@@ -1963,17 +1964,11 @@ function validateGeneralWorksForIssue(fieldMap: Record<string, unknown>) {
 }
 
 function validateBoilerServiceForIssue(fieldMap: Record<string, unknown>) {
-  const errors: string[] = [];
-  BOILER_SERVICE_REQUIRED_FOR_ISSUE.forEach((key) => {
-    if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
-  });
-
-  const defects = booleanFromField(fieldMap.defects_found);
-  if (defects && !hasValue(fieldMap.defects_details)) {
-    errors.push('Defects details are required when defects are found');
-  }
-
-  return errors;
+  // Delegates to the shared validator (src/lib/gas-service/validation.ts) so the
+  // server issue gate and the wizard enforce identical rules — engineer identity,
+  // appliance identity and the Reg 26(9) safety outcomes; customer signature and
+  // Benchmark tasks stay optional.
+  return validateGasServiceForIssue(fieldMap);
 }
 
 function validateGasWarningNoticeForIssue(fields: GasWarningNoticeFields) {

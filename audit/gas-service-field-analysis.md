@@ -79,10 +79,19 @@ Everything else on a service record is **Benchmark / manufacturer convention** �
 - **F-S3 — Commissioning vs service.** If this template is ever used to *commission* a new appliance, combustion readings become **mandatory** (Benchmark / Building Regs). Worth a mode flag; not required for a routine service.
 - **F-S4 — Unsafe situation found during a service** → the [Gas Warning Notice](gas-warning-notice-field-analysis.md) procedure (GIUSP) applies; the service record itself does not carry those duties.
 
-## Redesign guidance (next step — not done here)
+## Redesign guidance
 1. Adopt the CP12 house style + adaptive "render-if-captured" (no statutory content list, so omitting unperformed sections is fine).
 2. Enforce only: engineer name + Gas Safe number, appliance identity, Reg 26(9) outcomes.
 3. Treat Benchmark tasks + combustion as conventional (render-if-done); add "next service due"; consider a commissioning mode (combustion mandatory).
 4. Reuse the CP12 tiered `field-config` + shared validator/renderer primitives.
+
+### PDF + wizard — ✅ implemented (2026-07-12)
+- **PDF:** new programmatic renderer `src/server/pdf/renderGasServiceV2.ts` in the CP12 house style; `renderGasServicePdf` delegates to it (fixed AcroForm asset retired). Status badge (Appliance safe / Defect identified), next-service-due callout (auto +12mo), a **"Safety examination (Reg 26(9))"** section as the required spine, combustion readings + Benchmark **service checks** rendered only when captured, recommendations/comments, engineer signature always + received-by optional. Samples: `tmp/gasservice-v2-{typical,minimal,defect}.pdf`.
+- **Single source of truth:** new shared validator `src/lib/gas-service/validation.ts` (`validateGasServiceForIssue`); the server `validateBoilerServiceForIssue` delegates to it, and the wizard checklist mirrors it.
+- **F-S1 done:** the issue gate now requires engineer identity + appliance identity + the **Reg 26(9) outcomes** (flue, ventilation, operating pressure, heat input, safe functioning), plus defect details when unsafe. **Removed** the over-blocks: customer signature, service summary and recommendations are now optional (conventional). `BOILER_SERVICE_REQUIRED_FOR_ISSUE` trimmed to the tier-1 flat keys.
+- **F-S2 done:** the wizard already captures a "next service due" (defaults +12 months) and it now renders on the PDF.
+- Tests: `tests/gas-service-validation.test.ts`, `tests/gas-service-v2-render.test.ts`.
+
+**Still to do (conventional):** an explicit commissioning mode where combustion readings become mandatory (**F-S3**); optionally move onto a full tiered `field-config` like CP12. Interactive wizard click-through recommended before merge.
 
 _Analysis only — sources current as of 2026-07-12._

@@ -117,17 +117,17 @@ export const BOILER_SERVICE_REQUIRED_FOR_ISSUE: Array<
   | keyof BoilerServiceChecks
   | BoilerServiceSignatureKey
 > = [
-  'property_address',
+  // Tier-1 flat keys. Property address (has a job-address fallback), the engineer
+  // signature, the Reg 26(9) safety outcomes and the defect-when-unsafe rule are
+  // enforced separately in validateGasServiceForIssue. Service summary,
+  // recommendations and the customer signature are conventional, not required
+  // (see audit/gas-service-field-analysis.md).
   'service_date',
   'engineer_name',
   'gas_safe_number',
   'boiler_make',
   'boiler_model',
   'boiler_location',
-  'service_summary',
-  'recommendations',
-  'engineer_signature',
-  'customer_signature',
 ];
 
 export const BOILER_SERVICE_EVIDENCE_CARDS: {
