@@ -38,13 +38,6 @@ const STATUS_BADGE: Record<InvoiceStatus, { bg: string; color: string; label: st
   paid:    { bg: '#edf7f2', color: '#1a7a52',         label: 'Paid' },
 };
 
-const STATUS_SEGMENTS: Array<{ value: InvoiceStatus; label: string; activeBg: string; activeColor: string }> = [
-  { value: 'draft',   label: 'Draft',   activeBg: 'var(--color-background-secondary)', activeColor: 'var(--color-text-secondary)' },
-  { value: 'unpaid',  label: 'Unpaid',  activeBg: '#faeeda', activeColor: '#BA7517' },
-  { value: 'overdue', label: 'Overdue', activeBg: '#fcebeb', activeColor: '#a32d2d' },
-  { value: 'paid',    label: 'Paid',    activeBg: '#edf7f2', activeColor: '#1a7a52' },
-];
-
 const LAST_USED_PRICE_STORAGE_KEY = 'certnow.invoice.last-used-prices';
 
 const DEFAULT_LINE_ITEM_BY_CERTIFICATE_TYPE: Record<string, string> = {
@@ -154,9 +147,13 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   );
   const [vatRate, setVatRate] = useState<string>(getVatPercentDisplay(invoice.vat_rate ?? 0.2));
   const [notes, setNotes] = useState<string>(invoice.notes ?? '');
-  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus>(
-    computeInitialStatus(invoice.status, invoice.due_date),
-  );
+  // Lifecycle is derived, not hand-picked. `paid` is the one manual flag (pay-on-the-day);
+  // `sent` flips automatically the first time the invoice is emailed/messaged. Overdue is
+  // computed from the due date. Anything past 'draft' in the persisted status means it has
+  // already been issued to the client.
+  const initialStatus = computeInitialStatus(invoice.status, invoice.due_date);
+  const [paid, setPaid] = useState<boolean>(initialStatus === 'paid');
+  const [sent, setSent] = useState<boolean>(initialStatus !== 'draft');
   const [dueDate, setDueDate] = useState<string>(() => {
     if (invoice.due_date) return toInputDate(invoice.due_date);
     const d = new Date(invoice.created_at);
@@ -194,6 +191,18 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       return [{ ...firstItem!, unit_price: lastUsedPrice, description: firstItem?.description || defaultDescription }];
     });
   }, [certificateType, defaultDescription, lineItems.length]);
+
+  const pastDue = useMemo(() => {
+    if (!dueDate) return false;
+    const d = new Date(dueDate);
+    if (Number.isNaN(d.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return d < today;
+  }, [dueDate]);
+
+  // Single source of truth for the lifecycle state shown/persisted.
+  const status: InvoiceStatus = paid ? 'paid' : sent ? (pastDue ? 'overdue' : 'unpaid') : 'draft';
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, item) => {
@@ -234,7 +243,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   const persist = async () => {
     await upsertLineItems(invoice.id, items.filter((item) => item.description?.trim().length));
     await setInvoiceMeta(invoice.id, {
-      status: invoiceStatus,
+      status,
       due_date: dueDate || null,
       vat_rate: normalizeVatPercent(vatRate) / 100,
       notes,
@@ -282,6 +291,32 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
     return payload.pdfUrl;
   };
 
+  // First send moves a draft into the outstanding (unpaid/overdue) lifecycle.
+  const markSent = async () => {
+    if (paid || sent) return;
+    setSent(true);
+    await setInvoiceMeta(invoice.id, { status: pastDue ? 'overdue' : 'unpaid' });
+  };
+
+  const togglePaid = () => {
+    startTransition(async () => {
+      const next = !paid;
+      setPaid(next);
+      try {
+        const nextStatus: InvoiceStatus = next ? 'paid' : sent ? (pastDue ? 'overdue' : 'unpaid') : 'draft';
+        await setInvoiceMeta(invoice.id, { status: nextStatus });
+        pushToast({ title: next ? 'Marked as paid' : 'Marked as unpaid', variant: 'success' });
+      } catch (error) {
+        setPaid(!next);
+        pushToast({
+          title: 'Unable to update status',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'error',
+        });
+      }
+    });
+  };
+
   const handleEmail = () => {
     startTransition(async () => {
       try {
@@ -296,6 +331,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
         if (result.status === 'failed') {
           throw new Error(result.error ?? 'Send failed. Please try again.');
         }
+        await markSent();
         pushToast({ title: `Invoice sent to ${email}`, variant: 'success' });
       } catch (error) {
         pushToast({
@@ -330,6 +366,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
         const message = encodeURIComponent(`Invoice ${invoice.invoice_number}: ${url}`);
         const phone = clientPhone.replace(/[^\d+]/g, '');
         window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+        await markSent();
       } catch (error) {
         pushToast({
           title: 'Unable to send WhatsApp',
@@ -340,12 +377,11 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
     });
   };
 
-  const badge = STATUS_BADGE[invoiceStatus];
+  const badge = STATUS_BADGE[status];
   const initials = getInitials(clientName || 'C');
-  const displayPaidAt =
-    invoiceStatus === 'paid'
-      ? formatDisplayDate(invoice.status === 'paid' ? invoice.updated_at : new Date().toISOString())
-      : null;
+  const displayPaidAt = paid
+    ? formatDisplayDate(invoice.status === 'paid' ? invoice.updated_at : new Date().toISOString())
+    : null;
 
   return (
     <div className="min-h-full">
@@ -376,33 +412,47 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-4">
         {/* Status & terms card */}
         <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
-          <div className="p-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
-              Payment status
-            </p>
-            <div className="mt-3 flex gap-1 rounded-[10px] bg-[var(--color-background-secondary)] p-1">
-              {STATUS_SEGMENTS.map((seg) => {
-                const active = invoiceStatus === seg.value;
-                return (
-                  <button
-                    key={seg.value}
-                    type="button"
-                    onClick={() => setInvoiceStatus(seg.value)}
-                    className="flex-1 rounded-[8px] py-[7px] text-[13px] font-medium transition-colors"
-                    style={
-                      active
-                        ? { backgroundColor: seg.activeBg, color: seg.activeColor }
-                        : { backgroundColor: 'transparent', color: 'var(--color-text-tertiary)' }
-                    }
-                  >
-                    {seg.label}
-                  </button>
-                );
-              })}
+          {/* Status — derived, not hand-picked. Shows where the invoice is in its life. */}
+          <div className="flex items-center justify-between p-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
+                Status
+              </p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span
+                  className="rounded-full px-2 py-0.5 text-[12px] font-medium"
+                  style={{ backgroundColor: badge.bg, color: badge.color }}
+                >
+                  {badge.label}
+                </span>
+                <span className="text-[12px] text-[var(--color-text-tertiary)]">
+                  {paid
+                    ? displayPaidAt
+                      ? `Paid on ${displayPaidAt}`
+                      : 'Paid'
+                    : sent
+                      ? pastDue
+                        ? 'Sent · past due date'
+                        : 'Sent · awaiting payment'
+                      : 'Not sent yet'}
+                </span>
+              </div>
             </div>
-            {invoiceStatus === 'paid' && displayPaidAt ? (
-              <p className="mt-2 text-[13px] text-[var(--color-text-secondary)]">Paid on {displayPaidAt}</p>
-            ) : null}
+            {/* Mark as paid — the one manual status action (pay-on-the-day) */}
+            <button
+              type="button"
+              onClick={togglePaid}
+              disabled={isPending}
+              aria-pressed={paid}
+              className="shrink-0 rounded-full border-[0.5px] px-3 py-[7px] text-[13px] font-medium transition-colors disabled:opacity-50"
+              style={
+                paid
+                  ? { backgroundColor: '#edf7f2', color: '#1a7a52', borderColor: 'transparent' }
+                  : { backgroundColor: 'transparent', color: 'var(--color-text-secondary)', borderColor: 'var(--color-border-secondary)' }
+              }
+            >
+              {paid ? 'Paid ✓' : 'Mark as paid'}
+            </button>
           </div>
           {/* Due date */}
           <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
@@ -631,7 +681,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
               disabled={isPending}
               className="flex-1 rounded-[24px] border-[0.5px] border-[var(--color-border-secondary)] py-[12px] text-[14px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
             >
-              {invoiceStatus === 'paid' ? 'Resend receipt' : 'Email'}
+              {paid ? 'Resend receipt' : 'Email'}
             </button>
             <button
               type="button"
