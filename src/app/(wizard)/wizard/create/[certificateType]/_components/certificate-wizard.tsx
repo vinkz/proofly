@@ -518,10 +518,38 @@ export function CertificateWizard({
     reg_26_9_confirmed: appliance.reg_26_9_confirmed ?? false,
   });
 
+  // Cross-cert autofill: if the boiler service was done first on this job, seed the
+  // first CP12 appliance from the captured boiler details (property/landlord already
+  // share job-level fields). Only applies when no CP12 appliance exists yet.
+  const seedApplianceFromJobContext = (): Cp12Appliance => {
+    const info = resolvedInitialInfo as Record<string, unknown>;
+    const t = (key: string) => String(info[key] ?? '').trim();
+    const make = t('boiler_make');
+    const model = t('boiler_model');
+    const boilerType = t('boiler_type');
+    const location = t('boiler_location');
+    if (!make && !model && !boilerType && !location) return { ...emptyAppliance };
+    return sanitizeAppliance({
+      ...emptyAppliance,
+      appliance_type: boilerType || 'boiler',
+      make_model: [make, model].filter(Boolean).join(' '),
+      location,
+      flue_type: t('flue_type'),
+      operating_pressure: t('operating_pressure_mbar'),
+      heat_input: t('heat_input'),
+      high_co_ppm: t('high_combustion_co_ppm'),
+      high_co2: t('high_combustion_co2'),
+      high_ratio: t('high_combustion_ratio'),
+      low_co_ppm: t('low_combustion_co_ppm'),
+      low_co2: t('low_combustion_co2'),
+      low_ratio: t('low_combustion_ratio'),
+    });
+  };
+
   const [appliances, setAppliances] = useState<Cp12Appliance[]>(
     initialAppliances.length
       ? initialAppliances.slice(0, MAX_APPLIANCES).map(sanitizeAppliance)
-      : [emptyAppliance],
+      : [seedApplianceFromJobContext()],
   );
   const [defects, setDefects] = useState({
     defect_description: resolvedInitialInfo.defect_description ?? '',

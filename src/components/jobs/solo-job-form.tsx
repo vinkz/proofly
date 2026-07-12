@@ -303,6 +303,11 @@ export function SoloJobForm({
   const [jobType, setJobType] = useState<JobType>(
     initialSelection?.jobType ?? (initialRequest?.jobType === 'service' ? 'service' : 'safety_check'),
   );
+  // The job type must be chosen explicitly on a fresh create (no pre-selected
+  // default). Prefilled flows (request/property/client) count as already chosen.
+  const [jobTypeTouched, setJobTypeTouched] = useState<boolean>(
+    () => Boolean(initialSelection?.jobType) || Boolean(initialRequest) || Boolean(initialPropertyId) || Boolean(initialClientId),
+  );
   const [inspectionDate, setInspectionDate] = useState(requestPreferredDate);
   const [jobAddressName, setJobAddressName] = useState(requestTenantName);
   const [jobAddressLine1, setJobAddressLine1] = useState(requestAddress.line1);
@@ -358,7 +363,7 @@ export function SoloJobForm({
     [availableProperties, selectedPropertyKey],
   );
 
-  const canShowContinue = clientChosen && propertyChosen;
+  const canShowContinue = jobTypeTouched && clientChosen && propertyChosen;
 
   const goBack = () => {
     if (step === 5) {
@@ -441,6 +446,7 @@ export function SoloJobForm({
     setScheduledFor(preferredDate ? `${preferredDate}T09:00` : '');
     setInspectionDate(preferredDate);
     setJobType(initialRequest.jobType === 'service' ? 'service' : 'safety_check');
+    setJobTypeTouched(true);
     setJobAddressName(initialRequest.tenantName.trim());
     setJobAddressLine1(address.line1);
     setJobAddressLine2(address.line2);
@@ -535,6 +541,7 @@ export function SoloJobForm({
       setSitePhone(draft.sitePhone ?? '');
       setScheduledFor(draft.scheduledFor ?? '');
       setJobType(draft.jobType ?? 'safety_check');
+      if (draft.jobType) setJobTypeTouched(true);
       setInspectionDate(draft.inspectionDate ?? '');
       setJobAddressName(draft.jobAddressName ?? '');
       setJobAddressLine1(draft.jobAddressLine1 ?? '');
@@ -1094,9 +1101,12 @@ export function SoloJobForm({
                   key={type}
                   type="button"
                   disabled={isPending}
-                  onClick={() => setJobType(type)}
+                  onClick={() => {
+                    setJobType(type);
+                    setJobTypeTouched(true);
+                  }}
                   className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
-                    jobType === type
+                    jobTypeTouched && jobType === type
                       ? 'bg-[#111] text-white'
                       : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                   }`}
@@ -1105,6 +1115,11 @@ export function SoloJobForm({
                 </button>
               ))}
             </div>
+            {!jobTypeTouched ? (
+              <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
+                Choose a job type to continue. Pick “Safety check + service” to do the CP12 and boiler service together.
+              </p>
+            ) : null}
             {demoEnabled ? (
               <div className="mt-2 flex justify-end">
                 <button type="button" className="text-xs text-[var(--color-text-tertiary)] underline-offset-2 hover:underline" onClick={handleAutofill} disabled={isPending}>
