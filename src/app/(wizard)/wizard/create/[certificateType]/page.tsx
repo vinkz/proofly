@@ -72,8 +72,6 @@ const CERTIFICATE_STEP_TOTALS: Record<CertificateType, number> = {
   commissioning: 4,
 };
 
-const FINAL_JOB_STATUSES = new Set(['issued', 'delivered']);
-
 export default async function CertificateWizardPage({
   params,
   searchParams,
@@ -242,9 +240,11 @@ export default async function CertificateWizardPage({
   }
 
   const job = wizardState.job as Database['public']['Tables']['jobs']['Row'] | null;
-  if (job?.status && FINAL_JOB_STATUSES.has(String(job.status).toLowerCase())) {
-    redirect(`/jobs/${jobId}/complete`);
-  }
+  // Do NOT redirect issued/delivered jobs away from the wizard: a job flips to
+  // 'issued' as soon as ANY certificate is issued, so on a combined
+  // "safety check + service" job that would strand the still-outstanding cert,
+  // and it would also break the completion page's "Edit" of an already-issued
+  // certificate. The completion checklist is the hub and links back here on purpose.
 
   if (normalizedType === 'gas_warning_notice') {
     let shouldRedirectToCompletion = false;
