@@ -84,10 +84,19 @@ Unlike the CP12 (whose minimum content is *prescribed* by statute — GSIUR 1998
 - **F-W4 — Responsible-person type.** GIUSP / HSE distinguish landlord vs occupier / owner; a "given to: landlord / tenant / owner" selector would tighten compliance. Conventional.
 - **F-W5 — Not RIDDOR-reportable if purely maintenance-related.** Don't force a RIDDOR reference for AR or maintenance-only situations. (**RGE**)
 
-## Redesign guidance (next step — not done here)
+## Redesign guidance
 1. Adopt the CP12 house style + adaptive "render-if-captured".
 2. Make **ID/AR classification the spine**; conditionally require the ID-only duties (Danger-Do-Not-Use label, cap/isolate, RIDDOR reference, emergency-provider notification if refused) and the responsible-person notification.
 3. Keep the customer acknowledgement / signature optional (like CP12).
 4. Reuse the CP12 tiered `field-config` + shared validator/renderer primitives.
+
+### PDF redesign — ✅ implemented (2026-07-12)
+- New programmatic renderer `src/server/pdf/renderGasWarningNoticeV2.ts` in the CP12 house style (A4, monochrome + status colour). `renderGasWarningNoticePdf` now delegates to it (the fixed AcroForm asset is retired for this cert).
+- **Classification is the spine**: a full-width banner — deep red **IMMEDIATELY DANGEROUS** / amber **AT RISK** — with the ID/AR code, driving the rest of the form (F-W1).
+- **ID-only sections are conditional**: the RIDDOR-report section renders only for ID (with the report/emergency reference); a pure AR shows an explicit "No 'Danger — Do Not Use' label fitted (At Risk)" note (F-W1/F-W2/F-W5).
+- Adaptive render-if-captured for appliance, defect categories, action flags, and responsible-person notification; engineer signature always, responsible-person signature optional.
+- Footer cites the GIUSP (IGEM/G/11) and stamps `gwn-template-v2`. Samples: `tmp/gwn-v2-at-risk.pdf`, `tmp/gwn-v2-immediately-dangerous.pdf`.
+
+**Still to do:** wizard alignment (make ID/AR the spine, conditionally require ID-only duties, surface a RIDDOR reference field when ID — **F-W2**), a dedicated notice date (**F-W3**), a responsible-person-type selector (**F-W4**), and a shared tiered `field-config`/validator like CP12. Interactive wizard click-through recommended before merge.
 
 _Analysis only — sources current as of 2026-07-12. IGEM/G/11 is a paid standard; where its exact wording matters for implementation, verify against the current edition or Gas Safe Register technical bulletins._
