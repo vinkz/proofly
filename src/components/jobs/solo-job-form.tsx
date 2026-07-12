@@ -308,6 +308,9 @@ export function SoloJobForm({
   const [jobTypeTouched, setJobTypeTouched] = useState<boolean>(
     () => Boolean(initialSelection?.jobType) || Boolean(initialRequest) || Boolean(initialPropertyId) || Boolean(initialClientId),
   );
+  // For a combined "Safety check + service" job the engineer chooses which cert to
+  // start with (there is no required order); the other is completed straight after.
+  const [combinedFirst, setCombinedFirst] = useState<'cp12' | 'boiler_service' | null>(null);
   const [inspectionDate, setInspectionDate] = useState(requestPreferredDate);
   const [jobAddressName, setJobAddressName] = useState(requestTenantName);
   const [jobAddressLine1, setJobAddressLine1] = useState(requestAddress.line1);
@@ -363,7 +366,8 @@ export function SoloJobForm({
     [availableProperties, selectedPropertyKey],
   );
 
-  const canShowContinue = jobTypeTouched && clientChosen && propertyChosen;
+  const combinedOrderChosen = jobType !== 'safety_check_service' || combinedFirst !== null;
+  const canShowContinue = jobTypeTouched && combinedOrderChosen && clientChosen && propertyChosen;
 
   const goBack = () => {
     if (step === 5) {
@@ -1039,7 +1043,10 @@ export function SoloJobForm({
           variant: 'success',
         });
         if (submitMode === 'continue') {
-          const wizardRoute = WIZARD_ROUTE_BY_JOB_TYPE[jobType];
+          const wizardRoute =
+            jobType === 'safety_check_service'
+              ? combinedFirst ?? 'cp12'
+              : WIZARD_ROUTE_BY_JOB_TYPE[jobType];
           const shouldSkipFirstWizardStep =
             Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice';
           const href = shouldSkipFirstWizardStep
@@ -1119,6 +1126,34 @@ export function SoloJobForm({
               <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
                 Choose a job type to continue. Pick “Safety check + service” to do the CP12 and boiler service together.
               </p>
+            ) : null}
+            {jobTypeTouched && jobType === 'safety_check_service' ? (
+              <div className="mt-3">
+                <p className="mb-2 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Complete first</p>
+                <div className="flex gap-2">
+                  {([
+                    ['cp12', 'Landlord safety check'],
+                    ['boiler_service', 'Boiler service'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => setCombinedFirst(value)}
+                      className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
+                        combinedFirst === value
+                          ? 'bg-[#111] text-white'
+                          : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
+                  No set order — complete the other one straight after; property and appliance details carry over.
+                </p>
+              </div>
             ) : null}
             {demoEnabled ? (
               <div className="mt-2 flex justify-end">
