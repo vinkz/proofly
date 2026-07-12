@@ -867,7 +867,7 @@ Boiler Service UI should only expose fields needed by the current gas-service PD
 - safety/template yes-no checks used by the PDF
 - service summary, recommendations, defects/parts comments
 - next service due
-- engineer and customer signatures
+- engineer signature (mandatory) and customer/received-by signature (optional — rendered only when captured)
 
 When completed:
 
@@ -886,7 +886,7 @@ Keep existing logic:
 - do not merge with boiler service follow-up logic
 
 Target completion model:
-- unsafe CP12 appliance flags (`ID` or `AR`) make Gas Warning Notice a required row on `/jobs/[jobId]/complete`
+- unsafe CP12 appliance flags (`ID` or `AR`) surface Gas Warning Notice as a recommended row on `/jobs/[jobId]/complete`. **(July 2026) It is OPTIONAL / non-blocking — a GIUSP follow-up, not part of the CP12 legal minimum — so it must not block sending the job.** It stays visually prominent (amber) but the CP12 alone gates delivery.
 - engineer opens the warning notice wizard from that checklist
 - warning notice is prefilled from job/property/landlord/appliance defect data
 - on issue, PDF is final/immutable and engineer returns to `/jobs/[jobId]/complete`
@@ -1047,10 +1047,14 @@ Before real users, run a deliberate RLS/storage audit across:
 - Planned delivery bundle actions live around `src/server/certificates.ts` and invoice helpers: build the delivery bundle from existing `certificates` rows and invoice data, then send via Resend or WhatsApp without moving PDF rendering out of the current renderers.
 
 ### PDF/Document Layer
-- CP12 AcroForm renderer: `src/server/pdf/renderCp12Certificate.ts`
-- Gas Warning Notice renderer: `src/server/pdf/renderGasWarningNoticePdf.ts`
-- Boiler service/general works renderers live under `src/lib/pdf` and `src/server/pdf`
-- Generated certificates/documents upload to Supabase storage and are returned via signed URLs
+- **Programmatic "v2" certificate renderers (July 2026).** CP12, Gas Warning Notice and Gas/Boiler Service moved off fixed AcroForm templates to programmatic, adaptive renderers in a shared house style (A4, monochrome + status badges, render-if-captured). The old render functions are thin wrappers that delegate to the v2:
+  - CP12: `renderCp12Certificate.ts` → `renderCp12CertificateV2.ts` (`cp12-template-v2`)
+  - Gas Warning Notice: `renderGasWarningNoticePdf.ts` → `renderGasWarningNoticeV2.ts` (`gwn-template-v2`; ID/AR classification is the spine, RIDDOR conditional on ID)
+  - Gas/Boiler Service: `renderGasServicePdf.ts` → `renderGasServiceV2.ts` (`gas-service-template-v2`; Reg 26(9) examination is the spine)
+- Shared issue validators (wizard + server use the same): `src/lib/cp12/validation.ts`, `src/lib/gwn/validation.ts`, `src/lib/gas-service/validation.ts`; tier policy in `src/lib/cp12/field-config.ts`.
+- **Compliance source of truth:** per-cert legal-minimum audits in `audit/` (`cp12-field-analysis.md`, `gas-service-field-analysis.md`, `gas-warning-notice-field-analysis.md`).
+- Retired/deleted: fixed AcroForm assets are no longer loaded; `src/lib/pdf/cp12-template.ts` and `src/server/actions/generateCp12FromJob.ts` were removed. General Works renderer unchanged.
+- Generated certificates/documents upload to Supabase storage and are returned via signed URLs.
 
 ### Key UX State
 - CP12 is the most developed certificate flow and drives the app direction
