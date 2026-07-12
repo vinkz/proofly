@@ -77,11 +77,15 @@ The Phase-4 change tier-aligned the **gate logic** (what blocks issue), which is
 
 **Recommendation: do not do a full DOM reorder now** — it is high-risk (3.4k-line component; touches Path A/C prefill, address lookup, voice readings anchors, the checklist `action()` `setStep` targets) for low incremental benefit now that the gate enforces tiers. If pursued later, prefer *labelling over moving*: mark the Tier-2 tabs/sections as “optional” inline (e.g. “Readings (optional)”) and, within the “Appliance checks” tabs, order the Tier-1 field (Reg 26(9) confirm) before the optional readings. Reserve any card-level DOM reordering for a dedicated PR with full click-through QA.
 
-### R-C — Contextual remedial prompts
+### R-C — Contextual remedial prompts ✅ implemented (2026-07-12)
 
-Today, a note box appears when a check fails / CO alarm = No. Record-level defect + remedial flow through `defects.defect_description` / `defects.remedial_action` (Tier-1, rendered on the PDF); per-appliance capture uses `defect_notes` / `actions_taken` / `actions_required`.
+Failed checks now drive defect/remedial capture:
+- **Wizard:** the per-appliance defect / remedial note area is revealed whenever any individual check reads "fail" (not only when the appliance is classified At Risk/ID), with a "Failed: …" hint listing the failing checks.
+- **Record-level end box:** a new "Defects & remedial action" card auto-fills from per-appliance failed checks + notes and remains editable (a dirty flag stops auto-sync once the engineer types; a "Reset to auto-filled summary" affordance restores it). Aggregation logic is the pure, unit-tested `src/lib/cp12/defect-summary.ts` (`composeCp12DefectSummary`).
+- **Server fallback:** `certificates.ts` composes the same summary at issue when the record-level box is empty, so the certificate never prints "None identified" while a defect exists on an appliance.
+- Routing goes to the Tier-1 `defect_description` / `remedial_action` (rendered), never the collapsed Tier-3 `comments`. The checklist `defects` item accepts per-appliance notes, matching the server validator; the automatic At Risk/ID warning-notice follow-up job is unchanged.
 
-**Recommendation:** keep the mechanism, and make two things explicit: (1) route contextual failed-check notes into the **defect/remedial** fields (Tier-1, always rendered), never into the now-collapsed Tier-3 `comments`; (2) when an appliance is marked At Risk / Immediately Dangerous, require its defect + remedial fields (the checklist already blocks on this) and keep the existing automatic warning-notice follow-up job wiring. Suggest a short follow-up task to audit that every contextual prompt writes to a Tier-1 defect/remedial field rather than `comments`.
+**Interactive QA still needed:** the React auto-fill/edit/reset behaviour typechecks and the aggregation + render path are verified (see `tmp/cp12-defect-flow.pdf`), but the wizard UI itself should get a manual click-through before merge.
 
 ## Regression requirements
 

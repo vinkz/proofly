@@ -26,6 +26,7 @@ import { type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12C
 import { renderCp12CertificateV2Pdf } from '@/server/pdf/renderCp12CertificateV2';
 import { cp12ApplianceTypeLabel, resolveCp12Category, resolveCp12Subtype } from '@/lib/cp12/applianceConfig';
 import { CP12_TEMPLATE_VERSION } from '@/lib/cp12/field-config';
+import { composeCp12DefectSummary, type Cp12DefectAppliance } from '@/lib/cp12/defect-summary';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 import {
   renderGasServicePdf,
@@ -2984,8 +2985,15 @@ async function generateCp12CertificateForJob(params: {
         '',
     ),
     responsiblePersonAcknowledgementDate: toText(mergedFieldMap.completion_date ?? ''),
-    defectsIdentified: toText(mergedFieldMap.defect_description ?? ''),
-    remedialWorksRequired: toText(mergedFieldMap.remedial_action ?? ''),
+    // Fallback: if the record-level defect/remedial box was not filled, compose
+    // it from per-appliance failed checks + notes so the certificate never shows
+    // "None identified" while a defect exists on an appliance.
+    defectsIdentified:
+      toText(mergedFieldMap.defect_description ?? '') ||
+      composeCp12DefectSummary(appliancesForIssue as unknown as Cp12DefectAppliance[]).defect_description,
+    remedialWorksRequired:
+      toText(mergedFieldMap.remedial_action ?? '') ||
+      composeCp12DefectSummary(appliancesForIssue as unknown as Cp12DefectAppliance[]).remedial_action,
     warningNoticeIssued: toText(mergedFieldMap.warning_notice_issued ?? ''),
     additionalNotes: toText(mergedFieldMap.comments ?? mergedFieldMap.additional_notes ?? ''),
     coAlarmFitted: toText(mergedFieldMap.co_alarm_fitted ?? ''),

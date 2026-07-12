@@ -44,6 +44,7 @@ import { getApplianceCatalog } from '@/lib/applianceCatalog/ukAppliances';
 import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
+import { composeCp12DefectSummary, cp12ApplianceHasFailedCheck, cp12FailedChecks } from '@/lib/cp12/defect-summary';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
 import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 import {
@@ -527,6 +528,11 @@ export function CertificateWizard({
     remedial_action: resolvedInitialInfo.remedial_action ?? '',
     warning_notice_issued: resolvedInitialInfo.warning_notice_issued ?? 'NO',
   });
+  // The record-level defect/remedial box auto-fills from per-appliance failed
+  // checks + notes until the engineer edits it by hand (then we stop syncing).
+  const [defectsEdited, setDefectsEdited] = useState(
+    hasValue(resolvedInitialInfo.defect_description) || hasValue(resolvedInitialInfo.remedial_action),
+  );
   const [completionDate, setCompletionDate] = useState(resolvedInitialInfo.completion_date ?? new Date().toISOString().slice(0, 10));
   const [engineerSignature, setEngineerSignature] = useState(resolvedInitialInfo.engineer_signature ?? '');
   const [engineerSignaturePath, setEngineerSignaturePath] = useState(resolvedInitialInfo.engineer_signature_path ?? '');
@@ -1902,7 +1908,10 @@ export function CertificateWizard({
       items.push({
         id: 'defects',
         label: 'Defect & remedial action recorded',
-        ok: hasValue(defects.defect_description) && hasValue(defects.remedial_action),
+        ok:
+          (hasValue(defects.defect_description) || appliances.some((a) => hasValue(a.defect_notes))) &&
+          (hasValue(defects.remedial_action) ||
+            appliances.some((a) => hasValue(a.actions_taken) || hasValue(a.actions_required))),
         hint: 'Required when an appliance is At Risk / Immediately Dangerous',
         action: () => setStep(4),
         blocking: true,
@@ -1989,6 +1998,18 @@ export function CertificateWizard({
     router,
   ]);
   const firstBlockingMissing = checklist.items.find((item) => item.blocking !== false && !item.ok);
+
+  // Auto-fill the record-level defect/remedial box from per-appliance failed
+  // checks + notes, until the engineer edits it by hand.
+  useEffect(() => {
+    if (!isCp12 || defectsEdited) return;
+    const suggested = composeCp12DefectSummary(appliances);
+    setDefects((prev) =>
+      prev.defect_description === suggested.defect_description && prev.remedial_action === suggested.remedial_action
+        ? prev
+        : { ...prev, defect_description: suggested.defect_description, remedial_action: suggested.remedial_action },
+    );
+  }, [appliances, defectsEdited, isCp12]);
 
   useEffect(() => {
     if (!queuedIssue || !isOnline || isBusy || checklist.blockingMissing > 0) return;
@@ -3014,6 +3035,11 @@ export function CertificateWizard({
             const classification = getApplianceSafetyClassification(appliance);
             const safeToUse = getApplianceSafeToUse(appliance);
             const showUnsafeFields = classification === 'ar' || classification === 'id';
+            // Reveal the defect / remedial capture whenever the appliance is
+            // unsafe OR any individual check fails, so a defect is recorded in
+            // context (Reg 36(3)(e)/(f)).
+            const failedChecks = cp12FailedChecks(appliance);
+            const showDefectCapture = showUnsafeFields || failedChecks.length > 0;
             return (
               <div
                 key={`checks-${index}`}
@@ -3081,8 +3107,13 @@ export function CertificateWizard({
                         />
                       </div>
                     </div>
-                    {showUnsafeFields ? (
+                    {showDefectCapture ? (
                       <div className="mt-4 space-y-3">
+                        {failedChecks.length > 0 ? (
+                          <p className="text-[12px] font-medium text-[var(--color-status-danger,#9b2020)]">
+                            Failed: {failedChecks.join(', ')} — record the defect and remedial action below.
+                          </p>
+                        ) : null}
                         <Textarea
                           value={appliance.defect_notes ?? ''}
                           onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
@@ -3191,6 +3222,53 @@ export function CertificateWizard({
               />
             </div>
           </div>
+          {isCp12 &&
+          (hasValue(defects.defect_description) ||
+            hasValue(defects.remedial_action) ||
+            appliances.some((a) => cp12ApplianceHasFailedCheck(a) || ['ar', 'id'].includes(getApplianceSafetyClassification(a)))) ? (
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Defects &amp; remedial action</p>
+                {!defectsEdited ? (
+                  <span className="text-[11px] text-[var(--color-text-tertiary)]">Auto-filled from checks · editable</span>
+                ) : null}
+              </div>
+              <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">
+                These appear on the certificate. Auto-filled from failed checks and per-appliance notes — edit freely.
+              </p>
+              <Textarea
+                className="mt-3 min-h-[80px]"
+                value={defects.defect_description}
+                onChange={(e) => {
+                  setDefectsEdited(true);
+                  setDefects((prev) => ({ ...prev, defect_description: e.target.value }));
+                }}
+                placeholder="Defects identified"
+              />
+              <Textarea
+                className="mt-3 min-h-[80px]"
+                value={defects.remedial_action}
+                onChange={(e) => {
+                  setDefectsEdited(true);
+                  setDefects((prev) => ({ ...prev, remedial_action: e.target.value }));
+                }}
+                placeholder="Remedial action taken"
+              />
+              {defectsEdited ? (
+                <button
+                  type="button"
+                  className="mt-2 text-[12px] text-[var(--color-action)] underline"
+                  onClick={() => {
+                    const suggested = composeCp12DefectSummary(appliances);
+                    setDefects((prev) => ({ ...prev, ...suggested }));
+                    setDefectsEdited(false);
+                  }}
+                >
+                  Reset to auto-filled summary
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <details className="group rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4" open={hasValue(evidenceFields.comments)}>
             <summary className="flex cursor-pointer list-none items-center justify-between text-[13px] font-medium text-[var(--color-text-primary)]">
               <span>Comments (optional)</span>
