@@ -18,7 +18,7 @@ import { DEFAULT_JOB_TYPE, type JobType } from '@/types/job-records';
 import type { BoilerServicePhotoCategory } from '@/types/boiler-service';
 import { BOILER_SERVICE_PHOTO_CATEGORIES, BOILER_SERVICE_REQUIRED_FOR_ISSUE } from '@/types/boiler-service';
 import type { GasWarningNoticeFields } from '@/types/gas-warning-notice';
-import { GAS_WARNING_REQUIRED_FOR_ISSUE } from '@/types/gas-warning-notice';
+import { validateGwnForIssue } from '@/lib/gwn/validation';
 import type { GeneralWorksPhotoCategory } from '@/types/general-works';
 import { GENERAL_WORKS_PHOTO_CATEGORIES, GENERAL_WORKS_REQUIRED_FIELDS } from '@/types/general-works';
 import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
@@ -1977,32 +1977,10 @@ function validateBoilerServiceForIssue(fieldMap: Record<string, unknown>) {
 }
 
 function validateGasWarningNoticeForIssue(fields: GasWarningNoticeFields) {
-  const errors: string[] = [];
-  const customerPresent = resolveGasWarningCustomerPresent(fields);
-  const handoverConfirmed = resolveGasWarningCustomerHandover(fields);
-
-  GAS_WARNING_REQUIRED_FOR_ISSUE.forEach((key) => {
-    if (key === 'customer_informed') {
-      if (!handoverConfirmed) {
-        errors.push(customerPresent ? 'Customer must be informed before issuing' : 'Notice left on premises must be confirmed when customer is not present');
-      }
-      return;
-    }
-    const value = (fields as Record<string, unknown>)[key];
-    if (!hasValue(value)) errors.push(`${key.replace(/_/g, ' ')} is required`);
-  });
-
-  const classification = String(fields.classification ?? '').trim();
-  if (classification === 'IMMEDIATELY_DANGEROUS') {
-    if (!booleanFromField(fields.danger_do_not_use_label_fitted)) {
-      errors.push('Danger: Do Not Use label must be fitted for Immediately Dangerous');
-    }
-    if (!booleanFromField(fields.gas_supply_isolated) && !booleanFromField(fields.customer_refused_isolation)) {
-      errors.push('Customer refusal is required when gas supply is not isolated for Immediately Dangerous');
-    }
-  }
-
-  return errors;
+  // Delegates to the shared validator (src/lib/gwn/validation.ts) so the server
+  // issue gate and the wizard checklist enforce exactly the same rules, including
+  // the RIDDOR requirement for Immediately Dangerous.
+  return validateGwnForIssue(fields);
 }
 
 // CP12 validation per docs/specs/cp12.md

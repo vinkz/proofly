@@ -298,6 +298,13 @@ export function GasWarningNoticeWizard({
         fields.gas_supply_isolated || fields.customer_refused_isolation,
         2,
       );
+      // RIDDOR 2013 Reg 6(2): Immediately Dangerous fittings must be reported to HSE.
+      add(
+        'riddor-report',
+        'RIDDOR report recorded (reported to HSE or reference)',
+        fields.riddor_11_1_reported || fields.riddor_11_2_reported || hasValue(fields.emergency_reference),
+        2,
+      );
     }
 
     return items;
@@ -311,12 +318,15 @@ export function GasWarningNoticeWizard({
     fields.customer_present,
     fields.customer_refused_isolation,
     fields.danger_do_not_use_label_fitted,
+    fields.emergency_reference,
     fields.engineer_name,
     fields.gas_safe_number,
     fields.gas_supply_isolated,
     fields.issued_at,
     fields.notice_left_on_premises,
     fields.property_address,
+    fields.riddor_11_1_reported,
+    fields.riddor_11_2_reported,
     fields.unsafe_situation_description,
     jobAddress.job_address_line1,
   ]);
@@ -1030,7 +1040,7 @@ export function GasWarningNoticeWizard({
               <Input
                 value={fields.emergency_reference}
                 onChange={(e) => setFields((prev) => ({ ...prev, emergency_reference: e.target.value }))}
-                placeholder="Emergency reference (optional)"
+                placeholder="HSE / RIDDOR report reference (required if Immediately Dangerous)"
                 className="rounded-[8px] sm:col-span-2"
               />
             </div>

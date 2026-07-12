@@ -97,6 +97,12 @@ Unlike the CP12 (whose minimum content is *prescribed* by statute — GSIUR 1998
 - Adaptive render-if-captured for appliance, defect categories, action flags, and responsible-person notification; engineer signature always, responsible-person signature optional.
 - Footer cites the GIUSP (IGEM/G/11) and stamps `gwn-template-v2`. Samples: `tmp/gwn-v2-at-risk.pdf`, `tmp/gwn-v2-immediately-dangerous.pdf`.
 
-**Still to do:** wizard alignment (make ID/AR the spine, conditionally require ID-only duties, surface a RIDDOR reference field when ID — **F-W2**), a dedicated notice date (**F-W3**), a responsible-person-type selector (**F-W4**), and a shared tiered `field-config`/validator like CP12. Interactive wizard click-through recommended before merge.
+### Wizard alignment — ✅ implemented (2026-07-12)
+- **Single source of truth:** new shared validator `src/lib/gwn/validation.ts` (`validateGwnForIssue`) encodes the tier-1 requirements + ID-conditional duties. The server issue gate (`certificates.ts` `validateGasWarningNoticeForIssue`) now delegates to it, so wizard and server enforce identical rules.
+- **F-W2 done:** for Immediately Dangerous, issuing is now blocked unless a **RIDDOR report is recorded** (RIDDOR 11(1)/11(2) flag or an HSE/RIDDOR report reference) — enforced in the shared validator, added to the wizard checklist, and the reference input is relabelled "HSE / RIDDOR report reference (required if Immediately Dangerous)".
+- The wizard already had the classification select, safety-action checkboxes (Danger label, isolation, cap, refusal), and RIDDOR 11(1)/11(2) checkboxes; those remain and are now gated consistently.
+- Tests: `tests/gwn-validation.test.ts` (AR passes without RIDDOR; ID blocked without RIDDOR; ID passes once recorded; Danger-label/isolation still required; notice-left required when not present).
+
+**Still to do:** dedicated notice date (**F-W3**, currently uses `issued_at`), a responsible-person-type "given to: landlord / tenant / owner" selector (**F-W4**, conventional), and optionally a full tiered `field-config` like CP12. Interactive wizard click-through recommended before merge.
 
 _Analysis only — sources current as of 2026-07-12. IGEM/G/11 is a paid standard; where its exact wording matters for implementation, verify against the current edition or Gas Safe Register technical bulletins._
