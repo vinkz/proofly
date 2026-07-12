@@ -1925,17 +1925,17 @@ export function BoilerServiceWizard({
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="Central heating Annual Service and Plumbing Inspection"
-            subtitle={`${centralHeatingCompleted}/${CENTRAL_HEATING_CHECK_ITEMS.length} complete`}
-            defaultOpen={firstIncompleteKey === 'central-heating'}
+            title="Central heating & plumbing (optional)"
+            subtitle={`Warranty / Benchmark · ${centralHeatingCompleted}/${CENTRAL_HEATING_CHECK_ITEMS.length}`}
+            defaultOpen={false}
           >
             <div className="space-y-2">{CENTRAL_HEATING_CHECK_ITEMS.map(renderCheckToggle)}</div>
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="Appliance / system advice and recommendations"
-            subtitle={`${adviceCompleted}/${ADVICE_CHECK_ITEMS.length} complete`}
-            defaultOpen={firstIncompleteKey === 'advice'}
+            title="Advice & recommendations (optional)"
+            subtitle={`Warranty / Benchmark · ${adviceCompleted}/${ADVICE_CHECK_ITEMS.length}`}
+            defaultOpen={false}
           >
             <div className="space-y-2">{ADVICE_CHECK_ITEMS.map(renderCheckToggleWithComment)}</div>
           </CollapsibleSection>

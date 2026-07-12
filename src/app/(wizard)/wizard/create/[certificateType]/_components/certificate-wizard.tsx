@@ -2792,6 +2792,9 @@ export function CertificateWizard({
       onBack={goBackOneStep}
     >
       {offlineDraftBanner}
+      <p className="mb-3 text-[12px] leading-[1.5] text-[var(--color-text-tertiary)]">
+        Required: appliance description, location and the Regulation 26(9) confirmation. Readings, Safety and Property checks are optional — they appear on the certificate only if you record them.
+      </p>
       <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
         {(
           [
@@ -3211,7 +3214,7 @@ export function CertificateWizard({
       {checksTab === 'house' && (
         <div className="space-y-4">
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Whole-house safety</p>
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Whole-house safety (optional)</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <PassFailToggle
                 label="Emergency control accessible"
@@ -3236,7 +3239,7 @@ export function CertificateWizard({
             </div>
           </div>
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">CO alarms</p>
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">CO alarms (optional)</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <PassFailToggle
                 label="CO alarm fitted"
