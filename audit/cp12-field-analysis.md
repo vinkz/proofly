@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-11
 **Scope:** the production CP12 issue path, not legacy renderers.
+**Related audits:** [gas-service-field-analysis.md](gas-service-field-analysis.md) · [gas-warning-notice-field-analysis.md](gas-warning-notice-field-analysis.md)
 
 ## Correction to the original audit
 
