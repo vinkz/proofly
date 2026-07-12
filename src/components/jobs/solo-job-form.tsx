@@ -366,8 +366,10 @@ export function SoloJobForm({
     [availableProperties, selectedPropertyKey],
   );
 
-  const combinedOrderChosen = jobType !== 'safety_check_service' || combinedFirst !== null;
-  const canShowContinue = jobTypeTouched && combinedOrderChosen && clientChosen && propertyChosen;
+  // The combined "complete first" choice is offered but must NOT gate progress —
+  // if skipped it defaults to CP12-first at routing (combinedFirst ?? 'cp12').
+  // Gating it here strands the form on later steps (no visible Continue button).
+  const canShowContinue = jobTypeTouched && clientChosen && propertyChosen;
 
   const goBack = () => {
     if (step === 5) {
@@ -925,6 +927,7 @@ export function SoloJobForm({
 
   const handleAutofill = () => {
     if (!demoEnabled) return;
+    setJobTypeTouched(true);
     const demo = JOB_DEMO_VALUES[jobType];
     const today = new Date().toISOString().slice(0, 10);
     const futureDateTime = `${today}T10:30`;
