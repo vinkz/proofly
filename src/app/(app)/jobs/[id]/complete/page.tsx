@@ -106,7 +106,7 @@ function ChecklistRow({ item }: { item: JobCompletionChecklistItem }) {
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {item.editHref && item.status === 'completed' ? (
+        {item.editHref ? (
           <Link
             href={item.editHref}
             className="inline-flex h-[34px] items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-opacity hover:opacity-80"

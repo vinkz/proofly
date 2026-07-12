@@ -1811,14 +1811,13 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
           : 'Draft needed if this handover should include payment details.',
       status: invoiceReady ? 'completed' : invoice ? 'ready' : 'draft_needed',
       blocking: false,
-      // When ready, "Open" goes to the PDF and "Edit" opens the editor; otherwise the
-      // primary action opens the editor / create flow.
-      href: invoiceReady
-        ? `/invoices/${invoice!.id}/pdf`
-        : invoice?.id
-          ? invoiceEditHref
-          : `/invoices/new?jobId=${jobId}&returnTo=${invoiceReturnTo}`,
-      editHref: invoiceReady ? invoiceEditHref : null,
+      // Once an invoice exists (draft or issued), the primary action reviews the output
+      // PDF (the /pdf page auto-generates for drafts) and "Edit" opens the editor. With no
+      // invoice yet, the primary action opens the create flow.
+      href: invoice?.id
+        ? `/invoices/${invoice.id}/pdf`
+        : `/invoices/new?jobId=${jobId}&returnTo=${invoiceReturnTo}`,
+      editHref: invoice?.id ? invoiceEditHref : null,
       completedAt: typeof invoice?.created_at === 'string' ? invoice.created_at : null,
     },
   ];

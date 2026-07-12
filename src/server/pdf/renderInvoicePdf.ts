@@ -49,6 +49,9 @@ type InvoiceInput = {
   client: InvoiceClient;
   job: InvoiceJob;
   lineItems: InvoiceLineItem[];
+  // Engineer/company logo — drawn top-left where the company name shows, matching
+  // the certificate renderers. Wiring (fetching profiles.logo_url) is separate.
+  companyLogoBytes?: Uint8Array;
 };
 
 type StatusKey = 'draft' | 'unpaid' | 'overdue' | 'paid';
@@ -136,6 +139,15 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Uint8Array>
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+  let logo: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null;
+  if (input.companyLogoBytes?.length) {
+    try {
+      logo = await pdfDoc.embedPng(input.companyLogoBytes);
+    } catch {
+      try { logo = await pdfDoc.embedJpg(input.companyLogoBytes); } catch { logo = null; }
+    }
+  }
+
   const PW = 595.28;
   const PH = 841.89;
   const M = 40;
@@ -176,8 +188,13 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Uint8Array>
   // ═══════════════════════════════════════════
   const headerStartY = y;
 
-  // Left: company info
+  // Left: logo (if present) then company info — same slot/logic as the certs.
   let leftY = headerStartY;
+  if (logo) {
+    const dims = logo.scaleToFit(150, 46);
+    page.drawImage(logo, { x: M, y: headerStartY - dims.height + 8, width: dims.width, height: dims.height });
+    leftY = headerStartY - dims.height - 4;
+  }
   const companyName = input.profile.company_name ?? input.profile.full_name ?? '';
   if (companyName) {
     drawText(companyName, M, leftY, 15, true, C.black);
