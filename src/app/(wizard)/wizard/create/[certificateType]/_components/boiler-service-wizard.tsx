@@ -316,9 +316,9 @@ export function BoilerServiceWizard({
   const [completionDate, setCompletionDate] = useState(
     resolvedFields.completion_date ? resolvedFields.completion_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
   );
-  const initialServiceDate = normalizeDateOnly(
-    resolvedFields.service_date ?? resolvedFields.job_visit_date ?? resolvedFields.completion_date,
-  );
+  const initialServiceDate =
+    normalizeDateOnly(resolvedFields.service_date ?? resolvedFields.job_visit_date ?? resolvedFields.completion_date) ||
+    new Date().toISOString().slice(0, 10);
   const initialNextServiceDue = normalizeDateOnly(resolvedFields.next_service_due) || addOneYear(initialServiceDate);
 
   const [jobInfo, setJobInfo] = useState<BoilerServiceJobInfo>({
@@ -1814,42 +1814,47 @@ export function BoilerServiceWizard({
             subtitle={`${readingsCompleted}/${combustionReadingFields.length} readings`}
             defaultOpen={firstIncompleteKey === 'readings'}
           >
-            <div className="mb-1 flex items-center justify-between">
-              <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">FGA readings</p>
-              <Cp12VoiceReadings
-                jobId={jobId}
-                scope="high"
-                buttonLabel="Speak high"
-                buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
-                onApply={applyVoiceReadings}
-              />
-            </div>
-            <p className="mb-3 text-[11px] leading-[1.5] text-[rgba(255,255,255,0.28)]">Speak readings in order with small pauses between each value.</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <UnitNumberInput
-                label="CO ppm"
-                value={checks.high_combustion_co_ppm}
-                onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
-                unit="ppm"
-              />
-              <UnitNumberInput
-                label="CO₂ %"
-                value={checks.high_combustion_co2}
-                onChange={(value) => setCheckValue('high_combustion_co2', value)}
-                unit="%"
-              />
-              <UnitNumberInput
-                label="Ratio"
-                value={checks.high_combustion_ratio}
-                onChange={(value) => setCheckValue('high_combustion_ratio', value)}
-                unit="ratio"
-              />
-              <UnitNumberInput
-                label="CO ppm"
-                value={checks.low_combustion_co_ppm}
-                onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
-                unit="ppm"
-                labelAction={
+            <p className="mb-3 text-[11px] leading-[1.5] text-[rgba(255,255,255,0.28)]">
+              FGA readings — speak values in order with small pauses between each.
+            </p>
+            {/* High and Low are separate labelled groups so the two rows are never
+                ambiguous in wide/landscape view (previously an unlabelled 3×2 grid). */}
+            <div className="space-y-4">
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">High reading</p>
+                  <Cp12VoiceReadings
+                    jobId={jobId}
+                    scope="high"
+                    buttonLabel="Speak high"
+                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
+                    onApply={applyVoiceReadings}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <UnitNumberInput
+                    label="CO ppm"
+                    value={checks.high_combustion_co_ppm}
+                    onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
+                    unit="ppm"
+                  />
+                  <UnitNumberInput
+                    label="CO₂ %"
+                    value={checks.high_combustion_co2}
+                    onChange={(value) => setCheckValue('high_combustion_co2', value)}
+                    unit="%"
+                  />
+                  <UnitNumberInput
+                    label="Ratio"
+                    value={checks.high_combustion_ratio}
+                    onChange={(value) => setCheckValue('high_combustion_ratio', value)}
+                    unit="ratio"
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">Low reading</p>
                   <Cp12VoiceReadings
                     jobId={jobId}
                     scope="low"
@@ -1857,20 +1862,28 @@ export function BoilerServiceWizard({
                     buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
                     onApply={applyVoiceReadings}
                   />
-                }
-              />
-              <UnitNumberInput
-                label="CO₂ %"
-                value={checks.low_combustion_co2}
-                onChange={(value) => setCheckValue('low_combustion_co2', value)}
-                unit="%"
-              />
-              <UnitNumberInput
-                label="Ratio"
-                value={checks.low_combustion_ratio}
-                onChange={(value) => setCheckValue('low_combustion_ratio', value)}
-                unit="ratio"
-              />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <UnitNumberInput
+                    label="CO ppm"
+                    value={checks.low_combustion_co_ppm}
+                    onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
+                    unit="ppm"
+                  />
+                  <UnitNumberInput
+                    label="CO₂ %"
+                    value={checks.low_combustion_co2}
+                    onChange={(value) => setCheckValue('low_combustion_co2', value)}
+                    unit="%"
+                  />
+                  <UnitNumberInput
+                    label="Ratio"
+                    value={checks.low_combustion_ratio}
+                    onChange={(value) => setCheckValue('low_combustion_ratio', value)}
+                    unit="ratio"
+                  />
+                </div>
+              </div>
             </div>
           </CollapsibleSection>
 

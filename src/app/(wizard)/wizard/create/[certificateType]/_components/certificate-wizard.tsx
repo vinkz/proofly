@@ -430,7 +430,9 @@ export function CertificateWizard({
     customer_phone: resolvedInitialInfo.customer_phone ?? resolvedInitialInfo.job_phone ?? '',
     property_address: resolvedInitialInfo.property_address ?? '',
     postcode: resolvedInitialInfo.postcode ?? '',
-    inspection_date: resolvedInitialInfo.inspection_date ?? new Date().toISOString().slice(0, 10),
+    // Default to today when unset OR blank ('' is common from job fields, and `??`
+    // would leave it empty, forcing a manual pick).
+    inspection_date: resolvedInitialInfo.inspection_date || new Date().toISOString().slice(0, 10),
     landlord_name: resolvedInitialInfo.landlord_name ?? '',
     landlord_company: resolvedInitialInfo.landlord_company ?? '',
     landlord_address_line1: initialLandlordLine1,
