@@ -1810,16 +1810,43 @@ export function BoilerServiceWizard({
             </div>
           ) : null}
           <CollapsibleSection
-            title="High / Low combustion readings"
-            subtitle={`${readingsCompleted}/${combustionReadingFields.length} readings`}
+            title="Readings — pressure, heat input & combustion"
+            subtitle={`${readingsCompleted}/${combustionReadingFields.length} combustion readings`}
             defaultOpen={firstIncompleteKey === 'readings'}
           >
             <p className="mb-3 text-[11px] leading-[1.5] text-[rgba(255,255,255,0.28)]">
               FGA readings — speak values in order with small pauses between each.
             </p>
-            {/* High and Low are separate labelled groups so the two rows are never
+            {/* Gas pressure / rate is measured first, then High and Low combustion.
+                High and Low are separate labelled groups so the two rows are never
                 ambiguous in wide/landscape view (previously an unlabelled 3×2 grid). */}
             <div className="space-y-4">
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">Gas pressure / rate</p>
+                  <Cp12VoiceReadings
+                    jobId={jobId}
+                    scope="pressure"
+                    buttonLabel="Speak pressure/input"
+                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
+                    onApply={applyVoiceReadings}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <UnitNumberInput
+                    label="Operating pressure"
+                    value={checks.operating_pressure_mbar}
+                    onChange={(value) => setCheckValue('operating_pressure_mbar', value)}
+                    unit="mbar"
+                  />
+                  <UnitNumberInput
+                    label="Heat input"
+                    value={checks.heat_input}
+                    onChange={(value) => setCheckValue('heat_input', value)}
+                    unit="kW"
+                  />
+                </div>
+              </div>
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">High reading</p>
@@ -1893,31 +1920,7 @@ export function BoilerServiceWizard({
             defaultOpen={firstIncompleteKey === 'safety'}
           >
             <div className="space-y-2">
-              {SAFETY_CHECK_ITEMS.slice(0, 3).map(renderCheckToggleWithComment)}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <UnitNumberInput
-                  label="Operating pressure"
-                  value={checks.operating_pressure_mbar}
-                  onChange={(value) => setCheckValue('operating_pressure_mbar', value)}
-                  unit="mbar"
-                  labelAction={
-                    <Cp12VoiceReadings
-                      jobId={jobId}
-                      scope="pressure"
-                      buttonLabel="Speak pressure/input"
-                      buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
-                      onApply={applyVoiceReadings}
-                    />
-                  }
-                />
-                <UnitNumberInput
-                  label="Heat input"
-                  value={checks.heat_input}
-                  onChange={(value) => setCheckValue('heat_input', value)}
-                  unit="kW"
-                />
-              </div>
-              {SAFETY_CHECK_ITEMS.slice(3).map(renderCheckToggleWithComment)}
+              {SAFETY_CHECK_ITEMS.map(renderCheckToggleWithComment)}
             </div>
           </CollapsibleSection>
 

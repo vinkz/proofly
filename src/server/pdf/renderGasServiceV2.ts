@@ -298,7 +298,10 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
     draw(name || '—', x, sigBaseY - 60, 9.5, font, C.dark);
   };
   await drawSig('ENGINEER', text(f.issuedByPrintName) || text(f.engineerName), f.engineerSignatureUrl, M);
-  if (text(f.receivedByPrintName) || f.customerSignatureUrl) {
+  // Only show the received-by block when a customer signature was actually
+  // captured — the customer name alone (from the job) would otherwise leave an
+  // empty signature box on every record.
+  if (f.customerSignatureUrl) {
     await drawSig('RECEIVED BY', text(f.receivedByPrintName), f.customerSignatureUrl, M + sigColW + colGap);
   }
   y = sigBaseY - 72;

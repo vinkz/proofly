@@ -363,8 +363,9 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
     draw(name || '—', x, sigBaseY - 60, 9.5, font, C.dark);
   };
   await drawSig('ENGINEER', text(input.fields.engineerSignatureText) || text(input.fields.engineerName), input.fields.engineerSignatureUrl, M);
-  // customer/received-by — optional, only when captured
-  if (text(input.fields.responsiblePersonName) || input.fields.responsiblePersonSignatureUrl) {
+  // customer/received-by — only when a signature was actually captured (the name
+  // alone comes from the job and would leave an empty signature box otherwise).
+  if (input.fields.responsiblePersonSignatureUrl) {
     await drawSig('RECEIVED BY', text(input.fields.responsiblePersonName), input.fields.responsiblePersonSignatureUrl, M + sigColW + colGap);
   }
   y = sigBaseY - 72;
