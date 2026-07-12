@@ -250,7 +250,9 @@ export default async function CertificateWizardPage({
     let shouldRedirectToCompletion = false;
     try {
       const completionState = await getJobCompletionState(jobId);
-      const warningNoticeRow = completionState.required.find((item) => item.id === 'gas_warning_notice');
+      const warningNoticeRow = [...completionState.required, ...completionState.optional].find(
+        (item) => item.id === 'gas_warning_notice',
+      );
       if (warningNoticeRow?.status === 'completed') {
         shouldRedirectToCompletion = true;
       }

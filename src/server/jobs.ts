@@ -1768,34 +1768,39 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
     };
   });
 
-  if (needsGasWarningNotice) {
-    const certificate = findCertificate('gas_warning_notice');
-    required.push({
-      id: 'gas_warning_notice',
-      label: CERTIFICATE_COMPLETION_LABELS.gas_warning_notice,
-      description: certificate
-        ? 'Final warning notice PDF is stored on this job.'
-        : 'Unsafe appliance details require a final warning notice.',
-      status: certificate ? 'completed' : 'required',
-      blocking: !certificate,
-      href: certificate
-        ? `/jobs/${jobId}/pdf?certificateType=gas_warning_notice`
-        : `/wizard/create/gas_warning_notice?jobId=${jobId}`,
-      editHref: certificate ? `/wizard/create/gas_warning_notice?jobId=${jobId}` : null,
-      completedAt:
-        typeof certificate?.issued_at === 'string'
-          ? certificate.issued_at
-          : typeof certificate?.created_at === 'string'
-            ? certificate.created_at
-            : null,
-    });
-  }
+  // The Gas Warning Notice is a recommended follow-up for unsafe appliances
+  // (GIUSP), NOT part of the CP12 legal minimum — it must not block sending the
+  // job. It stays offered (with property/landlord/appliance details pre-filled
+  // from this job) in the Optional section.
+  const gasWarningNoticeCertificate = needsGasWarningNotice ? findCertificate('gas_warning_notice') : null;
+  const gasWarningNoticeItem: JobCompletionChecklistItem | null = needsGasWarningNotice
+    ? {
+        id: 'gas_warning_notice',
+        label: CERTIFICATE_COMPLETION_LABELS.gas_warning_notice,
+        description: gasWarningNoticeCertificate
+          ? 'Final warning notice PDF is stored on this job.'
+          : 'Recommended for unsafe appliances — property, landlord and appliance details are pre-filled from this job. Optional: does not block sending.',
+        status: gasWarningNoticeCertificate ? 'completed' : 'ready',
+        blocking: false,
+        href: gasWarningNoticeCertificate
+          ? `/jobs/${jobId}/pdf?certificateType=gas_warning_notice`
+          : `/wizard/create/gas_warning_notice?jobId=${jobId}`,
+        editHref: gasWarningNoticeCertificate ? `/wizard/create/gas_warning_notice?jobId=${jobId}` : null,
+        completedAt:
+          typeof gasWarningNoticeCertificate?.issued_at === 'string'
+            ? gasWarningNoticeCertificate.issued_at
+            : typeof gasWarningNoticeCertificate?.created_at === 'string'
+              ? gasWarningNoticeCertificate.created_at
+              : null,
+      }
+    : null;
 
   const invoice = ((invoiceResp.data ?? []) as Record<string, unknown>[])[0] ?? null;
   const invoiceReady = Boolean(invoice?.pdf_path || invoice?.payment_link_url || invoice?.status === 'issued');
   const invoiceReturnTo = encodeURIComponent(`/jobs/${jobId}/complete`);
   const invoiceEditHref = invoice?.id ? `/invoices/${invoice.id}?returnTo=${invoiceReturnTo}` : null;
   const optional: JobCompletionChecklistItem[] = [
+    ...(gasWarningNoticeItem ? [gasWarningNoticeItem] : []),
     {
       id: 'invoice',
       label: 'Invoice',

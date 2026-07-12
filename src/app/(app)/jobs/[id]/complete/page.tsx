@@ -65,7 +65,9 @@ function getActionClass(item: JobCompletionChecklistItem): string {
   if (item.status === 'completed') {
     return 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]';
   }
-  if (item.id === 'gas_warning_notice' && item.status === 'required') {
+  if (item.id === 'gas_warning_notice') {
+    // Not-completed GWN stays visually prominent (amber) even though it is now
+    // optional and non-blocking. Completed items are handled above.
     return 'bg-[var(--color-amber-bg)] text-[var(--color-amber)]';
   }
   if (item.id === 'invoice') {
