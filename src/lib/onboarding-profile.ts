@@ -14,16 +14,22 @@ export type OnboardingProfileShape = Pick<
   | 'gas_safe_number'
 >;
 
+// Legal minimum to issue a compliant CP12 (HSE / Reg 36(3)(h),(i)): the
+// engineer's name and Gas Safe registration number. Everything else (company
+// details, ID card, DOB, profession) is conventional and captured as
+// recommended — it must never hard-block issuing a certificate.
 export const ONBOARDING_REQUIRED_FIELDS: Array<{ key: keyof OnboardingProfileShape; label: string }> = [
-  { key: 'full_name', label: 'Full name' },
-  { key: 'date_of_birth', label: 'Date of birth' },
-  { key: 'profession', label: 'Profession' },
+  { key: 'default_engineer_name', label: 'Engineer name' },
+  { key: 'gas_safe_number', label: 'Gas Safe number' },
+];
+
+// Conventional profile fields — improve the certificate but are optional.
+export const ONBOARDING_RECOMMENDED_FIELDS: Array<{ key: keyof OnboardingProfileShape; label: string }> = [
   { key: 'company_name', label: 'Company name' },
   { key: 'company_address', label: 'Company address line 1' },
   { key: 'company_postcode', label: 'Company postcode' },
   { key: 'company_phone', label: 'Company phone' },
   { key: 'default_engineer_id', label: 'Engineer ID card number' },
-  { key: 'gas_safe_number', label: 'Gas Safe number' },
 ];
 
 export const GAS_SAFE_NUMBER_PATTERN = /^\d{6}$/;

@@ -86,10 +86,10 @@ export function GetStartedCard({
           label="Certificate-ready profile"
           detail={
             certificateProfileComplete
-              ? 'Gas Safe and company details ready.'
+              ? 'Engineer name and Gas Safe number ready. Company details optional.'
               : profileMissingFields.length > 0
                 ? `${profileMissingFields.slice(0, 2).join(', ')}${profileMissingFields.length > 2 ? ` +${profileMissingFields.length - 2} more` : ''}`
-                : 'Gas Safe number, licence class, and company details.'
+                : 'Engineer name and Gas Safe number (company details optional).'
           }
           statusLabel={certificateProfileComplete ? 'Done' : 'Required'}
           statusTone={certificateProfileComplete ? 'done' : 'required'}
