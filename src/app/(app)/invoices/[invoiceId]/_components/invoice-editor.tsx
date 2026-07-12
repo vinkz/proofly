@@ -228,24 +228,31 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
     return parts.filter((p, idx, arr) => arr.indexOf(p) === idx).join(', ');
   };
 
+  // Persist the current form state (line items + meta). Shared by Save and by every
+  // share action, so a previewed/emailed PDF always reflects the on-screen edits rather
+  // than the last saved version.
+  const persist = async () => {
+    await upsertLineItems(invoice.id, items.filter((item) => item.description?.trim().length));
+    await setInvoiceMeta(invoice.id, {
+      status: invoiceStatus,
+      due_date: dueDate || null,
+      vat_rate: normalizeVatPercent(vatRate) / 100,
+      notes,
+      client_name_override: clientName || null,
+      client_address_override: buildSaveAddress() || null,
+      client_email_override: clientEmail || null,
+      client_phone_override: clientPhone || null,
+    });
+    const rememberedItem = items.find((item) => item.description?.trim() && Number(item.unit_price ?? 0) >= 0);
+    if (rememberedItem) {
+      writeLastUsedPrice(certificateType, Number(rememberedItem.unit_price ?? 0));
+    }
+  };
+
   const handleSave = () => {
     startTransition(async () => {
       try {
-        await upsertLineItems(invoice.id, items.filter((item) => item.description?.trim().length));
-        await setInvoiceMeta(invoice.id, {
-          status: invoiceStatus,
-          due_date: dueDate || null,
-          vat_rate: normalizeVatPercent(vatRate) / 100,
-          notes,
-          client_name_override: clientName || null,
-          client_address_override: buildSaveAddress() || null,
-          client_email_override: clientEmail || null,
-          client_phone_override: clientPhone || null,
-        });
-        const rememberedItem = items.find((item) => item.description?.trim() && Number(item.unit_price ?? 0) >= 0);
-        if (rememberedItem) {
-          writeLastUsedPrice(certificateType, Number(rememberedItem.unit_price ?? 0));
-        }
+        await persist();
         const response = await fetch(`/api/invoices/${invoice.id}/pdf`, { method: 'POST' });
         if (!response.ok) {
           const payload = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -264,6 +271,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   };
 
   const sharePdf = async () => {
+    await persist();
     const response = await fetch(`/api/invoices/${invoice.id}/pdf`, { method: 'POST' });
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -366,34 +374,46 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       </div>
 
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-4">
-        {/* Status card */}
-        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
-            Payment status
-          </p>
-          <div className="mt-3 flex gap-1 rounded-[10px] bg-[var(--color-background-secondary)] p-1">
-            {STATUS_SEGMENTS.map((seg) => {
-              const active = invoiceStatus === seg.value;
-              return (
-                <button
-                  key={seg.value}
-                  type="button"
-                  onClick={() => setInvoiceStatus(seg.value)}
-                  className="flex-1 rounded-[8px] py-[7px] text-[13px] font-medium transition-colors"
-                  style={
-                    active
-                      ? { backgroundColor: seg.activeBg, color: seg.activeColor }
-                      : { backgroundColor: 'transparent', color: 'var(--color-text-tertiary)' }
-                  }
-                >
-                  {seg.label}
-                </button>
-              );
-            })}
+        {/* Status & terms card */}
+        <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+          <div className="p-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
+              Payment status
+            </p>
+            <div className="mt-3 flex gap-1 rounded-[10px] bg-[var(--color-background-secondary)] p-1">
+              {STATUS_SEGMENTS.map((seg) => {
+                const active = invoiceStatus === seg.value;
+                return (
+                  <button
+                    key={seg.value}
+                    type="button"
+                    onClick={() => setInvoiceStatus(seg.value)}
+                    className="flex-1 rounded-[8px] py-[7px] text-[13px] font-medium transition-colors"
+                    style={
+                      active
+                        ? { backgroundColor: seg.activeBg, color: seg.activeColor }
+                        : { backgroundColor: 'transparent', color: 'var(--color-text-tertiary)' }
+                    }
+                  >
+                    {seg.label}
+                  </button>
+                );
+              })}
+            </div>
+            {invoiceStatus === 'paid' && displayPaidAt ? (
+              <p className="mt-2 text-[13px] text-[var(--color-text-secondary)]">Paid on {displayPaidAt}</p>
+            ) : null}
           </div>
-          {invoiceStatus === 'paid' && displayPaidAt ? (
-            <p className="mt-2 text-[13px] text-[var(--color-text-secondary)]">Paid on {displayPaidAt}</p>
-          ) : null}
+          {/* Due date */}
+          <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Due date</p>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="cursor-pointer bg-transparent text-right text-[14px] font-medium text-[var(--color-text-primary)] outline-none"
+            />
+          </div>
         </div>
 
         {/* Client card */}
@@ -473,51 +493,6 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
               className="min-w-0 flex-1 bg-transparent text-right text-[14px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
             />
           </div>
-
-          {/* Due date */}
-          <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Due</p>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="cursor-pointer bg-transparent text-right text-[14px] font-medium text-[var(--color-text-primary)] outline-none"
-            />
-          </div>
-
-          {/* Send buttons */}
-          <div className="flex gap-2 border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
-            <button
-              type="button"
-              onClick={handleEmail}
-              disabled={isPending}
-              style={{ flex: 2 }}
-              className="rounded-[24px] bg-[#111] px-5 py-[13px] text-[15px] font-medium text-white disabled:opacity-50"
-            >
-              {invoiceStatus === 'paid' ? 'Resend receipt' : 'Email invoice'} →
-            </button>
-            <button
-              type="button"
-              onClick={handleWhatsApp}
-              disabled={isPending}
-              style={{ flex: 1 }}
-              className="rounded-[24px] border-[0.5px] border-[var(--color-border-secondary)] px-3 py-[13px] text-[15px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
-            >
-              WhatsApp
-            </button>
-          </div>
-
-          {/* Preview */}
-          <div className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 pb-3.5 pt-2 text-center">
-            <button
-              type="button"
-              onClick={handlePreview}
-              disabled={isPending}
-              className="text-[12px] text-[var(--color-text-tertiary)] underline-offset-2 hover:text-[var(--color-text-secondary)] hover:underline disabled:opacity-50"
-            >
-              Preview PDF ↗
-            </button>
-          </div>
         </div>
 
         {/* Line items card */}
@@ -533,42 +508,64 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
             </button>
           </div>
 
-          {items.map((item, index) => (
-            <div key={`item-${index}`} className="border-t-[0.5px] border-[var(--color-border-tertiary)]">
-              <div className="px-4 py-3">
-                <div className="flex items-center gap-2">
+          {items.map((item, index) => {
+            const qty = Number(item.quantity ?? 1);
+            const unit = Number(item.unit_price ?? 0);
+            const lineTotal = (Number.isFinite(qty) ? qty : 0) * (Number.isFinite(unit) ? unit : 0);
+            return (
+              <div key={`item-${index}`} className="border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
+                {/* Description on its own line — easy to read and type */}
+                <div className="flex items-start gap-2">
                   <input
                     value={item.description}
                     onChange={(e) => updateItem(index, { description: e.target.value })}
                     placeholder="Description"
                     className="min-w-0 flex-1 bg-transparent text-[14px] font-medium text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
                   />
-                  <div className="flex shrink-0 items-center">
-                    <span className="text-[14px] font-medium text-[var(--color-text-primary)]">£</span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={String(item.unit_price ?? 0)}
-                      onChange={(e) => updateItem(index, { unit_price: parseMoneyInput(e.target.value) })}
-                      className="w-16 bg-transparent text-right text-[14px] font-medium text-[var(--color-text-primary)] outline-none"
-                    />
-                  </div>
-                </div>
-                <div className="mt-1 flex items-center justify-between">
-                  <p className="text-[12px] text-[var(--color-text-secondary)]">
-                    {item.quantity ?? 1} × £{Number(item.unit_price ?? 0).toFixed(2)}
-                  </p>
                   <button
                     type="button"
                     onClick={() => removeRow(index)}
-                    className="text-[12px] text-[#a32d2d]"
+                    aria-label="Remove item"
+                    className="shrink-0 rounded-full p-1 text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-background-secondary)] hover:text-[#a32d2d]"
                   >
-                    Remove
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
                   </button>
                 </div>
+                {/* Compact controls: qty × unit price, with the line total on the right */}
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[13px] text-[var(--color-text-secondary)]">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={String(item.quantity ?? 1)}
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value.replace(/[^\d]/g, ''), 10);
+                        updateItem(index, { quantity: Number.isFinite(n) && n > 0 ? n : 1 });
+                      }}
+                      aria-label="Quantity"
+                      className="w-10 rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-1.5 py-1 text-center text-[13px] text-[var(--color-text-primary)] outline-none"
+                    />
+                    <span>×</span>
+                    <span className="flex items-center rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-1.5 py-1">
+                      <span className="text-[13px] text-[var(--color-text-secondary)]">£</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={String(item.unit_price ?? 0)}
+                        onChange={(e) => updateItem(index, { unit_price: parseMoneyInput(e.target.value) })}
+                        aria-label="Unit price"
+                        className="w-14 bg-transparent text-right text-[13px] text-[var(--color-text-primary)] outline-none"
+                      />
+                    </span>
+                  </div>
+                  <span className="text-[14px] font-medium text-[var(--color-text-primary)]">£{lineTotal.toFixed(2)}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* VAT */}
           <div className="flex items-center justify-between border-t-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
@@ -617,15 +614,46 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
           />
         </div>
 
-        {/* Save button */}
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isPending}
-          className="w-full rounded-[24px] bg-[#111] py-[14px] text-[15px] font-medium text-white disabled:opacity-50"
-        >
-          {isPending ? 'Saving…' : 'Save invoice'}
-        </button>
+        {/* Actions — one place for save, preview, and sending */}
+        <div className="space-y-2 pt-1">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isPending}
+            className="w-full rounded-[24px] bg-[#111] py-[14px] text-[15px] font-medium text-white disabled:opacity-50"
+          >
+            {isPending ? 'Saving…' : 'Save invoice'}
+          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleEmail}
+              disabled={isPending}
+              className="flex-1 rounded-[24px] border-[0.5px] border-[var(--color-border-secondary)] py-[12px] text-[14px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              {invoiceStatus === 'paid' ? 'Resend receipt' : 'Email'}
+            </button>
+            <button
+              type="button"
+              onClick={handleWhatsApp}
+              disabled={isPending}
+              className="flex-1 rounded-[24px] border-[0.5px] border-[var(--color-border-secondary)] py-[12px] text-[14px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              WhatsApp
+            </button>
+            <button
+              type="button"
+              onClick={handlePreview}
+              disabled={isPending}
+              className="flex-1 rounded-[24px] border-[0.5px] border-[var(--color-border-secondary)] py-[12px] text-[14px] font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              Preview
+            </button>
+          </div>
+          <p className="pt-0.5 text-center text-[11px] text-[var(--color-text-tertiary)]">
+            Emailing, WhatsApp and preview save your changes first.
+          </p>
+        </div>
       </div>
     </div>
   );
