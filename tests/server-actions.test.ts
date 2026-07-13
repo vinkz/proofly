@@ -43,6 +43,7 @@ vi.mock('@/server/job-fields', () => ({
 
 vi.mock('@/lib/resend', () => ({
   sendEmail: sendEmailMock,
+  isEmailConfigured: () => true,
 }));
 
 const openaiMock = {
@@ -447,7 +448,7 @@ describe('server actions', () => {
       expect.objectContaining({
         client_id: 'client-2',
         client_name: 'Sam Patel',
-        title: 'CP12 for Sam Patel',
+        title: 'Landlord safety check for Sam Patel',
         job_type: 'safety_check',
         scheduled_for: '2026-04-01T09:00',
       }),
@@ -510,6 +511,17 @@ describe('server actions', () => {
     const jobSelect = vi.fn().mockReturnValue({ single: jobSingle });
     const jobInsert = vi.fn().mockReturnValue({ select: jobSelect });
 
+    // Engineer profile used to personalise the landlord email.
+    const profileMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        default_engineer_name: 'Alex Engineer',
+        full_name: 'Alex Engineer',
+        company_name: 'Alex Gas',
+        company_email: 'alex@example.com',
+      },
+      error: null,
+    });
+
     supabase.from.mockImplementation((table: string) => {
       if (table === 'clients') {
         return {
@@ -521,6 +533,13 @@ describe('server actions', () => {
       if (table === 'jobs') {
         return {
           insert: jobInsert,
+        };
+      }
+      if (table === 'profiles') {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({ maybeSingle: profileMaybeSingle }),
+          }),
         };
       }
       throw new Error(`Unexpected table ${table}`);
@@ -549,13 +568,13 @@ describe('server actions', () => {
         status: 'awaiting_landlord',
         job_type: 'safety_check',
         cert_types: ['cp12'],
-        data_collection_status: 'awaiting_landlord',
+        data_collection_status: 'awaiting_landlord_input',
       }),
     );
     expect(sendEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'landlord@example.com',
-        subject: 'Please send your job details to CertNow',
+        subject: 'Alex Engineer needs your property details',
         text: expect.stringContaining('/prefill/job-prefill-1?token='),
       }),
     );

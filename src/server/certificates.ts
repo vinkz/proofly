@@ -16,14 +16,19 @@ import type { CertificateType, PhotoCategory, Cp12Appliance } from '@/types/cert
 import { CERTIFICATE_TYPES, PHOTO_CATEGORIES, CERTIFICATE_LABELS } from '@/types/certificates';
 import { DEFAULT_JOB_TYPE, type JobType } from '@/types/job-records';
 import type { BoilerServicePhotoCategory } from '@/types/boiler-service';
-import { BOILER_SERVICE_PHOTO_CATEGORIES, BOILER_SERVICE_REQUIRED_FOR_ISSUE } from '@/types/boiler-service';
+import { BOILER_SERVICE_PHOTO_CATEGORIES } from '@/types/boiler-service';
+import { validateGasServiceForIssue } from '@/lib/gas-service/validation';
 import type { GasWarningNoticeFields } from '@/types/gas-warning-notice';
-import { GAS_WARNING_REQUIRED_FOR_ISSUE } from '@/types/gas-warning-notice';
+import { validateGwnForIssue } from '@/lib/gwn/validation';
 import type { GeneralWorksPhotoCategory } from '@/types/general-works';
 import { GENERAL_WORKS_PHOTO_CATEGORIES, GENERAL_WORKS_REQUIRED_FIELDS } from '@/types/general-works';
 import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
-import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import { type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import { renderCp12CertificateV2Pdf } from '@/server/pdf/renderCp12CertificateV2';
 import { cp12ApplianceTypeLabel, resolveCp12Category, resolveCp12Subtype } from '@/lib/cp12/applianceConfig';
+import { CP12_TEMPLATE_VERSION } from '@/lib/cp12/field-config';
+import { composeCp12DefectSummary, type Cp12DefectAppliance } from '@/lib/cp12/defect-summary';
+import { validateCp12TierOne } from '@/lib/cp12/validation';
 import {
   renderGasServicePdf,
   type ApplianceInput as GasServiceApplianceInput,
@@ -96,6 +101,27 @@ type JobContext = {
 const JOB_FIELDS_TABLE = 'job_fields' as unknown as keyof Database['public']['Tables'];
 const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['public']['Tables'];
 const JOB_PHOTOS_TABLE = 'job_photos' as unknown as keyof Database['public']['Tables'];
+
+// The job-photos bucket is private, so evidence photos must be read via signed URLs.
+// New rows store the raw storage path in `file_url`; legacy rows stored a (non-working)
+// public URL — extract the path from either form.
+function jobPhotoStoragePath(fileUrlOrPath: string): string {
+  const marker = '/job-photos/';
+  const idx = fileUrlOrPath.indexOf(marker);
+  if (idx >= 0) return decodeURIComponent(fileUrlOrPath.slice(idx + marker.length).split('?')[0]);
+  return fileUrlOrPath;
+}
+async function signJobPhotoUrl(
+  client: Awaited<ReturnType<typeof supabaseServerServiceRole>>,
+  fileUrlOrPath: string | null | undefined,
+  expiresIn = 3600,
+): Promise<string | null> {
+  if (!fileUrlOrPath) return null;
+  const { data } = await client.storage
+    .from('job-photos')
+    .createSignedUrl(jobPhotoStoragePath(fileUrlOrPath), expiresIn);
+  return data?.signedUrl ?? null;
+}
 const CP12_REMOTE_SIGNATURE_TOKEN_FIELD = 'cp12_remote_signature_token';
 const CP12_REMOTE_SIGNATURE_CREATED_AT_FIELD = 'cp12_remote_signature_created_at';
 const CP12_REMOTE_SIGNATURE_EXPIRES_AT_FIELD = 'cp12_remote_signature_expires_at';
@@ -928,6 +954,105 @@ export async function createJob(payload: JobInsertPayload) {
   return { jobId: jobRow.id };
 }
 
+const EnsureGwnJobSchema = z.object({
+  parentJobId: z.string().uuid(),
+  applianceKey: z.string().regex(/^appliance_\d+$/),
+});
+
+// Create (or reuse) a Gas Warning Notice follow-up job for one specific CP12
+// appliance. The follow-up carries `parent_job_id` + `source_appliance_key`/`id`, so
+// getCertificateWizardState seeds it from that appliance via
+// applyCp12SourceDefaultsForGasWarningNotice. Idempotent per (parent, appliance).
+export async function ensureGasWarningNoticeJob(payload: z.infer<typeof EnsureGwnJobSchema>) {
+  const input = EnsureGwnJobSchema.parse(payload);
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'ensureGasWarningNoticeJob');
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const sb = await supabaseServerServiceRole();
+  const { data: parent, error: parentErr } = await sb
+    .from('jobs')
+    .select('id, user_id, client_id, property_id, client_name, address')
+    .eq('id', input.parentJobId)
+    .maybeSingle();
+  if (parentErr || !parent) throw new Error(parentErr?.message ?? 'Parent job not found');
+  const parentRow = parent as {
+    id: string;
+    user_id: string | null;
+    client_id: string | null;
+    property_id: string | null;
+    client_name: string | null;
+    address: string | null;
+  };
+  if (parentRow.user_id && parentRow.user_id !== user.id) throw new Error('Unauthorized');
+
+  // Reuse an existing follow-up for this appliance if one already exists.
+  const { data: existing, error: existingErr } = await sb
+    .from('jobs')
+    .select('id')
+    .eq('parent_job_id', input.parentJobId)
+    .eq('certificate_type', 'gas_warning_notice')
+    .eq('source_appliance_key', input.applianceKey)
+    .limit(1)
+    .maybeSingle();
+  if (existingErr) throw new Error(existingErr.message);
+  if ((existing as { id?: string } | null)?.id) {
+    return { jobId: (existing as { id: string }).id, created: false };
+  }
+
+  // Resolve the source appliance id from the key (appliance_N -> index N-1, created_at asc).
+  const idxMatch = input.applianceKey.match(/^appliance_(\d+)$/);
+  const idx = idxMatch ? Number.parseInt(idxMatch[1], 10) - 1 : -1;
+  let sourceApplianceId: string | null = null;
+  if (idx >= 0) {
+    const { data: apps } = await sb
+      .from(CP12_APPLIANCES_TABLE)
+      .select('id, created_at')
+      .eq('job_id', input.parentJobId)
+      .order('created_at', { ascending: true });
+    sourceApplianceId = ((apps ?? [])[idx] as { id?: string } | undefined)?.id ?? null;
+  }
+
+  const jobCode = await getNextJobCode(sb, user.id);
+  const insertPayload = {
+    status: 'draft',
+    certificate_type: 'gas_warning_notice',
+    cert_types: ['gas_warning_notice'],
+    parent_job_id: input.parentJobId,
+    source_appliance_key: input.applianceKey,
+    source_appliance_id: sourceApplianceId,
+    property_id: parentRow.property_id ?? null,
+    client_id: parentRow.client_id ?? null,
+    client_name: parentRow.client_name ?? null,
+    address: parentRow.address ?? null,
+    user_id: user.id,
+    job_type: getJobTypeForCertificate('gas_warning_notice'),
+    job_code: jobCode,
+    client_ref: buildClientRef(jobCode),
+    title: `Gas Warning Notice — ${parentRow.client_name ?? parentRow.address ?? 'appliance'}`,
+    entry_point: 'engineer_created',
+  } as Record<string, unknown>;
+
+  const { data: created, error: insertErr } = await sb
+    .from('jobs')
+    .insert(insertPayload as unknown as Database['public']['Tables']['jobs']['Insert'])
+    .select('id')
+    .single();
+  if (insertErr || !created) throw new Error(insertErr?.message ?? 'Unable to create warning notice');
+  const gwnJobId = (created as { id: string }).id;
+
+  if (parentRow.address) {
+    await upsertJobAddressForJob({
+      jobId: gwnJobId,
+      fields: { line1: parentRow.address },
+      sb,
+      userId: user.id,
+    });
+  }
+
+  return { jobId: gwnJobId, created: true };
+}
+
 const AssignClientSchema = z.object({
   jobId: z.string().uuid(),
   clientId: z.string().uuid(),
@@ -1089,14 +1214,46 @@ export async function uploadJobPhoto(formData: FormData) {
   });
   if (uploadErr) throw new Error(uploadErr.message);
 
-  const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
-
-  const insertPayload = { job_id: id, category: cat, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const insertPayload = { job_id: id, category: cat, file_url: path } as Record<string, unknown>;
   const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
   revalidatePath(`/jobs/${id}`);
-  return { url: publicUrl };
+  return { url: (await signJobPhotoUrl(sb, path)) ?? '' };
+}
+
+export type JobEvidencePhoto = { id: string; category: string; url: string; createdAt: string | null };
+
+// Evidence photos captured during the job, with fresh signed URLs so the engineer can
+// review/download them after the job (they live in the private job-photos bucket).
+export async function getJobPhotos(jobId: string): Promise<JobEvidencePhoto[]> {
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'getJobPhotos');
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  const sb = await supabaseServerServiceRole();
+  const { data: job } = await sb.from('jobs').select('id, user_id').eq('id', jobId).maybeSingle();
+  if (!job || ((job as { user_id?: string | null }).user_id ?? null) !== user.id) return [];
+
+  const { data: rows, error: rowsErr } = await sb
+    .from(JOB_PHOTOS_TABLE)
+    .select('id, category, file_url, created_at')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: true });
+  if (rowsErr) throw new Error(rowsErr.message);
+
+  const photos = (rows ?? []) as unknown as Array<{
+    id: string;
+    category: string | null;
+    file_url: string | null;
+    created_at: string | null;
+  }>;
+  const result: JobEvidencePhoto[] = [];
+  for (const photo of photos) {
+    if (!photo.file_url) continue;
+    const url = await signJobPhotoUrl(sb, photo.file_url);
+    if (url) result.push({ id: photo.id, category: photo.category ?? 'Photo', url, createdAt: photo.created_at });
+  }
+  return result;
 }
 
 export async function getCertificateWizardState(jobId: string) {
@@ -1171,11 +1328,14 @@ export async function getCertificateWizardState(jobId: string) {
   if (photosErr) throw new Error(photosErr.message);
   const photoPreviews: Record<string, string> = {};
   const photoRows = (photos ?? []) as unknown as Array<{ category: string | null; file_url: string | null }>;
-  photoRows.forEach((photo) => {
+  // The bucket is private, so previews need signed URLs (via service role).
+  const photoAdmin = await supabaseServerServiceRole();
+  for (const photo of photoRows) {
     if (photo.category && photo.file_url && !photoPreviews[photo.category]) {
-      photoPreviews[photo.category] = photo.file_url;
+      const signed = await signJobPhotoUrl(photoAdmin, photo.file_url);
+      if (signed) photoPreviews[photo.category] = signed;
     }
-  });
+  }
 
   let appliances: Cp12Appliance[] = [];
   const appResp = await sb.from(CP12_APPLIANCES_TABLE).select('*').eq('job_id', jobId);
@@ -1686,14 +1846,12 @@ export async function uploadBoilerServicePhoto(formData: FormData) {
     .upload(path, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: true });
   if (uploadErr) throw new Error(uploadErr.message);
 
-  const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
-
-  const insertPayload = { job_id: jobId, category, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const insertPayload = { job_id: jobId, category, file_url: path } as Record<string, unknown>;
   const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
   revalidatePath(`/wizard/create/gas_service?jobId=${jobId}`);
-  return { url: publicUrl };
+  return { url: (await signJobPhotoUrl(sb, path)) ?? '' };
 }
 
 export async function saveGeneralWorksInfo(payload: z.infer<typeof GeneralWorksInfoSchema>) {
@@ -1755,14 +1913,12 @@ export async function uploadGeneralWorksPhoto(formData: FormData) {
     .upload(path, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: true });
   if (uploadErr) throw new Error(uploadErr.message);
 
-  const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
-
-  const insertPayload = { job_id: jobId, category, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const insertPayload = { job_id: jobId, category, file_url: path } as Record<string, unknown>;
   const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
   revalidatePath(`/wizard/create/general_works?jobId=${jobId}`);
-  return { url: publicUrl };
+  return { url: (await signJobPhotoUrl(sb, path)) ?? '' };
 }
 
 const Cp12JobSchema = z.object({
@@ -1856,6 +2012,7 @@ const Cp12ApplianceSchema = z.object({
       co_reading_high: optionalText,
       co_reading_low: optionalText,
       flue_type: optionalText,
+      flue_location: optionalText,
       ventilation_provision: optionalText,
       ventilation_satisfactory: optionalText,
       flue_condition: optionalText,
@@ -1875,6 +2032,7 @@ const Cp12ApplianceSchema = z.object({
       warning_notice_issued: z.boolean().optional().default(false),
       appliance_disconnected: z.boolean().optional().default(false),
       danger_do_not_use_attached: z.boolean().optional().default(false),
+      reg_26_9_confirmed: z.boolean().optional().default(false),
     }),
   )
     .min(0),
@@ -1925,25 +2083,8 @@ export async function saveCp12Appliances(payload: z.infer<typeof Cp12ApplianceSc
   return { ok: true };
 }
 
-const CP12_REQUIRED_FIELDS = [
-  'property_address',
-  'inspection_date',
-  'landlord_name',
-  'landlord_address',
-  'engineer_name',
-  'gas_safe_number',
-];
-
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
-
-function hasSignatureValue(fieldMap: Record<string, unknown>, role: 'engineer' | 'customer') {
-  const keys =
-    role === 'engineer'
-      ? ['engineer_signature_path', 'engineer_signature', 'engineer_signature_url']
-      : ['customer_signature_path', 'customer_signature', 'customer_signature_url'];
-  return keys.some((key) => hasValue(fieldMap[key]));
-}
 
 function resolveGasWarningCustomerPresent(fields: GasWarningNoticeFields | Record<string, unknown>) {
   const explicit = fields.customer_present;
@@ -1974,46 +2115,18 @@ function validateGeneralWorksForIssue(fieldMap: Record<string, unknown>) {
 }
 
 function validateBoilerServiceForIssue(fieldMap: Record<string, unknown>) {
-  const errors: string[] = [];
-  BOILER_SERVICE_REQUIRED_FOR_ISSUE.forEach((key) => {
-    if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
-  });
-
-  const defects = booleanFromField(fieldMap.defects_found);
-  if (defects && !hasValue(fieldMap.defects_details)) {
-    errors.push('Defects details are required when defects are found');
-  }
-
-  return errors;
+  // Delegates to the shared validator (src/lib/gas-service/validation.ts) so the
+  // server issue gate and the wizard enforce identical rules — engineer identity,
+  // appliance identity and the Reg 26(9) safety outcomes; customer signature and
+  // Benchmark tasks stay optional.
+  return validateGasServiceForIssue(fieldMap);
 }
 
 function validateGasWarningNoticeForIssue(fields: GasWarningNoticeFields) {
-  const errors: string[] = [];
-  const customerPresent = resolveGasWarningCustomerPresent(fields);
-  const handoverConfirmed = resolveGasWarningCustomerHandover(fields);
-
-  GAS_WARNING_REQUIRED_FOR_ISSUE.forEach((key) => {
-    if (key === 'customer_informed') {
-      if (!handoverConfirmed) {
-        errors.push(customerPresent ? 'Customer must be informed before issuing' : 'Notice left on premises must be confirmed when customer is not present');
-      }
-      return;
-    }
-    const value = (fields as Record<string, unknown>)[key];
-    if (!hasValue(value)) errors.push(`${key.replace(/_/g, ' ')} is required`);
-  });
-
-  const classification = String(fields.classification ?? '').trim();
-  if (classification === 'IMMEDIATELY_DANGEROUS') {
-    if (!booleanFromField(fields.danger_do_not_use_label_fitted)) {
-      errors.push('Danger: Do Not Use label must be fitted for Immediately Dangerous');
-    }
-    if (!booleanFromField(fields.gas_supply_isolated) && !booleanFromField(fields.customer_refused_isolation)) {
-      errors.push('Customer refusal is required when gas supply is not isolated for Immediately Dangerous');
-    }
-  }
-
-  return errors;
+  // Delegates to the shared validator (src/lib/gwn/validation.ts) so the server
+  // issue gate and the wizard checklist enforce exactly the same rules, including
+  // the RIDDOR requirement for Immediately Dangerous.
+  return validateGwnForIssue(fields);
 }
 
 // CP12 validation per docs/specs/cp12.md
@@ -2022,70 +2135,12 @@ function validateCp12ForIssue(
   appliances: Cp12Appliance[],
   options: { requireCustomerSignature?: boolean } = {},
 ) {
-  const requireCustomerSignature = options.requireCustomerSignature ?? true;
-  const errors: string[] = [];
-  CP12_REQUIRED_FIELDS.forEach((key) => {
-    if (!hasValue(fieldMap[key])) errors.push(`${key.replace(/_/g, ' ')} is required`);
+  return validateCp12TierOne({
+    fields: fieldMap,
+    appliances,
+    // Customer / received-by signature is optional (HSE: only the engineer must sign).
+    requireCustomerSignature: options.requireCustomerSignature ?? false,
   });
-
-  const landlordLine1 = String(fieldMap.landlord_address_line1 ?? '').trim();
-  const landlordLine2 = String(fieldMap.landlord_address_line2 ?? '').trim();
-  const landlordCity = String(fieldMap.landlord_city ?? fieldMap.landlord_town ?? '').trim();
-  const landlordAddress =
-    String(fieldMap.landlord_address ?? '').trim() ||
-    [landlordLine1, landlordLine2, landlordCity].filter((part) => part.length > 0).join(', ');
-  const landlordPostcode = String(fieldMap.landlord_postcode ?? '').trim();
-  if (!landlordAddress) {
-    errors.push('Landlord address is required');
-  }
-  if (!landlordPostcode && !String(fieldMap.landlord_address ?? '').trim()) {
-    errors.push('Landlord postcode is required');
-  }
-  if (!booleanFromField(fieldMap.reg_26_9_confirmed)) {
-    errors.push('Regulation 26(9) confirmation is required');
-  }
-
-  const applianceRows = (appliances ?? []).filter(
-    (app) => hasValue(app?.appliance_type) || hasValue(app?.location),
-  );
-  if (!applianceRows.length) {
-    errors.push('At least one appliance with location and description is required');
-  } else if (applianceRows.some((app) => !hasValue(app?.location) || !hasValue(app?.appliance_type))) {
-    errors.push('Each appliance must include location and description');
-  }
-  applianceRows.forEach((app) => {
-    if (hasValue(app.classification_code) && (app.safety_rating ?? '').toLowerCase() === 'safe') {
-      errors.push('Classification code should only be set when safety rating is not safe');
-    }
-  });
-
-  const warningSelection = String(fieldMap.warning_notice_issued ?? '').trim().toUpperCase();
-  const hasDefectText = hasValue(fieldMap.defect_description) || hasValue(fieldMap.remedial_action);
-  const unsafeAppliances = applianceRows.filter((app) => {
-    const rating = (app.safety_rating ?? '').toLowerCase().trim();
-    const classification = (app.safety_classification ?? '').toLowerCase().trim();
-    return (rating.length > 0 && rating !== 'safe') || (classification.length > 0 && classification !== 'safe');
-  });
-  const hasStructuredDefectText = unsafeAppliances.some(
-    (app) => hasValue(app.defect_notes) || hasValue(app.actions_taken) || hasValue(app.actions_required),
-  );
-  const hasStructuredWarningSelection = unsafeAppliances.some((app) => typeof app.warning_notice_issued === 'boolean');
-  const requiresDefectDetails = unsafeAppliances.length > 0 || hasDefectText || warningSelection === 'YES';
-  if (requiresDefectDetails) {
-    if (!hasValue(fieldMap.defect_description) && !hasStructuredDefectText) {
-      errors.push('Defect description is required when an appliance is unsafe');
-    }
-    if (!warningSelection && !hasStructuredWarningSelection) {
-      errors.push('Confirm whether a warning notice was issued');
-    }
-  }
-
-  if (!hasSignatureValue(fieldMap, 'engineer')) errors.push('Engineer signature is required');
-  if (requireCustomerSignature && !hasSignatureValue(fieldMap, 'customer')) {
-    errors.push('Customer signature is required');
-  }
-
-  return errors;
 }
 
 function buildRemoteCp12SigningPath(token: string) {
@@ -2424,9 +2479,16 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   if (limitReached) return limitReached;
 
   const photoRows = (photos ?? []) as unknown as Array<{ category?: string | null; file_url?: string | null }>;
+  // Private bucket: sign each photo so the renderer can fetch and embed it.
+  const signedPhotoRows: { category: string; file_url: string }[] = [];
+  for (const photo of photoRows) {
+    if (!photo.category || !photo.file_url) continue;
+    const signed = await signJobPhotoUrl(supabase, photo.file_url);
+    if (signed) signedPhotoRows.push({ category: photo.category, file_url: signed });
+  }
   const pdfBytes = await renderGeneralWorksPdf({
     fieldMap: mergedFieldMap,
-    photos: photoRows.filter((p) => p.category && p.file_url) as { category: string; file_url: string }[],
+    photos: signedPhotoRows,
     issuedAt: issuedAt.toISOString(),
     previewMode: previewOnly,
   });
@@ -2951,7 +3013,14 @@ async function generateCp12CertificateForJob(params: {
     property_address: propertyAddress.summary || mergedFieldMap.property_address,
     postcode: propertyAddress.postcode || mergedFieldMap.postcode,
   };
-  const validationErrors = previewOnly ? [] : validateCp12ForIssue(validationFieldMap, appliances);
+  // Historic appliances pre-date the per-appliance declaration. Their existing
+  // record-level confirmation remains valid; newly saved rows persist their own.
+  const appliancesForIssue = appliances.map((appliance) => ({
+    ...appliance,
+    flue_location: appliance.flue_location ?? appliance.location ?? '',
+    reg_26_9_confirmed: appliance.reg_26_9_confirmed ?? booleanFromField(mergedFieldMap.reg_26_9_confirmed),
+  }));
+  const validationErrors = previewOnly ? [] : validateCp12ForIssue(validationFieldMap, appliancesForIssue);
   if (validationErrors.length) {
     throw new Error(`CP12 validation failed: ${validationErrors.join('; ')}`);
   }
@@ -3047,8 +3116,15 @@ async function generateCp12CertificateForJob(params: {
         '',
     ),
     responsiblePersonAcknowledgementDate: toText(mergedFieldMap.completion_date ?? ''),
-    defectsIdentified: toText(mergedFieldMap.defect_description ?? ''),
-    remedialWorksRequired: toText(mergedFieldMap.remedial_action ?? ''),
+    // Fallback: if the record-level defect/remedial box was not filled, compose
+    // it from per-appliance failed checks + notes so the certificate never shows
+    // "None identified" while a defect exists on an appliance.
+    defectsIdentified:
+      toText(mergedFieldMap.defect_description ?? '') ||
+      composeCp12DefectSummary(appliancesForIssue as unknown as Cp12DefectAppliance[]).defect_description,
+    remedialWorksRequired:
+      toText(mergedFieldMap.remedial_action ?? '') ||
+      composeCp12DefectSummary(appliancesForIssue as unknown as Cp12DefectAppliance[]).remedial_action,
     warningNoticeIssued: toText(mergedFieldMap.warning_notice_issued ?? ''),
     additionalNotes: toText(mergedFieldMap.comments ?? mergedFieldMap.additional_notes ?? ''),
     coAlarmFitted: toText(mergedFieldMap.co_alarm_fitted ?? ''),
@@ -3062,7 +3138,7 @@ async function generateCp12CertificateForJob(params: {
     equipotentialBondingSatisfactory: toText(mergedFieldMap.equipotential_bonding_satisfactory ?? ''),
   };
 
-  const applianceInputs: ApplianceInput[] = (appliances ?? []).map((app) => {
+  const applianceInputs: ApplianceInput[] = appliancesForIssue.map((app) => {
     const appExtras = app as Cp12Appliance & { appliance_make_model?: string };
     const highCoPpm = toText(app.high_co_ppm ?? app.co_reading_high ?? '');
     const highCo2 = toText(app.high_co2 ?? '');
@@ -3082,6 +3158,7 @@ async function generateCp12CertificateForJob(params: {
       type: typeLabel,
       category,
       flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
+      flueLocation: toText(app.flue_location ?? app.location ?? ''),
       operatingPressure: toText(app.operating_pressure ?? ''),
       heatInput: toText(app.heat_input ?? ''),
       safetyDevice: toText(app.safety_devices_correct ?? app.stability_test ?? ''),
@@ -3100,15 +3177,17 @@ async function generateCp12CertificateForJob(params: {
       combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? '')),
       combustionNotes: toText(app.combustion_notes ?? ''),
       applianceServiced: toText(app.appliance_serviced ?? ''),
+      reg26Confirmed: Boolean(app.reg_26_9_confirmed),
     };
   });
 
-  const pdfBytes = await renderCp12CertificatePdf({
+  const pdfBytes = await renderCp12CertificateV2Pdf({
     fields: cp12Fields,
     appliances: applianceInputs,
     issuedAt,
     recordId: jobId,
   });
+  console.info('CP12 PDF rendered', { jobId, templateVersion: CP12_TEMPLATE_VERSION, previewOnly });
   const cp12PdfHash8 = createHash('sha256').update(pdfBytes).digest('hex').slice(0, 8);
   const cp12DebugMode = process.env.CP12_PDF_DEBUG === '1';
   const appendCacheBust = (url: string, token: string) =>
@@ -3137,6 +3216,7 @@ async function generateCp12CertificateForJob(params: {
     cert_type: 'cp12',
     public_id: publicId,
     user_id: userId,
+    template_version: CP12_TEMPLATE_VERSION,
   };
   const certificatePayload: Record<string, unknown> = { ...baseCertificatePayload, pdf_path: path };
   const { error: certErr } = await saveCertificateRecord(admin, {

@@ -425,6 +425,9 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       {step === 2 ? (
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
           <div className="grid gap-3">
+            <p className="text-[12px] text-[var(--color-text-tertiary)]">
+              Your contact details as the landlord or agent — this is where the certificate and reminders are sent. It can be different from the property being inspected.
+            </p>
             <Input
               autoComplete="name"
               value={landlordName}
@@ -486,11 +489,14 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       {step === 3 ? (
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
           <div className="grid gap-3">
+            <p className="text-[12px] text-[var(--color-text-tertiary)]">
+              The address of the property to be inspected — where the gas appliances are. This is the address that appears on the certificate.
+            </p>
             <div className="flex flex-col gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Property same as your details?</p>
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Do you live at the property being inspected?</p>
                 <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
-                  Copy your name, phone and address from Step 2.
+                  Only if your address in Step 2 is the same property — copies your name, phone and address here.
                 </p>
               </div>
               <Button
@@ -519,7 +525,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
                   setAddressSearchError(null);
                   setSelectedAddressMatchId(null);
                 }}
-                placeholder="Address line 1"
+                placeholder="Property address line 1"
               />
               {isAddressLookupPending && !addressSuggestions.length ? (
                 <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-secondary)] shadow-sm">

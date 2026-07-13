@@ -1,7 +1,7 @@
 // Jobs-centric flow: wizard bootstraps from jobId and prefers job/client data over job_fields for customer/address defaults.
 import { notFound, redirect } from 'next/navigation';
 
-import { createJob, getCertificateWizardState } from '@/server/certificates';
+import { createJob, ensureGasWarningNoticeJob, getCertificateWizardState } from '@/server/certificates';
 import { getJobCompletionState } from '@/server/jobs';
 import { listClients } from '@/server/clients';
 import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
@@ -72,8 +72,6 @@ const CERTIFICATE_STEP_TOTALS: Record<CertificateType, number> = {
   commissioning: 4,
 };
 
-const FINAL_JOB_STATUSES = new Set(['issued', 'delivered']);
-
 export default async function CertificateWizardPage({
   params,
   searchParams,
@@ -87,6 +85,8 @@ export default async function CertificateWizardPage({
     forceClientStep?: string;
     prepare?: string;
     startStep?: string;
+    parentJobId?: string;
+    applianceKey?: string;
   }>;
 }) {
   const { certificateType } = await params;
@@ -128,6 +128,28 @@ export default async function CertificateWizardPage({
     typeof resolvedSearchParams?.clientId === 'string' ? resolvedSearchParams.clientId : null;
   const existingJobId =
     typeof resolvedSearchParams?.jobId === 'string' ? resolvedSearchParams.jobId : null;
+
+  // Per-appliance Gas Warning Notice: when opened from a CP12 completion row for a
+  // specific unsafe appliance, create (or reuse) a linked follow-up job seeded from
+  // that appliance, then continue in the wizard on that job.
+  if (normalizedType === 'gas_warning_notice' && !existingJobId) {
+    const parentJobId =
+      typeof resolvedSearchParams?.parentJobId === 'string' ? resolvedSearchParams.parentJobId : null;
+    const applianceKey =
+      typeof resolvedSearchParams?.applianceKey === 'string' ? resolvedSearchParams.applianceKey : null;
+    if (parentJobId && applianceKey) {
+      let ensuredJobId: string | null = null;
+      try {
+        const ensured = await ensureGasWarningNoticeJob({ parentJobId, applianceKey });
+        ensuredJobId = ensured.jobId;
+      } catch (error) {
+        if (isAuthError(error)) redirect('/login');
+        throw error;
+      }
+      redirect(`/wizard/create/gas_warning_notice?jobId=${ensuredJobId}`);
+    }
+  }
+
   const isCp12 = normalizedType === 'cp12';
   const startsInWizard = normalizedType === 'cp12' || normalizedType === 'gas_service';
   const hasSeparateClientStep = !startsInWizard;
@@ -242,15 +264,19 @@ export default async function CertificateWizardPage({
   }
 
   const job = wizardState.job as Database['public']['Tables']['jobs']['Row'] | null;
-  if (job?.status && FINAL_JOB_STATUSES.has(String(job.status).toLowerCase())) {
-    redirect(`/jobs/${jobId}/complete`);
-  }
+  // Do NOT redirect issued/delivered jobs away from the wizard: a job flips to
+  // 'issued' as soon as ANY certificate is issued, so on a combined
+  // "safety check + service" job that would strand the still-outstanding cert,
+  // and it would also break the completion page's "Edit" of an already-issued
+  // certificate. The completion checklist is the hub and links back here on purpose.
 
   if (normalizedType === 'gas_warning_notice') {
     let shouldRedirectToCompletion = false;
     try {
       const completionState = await getJobCompletionState(jobId);
-      const warningNoticeRow = completionState.required.find((item) => item.id === 'gas_warning_notice');
+      const warningNoticeRow = [...completionState.required, ...completionState.optional].find(
+        (item) => item.id === 'gas_warning_notice',
+      );
       if (warningNoticeRow?.status === 'completed') {
         shouldRedirectToCompletion = true;
       }
@@ -264,7 +290,9 @@ export default async function CertificateWizardPage({
       });
     }
     if (shouldRedirectToCompletion) {
-      redirect(`/jobs/${jobId}/complete`);
+      // For a per-appliance follow-up, land on the parent CP12/combined completion page.
+      const completionJobId = (job as { parent_job_id?: string | null } | null)?.parent_job_id ?? jobId;
+      redirect(`/jobs/${completionJobId}/complete`);
     }
   }
 
@@ -342,6 +370,7 @@ export default async function CertificateWizardPage({
         certificateType={normalizedType as CertificateType}
         stepOffset={stepOffset}
         startStep={requestedStartStep}
+        parentJobId={(job as { parent_job_id?: string | null } | null)?.parent_job_id ?? null}
       />
     );
   }

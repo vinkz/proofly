@@ -132,6 +132,35 @@ const buildInvoiceNumber = (invoiceId: string) => {
   return `INV-${year}-${shortId}`;
 };
 
+// Certs a job is expected to produce, in the invoice token space (`gas_service`, not the
+// jobs-table `boiler_service`). Derived from the job's `cert_types` / `job_type` so an
+// invoice created before every cert is issued still lists every expected line item.
+function expectedInvoiceCertTypesFromJob(job: {
+  job_type?: string | null;
+  cert_types?: unknown;
+}): string[] {
+  const out = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value !== 'string') return;
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return;
+    // jobs store the boiler service as `boiler_service`; invoices use `gas_service`.
+    out.add(normalized === 'boiler_service' ? 'gas_service' : normalized);
+  };
+
+  if (Array.isArray(job.cert_types)) job.cert_types.forEach(add);
+
+  const jobType = typeof job.job_type === 'string' ? job.job_type.trim().toLowerCase() : '';
+  if (jobType === 'safety_check') add('cp12');
+  else if (jobType === 'service') add('gas_service');
+  else if (jobType === 'safety_check_service') {
+    add('cp12');
+    add('gas_service');
+  }
+
+  return Array.from(out);
+}
+
 async function resolveInvoiceCertificateType(params: {
   sb: Awaited<ReturnType<typeof supabaseServerAction>>;
   jobId: string;
@@ -290,17 +319,25 @@ export async function createInvoiceForJob(jobId: string) {
 
   const { data: job, error: jobErr } = await sb
     .from('jobs')
-    .select('id, client_id, certificate_type')
+    .select('id, client_id, certificate_type, job_type, cert_types')
     .eq('id', jobId)
     .eq('user_id', user.id)
     .maybeSingle();
   if (jobErr || !job) throw new Error(jobErr?.message ?? 'Job not found');
 
-  const certificateTypes = await resolveInvoiceCertificateTypes({
+  // Seed line items from the certs this job is *expected* to produce (its job type /
+  // cert_types), not only the certs issued so far. Combined "safety check + service"
+  // jobs are often invoiced after the first cert is completed but before the second is
+  // issued; relying on issued certs alone permanently drops the later cert's line item.
+  const expectedCertificateTypes = expectedInvoiceCertTypesFromJob(job);
+  const issuedCertificateTypes = await resolveInvoiceCertificateTypes({
     sb,
     jobId,
     jobCertificateType: job.certificate_type,
   });
+  const certificateTypes = Array.from(
+    new Set([...expectedCertificateTypes, ...issuedCertificateTypes]),
+  );
   const standardRates = await getStandardRatesForUser({ sb, userId: user.id });
 
   const { data: created, error: insertErr } = await fromInvoices(sb)

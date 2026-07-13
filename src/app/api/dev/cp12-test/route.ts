@@ -68,6 +68,7 @@ export async function GET(request: Request) {
         co_reading_high: '3 ppm',
         co_reading_low: '2 ppm',
         flue_type: 'Balanced',
+        flue_location: 'Kitchen',
         ventilation_provision: 'Adequate',
         ventilation_satisfactory: 'PASS',
         flue_condition: 'PASS',
@@ -87,6 +88,7 @@ export async function GET(request: Request) {
         warning_notice_issued: false,
         appliance_disconnected: false,
         danger_do_not_use_attached: false,
+        reg_26_9_confirmed: true,
       },
     ],
     defects: {

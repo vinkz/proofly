@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
@@ -10,8 +10,9 @@ export function InvoicePdfActions({ invoiceId }: { invoiceId: string }) {
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const startedRef = useRef(false);
 
-  const handleGenerate = () => {
+  const handleGenerate = (redirect: boolean) => {
     startTransition(async () => {
       try {
         const response = await fetch(`/api/invoices/${invoiceId}/pdf`, { method: 'POST' });
@@ -22,9 +23,10 @@ export function InvoicePdfActions({ invoiceId }: { invoiceId: string }) {
         const payload = (await response.json()) as { pdfUrl?: string };
         setPdfUrl(payload.pdfUrl ?? null);
         track(ANALYTICS_EVENTS.invoicePdfGenerated);
-        pushToast({ title: 'PDF generated', variant: 'success' });
         if (payload.pdfUrl) {
-          window.open(payload.pdfUrl, '_blank');
+          // Reached via "Review": show the PDF in place rather than a manual step.
+          if (redirect) window.location.href = payload.pdfUrl;
+          else window.open(payload.pdfUrl, '_blank');
         }
       } catch (error) {
         pushToast({
@@ -35,6 +37,15 @@ export function InvoicePdfActions({ invoiceId }: { invoiceId: string }) {
       }
     });
   };
+
+  // Auto-generate and show the PDF when the page is opened for a draft (no stored
+  // pdf_path). Guarded so it runs once (React StrictMode double-invokes effects).
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    handleGenerate(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (pdfUrl) {
     return (
@@ -47,8 +58,8 @@ export function InvoicePdfActions({ invoiceId }: { invoiceId: string }) {
   }
 
   return (
-    <Button className="rounded-full" onClick={handleGenerate} disabled={isPending}>
-      {isPending ? 'Generating…' : 'Generate PDF'}
+    <Button className="rounded-full" onClick={() => handleGenerate(false)} disabled={isPending}>
+      {isPending ? 'Preparing PDF…' : 'Generate PDF'}
     </Button>
   );
 }

@@ -316,9 +316,9 @@ export function BoilerServiceWizard({
   const [completionDate, setCompletionDate] = useState(
     resolvedFields.completion_date ? resolvedFields.completion_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
   );
-  const initialServiceDate = normalizeDateOnly(
-    resolvedFields.service_date ?? resolvedFields.job_visit_date ?? resolvedFields.completion_date,
-  );
+  const initialServiceDate =
+    normalizeDateOnly(resolvedFields.service_date ?? resolvedFields.job_visit_date ?? resolvedFields.completion_date) ||
+    new Date().toISOString().slice(0, 10);
   const initialNextServiceDue = normalizeDateOnly(resolvedFields.next_service_due) || addOneYear(initialServiceDate);
 
   const [jobInfo, setJobInfo] = useState<BoilerServiceJobInfo>({
@@ -374,6 +374,10 @@ export function BoilerServiceWizard({
   const [engineerSignaturePath, setEngineerSignaturePath] = useState((resolvedFields.engineer_signature_path as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
   const [customerSignaturePath, setCustomerSignaturePath] = useState((resolvedFields.customer_signature_path as string) ?? '');
+  // Customer signature is optional (only the engineer must sign): opt-in, not shown by default.
+  const [showCustomerSignature, setShowCustomerSignature] = useState(
+    Boolean(((resolvedFields.customer_signature as string) ?? '') || ((resolvedFields.customer_signature_path as string) ?? '')),
+  );
   const [checkComments, setCheckComments] = useState<Record<string, string>>({});
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
@@ -1177,22 +1181,33 @@ export function BoilerServiceWizard({
     add('boiler-make', 'Boiler make', hasValue(details.boiler_make), 2);
     add('boiler-model', 'Boiler model', hasValue(details.boiler_model), 2);
     add('boiler-location', 'Boiler location', hasValue(details.boiler_location), 2);
-    add('service-summary', 'Service summary', hasValue(checks.service_summary), 4);
-    add('recommendations', 'Recommendations', hasValue(checks.recommendations), 4);
-    if (checks.defects_found === 'yes') {
+    // Reg 26(9) safety-examination outcomes — the only tier-1 "checks" for a
+    // service (audit/gas-service-field-analysis.md). Everything else is optional.
+    const reg26Ok = (keys: Array<keyof typeof checks>) => keys.some((k) => hasValue(checks[k] ?? ''));
+    add('reg26-flue', 'Flue safety result (Reg 26(9))', reg26Ok(['appliance_flueing_safe', 'service_flue_checked']), 3);
+    add('reg26-ventilation', 'Ventilation result (Reg 26(9))', reg26Ok(['appliance_ventilation_safe', 'service_ventilation_checked']), 3);
+    add('reg26-pressure', 'Operating pressure (Reg 26(9))', reg26Ok(['operating_pressure_mbar']), 3);
+    add('reg26-heat-input', 'Heat input (Reg 26(9))', reg26Ok(['heat_input']), 3);
+    add('reg26-safe', 'Safe-functioning result (Reg 26(9))', reg26Ok(['appliance_safe', 'appliance_operating_correctly', 'boiler_working_correctly']), 3);
+    if (checks.defects_found === 'yes' || ['no', 'fail', 'unsafe'].includes(String(checks.appliance_safe ?? '').toLowerCase())) {
       add('defects-details', 'Defect details', hasValue(checks.defects_details), 4);
     }
+    // Engineer signature required; customer / received-by signature is optional (HSE).
     add('engineer-signature', 'Engineer signature', hasValue(engineerSignature) || hasValue(engineerSignaturePath), 4);
-    add('customer-signature', 'Customer signature', hasValue(customerSignature) || hasValue(customerSignaturePath), 4);
     return items;
   }, [
+    checks.appliance_flueing_safe,
+    checks.appliance_operating_correctly,
+    checks.appliance_safe,
+    checks.appliance_ventilation_safe,
+    checks.boiler_working_correctly,
     checks.defects_details,
     checks.defects_found,
-    checks.recommendations,
-    checks.service_summary,
+    checks.heat_input,
+    checks.operating_pressure_mbar,
+    checks.service_flue_checked,
+    checks.service_ventilation_checked,
     completionDate,
-    customerSignature,
-    customerSignaturePath,
     details.boiler_location,
     details.boiler_make,
     details.boiler_model,
@@ -1799,46 +1814,78 @@ export function BoilerServiceWizard({
             </div>
           ) : null}
           <CollapsibleSection
-            title="High / Low combustion readings"
-            subtitle={`${readingsCompleted}/${combustionReadingFields.length} readings`}
+            title="Readings — pressure, heat input & combustion"
+            subtitle={`${readingsCompleted}/${combustionReadingFields.length} combustion readings`}
             defaultOpen={firstIncompleteKey === 'readings'}
           >
-            <div className="mb-1 flex items-center justify-between">
-              <p className="text-[11px] uppercase tracking-[0.5px] text-[rgba(255,255,255,0.38)]">FGA readings</p>
-              <Cp12VoiceReadings
-                jobId={jobId}
-                scope="high"
-                buttonLabel="Speak high"
-                buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
-                onApply={applyVoiceReadings}
-              />
-            </div>
-            <p className="mb-3 text-[11px] leading-[1.5] text-[rgba(255,255,255,0.28)]">Speak readings in order with small pauses between each value.</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <UnitNumberInput
-                label="CO ppm"
-                value={checks.high_combustion_co_ppm}
-                onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
-                unit="ppm"
-              />
-              <UnitNumberInput
-                label="CO₂ %"
-                value={checks.high_combustion_co2}
-                onChange={(value) => setCheckValue('high_combustion_co2', value)}
-                unit="%"
-              />
-              <UnitNumberInput
-                label="Ratio"
-                value={checks.high_combustion_ratio}
-                onChange={(value) => setCheckValue('high_combustion_ratio', value)}
-                unit="ratio"
-              />
-              <UnitNumberInput
-                label="CO ppm"
-                value={checks.low_combustion_co_ppm}
-                onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
-                unit="ppm"
-                labelAction={
+            <p className="mb-3 text-[11px] leading-[1.5] text-[rgba(255,255,255,0.28)]">
+              FGA readings — speak values in order with small pauses between each.
+            </p>
+            {/* Gas pressure / rate is measured first, then High and Low combustion.
+                High and Low are separate labelled groups so the two rows are never
+                ambiguous in wide/landscape view (previously an unlabelled 3×2 grid). */}
+            <div className="space-y-4">
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">Gas pressure / rate</p>
+                  <Cp12VoiceReadings
+                    jobId={jobId}
+                    scope="pressure"
+                    buttonLabel="Speak pressure/input"
+                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
+                    onApply={applyVoiceReadings}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <UnitNumberInput
+                    label="Operating pressure"
+                    value={checks.operating_pressure_mbar}
+                    onChange={(value) => setCheckValue('operating_pressure_mbar', value)}
+                    unit="mbar"
+                  />
+                  <UnitNumberInput
+                    label="Heat input"
+                    value={checks.heat_input}
+                    onChange={(value) => setCheckValue('heat_input', value)}
+                    unit="kW"
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">High reading</p>
+                  <Cp12VoiceReadings
+                    jobId={jobId}
+                    scope="high"
+                    buttonLabel="Speak high"
+                    buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
+                    onApply={applyVoiceReadings}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <UnitNumberInput
+                    label="CO ppm"
+                    value={checks.high_combustion_co_ppm}
+                    onChange={(value) => setCheckValue('high_combustion_co_ppm', value)}
+                    unit="ppm"
+                  />
+                  <UnitNumberInput
+                    label="CO₂ %"
+                    value={checks.high_combustion_co2}
+                    onChange={(value) => setCheckValue('high_combustion_co2', value)}
+                    unit="%"
+                  />
+                  <UnitNumberInput
+                    label="Ratio"
+                    value={checks.high_combustion_ratio}
+                    onChange={(value) => setCheckValue('high_combustion_ratio', value)}
+                    unit="ratio"
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">Low reading</p>
                   <Cp12VoiceReadings
                     jobId={jobId}
                     scope="low"
@@ -1846,20 +1893,28 @@ export function BoilerServiceWizard({
                     buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
                     onApply={applyVoiceReadings}
                   />
-                }
-              />
-              <UnitNumberInput
-                label="CO₂ %"
-                value={checks.low_combustion_co2}
-                onChange={(value) => setCheckValue('low_combustion_co2', value)}
-                unit="%"
-              />
-              <UnitNumberInput
-                label="Ratio"
-                value={checks.low_combustion_ratio}
-                onChange={(value) => setCheckValue('low_combustion_ratio', value)}
-                unit="ratio"
-              />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <UnitNumberInput
+                    label="CO ppm"
+                    value={checks.low_combustion_co_ppm}
+                    onChange={(value) => setCheckValue('low_combustion_co_ppm', value)}
+                    unit="ppm"
+                  />
+                  <UnitNumberInput
+                    label="CO₂ %"
+                    value={checks.low_combustion_co2}
+                    onChange={(value) => setCheckValue('low_combustion_co2', value)}
+                    unit="%"
+                  />
+                  <UnitNumberInput
+                    label="Ratio"
+                    value={checks.low_combustion_ratio}
+                    onChange={(value) => setCheckValue('low_combustion_ratio', value)}
+                    unit="ratio"
+                  />
+                </div>
+              </div>
             </div>
           </CollapsibleSection>
 
@@ -1869,46 +1924,22 @@ export function BoilerServiceWizard({
             defaultOpen={firstIncompleteKey === 'safety'}
           >
             <div className="space-y-2">
-              {SAFETY_CHECK_ITEMS.slice(0, 3).map(renderCheckToggleWithComment)}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <UnitNumberInput
-                  label="Operating pressure"
-                  value={checks.operating_pressure_mbar}
-                  onChange={(value) => setCheckValue('operating_pressure_mbar', value)}
-                  unit="mbar"
-                  labelAction={
-                    <Cp12VoiceReadings
-                      jobId={jobId}
-                      scope="pressure"
-                      buttonLabel="Speak pressure/input"
-                      buttonClassName="h-7 rounded-[6px] px-3 text-[11px]"
-                      onApply={applyVoiceReadings}
-                    />
-                  }
-                />
-                <UnitNumberInput
-                  label="Heat input"
-                  value={checks.heat_input}
-                  onChange={(value) => setCheckValue('heat_input', value)}
-                  unit="kW"
-                />
-              </div>
-              {SAFETY_CHECK_ITEMS.slice(3).map(renderCheckToggleWithComment)}
+              {SAFETY_CHECK_ITEMS.map(renderCheckToggleWithComment)}
             </div>
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="Central heating Annual Service and Plumbing Inspection"
-            subtitle={`${centralHeatingCompleted}/${CENTRAL_HEATING_CHECK_ITEMS.length} complete`}
-            defaultOpen={firstIncompleteKey === 'central-heating'}
+            title="Central heating & plumbing (optional)"
+            subtitle={`Warranty / Benchmark · ${centralHeatingCompleted}/${CENTRAL_HEATING_CHECK_ITEMS.length}`}
+            defaultOpen={false}
           >
             <div className="space-y-2">{CENTRAL_HEATING_CHECK_ITEMS.map(renderCheckToggle)}</div>
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="Appliance / system advice and recommendations"
-            subtitle={`${adviceCompleted}/${ADVICE_CHECK_ITEMS.length} complete`}
-            defaultOpen={firstIncompleteKey === 'advice'}
+            title="Advice & recommendations (optional)"
+            subtitle={`Warranty / Benchmark · ${adviceCompleted}/${ADVICE_CHECK_ITEMS.length}`}
+            defaultOpen={false}
           >
             <div className="space-y-2">{ADVICE_CHECK_ITEMS.map(renderCheckToggleWithComment)}</div>
           </CollapsibleSection>
@@ -2044,9 +2075,19 @@ export function BoilerServiceWizard({
                 />
               </div>
             </CollapsibleSection>
-            <div id="boiler-signatures" className="grid gap-4 sm:grid-cols-2">
-              <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+            <div id="boiler-signatures" className="space-y-3">
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
+              {showCustomerSignature ? (
+                <SignatureCard label="Customer (optional)" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerSignature(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3 text-[13px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                >
+                  + Add customer signature (optional)
+                </button>
+              )}
             </div>
             <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Completion</p>

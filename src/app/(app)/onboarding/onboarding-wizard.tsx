@@ -34,7 +34,7 @@ type OnboardingWizardProps = {
 
 const steps = [
   { id: 1, title: 'About you' },
-  { id: 2, title: 'Your business' },
+  { id: 2, title: 'Your business (optional)' },
   { id: 3, title: 'Engineer details' },
 ] as const;
 
@@ -124,11 +124,11 @@ export function OnboardingWizard({
     ) {
       return requestedInitialStep;
     }
-    if (!fullName.trim() || !dateOfBirth.trim() || !profession.trim()) return 1;
-    if (!companyName.trim() || !companyAddressLine1.trim() || !companyPostcode.trim() || !companyPhone.trim()) {
-      return 2;
-    }
-    if (!engineerId.trim() || !gasSafeNumber.trim()) return 3;
+    // Resume on the first step whose legally-required field is missing:
+    // engineer name (step 1) or Gas Safe number (step 3). Company details
+    // (step 2) are optional and never force a resume.
+    if (!fullName.trim()) return 1;
+    if (!gasSafeNumber.trim()) return 3;
     return 1;
   });
 
@@ -235,24 +235,15 @@ export function OnboardingWizard({
   };
 
   const validateCurrentStep = () => {
+    // Only the legal minimum blocks progress: engineer name (step 1) and Gas
+    // Safe number (step 3). Company details (step 2) and the ID card number are
+    // conventional and optional — they can be added later in Settings.
     const missing =
       step === 1
-        ? [
-            ['Full name', fullName],
-            ['Date of birth', dateOfBirth],
-            ['Profession', profession],
-          ]
+        ? [['Full name', fullName]]
         : step === 2
-          ? [
-              ['Company name', companyName],
-              ['Address line 1', companyAddressLine1],
-              ['Postcode', companyPostcode],
-              ['Phone', companyPhone],
-            ]
-          : [
-              ['Gas Safe number', gasSafeNumber],
-              ['ID card number', engineerId],
-            ];
+          ? []
+          : [['Gas Safe number', gasSafeNumber]];
 
     const empty = missing.filter(([, value]) => !String(value).trim()).map(([label]) => label);
     if (empty.length) {
@@ -274,7 +265,8 @@ export function OnboardingWizard({
         return false;
       }
 
-      if (!ENGINEER_ID_CARD_NUMBER_PATTERN.test(engineerId.trim())) {
+      // ID card number is optional, but validate its format when provided.
+      if (engineerId.trim() && !ENGINEER_ID_CARD_NUMBER_PATTERN.test(engineerId.trim())) {
         pushToast({
           title: 'Check ID card number',
           description: ENGINEER_ID_CARD_NUMBER_MESSAGE,

@@ -157,6 +157,7 @@ export type Database = {
           combustion_notes: string | null
           created_at: string | null
           flue_condition: string | null
+          flue_location: string | null
           flue_type: string | null
           gas_tightness_test: string | null
           heat_input: string | null
@@ -177,6 +178,7 @@ export type Database = {
           safety_classification: string | null
           safety_devices_correct: string | null
           safety_rating: string | null
+          reg_26_9_confirmed: boolean | null
           stability_test: string | null
           user_id: string | null
           ventilation_provision: string | null
@@ -197,6 +199,7 @@ export type Database = {
           combustion_notes?: string | null
           created_at?: string | null
           flue_condition?: string | null
+          flue_location?: string | null
           flue_type?: string | null
           gas_tightness_test?: string | null
           heat_input?: string | null
@@ -217,6 +220,7 @@ export type Database = {
           safety_classification?: string | null
           safety_devices_correct?: string | null
           safety_rating?: string | null
+          reg_26_9_confirmed?: boolean | null
           stability_test?: string | null
           user_id?: string | null
           ventilation_provision?: string | null
@@ -237,6 +241,7 @@ export type Database = {
           combustion_notes?: string | null
           created_at?: string | null
           flue_condition?: string | null
+          flue_location?: string | null
           flue_type?: string | null
           gas_tightness_test?: string | null
           heat_input?: string | null
@@ -257,6 +262,7 @@ export type Database = {
           safety_classification?: string | null
           safety_devices_correct?: string | null
           safety_rating?: string | null
+          reg_26_9_confirmed?: boolean | null
           stability_test?: string | null
           user_id?: string | null
           ventilation_provision?: string | null

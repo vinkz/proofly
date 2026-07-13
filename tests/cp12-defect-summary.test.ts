@@ -1,0 +1,48 @@
+import { describe, expect, it } from 'vitest';
+
+import { composeCp12DefectSummary, cp12ApplianceHasFailedCheck, cp12FailedChecks } from '@/lib/cp12/defect-summary';
+
+describe('cp12 defect summary', () => {
+  it('turns a failed check into a defect line even without a typed note', () => {
+    const summary = composeCp12DefectSummary([
+      { location: 'Kitchen', gas_tightness_test: 'fail' },
+    ]);
+    expect(summary.defect_description).toBe('Appliance 1 (Kitchen): Failed: Gas tightness');
+    expect(summary.remedial_action).toBe('');
+  });
+
+  it('prefers the engineer note over the auto failed-checks text', () => {
+    const summary = composeCp12DefectSummary([
+      { location: 'Living room', flue_condition: 'fail', defect_notes: 'Flue partially blocked', actions_taken: 'Swept and re-tested' },
+    ]);
+    expect(summary.defect_description).toBe('Appliance 1 (Living room): Flue partially blocked');
+    expect(summary.remedial_action).toBe('Appliance 1 (Living room): Swept and re-tested');
+  });
+
+  it('aggregates multiple appliances and skips passing ones', () => {
+    const summary = composeCp12DefectSummary([
+      { location: 'Kitchen', gas_tightness_test: 'pass' },
+      { location: 'Bathroom', ventilation_satisfactory: 'fail' },
+    ]);
+    expect(summary.defect_description).toBe('Appliance 2 (Bathroom): Failed: Ventilation');
+  });
+
+  it('falls back to actions_required when actions_taken is empty', () => {
+    const summary = composeCp12DefectSummary([
+      { location: 'Hall', flue_performance_test: 'fail', actions_required: 'Return to make safe' },
+    ]);
+    expect(summary.remedial_action).toBe('Appliance 1 (Hall): Return to make safe');
+  });
+
+  it('reports failed check labels and the has-failed-check flag', () => {
+    const app = { safety_devices_correct: 'fail', ventilation_satisfactory: 'pass', gas_tightness_test: 'fail' };
+    expect(cp12FailedChecks(app)).toEqual(['Safety device', 'Gas tightness']);
+    expect(cp12ApplianceHasFailedCheck(app)).toBe(true);
+    expect(cp12ApplianceHasFailedCheck({ ventilation_satisfactory: 'pass' })).toBe(false);
+  });
+
+  it('produces empty strings when everything passes', () => {
+    const summary = composeCp12DefectSummary([{ location: 'Kitchen', ventilation_satisfactory: 'pass' }]);
+    expect(summary).toEqual({ defect_description: '', remedial_action: '' });
+  });
+});

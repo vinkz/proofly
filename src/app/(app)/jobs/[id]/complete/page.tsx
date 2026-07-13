@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import { getJobCompletionState, type JobCompletionChecklistItem } from '@/server/jobs';
+import { getJobPhotos, type JobEvidencePhoto } from '@/server/certificates';
 import { isUUID } from '@/lib/ids';
 import { RenewalSendButton } from './renewal-send-button';
 
@@ -65,7 +66,9 @@ function getActionClass(item: JobCompletionChecklistItem): string {
   if (item.status === 'completed') {
     return 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]';
   }
-  if (item.id === 'gas_warning_notice' && item.status === 'required') {
+  if (item.id === 'gas_warning_notice') {
+    // Not-completed GWN stays visually prominent (amber) even though it is now
+    // optional and non-blocking. Completed items are handled above.
     return 'bg-[var(--color-amber-bg)] text-[var(--color-amber)]';
   }
   if (item.id === 'invoice') {
@@ -104,7 +107,7 @@ function ChecklistRow({ item }: { item: JobCompletionChecklistItem }) {
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {item.editHref && item.status === 'completed' ? (
+        {item.editHref ? (
           <Link
             href={item.editHref}
             className="inline-flex h-[34px] items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-opacity hover:opacity-80"
@@ -140,8 +143,18 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
     throw error;
   }
 
+  // Evidence photos are optional and must never break the completion page.
+  let photos: JobEvidencePhoto[] = [];
+  try {
+    photos = await getJobPhotos(jobId);
+  } catch {
+    photos = [];
+  }
+
   const title = state.job.title || state.job.clientName || 'Job completion';
   const status = state.job.status ?? 'draft';
+  const prettyCategory = (category: string) =>
+    category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   const statusPillClass =
     status === 'issued'
@@ -189,7 +202,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
             <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Required</p>
           </div>
           {state.required.length ? (
-            state.required.map((item) => <ChecklistRow key={item.id} item={item} />)
+            state.required.map((item) => <ChecklistRow key={item.key ?? item.id} item={item} />)
           ) : (
             <p className="border-t-[0.5px] border-[var(--color-border-tertiary)] py-4 text-[13px] text-[var(--color-text-secondary)]">
               No required certificates inferred for this job.
@@ -198,7 +211,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
           <div className="pb-1 pt-5">
             <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Optional</p>
           </div>
-          {state.optional.map((item) => <ChecklistRow key={item.id} item={item} />)}
+          {state.optional.map((item) => <ChecklistRow key={item.key ?? item.id} item={item} />)}
         </div>
 
         {/* Send readiness panel */}
@@ -282,6 +295,44 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
             bookedDate={state.renewalBookedDate}
             requestedAt={state.renewalRequestedAt}
           />
+        </div>
+      ) : null}
+
+      {/* Evidence photos — captured on site, stored with the job, engineer-only */}
+      {photos.length ? (
+        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
+              Evidence photos
+            </p>
+            <span className="text-[11px] text-[var(--color-text-tertiary)]">
+              {photos.length} photo{photos.length === 1 ? '' : 's'} · kept with this job
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {photos.map((photo) => (
+              <a
+                key={photo.id}
+                href={photo.url}
+                target="_blank"
+                rel="noreferrer"
+                className="group block overflow-hidden rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.url}
+                  alt={prettyCategory(photo.category)}
+                  className="aspect-square w-full object-cover transition-opacity group-hover:opacity-90"
+                />
+                <span className="block truncate px-2 py-1 text-[11px] text-[var(--color-text-secondary)]">
+                  {prettyCategory(photo.category)}
+                </span>
+              </a>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-[var(--color-text-tertiary)]">
+            These stay internal — they are not attached to the landlord handover email.
+          </p>
         </div>
       ) : null}
     </main>

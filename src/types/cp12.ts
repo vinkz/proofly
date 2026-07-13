@@ -202,6 +202,7 @@ export const CP12_DEMO_APPLIANCE = {
   co_reading_high: '8 ppm',
   co_reading_low: '6 ppm',
   flue_type: 'room sealed',
+  flue_location: 'kitchen cupboard',
   ventilation_provision: 'adequate ventilation',
   ventilation_satisfactory: 'pass',
   flue_condition: 'pass',
@@ -221,4 +222,5 @@ export const CP12_DEMO_APPLIANCE = {
   warning_notice_issued: false,
   appliance_disconnected: false,
   danger_do_not_use_attached: false,
+  reg_26_9_confirmed: true,
 } as const;

@@ -8,6 +8,12 @@ import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { SignatureCard } from '@/components/certificates/signature-card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  ACTION_TAKEN_PRESETS,
+  UNDERLYING_CAUSE_PRESETS,
+  UNSAFE_SITUATION_PRESETS,
+  appendPresetSnippet,
+} from '@/lib/gas-safety/unsafe-presets';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -37,6 +43,9 @@ type GasWarningNoticeWizardProps = {
   certificateType: CertificateType;
   stepOffset?: number;
   startStep?: number;
+  // For a per-appliance GWN follow-up, the parent CP12/combined job to return to after
+  // issuing (so all appliance warning notices funnel back to one completion page).
+  parentJobId?: string | null;
 };
 
 type GasWarningFormState = {
@@ -167,6 +176,7 @@ export function GasWarningNoticeWizard({
   certificateType,
   stepOffset = 0,
   startStep = 1,
+  parentJobId = null,
 }: GasWarningNoticeWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
@@ -262,6 +272,12 @@ export function GasWarningNoticeWizard({
 
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+  // The customer's signature on a warning notice is an optional acknowledgement of
+  // receipt, not a legal requirement (the duty is recording + informing / leaving the
+  // notice). Hidden behind an opt-in control so it doesn't read as required.
+  const [showCustomerSignature, setShowCustomerSignature] = useState(
+    Boolean((resolvedFields.customer_signature as string) ?? ''),
+  );
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const didPrefillRef = useRef(false);
 
@@ -298,6 +314,13 @@ export function GasWarningNoticeWizard({
         fields.gas_supply_isolated || fields.customer_refused_isolation,
         2,
       );
+      // RIDDOR 2013 Reg 6(2): Immediately Dangerous fittings must be reported to HSE.
+      add(
+        'riddor-report',
+        'RIDDOR report recorded (reported to HSE or reference)',
+        fields.riddor_11_1_reported || fields.riddor_11_2_reported || hasValue(fields.emergency_reference),
+        2,
+      );
     }
 
     return items;
@@ -311,12 +334,15 @@ export function GasWarningNoticeWizard({
     fields.customer_present,
     fields.customer_refused_isolation,
     fields.danger_do_not_use_label_fitted,
+    fields.emergency_reference,
     fields.engineer_name,
     fields.gas_safe_number,
     fields.gas_supply_isolated,
     fields.issued_at,
     fields.notice_left_on_premises,
     fields.property_address,
+    fields.riddor_11_1_reported,
+    fields.riddor_11_2_reported,
     fields.unsafe_situation_description,
     jobAddress.job_address_line1,
   ]);
@@ -698,7 +724,9 @@ export function GasWarningNoticeWizard({
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}/complete`);
+        // Return to the parent CP12/combined job's completion page when this is a
+        // per-appliance follow-up, so every warning notice funnels back to one place.
+        router.push(`/jobs/${parentJobId ?? resultJobId}/complete`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
@@ -1009,28 +1037,79 @@ export function GasWarningNoticeWizard({
                   ))}
                 </Select>
               </LabeledField>
-              <Textarea
-                value={fields.unsafe_situation_description}
-                onChange={(e) => setFields((prev) => ({ ...prev, unsafe_situation_description: e.target.value }))}
-                placeholder="Unsafe situation description"
-                className="min-h-[90px] rounded-[8px] sm:col-span-2"
-              />
-              <Textarea
-                value={fields.underlying_cause}
-                onChange={(e) => setFields((prev) => ({ ...prev, underlying_cause: e.target.value }))}
-                placeholder="Underlying cause (optional)"
-                className="min-h-[90px] rounded-[8px] sm:col-span-2"
-              />
-              <Textarea
-                value={fields.actions_taken}
-                onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
-                placeholder="Actions taken"
-                className="min-h-[90px] rounded-[8px] sm:col-span-2"
-              />
+              <div className="space-y-1.5 sm:col-span-2">
+                <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Unsafe situation</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {UNSAFE_SITUATION_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setFields((prev) => ({ ...prev, unsafe_situation_description: appendPresetSnippet(prev.unsafe_situation_description, preset) }))
+                      }
+                      className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+                <Textarea
+                  value={fields.unsafe_situation_description}
+                  onChange={(e) => setFields((prev) => ({ ...prev, unsafe_situation_description: e.target.value }))}
+                  placeholder="Unsafe situation description — tap a chip above or type your own"
+                  className="min-h-[90px] rounded-[8px]"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Underlying cause (optional)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {UNDERLYING_CAUSE_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setFields((prev) => ({ ...prev, underlying_cause: appendPresetSnippet(prev.underlying_cause, preset) }))
+                      }
+                      className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+                <Textarea
+                  value={fields.underlying_cause}
+                  onChange={(e) => setFields((prev) => ({ ...prev, underlying_cause: e.target.value }))}
+                  placeholder="Underlying cause — tap a chip above or type your own"
+                  className="min-h-[90px] rounded-[8px]"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Actions taken</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ACTION_TAKEN_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setFields((prev) => ({ ...prev, actions_taken: appendPresetSnippet(prev.actions_taken, preset) }))
+                      }
+                      className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+                <Textarea
+                  value={fields.actions_taken}
+                  onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
+                  placeholder="Actions taken — tap a chip above or type your own"
+                  className="min-h-[90px] rounded-[8px]"
+                />
+              </div>
               <Input
                 value={fields.emergency_reference}
                 onChange={(e) => setFields((prev) => ({ ...prev, emergency_reference: e.target.value }))}
-                placeholder="Emergency reference (optional)"
+                placeholder="HSE / RIDDOR report reference (required if Immediately Dangerous)"
                 className="rounded-[8px] sm:col-span-2"
               />
             </div>
@@ -1256,16 +1335,24 @@ export function GasWarningNoticeWizard({
               </LabeledField>
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Signatures" subtitle="Customer + engineer">
-            <div className={`grid gap-4 ${showCustomerAcknowledgement ? 'sm:grid-cols-2' : ''}`}>
-              {showCustomerAcknowledgement ? (
-                <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
-              ) : (
+          <CollapsibleSection title="Signatures" subtitle="Engineer required · customer optional">
+            <div className="space-y-3">
+              <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
+              {!showCustomerAcknowledgement ? (
                 <div className="rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4 text-[13px] text-[var(--color-text-secondary)]">
                   Customer signature hidden because the customer was marked as not present.
                 </div>
+              ) : showCustomerSignature ? (
+                <SignatureCard label="Customer (optional)" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerSignature(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3 text-[13px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                >
+                  + Add customer acknowledgement signature (optional)
+                </button>
               )}
-              <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             </div>
           </CollapsibleSection>
           {gasWarningMissingItems.length > 0 ? (
