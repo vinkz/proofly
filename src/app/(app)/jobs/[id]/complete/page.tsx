@@ -191,7 +191,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
             <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Required</p>
           </div>
           {state.required.length ? (
-            state.required.map((item) => <ChecklistRow key={item.id} item={item} />)
+            state.required.map((item) => <ChecklistRow key={item.key ?? item.id} item={item} />)
           ) : (
             <p className="border-t-[0.5px] border-[var(--color-border-tertiary)] py-4 text-[13px] text-[var(--color-text-secondary)]">
               No required certificates inferred for this job.
@@ -200,7 +200,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
           <div className="pb-1 pt-5">
             <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Optional</p>
           </div>
-          {state.optional.map((item) => <ChecklistRow key={item.id} item={item} />)}
+          {state.optional.map((item) => <ChecklistRow key={item.key ?? item.id} item={item} />)}
         </div>
 
         {/* Send readiness panel */}

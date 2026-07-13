@@ -933,6 +933,105 @@ export async function createJob(payload: JobInsertPayload) {
   return { jobId: jobRow.id };
 }
 
+const EnsureGwnJobSchema = z.object({
+  parentJobId: z.string().uuid(),
+  applianceKey: z.string().regex(/^appliance_\d+$/),
+});
+
+// Create (or reuse) a Gas Warning Notice follow-up job for one specific CP12
+// appliance. The follow-up carries `parent_job_id` + `source_appliance_key`/`id`, so
+// getCertificateWizardState seeds it from that appliance via
+// applyCp12SourceDefaultsForGasWarningNotice. Idempotent per (parent, appliance).
+export async function ensureGasWarningNoticeJob(payload: z.infer<typeof EnsureGwnJobSchema>) {
+  const input = EnsureGwnJobSchema.parse(payload);
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'ensureGasWarningNoticeJob');
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+
+  const sb = await supabaseServerServiceRole();
+  const { data: parent, error: parentErr } = await sb
+    .from('jobs')
+    .select('id, user_id, client_id, property_id, client_name, address')
+    .eq('id', input.parentJobId)
+    .maybeSingle();
+  if (parentErr || !parent) throw new Error(parentErr?.message ?? 'Parent job not found');
+  const parentRow = parent as {
+    id: string;
+    user_id: string | null;
+    client_id: string | null;
+    property_id: string | null;
+    client_name: string | null;
+    address: string | null;
+  };
+  if (parentRow.user_id && parentRow.user_id !== user.id) throw new Error('Unauthorized');
+
+  // Reuse an existing follow-up for this appliance if one already exists.
+  const { data: existing, error: existingErr } = await sb
+    .from('jobs')
+    .select('id')
+    .eq('parent_job_id', input.parentJobId)
+    .eq('certificate_type', 'gas_warning_notice')
+    .eq('source_appliance_key', input.applianceKey)
+    .limit(1)
+    .maybeSingle();
+  if (existingErr) throw new Error(existingErr.message);
+  if ((existing as { id?: string } | null)?.id) {
+    return { jobId: (existing as { id: string }).id, created: false };
+  }
+
+  // Resolve the source appliance id from the key (appliance_N -> index N-1, created_at asc).
+  const idxMatch = input.applianceKey.match(/^appliance_(\d+)$/);
+  const idx = idxMatch ? Number.parseInt(idxMatch[1], 10) - 1 : -1;
+  let sourceApplianceId: string | null = null;
+  if (idx >= 0) {
+    const { data: apps } = await sb
+      .from(CP12_APPLIANCES_TABLE)
+      .select('id, created_at')
+      .eq('job_id', input.parentJobId)
+      .order('created_at', { ascending: true });
+    sourceApplianceId = ((apps ?? [])[idx] as { id?: string } | undefined)?.id ?? null;
+  }
+
+  const jobCode = await getNextJobCode(sb, user.id);
+  const insertPayload = {
+    status: 'draft',
+    certificate_type: 'gas_warning_notice',
+    cert_types: ['gas_warning_notice'],
+    parent_job_id: input.parentJobId,
+    source_appliance_key: input.applianceKey,
+    source_appliance_id: sourceApplianceId,
+    property_id: parentRow.property_id ?? null,
+    client_id: parentRow.client_id ?? null,
+    client_name: parentRow.client_name ?? null,
+    address: parentRow.address ?? null,
+    user_id: user.id,
+    job_type: getJobTypeForCertificate('gas_warning_notice'),
+    job_code: jobCode,
+    client_ref: buildClientRef(jobCode),
+    title: `Gas Warning Notice — ${parentRow.client_name ?? parentRow.address ?? 'appliance'}`,
+    entry_point: 'engineer_created',
+  } as Record<string, unknown>;
+
+  const { data: created, error: insertErr } = await sb
+    .from('jobs')
+    .insert(insertPayload as unknown as Database['public']['Tables']['jobs']['Insert'])
+    .select('id')
+    .single();
+  if (insertErr || !created) throw new Error(insertErr?.message ?? 'Unable to create warning notice');
+  const gwnJobId = (created as { id: string }).id;
+
+  if (parentRow.address) {
+    await upsertJobAddressForJob({
+      jobId: gwnJobId,
+      fields: { line1: parentRow.address },
+      sb,
+      userId: user.id,
+    });
+  }
+
+  return { jobId: gwnJobId, created: true };
+}
+
 const AssignClientSchema = z.object({
   jobId: z.string().uuid(),
   clientId: z.string().uuid(),

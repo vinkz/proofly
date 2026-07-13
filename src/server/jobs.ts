@@ -1585,6 +1585,9 @@ export type JobCompletionChecklistStatus = 'completed' | 'required' | 'ready' | 
 
 export type JobCompletionChecklistItem = {
   id: 'cp12' | 'boiler_service' | 'gas_warning_notice' | 'invoice';
+  // Unique React key. Defaults to `id`; set when several rows share an id (one Gas
+  // Warning Notice per unsafe appliance).
+  key?: string;
   label: string;
   description: string;
   status: JobCompletionChecklistStatus;
@@ -1701,7 +1704,7 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
   const typedJobId = jobId as JobRow['id'];
   const untypedSb = sb as unknown as UntypedTableClient;
   const admin = await supabaseServerServiceRole();
-  const [{ data: certificateRows, error: certErr }, { data: fieldRows, error: fieldsErr }, appliancesResp, invoiceResp] =
+  const [{ data: certificateRows, error: certErr }, { data: fieldRows, error: fieldsErr }, appliancesResp, invoiceResp, gwnFollowUpsResp] =
     await Promise.all([
       admin
         .from('certificates')
@@ -1712,18 +1715,28 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
       sb
         .from('cp12_appliances')
         .select('id, safety_classification, classification_code, safety_rating, defect_notes, actions_taken, actions_required')
-        .eq('job_id', typedJobId),
+        .eq('job_id', typedJobId)
+        // Stable order so appliance index N matches the `appliance_N` source key used
+        // by the Gas Warning Notice follow-ups and their server-side seeding.
+        .order('created_at', { ascending: true }),
       untypedSb
         .from('invoices')
         .select('id, invoice_number, status, payment_status, payment_link_url, pdf_path, created_at')
         .eq('job_id', typedJobId)
         .order('created_at', { ascending: false })
         .limit(1),
+      // Per-appliance Gas Warning Notice follow-up jobs (one per unsafe appliance).
+      untypedSb
+        .from('jobs')
+        .select('id, source_appliance_key, source_appliance_id, status')
+        .eq('parent_job_id', typedJobId)
+        .eq('certificate_type', 'gas_warning_notice'),
     ]);
   if (certErr) throw new Error(certErr.message);
   if (fieldsErr) throw new Error(fieldsErr.message);
   if (appliancesResp.error && appliancesResp.error.code !== '42P01') throw new Error(appliancesResp.error.message);
   if (invoiceResp.error && invoiceResp.error.code !== '42P01') throw new Error(invoiceResp.error.message);
+  if (gwnFollowUpsResp.error && gwnFollowUpsResp.error.code !== '42P01') throw new Error(gwnFollowUpsResp.error.message);
 
   const certificates = ((certificateRows ?? []) as Record<string, unknown>[]).filter(isFinalCertificate);
   const certificateTypes = certificates.map((certificate) => normalizeCertType(certificate.cert_type));
@@ -1770,37 +1783,104 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
 
   // The Gas Warning Notice is a recommended follow-up for unsafe appliances
   // (GIUSP), NOT part of the CP12 legal minimum — it must not block sending the
-  // job. It stays offered (with property/landlord/appliance details pre-filled
-  // from this job) in the Optional section.
-  const gasWarningNoticeCertificate = needsGasWarningNotice ? findCertificate('gas_warning_notice') : null;
-  const gasWarningNoticeItem: JobCompletionChecklistItem | null = needsGasWarningNotice
-    ? {
+  // job. GIUSP practice is one warning notice per dangerous appliance, so we offer
+  // one per unsafe appliance, each backed by its own linked follow-up job and
+  // seeded from that specific appliance.
+  const gwnFollowUps = (gwnFollowUpsResp.data ?? []) as Record<string, unknown>[];
+  const gwnFollowUpIds = gwnFollowUps
+    .map((row) => (typeof row.id === 'string' ? row.id : null))
+    .filter((value): value is string => Boolean(value));
+  const issuedGwnJobIds = new Set<string>();
+  if (gwnFollowUpIds.length) {
+    const { data: gwnCertRows, error: gwnCertErr } = await admin
+      .from('certificates')
+      .select('job_id, cert_type, status, pdf_path, pdf_url, issued_at, created_at')
+      .in('job_id', gwnFollowUpIds);
+    if (gwnCertErr) throw new Error(gwnCertErr.message);
+    ((gwnCertRows ?? []) as Record<string, unknown>[])
+      .filter((c) => normalizeCertType(c.cert_type) === 'gas_warning_notice' && isFinalCertificate(c))
+      .forEach((c) => {
+        if (typeof c.job_id === 'string') issuedGwnJobIds.add(c.job_id);
+      });
+  }
+  const gwnJobByKey = new Map<string, { id: string; issued: boolean }>();
+  gwnFollowUps.forEach((row) => {
+    const key = typeof row.source_appliance_key === 'string' ? row.source_appliance_key : null;
+    const id = typeof row.id === 'string' ? row.id : null;
+    if (key && id) gwnJobByKey.set(key, { id, issued: issuedGwnJobIds.has(id) });
+  });
+
+  const classificationLabel = (appliance: Record<string, unknown>): 'ID' | 'AR' | 'Unsafe' => {
+    const blob = [appliance.safety_classification, appliance.classification_code, appliance.safety_rating]
+      .map((value) => String(value ?? '').trim().toLowerCase())
+      .join(' ');
+    if (/\bid\b/.test(blob) || blob.includes('immediately dangerous')) return 'ID';
+    if (/\bar\b/.test(blob) || blob.includes('at risk')) return 'AR';
+    return 'Unsafe';
+  };
+
+  const gasWarningNoticeItems: JobCompletionChecklistItem[] = [];
+  if (unsafeAppliances.length > 0) {
+    appliances.forEach((appliance, index) => {
+      const isUnsafe =
+        hasUnsafeClassification(appliance.safety_classification) ||
+        hasUnsafeClassification(appliance.classification_code) ||
+        hasUnsafeClassification(appliance.safety_rating);
+      if (!isUnsafe) return;
+      const applianceKey = `appliance_${index + 1}`;
+      const gwnJob = gwnJobByKey.get(applianceKey) ?? null;
+      const issued = Boolean(gwnJob?.issued);
+      const cls = classificationLabel(appliance);
+      gasWarningNoticeItems.push({
         id: 'gas_warning_notice',
-        label: CERTIFICATE_COMPLETION_LABELS.gas_warning_notice,
-        description: gasWarningNoticeCertificate
-          ? 'Final warning notice PDF is stored on this job.'
-          : 'Recommended for unsafe appliances — property, landlord and appliance details are pre-filled from this job. Optional: does not block sending.',
-        status: gasWarningNoticeCertificate ? 'completed' : 'ready',
+        key: `gas_warning_notice_${index}`,
+        label: `${CERTIFICATE_COMPLETION_LABELS.gas_warning_notice} — Appliance #${index + 1} (${cls})`,
+        description: issued
+          ? 'Warning notice PDF is stored for this appliance.'
+          : 'Recommended for this unsafe appliance — details are pre-filled from the CP12. Optional: does not block sending.',
+        status: issued ? 'completed' : 'ready',
         blocking: false,
-        href: gasWarningNoticeCertificate
-          ? `/jobs/${jobId}/pdf?certificateType=gas_warning_notice`
-          : `/wizard/create/gas_warning_notice?jobId=${jobId}`,
-        editHref: gasWarningNoticeCertificate ? `/wizard/create/gas_warning_notice?jobId=${jobId}` : null,
-        completedAt:
-          typeof gasWarningNoticeCertificate?.issued_at === 'string'
-            ? gasWarningNoticeCertificate.issued_at
-            : typeof gasWarningNoticeCertificate?.created_at === 'string'
-              ? gasWarningNoticeCertificate.created_at
-              : null,
-      }
-    : null;
+        href:
+          issued && gwnJob
+            ? `/jobs/${gwnJob.id}/pdf?certificateType=gas_warning_notice`
+            : gwnJob
+              ? `/wizard/create/gas_warning_notice?jobId=${gwnJob.id}`
+              : `/wizard/create/gas_warning_notice?parentJobId=${jobId}&applianceKey=${applianceKey}`,
+        editHref: gwnJob ? `/wizard/create/gas_warning_notice?jobId=${gwnJob.id}` : null,
+        completedAt: null,
+      });
+    });
+  } else if (needsGasWarningNotice) {
+    // Job-level fallback (warning-notice-only jobs with no appliance rows): keep the
+    // original single, inline warning notice stored on this job.
+    const gasWarningNoticeCertificate = findCertificate('gas_warning_notice');
+    gasWarningNoticeItems.push({
+      id: 'gas_warning_notice',
+      label: CERTIFICATE_COMPLETION_LABELS.gas_warning_notice,
+      description: gasWarningNoticeCertificate
+        ? 'Final warning notice PDF is stored on this job.'
+        : 'Recommended for unsafe appliances — property, landlord and appliance details are pre-filled from this job. Optional: does not block sending.',
+      status: gasWarningNoticeCertificate ? 'completed' : 'ready',
+      blocking: false,
+      href: gasWarningNoticeCertificate
+        ? `/jobs/${jobId}/pdf?certificateType=gas_warning_notice`
+        : `/wizard/create/gas_warning_notice?jobId=${jobId}`,
+      editHref: gasWarningNoticeCertificate ? `/wizard/create/gas_warning_notice?jobId=${jobId}` : null,
+      completedAt:
+        typeof gasWarningNoticeCertificate?.issued_at === 'string'
+          ? gasWarningNoticeCertificate.issued_at
+          : typeof gasWarningNoticeCertificate?.created_at === 'string'
+            ? gasWarningNoticeCertificate.created_at
+            : null,
+    });
+  }
 
   const invoice = ((invoiceResp.data ?? []) as Record<string, unknown>[])[0] ?? null;
   const invoiceReady = Boolean(invoice?.pdf_path || invoice?.payment_link_url || invoice?.status === 'issued');
   const invoiceReturnTo = encodeURIComponent(`/jobs/${jobId}/complete`);
   const invoiceEditHref = invoice?.id ? `/invoices/${invoice.id}?returnTo=${invoiceReturnTo}` : null;
   const optional: JobCompletionChecklistItem[] = [
-    ...(gasWarningNoticeItem ? [gasWarningNoticeItem] : []),
+    ...gasWarningNoticeItems,
     {
       id: 'invoice',
       label: 'Invoice',

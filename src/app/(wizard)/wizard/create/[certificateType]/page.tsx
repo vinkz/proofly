@@ -1,7 +1,7 @@
 // Jobs-centric flow: wizard bootstraps from jobId and prefers job/client data over job_fields for customer/address defaults.
 import { notFound, redirect } from 'next/navigation';
 
-import { createJob, getCertificateWizardState } from '@/server/certificates';
+import { createJob, ensureGasWarningNoticeJob, getCertificateWizardState } from '@/server/certificates';
 import { getJobCompletionState } from '@/server/jobs';
 import { listClients } from '@/server/clients';
 import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
@@ -85,6 +85,8 @@ export default async function CertificateWizardPage({
     forceClientStep?: string;
     prepare?: string;
     startStep?: string;
+    parentJobId?: string;
+    applianceKey?: string;
   }>;
 }) {
   const { certificateType } = await params;
@@ -126,6 +128,28 @@ export default async function CertificateWizardPage({
     typeof resolvedSearchParams?.clientId === 'string' ? resolvedSearchParams.clientId : null;
   const existingJobId =
     typeof resolvedSearchParams?.jobId === 'string' ? resolvedSearchParams.jobId : null;
+
+  // Per-appliance Gas Warning Notice: when opened from a CP12 completion row for a
+  // specific unsafe appliance, create (or reuse) a linked follow-up job seeded from
+  // that appliance, then continue in the wizard on that job.
+  if (normalizedType === 'gas_warning_notice' && !existingJobId) {
+    const parentJobId =
+      typeof resolvedSearchParams?.parentJobId === 'string' ? resolvedSearchParams.parentJobId : null;
+    const applianceKey =
+      typeof resolvedSearchParams?.applianceKey === 'string' ? resolvedSearchParams.applianceKey : null;
+    if (parentJobId && applianceKey) {
+      let ensuredJobId: string | null = null;
+      try {
+        const ensured = await ensureGasWarningNoticeJob({ parentJobId, applianceKey });
+        ensuredJobId = ensured.jobId;
+      } catch (error) {
+        if (isAuthError(error)) redirect('/login');
+        throw error;
+      }
+      redirect(`/wizard/create/gas_warning_notice?jobId=${ensuredJobId}`);
+    }
+  }
+
   const isCp12 = normalizedType === 'cp12';
   const startsInWizard = normalizedType === 'cp12' || normalizedType === 'gas_service';
   const hasSeparateClientStep = !startsInWizard;
