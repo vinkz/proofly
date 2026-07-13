@@ -266,6 +266,12 @@ export function GasWarningNoticeWizard({
 
   const [engineerSignature, setEngineerSignature] = useState((resolvedFields.engineer_signature as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
+  // The customer's signature on a warning notice is an optional acknowledgement of
+  // receipt, not a legal requirement (the duty is recording + informing / leaving the
+  // notice). Hidden behind an opt-in control so it doesn't read as required.
+  const [showCustomerSignature, setShowCustomerSignature] = useState(
+    Boolean((resolvedFields.customer_signature as string) ?? ''),
+  );
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const didPrefillRef = useRef(false);
 
@@ -1272,16 +1278,24 @@ export function GasWarningNoticeWizard({
               </LabeledField>
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Signatures" subtitle="Customer + engineer">
-            <div className={`grid gap-4 ${showCustomerAcknowledgement ? 'sm:grid-cols-2' : ''}`}>
-              {showCustomerAcknowledgement ? (
-                <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
-              ) : (
+          <CollapsibleSection title="Signatures" subtitle="Engineer required · customer optional">
+            <div className="space-y-3">
+              <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
+              {!showCustomerAcknowledgement ? (
                 <div className="rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4 text-[13px] text-[var(--color-text-secondary)]">
                   Customer signature hidden because the customer was marked as not present.
                 </div>
+              ) : showCustomerSignature ? (
+                <SignatureCard label="Customer (optional)" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerSignature(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3 text-[13px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                >
+                  + Add customer acknowledgement signature (optional)
+                </button>
               )}
-              <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
             </div>
           </CollapsibleSection>
           {gasWarningMissingItems.length > 0 ? (
