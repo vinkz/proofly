@@ -278,6 +278,52 @@ const CP12_DEMO_PHOTO_NOTES: Record<string, string> = {
 
 const FINAL_EVIDENCE_DEFAULT: PhotoCategory = 'site';
 
+// Quick-select presets for unsafe-appliance capture, grounded in the GIUSP unsafe
+// situations (Immediately Dangerous / At Risk) and standard engineer actions. Tapping a
+// chip appends it to the free-text field; the engineer can still type/edit freely.
+const CP12_DEFECT_PRESETS = [
+  'Inadequate ventilation / air supply',
+  'Products of combustion spilling into room',
+  'Flue not terminating safely / defective flue',
+  'Blocked or restricted flue',
+  'Excessive CO detected',
+  'Gas leak / tightness test failure',
+  'No / inoperative flame supervision device',
+  'Appliance in prohibited location',
+  'Corroded / damaged heat exchanger',
+  'Incorrect operating pressure',
+  'Unstable / insecure appliance',
+  'Appliance not to current standards',
+];
+const CP12_ACTION_TAKEN_PRESETS = [
+  'Appliance turned off',
+  'Gas supply isolated / capped',
+  'Warning notice issued',
+  'Danger Do Not Use label attached',
+  'Responsible person advised of danger',
+  'Made safe',
+  'Gas Emergency Service notified (ID)',
+  'RIDDOR report submitted (ID)',
+];
+const CP12_ACTION_REQUIRED_PRESETS = [
+  'Replace appliance',
+  'Repair / replace flue',
+  'Provide adequate ventilation',
+  'Service appliance',
+  'Investigate and repair gas leak',
+  'Reposition appliance',
+  'Replace faulty component',
+  'Manufacturer / specialist inspection',
+];
+
+// Append a preset to a semicolon-separated free-text field, skipping duplicates.
+const appendPresetSnippet = (current: string | undefined | null, snippet: string): string => {
+  const value = (current ?? '').trim();
+  const parts = value ? value.split(/;\s*/).map((s) => s.trim()).filter(Boolean) : [];
+  if (parts.some((part) => part.toLowerCase() === snippet.toLowerCase())) return value;
+  return value ? `${value}; ${snippet}` : snippet;
+};
+
 // Where each completion-checklist "Go" link should land focus once its step is
 // shown. Appliance items focus their card via applianceRefs instead.
 const CP12_CHECKLIST_FOCUS_SELECTORS: Record<string, string> = {
@@ -3294,24 +3340,69 @@ export function CertificateWizard({
                             Failed: {failedChecks.join(', ')} — record the defect and remedial action below.
                           </p>
                         ) : null}
-                        <Textarea
-                          value={appliance.defect_notes ?? ''}
-                          onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
-                          placeholder="Defect notes"
-                          className="min-h-[80px]"
-                        />
-                        <Textarea
-                          value={appliance.actions_taken ?? ''}
-                          onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
-                          placeholder="Actions taken"
-                          className="min-h-[80px]"
-                        />
-                        <Textarea
-                          value={appliance.actions_required ?? ''}
-                          onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
-                          placeholder="Actions required"
-                          className="min-h-[80px]"
-                        />
+                        <div className="space-y-1.5">
+                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Defect / unsafe situation</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {CP12_DEFECT_PRESETS.map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setApplianceField(index, 'defect_notes', appendPresetSnippet(appliance.defect_notes, preset))}
+                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                          <Textarea
+                            value={appliance.defect_notes ?? ''}
+                            onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
+                            placeholder="Defect notes — tap a chip above or type your own"
+                            className="min-h-[80px]"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Actions taken</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {CP12_ACTION_TAKEN_PRESETS.map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setApplianceField(index, 'actions_taken', appendPresetSnippet(appliance.actions_taken, preset))}
+                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                          <Textarea
+                            value={appliance.actions_taken ?? ''}
+                            onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
+                            placeholder="Actions taken — tap a chip above or type your own"
+                            className="min-h-[80px]"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Actions required</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {CP12_ACTION_REQUIRED_PRESETS.map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setApplianceField(index, 'actions_required', appendPresetSnippet(appliance.actions_required, preset))}
+                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                          <Textarea
+                            value={appliance.actions_required ?? ''}
+                            onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
+                            placeholder="Actions required — tap a chip above or type your own"
+                            className="min-h-[80px]"
+                          />
+                        </div>
                         <div className="grid gap-2 text-[13px] text-[var(--color-text-primary)] sm:grid-cols-3">
                           <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
                             <input
