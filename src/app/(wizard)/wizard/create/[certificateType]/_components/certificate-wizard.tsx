@@ -45,6 +45,12 @@ import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 import { composeCp12DefectSummary, cp12ApplianceHasFailedCheck, cp12FailedChecks } from '@/lib/cp12/defect-summary';
+import {
+  ACTION_REQUIRED_PRESETS,
+  ACTION_TAKEN_PRESETS,
+  UNSAFE_SITUATION_PRESETS,
+  appendPresetSnippet,
+} from '@/lib/gas-safety/unsafe-presets';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
 import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 import {
@@ -278,51 +284,12 @@ const CP12_DEMO_PHOTO_NOTES: Record<string, string> = {
 
 const FINAL_EVIDENCE_DEFAULT: PhotoCategory = 'site';
 
-// Quick-select presets for unsafe-appliance capture, grounded in the GIUSP unsafe
-// situations (Immediately Dangerous / At Risk) and standard engineer actions. Tapping a
-// chip appends it to the free-text field; the engineer can still type/edit freely.
-const CP12_DEFECT_PRESETS = [
-  'Inadequate ventilation / air supply',
-  'Products of combustion spilling into room',
-  'Flue not terminating safely / defective flue',
-  'Blocked or restricted flue',
-  'Excessive CO detected',
-  'Gas leak / tightness test failure',
-  'No / inoperative flame supervision device',
-  'Appliance in prohibited location',
-  'Corroded / damaged heat exchanger',
-  'Incorrect operating pressure',
-  'Unstable / insecure appliance',
-  'Appliance not to current standards',
-];
-const CP12_ACTION_TAKEN_PRESETS = [
-  'Appliance turned off',
-  'Gas supply isolated / capped',
-  'Warning notice issued',
-  'Danger Do Not Use label attached',
-  'Responsible person advised of danger',
-  'Made safe',
-  'Gas Emergency Service notified (ID)',
-  'RIDDOR report submitted (ID)',
-];
-const CP12_ACTION_REQUIRED_PRESETS = [
-  'Replace appliance',
-  'Repair / replace flue',
-  'Provide adequate ventilation',
-  'Service appliance',
-  'Investigate and repair gas leak',
-  'Reposition appliance',
-  'Replace faulty component',
-  'Manufacturer / specialist inspection',
-];
-
-// Append a preset to a semicolon-separated free-text field, skipping duplicates.
-const appendPresetSnippet = (current: string | undefined | null, snippet: string): string => {
-  const value = (current ?? '').trim();
-  const parts = value ? value.split(/;\s*/).map((s) => s.trim()).filter(Boolean) : [];
-  if (parts.some((part) => part.toLowerCase() === snippet.toLowerCase())) return value;
-  return value ? `${value}; ${snippet}` : snippet;
-};
+// Quick-select presets for unsafe-appliance capture live in a shared module so the CP12
+// wizard and the Gas Warning Notice wizard stay consistent. Tapping a chip appends it to
+// the free-text field; the engineer can still type/edit freely.
+const CP12_DEFECT_PRESETS = UNSAFE_SITUATION_PRESETS;
+const CP12_ACTION_TAKEN_PRESETS = ACTION_TAKEN_PRESETS;
+const CP12_ACTION_REQUIRED_PRESETS = ACTION_REQUIRED_PRESETS;
 
 // Where each completion-checklist "Go" link should land focus once its step is
 // shown. Appliance items focus their card via applianceRefs instead.

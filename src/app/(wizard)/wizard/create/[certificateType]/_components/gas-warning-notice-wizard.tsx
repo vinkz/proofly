@@ -8,6 +8,12 @@ import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { SignatureCard } from '@/components/certificates/signature-card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  ACTION_TAKEN_PRESETS,
+  UNDERLYING_CAUSE_PRESETS,
+  UNSAFE_SITUATION_PRESETS,
+  appendPresetSnippet,
+} from '@/lib/gas-safety/unsafe-presets';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -1031,24 +1037,75 @@ export function GasWarningNoticeWizard({
                   ))}
                 </Select>
               </LabeledField>
-              <Textarea
-                value={fields.unsafe_situation_description}
-                onChange={(e) => setFields((prev) => ({ ...prev, unsafe_situation_description: e.target.value }))}
-                placeholder="Unsafe situation description"
-                className="min-h-[90px] rounded-[8px] sm:col-span-2"
-              />
-              <Textarea
-                value={fields.underlying_cause}
-                onChange={(e) => setFields((prev) => ({ ...prev, underlying_cause: e.target.value }))}
-                placeholder="Underlying cause (optional)"
-                className="min-h-[90px] rounded-[8px] sm:col-span-2"
-              />
-              <Textarea
-                value={fields.actions_taken}
-                onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
-                placeholder="Actions taken"
-                className="min-h-[90px] rounded-[8px] sm:col-span-2"
-              />
+              <div className="space-y-1.5 sm:col-span-2">
+                <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Unsafe situation</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {UNSAFE_SITUATION_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setFields((prev) => ({ ...prev, unsafe_situation_description: appendPresetSnippet(prev.unsafe_situation_description, preset) }))
+                      }
+                      className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+                <Textarea
+                  value={fields.unsafe_situation_description}
+                  onChange={(e) => setFields((prev) => ({ ...prev, unsafe_situation_description: e.target.value }))}
+                  placeholder="Unsafe situation description — tap a chip above or type your own"
+                  className="min-h-[90px] rounded-[8px]"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Underlying cause (optional)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {UNDERLYING_CAUSE_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setFields((prev) => ({ ...prev, underlying_cause: appendPresetSnippet(prev.underlying_cause, preset) }))
+                      }
+                      className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+                <Textarea
+                  value={fields.underlying_cause}
+                  onChange={(e) => setFields((prev) => ({ ...prev, underlying_cause: e.target.value }))}
+                  placeholder="Underlying cause — tap a chip above or type your own"
+                  className="min-h-[90px] rounded-[8px]"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Actions taken</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ACTION_TAKEN_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setFields((prev) => ({ ...prev, actions_taken: appendPresetSnippet(prev.actions_taken, preset) }))
+                      }
+                      className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+                <Textarea
+                  value={fields.actions_taken}
+                  onChange={(e) => setFields((prev) => ({ ...prev, actions_taken: e.target.value }))}
+                  placeholder="Actions taken — tap a chip above or type your own"
+                  className="min-h-[90px] rounded-[8px]"
+                />
+              </div>
               <Input
                 value={fields.emergency_reference}
                 onChange={(e) => setFields((prev) => ({ ...prev, emergency_reference: e.target.value }))}
