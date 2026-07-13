@@ -37,6 +37,9 @@ type GasWarningNoticeWizardProps = {
   certificateType: CertificateType;
   stepOffset?: number;
   startStep?: number;
+  // For a per-appliance GWN follow-up, the parent CP12/combined job to return to after
+  // issuing (so all appliance warning notices funnel back to one completion page).
+  parentJobId?: string | null;
 };
 
 type GasWarningFormState = {
@@ -167,6 +170,7 @@ export function GasWarningNoticeWizard({
   certificateType,
   stepOffset = 0,
   startStep = 1,
+  parentJobId = null,
 }: GasWarningNoticeWizardProps) {
   const router = useRouter();
   const { pushToast } = useToast();
@@ -708,7 +712,9 @@ export function GasWarningNoticeWizard({
           ),
           variant: 'success',
         });
-        router.push(`/jobs/${resultJobId}/complete`);
+        // Return to the parent CP12/combined job's completion page when this is a
+        // per-appliance follow-up, so every warning notice funnels back to one place.
+        router.push(`/jobs/${parentJobId ?? resultJobId}/complete`);
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',

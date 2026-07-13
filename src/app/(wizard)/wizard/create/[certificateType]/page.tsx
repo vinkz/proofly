@@ -290,7 +290,9 @@ export default async function CertificateWizardPage({
       });
     }
     if (shouldRedirectToCompletion) {
-      redirect(`/jobs/${jobId}/complete`);
+      // For a per-appliance follow-up, land on the parent CP12/combined completion page.
+      const completionJobId = (job as { parent_job_id?: string | null } | null)?.parent_job_id ?? jobId;
+      redirect(`/jobs/${completionJobId}/complete`);
     }
   }
 
@@ -368,6 +370,7 @@ export default async function CertificateWizardPage({
         certificateType={normalizedType as CertificateType}
         stepOffset={stepOffset}
         startStep={requestedStartStep}
+        parentJobId={(job as { parent_job_id?: string | null } | null)?.parent_job_id ?? null}
       />
     );
   }
