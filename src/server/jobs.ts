@@ -612,7 +612,7 @@ export async function fillAwaitingLandlordJobMyself(jobId: string) {
   return { ok: true, jobId };
 }
 
-export async function requestLandlordJobPrefill(payload: z.infer<typeof LandlordPrefillRequestSchema>) {
+export async function requestLandlordJobPrefill(payload: z.input<typeof LandlordPrefillRequestSchema>) {
   const input = LandlordPrefillRequestSchema.parse(payload);
   const readClient = await supabaseServerReadOnly();
   const user = await getSupabaseUser(readClient);
