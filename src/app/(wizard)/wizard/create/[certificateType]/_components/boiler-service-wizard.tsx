@@ -374,6 +374,10 @@ export function BoilerServiceWizard({
   const [engineerSignaturePath, setEngineerSignaturePath] = useState((resolvedFields.engineer_signature_path as string) ?? '');
   const [customerSignature, setCustomerSignature] = useState((resolvedFields.customer_signature as string) ?? '');
   const [customerSignaturePath, setCustomerSignaturePath] = useState((resolvedFields.customer_signature_path as string) ?? '');
+  // Customer signature is optional (only the engineer must sign): opt-in, not shown by default.
+  const [showCustomerSignature, setShowCustomerSignature] = useState(
+    Boolean(((resolvedFields.customer_signature as string) ?? '') || ((resolvedFields.customer_signature_path as string) ?? '')),
+  );
   const [checkComments, setCheckComments] = useState<Record<string, string>>({});
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
@@ -2071,9 +2075,19 @@ export function BoilerServiceWizard({
                 />
               </div>
             </CollapsibleSection>
-            <div id="boiler-signatures" className="grid gap-4 sm:grid-cols-2">
-              <SignatureCard label="Customer" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+            <div id="boiler-signatures" className="space-y-3">
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
+              {showCustomerSignature ? (
+                <SignatureCard label="Customer (optional)" existingUrl={customerSignature} onUpload={signatureUpload('customer')} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerSignature(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3 text-[13px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                >
+                  + Add customer signature (optional)
+                </button>
+              )}
             </div>
             <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Completion</p>

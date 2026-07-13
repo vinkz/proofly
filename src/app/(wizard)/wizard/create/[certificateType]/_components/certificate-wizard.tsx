@@ -568,6 +568,11 @@ export function CertificateWizard({
   const [engineerSignaturePath, setEngineerSignaturePath] = useState(resolvedInitialInfo.engineer_signature_path ?? '');
   const [customerSignature, setCustomerSignature] = useState(resolvedInitialInfo.customer_signature ?? '');
   const [customerSignaturePath, setCustomerSignaturePath] = useState(resolvedInitialInfo.customer_signature_path ?? '');
+  // Customer signature is optional (only the engineer must sign), so it's hidden behind
+  // an opt-in control rather than shown as an always-present pad that reads as required.
+  const [showCustomerSignature, setShowCustomerSignature] = useState(
+    Boolean((resolvedInitialInfo.customer_signature ?? '') || (resolvedInitialInfo.customer_signature_path ?? '')),
+  );
   const [remoteSignatureLink, setRemoteSignatureLink] = useState(
     resolvedInitialInfo.cp12_remote_signature_token
       ? `/sign/cp12/${resolvedInitialInfo.cp12_remote_signature_token}`
@@ -3571,30 +3576,40 @@ export function CertificateWizard({
           </div>
         ) : null}
         <div id="cp12-signatures" className="space-y-3">
-        <SignatureCard
-          label="Customer"
-          existingUrl={customerSignature as string}
-          onUpload={(file) => {
-            const data = new FormData();
-            data.append('jobId', jobId);
-            data.append('role', 'customer');
-            data.append('file', file);
-            startTransition(async () => {
-              try {
-                const { url, path } = await uploadSignature(data);
-                setCustomerSignature(url);
-                setCustomerSignaturePath(path);
-                pushToast({ title: 'Customer signature saved', variant: 'success' });
-              } catch (error) {
-                pushToast({
-                  title: 'Could not save signature',
-                  description: error instanceof Error ? error.message : 'Try again.',
-                  variant: 'error',
-                });
-              }
-            });
-          }}
-        />
+        {showCustomerSignature ? (
+          <SignatureCard
+            label="Customer (optional)"
+            existingUrl={customerSignature as string}
+            onUpload={(file) => {
+              const data = new FormData();
+              data.append('jobId', jobId);
+              data.append('role', 'customer');
+              data.append('file', file);
+              startTransition(async () => {
+                try {
+                  const { url, path } = await uploadSignature(data);
+                  setCustomerSignature(url);
+                  setCustomerSignaturePath(path);
+                  pushToast({ title: 'Customer signature saved', variant: 'success' });
+                } catch (error) {
+                  pushToast({
+                    title: 'Could not save signature',
+                    description: error instanceof Error ? error.message : 'Try again.',
+                    variant: 'error',
+                  });
+                }
+              });
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowCustomerSignature(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3 text-[13px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+          >
+            + Add customer signature (optional)
+          </button>
+        )}
         <SignatureCard
           label="Engineer"
           existingUrl={engineerSignature as string}

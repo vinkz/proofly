@@ -101,6 +101,27 @@ type JobContext = {
 const JOB_FIELDS_TABLE = 'job_fields' as unknown as keyof Database['public']['Tables'];
 const CP12_APPLIANCES_TABLE = 'cp12_appliances' as unknown as keyof Database['public']['Tables'];
 const JOB_PHOTOS_TABLE = 'job_photos' as unknown as keyof Database['public']['Tables'];
+
+// The job-photos bucket is private, so evidence photos must be read via signed URLs.
+// New rows store the raw storage path in `file_url`; legacy rows stored a (non-working)
+// public URL — extract the path from either form.
+function jobPhotoStoragePath(fileUrlOrPath: string): string {
+  const marker = '/job-photos/';
+  const idx = fileUrlOrPath.indexOf(marker);
+  if (idx >= 0) return decodeURIComponent(fileUrlOrPath.slice(idx + marker.length).split('?')[0]);
+  return fileUrlOrPath;
+}
+async function signJobPhotoUrl(
+  client: Awaited<ReturnType<typeof supabaseServerServiceRole>>,
+  fileUrlOrPath: string | null | undefined,
+  expiresIn = 3600,
+): Promise<string | null> {
+  if (!fileUrlOrPath) return null;
+  const { data } = await client.storage
+    .from('job-photos')
+    .createSignedUrl(jobPhotoStoragePath(fileUrlOrPath), expiresIn);
+  return data?.signedUrl ?? null;
+}
 const CP12_REMOTE_SIGNATURE_TOKEN_FIELD = 'cp12_remote_signature_token';
 const CP12_REMOTE_SIGNATURE_CREATED_AT_FIELD = 'cp12_remote_signature_created_at';
 const CP12_REMOTE_SIGNATURE_EXPIRES_AT_FIELD = 'cp12_remote_signature_expires_at';
@@ -1193,14 +1214,46 @@ export async function uploadJobPhoto(formData: FormData) {
   });
   if (uploadErr) throw new Error(uploadErr.message);
 
-  const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
-
-  const insertPayload = { job_id: id, category: cat, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const insertPayload = { job_id: id, category: cat, file_url: path } as Record<string, unknown>;
   const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
   revalidatePath(`/jobs/${id}`);
-  return { url: publicUrl };
+  return { url: (await signJobPhotoUrl(sb, path)) ?? '' };
+}
+
+export type JobEvidencePhoto = { id: string; category: string; url: string; createdAt: string | null };
+
+// Evidence photos captured during the job, with fresh signed URLs so the engineer can
+// review/download them after the job (they live in the private job-photos bucket).
+export async function getJobPhotos(jobId: string): Promise<JobEvidencePhoto[]> {
+  const readClient = await supabaseServerReadOnly();
+  const { user, error } = await getUserWithRetry(readClient, 'getJobPhotos');
+  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  const sb = await supabaseServerServiceRole();
+  const { data: job } = await sb.from('jobs').select('id, user_id').eq('id', jobId).maybeSingle();
+  if (!job || ((job as { user_id?: string | null }).user_id ?? null) !== user.id) return [];
+
+  const { data: rows, error: rowsErr } = await sb
+    .from(JOB_PHOTOS_TABLE)
+    .select('id, category, file_url, created_at')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: true });
+  if (rowsErr) throw new Error(rowsErr.message);
+
+  const photos = (rows ?? []) as unknown as Array<{
+    id: string;
+    category: string | null;
+    file_url: string | null;
+    created_at: string | null;
+  }>;
+  const result: JobEvidencePhoto[] = [];
+  for (const photo of photos) {
+    if (!photo.file_url) continue;
+    const url = await signJobPhotoUrl(sb, photo.file_url);
+    if (url) result.push({ id: photo.id, category: photo.category ?? 'Photo', url, createdAt: photo.created_at });
+  }
+  return result;
 }
 
 export async function getCertificateWizardState(jobId: string) {
@@ -1275,11 +1328,14 @@ export async function getCertificateWizardState(jobId: string) {
   if (photosErr) throw new Error(photosErr.message);
   const photoPreviews: Record<string, string> = {};
   const photoRows = (photos ?? []) as unknown as Array<{ category: string | null; file_url: string | null }>;
-  photoRows.forEach((photo) => {
+  // The bucket is private, so previews need signed URLs (via service role).
+  const photoAdmin = await supabaseServerServiceRole();
+  for (const photo of photoRows) {
     if (photo.category && photo.file_url && !photoPreviews[photo.category]) {
-      photoPreviews[photo.category] = photo.file_url;
+      const signed = await signJobPhotoUrl(photoAdmin, photo.file_url);
+      if (signed) photoPreviews[photo.category] = signed;
     }
-  });
+  }
 
   let appliances: Cp12Appliance[] = [];
   const appResp = await sb.from(CP12_APPLIANCES_TABLE).select('*').eq('job_id', jobId);
@@ -1790,14 +1846,12 @@ export async function uploadBoilerServicePhoto(formData: FormData) {
     .upload(path, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: true });
   if (uploadErr) throw new Error(uploadErr.message);
 
-  const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
-
-  const insertPayload = { job_id: jobId, category, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const insertPayload = { job_id: jobId, category, file_url: path } as Record<string, unknown>;
   const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
   revalidatePath(`/wizard/create/gas_service?jobId=${jobId}`);
-  return { url: publicUrl };
+  return { url: (await signJobPhotoUrl(sb, path)) ?? '' };
 }
 
 export async function saveGeneralWorksInfo(payload: z.infer<typeof GeneralWorksInfoSchema>) {
@@ -1859,14 +1913,12 @@ export async function uploadGeneralWorksPhoto(formData: FormData) {
     .upload(path, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: true });
   if (uploadErr) throw new Error(uploadErr.message);
 
-  const publicUrl = sb.storage.from('job-photos').getPublicUrl(path).data.publicUrl;
-
-  const insertPayload = { job_id: jobId, category, file_url: publicUrl, user_id: user.id } as Record<string, unknown>;
+  const insertPayload = { job_id: jobId, category, file_url: path } as Record<string, unknown>;
   const { error: insertErr } = await sb.from(JOB_PHOTOS_TABLE).insert(insertPayload);
   if (insertErr) throw new Error(insertErr.message);
 
   revalidatePath(`/wizard/create/general_works?jobId=${jobId}`);
-  return { url: publicUrl };
+  return { url: (await signJobPhotoUrl(sb, path)) ?? '' };
 }
 
 const Cp12JobSchema = z.object({
@@ -2427,9 +2479,16 @@ export async function generateGeneralWorksPdf(payload: z.infer<typeof GenerateGe
   if (limitReached) return limitReached;
 
   const photoRows = (photos ?? []) as unknown as Array<{ category?: string | null; file_url?: string | null }>;
+  // Private bucket: sign each photo so the renderer can fetch and embed it.
+  const signedPhotoRows: { category: string; file_url: string }[] = [];
+  for (const photo of photoRows) {
+    if (!photo.category || !photo.file_url) continue;
+    const signed = await signJobPhotoUrl(supabase, photo.file_url);
+    if (signed) signedPhotoRows.push({ category: photo.category, file_url: signed });
+  }
   const pdfBytes = await renderGeneralWorksPdf({
     fieldMap: mergedFieldMap,
-    photos: photoRows.filter((p) => p.category && p.file_url) as { category: string; file_url: string }[],
+    photos: signedPhotoRows,
     issuedAt: issuedAt.toISOString(),
     previewMode: previewOnly,
   });
