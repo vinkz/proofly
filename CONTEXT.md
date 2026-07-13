@@ -58,7 +58,7 @@ The Handover Bundle should include:
 - payment link or payment-status metadata when configured
 - landlord-safe public link where the landlord can retrieve the documents later
 
-Signature capture remains a prerequisite before legally meaningful certificates enter the bundle. Missing optional contact data can show nudges, but required signatures and certificate validation still gate issue.
+The **engineer** signature remains a prerequisite before legally meaningful certificates enter the bundle; the customer/received-by signature is optional and opt-in (CP12, boiler service, GWN). Missing optional contact data can show nudges, but the engineer signature and certificate validation still gate issue.
 
 Invoice line items should be zero-entry where possible: certificate types on the job determine line items, Standard Rates from the engineer business profile determine prices, and the engineer reviews rather than retyping. In the current schema, `profiles.standard_rates` stores CP12, Boiler Service, and CP12 + Boiler Service prices; `profiles` also holds bank-transfer payment details, while `invoices`/`invoice_line_items` hold finance output. A future `business_profile` abstraction can own standard rates without breaking those tables.
 
