@@ -55,6 +55,9 @@ type ApplianceStepProps = {
   inlineEditor?: boolean;
   showTopAddButton?: boolean;
   renderInlineHeaderAction?: (index: number) => ReactNode;
+  // When set (inline editor only), render just this one appliance's identity card —
+  // used by the appliance-hub detail view to show a single appliance at a time.
+  onlyIndex?: number | null;
 };
 
 const emptyAppliance: ApplianceStepValues = {
@@ -110,6 +113,7 @@ export function ApplianceStep({
   inlineEditor = false,
   showTopAddButton = true,
   renderInlineHeaderAction,
+  onlyIndex = null,
 }: ApplianceStepProps) {
   // Boiler catalog is the default when no resolver is supplied (other wizards).
   const DEFAULT_CATALOG: ApplianceCatalogApi = useMemo(
@@ -296,6 +300,7 @@ export function ApplianceStep({
       <div className="space-y-3">
         {inlineEditor ? (
           activeAppliances.map((appliance, index) => {
+            if (onlyIndex != null && index !== onlyIndex) return null;
             const catalog = getCatalog(appliance?.type);
             const makeValue = appliance?.make ?? '';
             const makeIsKnown = isKnownMakeIn(catalog, makeValue);
@@ -313,7 +318,7 @@ export function ApplianceStep({
                   <p className="text-sm font-semibold text-[var(--color-text-primary)]">Appliance {index + 1} identity</p>
                   <div className="flex shrink-0 items-center gap-2">
                     {renderInlineHeaderAction?.(index)}
-                    {allowMultiple && activeAppliances.length > 1 ? (
+                    {allowMultiple && activeAppliances.length > 1 && onlyIndex == null ? (
                       <Button
                         type="button"
                         variant="ghost"

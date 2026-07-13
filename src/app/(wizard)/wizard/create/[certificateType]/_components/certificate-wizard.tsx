@@ -576,6 +576,10 @@ export function CertificateWizard({
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
+  // Appliance-hub navigation: null = show the appliance list (hub); a number = the one
+  // appliance currently being filled in (its identity on step 2, its checks on step 3).
+  // Signatures (step 4) and property checks (step 3, hub mode) are unaffected.
+  const [activeApplianceIndex, setActiveApplianceIndex] = useState<number | null>(null);
   // For categories where combustion analysis is opt-in (gas fires / water heaters),
   // track which appliance indices the engineer has chosen to add it for.
   const [combustionOptIn, setCombustionOptIn] = useState<Record<number, boolean>>({});
@@ -1714,18 +1718,46 @@ export function CertificateWizard({
     });
   };
 
-  const addAppliance = () =>
-    setAppliances((prev) => {
-      if (prev.length >= MAX_APPLIANCES) {
-        pushToast({
-          title: 'Max 5 appliances',
-          description: 'The CP12 PDF table fits five appliances. Create another certificate for more.',
-          variant: 'default',
-        });
-        return prev;
-      }
-      return [...prev, { ...emptyAppliance }];
+  // Appliance-hub navigation helpers.
+  const openAppliance = (index: number) => {
+    setActiveApplianceIndex(index);
+    setChecksTab('inspection');
+    setStep(2);
+  };
+  const closeToHub = () => {
+    setActiveApplianceIndex(null);
+    setStep(2);
+  };
+  const removeActiveAppliance = () => {
+    if (activeApplianceIndex == null) return;
+    const idx = activeApplianceIndex;
+    setAppliances((prev) => prev.filter((_, i) => i !== idx));
+    setCombustionOptIn((prev) => {
+      const next: Record<number, boolean> = {};
+      Object.entries(prev).forEach(([key, val]) => {
+        const i = Number(key);
+        if (i < idx) next[i] = val;
+        else if (i > idx) next[i - 1] = val;
+      });
+      return next;
     });
+    setActiveApplianceIndex(null);
+    setStep(2);
+  };
+  const addAndOpenAppliance = () => {
+    if (appliances.length >= MAX_APPLIANCES) {
+      pushToast({
+        title: 'Max 5 appliances',
+        description: 'The CP12 PDF table fits five appliances. Create another certificate for more.',
+        variant: 'default',
+      });
+      return;
+    }
+    const newIndex = appliances.length;
+    setAppliances((prev) => [...prev, { ...emptyAppliance }]);
+    openAppliance(newIndex);
+  };
+
   const handleEvidenceFieldsUpdate = (updates: Record<string, string>) => {
     setEvidenceFields((prev) => ({ ...prev, ...updates }));
     startTransition(async () => {
@@ -1912,8 +1944,11 @@ export function CertificateWizard({
           id: `appliance-${index}`,
           label: `Appliance #${index + 1}: description, location & Reg 26(9)`,
           ok: tierOneOk,
-          hint: tierOneOk ? undefined : !identityOk ? 'Edit identity in Photos' : 'Confirm Reg 26(9) in Appliance checks',
-          action: () => setStep(identityOk ? 3 : 2),
+          hint: tierOneOk ? undefined : !identityOk ? 'Open the appliance to edit identity' : 'Confirm Reg 26(9) in the appliance checks',
+          action: () => {
+            openAppliance(index);
+            if (identityOk) setStep(3);
+          },
           blocking: true,
         },
         {
@@ -1921,7 +1956,10 @@ export function CertificateWizard({
           label: `Appliance #${index + 1}: readings & checks (optional)`,
           ok: readingsOk,
           hint: 'Optional — only the checks you record appear on the certificate',
-          action: () => setStep(3),
+          action: () => {
+            openAppliance(index);
+            setStep(3);
+          },
           blocking: false,
         },
       ];
@@ -2587,58 +2625,96 @@ export function CertificateWizard({
     </WizardLayout>
   );
 
-  const StepTwo = (
-    <WizardLayout
-      step={offsetStep(2)}
-      total={totalSteps}
-      title="Appliance details"
-      status="Tier one · appliance identity"
-      onBack={goBackOneStep}
-      actionsHideWhenVisibleId="cp12-step2-footer-actions"
-      actions={
-        <button
-          type="button"
-          onClick={() => setStep(3)}
-          disabled={isPending}
-          className="flex items-center gap-[5px] rounded-[20px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
-        >
-          Next
-          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14M12 5l7 7-7 7" />
-          </svg>
-        </button>
-      }
-    >
+  const inApplianceDetail = activeApplianceIndex !== null;
+  const applianceDisplayLabel = (a: Cp12Appliance, index: number) => {
+    const mm = (a.make_model ?? '').toString().trim();
+    if (mm) return mm;
+    const cat = CP12_APPLIANCE_CATEGORIES.find((c) => c.value === resolveCp12Category(a.appliance_type));
+    return cat?.label ?? `Appliance ${index + 1}`;
+  };
+  const applianceIdentityDone = (a: Cp12Appliance) =>
+    Boolean((a.appliance_type ?? '').toString().trim()) && Boolean((a.location ?? '').toString().trim());
+  const applianceChecksDone = (a: Cp12Appliance) => Boolean(getApplianceSafetyClassification(a));
+  const CLASSIFICATION_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+    safe: { label: 'Safe', bg: '#e7f4ec', color: '#1a6d44' },
+    ncs: { label: 'NCS', bg: '#e7f4ec', color: '#1a6d44' },
+    ar: { label: 'At risk', bg: '#fbeecd', color: '#8a5a10' },
+    id: { label: 'ID', bg: '#fbe3e3', color: '#9b2020' },
+  };
+  const ApplianceHub = (
+    <>
       <div className="space-y-2">
         {offlineDraftBanner}
-        <ApplianceStep
-          appliances={applianceProfiles}
-          onAppliancesChange={handleApplianceProfilesChange}
-          typeOptions={CP12_APPLIANCE_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))}
-          subtypeOptions={CP12_BOILER_SUBTYPES.map((s) => ({ label: s.label, value: s.value }))}
-          subtypeLabel="Boiler type"
-          showSubtypeWhen={(type) => resolveCp12Category(type) === 'boiler'}
-          resolveCatalog={(type) => getApplianceCatalog(resolveCp12Category(type))}
-          allowMultiple
-          showExtendedFields={false}
-          showYear={false}
-          applyExtendedDefaults={false}
-          inlineEditor
-          showTopAddButton={false}
-          renderInlineHeaderAction={(index) =>
-            index === 0 ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 rounded-[6px] px-3 text-xs"
-                onClick={addAppliance}
-                disabled={appliances.length >= MAX_APPLIANCES}
-              >
-                + Appliance
-              </Button>
-            ) : null
-          }
-        />
+        <div className="flex items-center justify-between">
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+            Appliances ({appliances.length})
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 rounded-[8px] px-3 text-xs"
+            onClick={addAndOpenAppliance}
+            disabled={appliances.length >= MAX_APPLIANCES}
+          >
+            + Add appliance
+          </Button>
+        </div>
+        {appliances.length === 0 ? (
+          <button
+            type="button"
+            onClick={addAndOpenAppliance}
+            className="flex w-full flex-col items-center gap-1 rounded-[16px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-8 text-center"
+          >
+            <span className="text-[14px] font-medium text-[var(--color-text-primary)]">Add your first appliance</span>
+            <span className="text-[12px] text-[var(--color-text-tertiary)]">Capture its identity, then run the checks.</span>
+          </button>
+        ) : (
+          <div className="space-y-2">
+            {appliances.map((appliance, index) => {
+              const idDone = applianceIdentityDone(appliance);
+              const checksDone = applianceChecksDone(appliance);
+              const classification = getApplianceSafetyClassification(appliance);
+              const badge = classification ? CLASSIFICATION_BADGE[classification] : null;
+              return (
+                <button
+                  key={`hub-appliance-${index}`}
+                  type="button"
+                  onClick={() => openAppliance(index)}
+                  className="flex w-full items-center gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 text-left"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-medium text-[var(--color-text-primary)]">
+                      {applianceDisplayLabel(appliance, index)}
+                    </p>
+                    <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-secondary)]">
+                      {(appliance.location ?? '').toString().trim() || 'Location not set'}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className={`text-[11px] font-medium ${idDone ? 'text-[#1a7a52]' : 'text-[var(--color-text-tertiary)]'}`}>
+                        {idDone ? 'Identity ✓' : 'Identity –'}
+                      </span>
+                      <span className="text-[11px] text-[var(--color-text-tertiary)]">·</span>
+                      <span className={`text-[11px] font-medium ${checksDone ? 'text-[#1a7a52]' : 'text-[var(--color-text-tertiary)]'}`}>
+                        {checksDone ? 'Checks ✓' : 'Checks –'}
+                      </span>
+                      {badge ? (
+                        <span
+                          className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                          style={{ backgroundColor: badge.bg, color: badge.color }}
+                        >
+                          {badge.label}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <svg className="h-4 w-4 shrink-0 text-[var(--color-text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
+              );
+            })}
+          </div>
+        )}
         {appliances.length >= MAX_APPLIANCES ? (
           <p className="text-right text-[12px] text-[var(--color-text-tertiary)]">
             CP12 PDF fits up to five appliances. Start another certificate for more.
@@ -2698,21 +2774,81 @@ export function CertificateWizard({
           />
         ))}
       </div>
+    </>
+  );
+
+  const ApplianceDetailIdentity = (
+    <div className="space-y-2">
+      {offlineDraftBanner}
+      <ApplianceStep
+        appliances={applianceProfiles}
+        onAppliancesChange={handleApplianceProfilesChange}
+        typeOptions={CP12_APPLIANCE_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))}
+        subtypeOptions={CP12_BOILER_SUBTYPES.map((s) => ({ label: s.label, value: s.value }))}
+        subtypeLabel="Boiler type"
+        showSubtypeWhen={(type) => resolveCp12Category(type) === 'boiler'}
+        resolveCatalog={(type) => getApplianceCatalog(resolveCp12Category(type))}
+        allowMultiple
+        showExtendedFields={false}
+        showYear={false}
+        applyExtendedDefaults={false}
+        inlineEditor
+        showTopAddButton={false}
+        onlyIndex={activeApplianceIndex}
+      />
+      <div className="flex items-center justify-between">
+        <p className="text-[12px] text-[var(--color-text-tertiary)]">
+          Next: run this appliance&apos;s checks. You&apos;ll return to the list when done.
+        </p>
+        <button
+          type="button"
+          onClick={removeActiveAppliance}
+          className="shrink-0 text-[12px] font-medium text-[#a32d2d] underline-offset-2 hover:underline"
+        >
+          Remove appliance
+        </button>
+      </div>
+    </div>
+  );
+
+  const StepTwo = (
+    <WizardLayout
+      step={offsetStep(2)}
+      total={totalSteps}
+      title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1}` : 'Appliances'}
+      status={inApplianceDetail ? 'Identity · then checks' : 'Add each appliance, then continue'}
+      onBack={inApplianceDetail ? closeToHub : goBackOneStep}
+      actionsHideWhenVisibleId="cp12-step2-footer-actions"
+      actions={
+        <button
+          type="button"
+          onClick={() => setStep(3)}
+          disabled={isPending || (!inApplianceDetail && appliances.length === 0)}
+          className="flex items-center gap-[5px] rounded-[20px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
+        >
+          {inApplianceDetail ? 'Checks' : 'Continue'}
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
+      }
+    >
+      {inApplianceDetail ? ApplianceDetailIdentity : ApplianceHub}
       <div id="cp12-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         <button
           type="button"
-          onClick={goBackOneStep}
+          onClick={inApplianceDetail ? closeToHub : goBackOneStep}
           className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)]"
         >
-          Back
+          {inApplianceDetail ? 'Back to list' : 'Back'}
         </button>
         <button
           type="button"
           onClick={() => setStep(3)}
-          disabled={isPending}
+          disabled={isPending || (!inApplianceDetail && appliances.length === 0)}
           className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
         >
-          Next
+          {inApplianceDetail ? 'Next: checks' : 'Continue'}
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
@@ -2736,50 +2872,47 @@ export function CertificateWizard({
       (acc, part) => ({ filled: acc.filled + part.filled, total: acc.total + part.total }),
       { filled: 0, total: 0 },
     );
-  const inspectionCount = sumCounts(
-    ...appliances.map((a) => {
-      const cat = resolveCp12Category(a.appliance_type);
-      // Flue type only counts toward completion for flued categories (hidden for hobs).
-      return countRequired(
-        ...(cp12FieldVisible(cat, 'flue_type') ? [a.flue_type] : []),
-        a.appliance_inspected,
-        a.appliance_serviced,
-      );
-    }),
-  );
-  const readingsCount = sumCounts(
-    ...appliances.map((a) => {
-      // FGA combustion analysis is optional, but all-or-nothing: once the
-      // engineer starts entering it, both the high- and low-fire groups must
-      // carry their core CO/CO₂ values before the tab can read complete.
-      const anyCombustion =
-        !!a.high_co_ppm || !!a.high_co2 || !!a.high_ratio || !!a.low_co_ppm || !!a.low_co2 || !!a.low_ratio;
-      return anyCombustion
-        ? countRequired(a.operating_pressure, a.heat_input, a.high_co_ppm, a.high_co2, a.low_co_ppm, a.low_co2)
-        : countRequired(a.operating_pressure, a.heat_input);
-    }),
-  );
-  const safetyCount = sumCounts(
-    ...appliances.map((a) => {
-      const cat = resolveCp12Category(a.appliance_type);
-      // Flue checks count only for flued categories; cooker stability only for hobs/cookers.
-      return countRequired(
-        a.safety_devices_correct,
-        a.ventilation_satisfactory,
-        ...(cp12FieldVisible(cat, 'flue_condition') ? [a.flue_condition] : []),
-        ...(cp12FieldVisible(cat, 'flue_performance_test') ? [a.flue_performance_test] : []),
-        ...(cp12FieldVisible(cat, 'cooker_stability') ? [a.cooker_stability] : []),
-        a.gas_tightness_test,
-        a.safety_rating,
-      );
-    }),
-  );
-  const houseCount = countRequired(
-    booleanFromField(evidenceFields.emergency_control_accessible),
-    booleanFromField(evidenceFields.gas_tightness_satisfactory),
-    booleanFromField(evidenceFields.pipework_visual_satisfactory),
-    booleanFromField(evidenceFields.equipotential_bonding_satisfactory),
-  );
+  // Per-appliance count helpers so the checks tabs can show progress for a single
+  // appliance (hub detail view) or summed across all (legacy all-in-one view).
+  const inspectionCountFor = (a: Cp12Appliance) => {
+    const cat = resolveCp12Category(a.appliance_type);
+    // Flue type only counts toward completion for flued categories (hidden for hobs).
+    return countRequired(
+      ...(cp12FieldVisible(cat, 'flue_type') ? [a.flue_type] : []),
+      a.appliance_inspected,
+      a.appliance_serviced,
+    );
+  };
+  const readingsCountFor = (a: Cp12Appliance) => {
+    // FGA combustion analysis is optional, but all-or-nothing: once the
+    // engineer starts entering it, both the high- and low-fire groups must
+    // carry their core CO/CO₂ values before the tab can read complete.
+    const anyCombustion =
+      !!a.high_co_ppm || !!a.high_co2 || !!a.high_ratio || !!a.low_co_ppm || !!a.low_co2 || !!a.low_ratio;
+    return anyCombustion
+      ? countRequired(a.operating_pressure, a.heat_input, a.high_co_ppm, a.high_co2, a.low_co_ppm, a.low_co2)
+      : countRequired(a.operating_pressure, a.heat_input);
+  };
+  const safetyCountFor = (a: Cp12Appliance) => {
+    const cat = resolveCp12Category(a.appliance_type);
+    // Flue checks count only for flued categories; cooker stability only for hobs/cookers.
+    return countRequired(
+      a.safety_devices_correct,
+      a.ventilation_satisfactory,
+      ...(cp12FieldVisible(cat, 'flue_condition') ? [a.flue_condition] : []),
+      ...(cp12FieldVisible(cat, 'flue_performance_test') ? [a.flue_performance_test] : []),
+      ...(cp12FieldVisible(cat, 'cooker_stability') ? [a.cooker_stability] : []),
+      a.gas_tightness_test,
+      a.safety_rating,
+    );
+  };
+  // In the hub detail view, tab dots reflect the one active appliance; otherwise all.
+  const countScope = inApplianceDetail && activeApplianceIndex != null && appliances[activeApplianceIndex]
+    ? [appliances[activeApplianceIndex]]
+    : appliances;
+  const inspectionCount = sumCounts(...countScope.map(inspectionCountFor));
+  const readingsCount = sumCounts(...countScope.map(readingsCountFor));
+  const safetyCount = sumCounts(...countScope.map(safetyCountFor));
   const checkDotState = ({ filled, total }: { filled: number; total: number }) =>
     total > 0 && filled >= total ? 'all' : filled > 0 ? 'some' : 'none';
 
@@ -2787,21 +2920,23 @@ export function CertificateWizard({
     <WizardLayout
       step={offsetStep(3)}
       total={totalSteps}
-      title="Appliance checks"
-      status="On-site checks"
-      onBack={goBackOneStep}
+      title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
+      status={inApplianceDetail ? 'On-site checks' : 'Whole-installation checks'}
+      onBack={inApplianceDetail ? () => setStep(2) : goBackOneStep}
     >
       {offlineDraftBanner}
       <p className="mb-3 text-[12px] leading-[1.5] text-[var(--color-text-tertiary)]">
-        Required: appliance description, location and the Regulation 26(9) confirmation. Readings, Safety and Property checks are optional — they appear on the certificate only if you record them.
+        {inApplianceDetail
+          ? 'Required: the Regulation 26(9) confirmation. Readings and Safety are optional — they appear on the certificate only if you record them.'
+          : 'Whole-installation checks are optional — they appear on the certificate only if you record them. Continue to signatures when ready.'}
       </p>
+      {inApplianceDetail ? (
       <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
         {(
           [
             { id: 'inspection', label: 'Inspection', count: inspectionCount },
             { id: 'readings', label: 'Readings', count: readingsCount },
             { id: 'safety', label: 'Safety', count: safetyCount },
-            { id: 'house', label: 'Property', count: houseCount },
           ] as {
             id: 'inspection' | 'readings' | 'safety' | 'house';
             label: string;
@@ -2833,10 +2968,12 @@ export function CertificateWizard({
           );
         })}
       </div>
+      ) : null}
 
-      {checksTab === 'inspection' && (
+      {inApplianceDetail && checksTab === 'inspection' && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
+            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             return (
             <div
@@ -2909,9 +3046,10 @@ export function CertificateWizard({
         </div>
       )}
 
-      {checksTab === 'readings' && (
+      {inApplianceDetail && checksTab === 'readings' && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
+            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             const combustionVis = cp12FieldVisibility(category, 'combustion');
             const hasCombustionValues =
@@ -3064,9 +3202,10 @@ export function CertificateWizard({
         </div>
       )}
 
-      {checksTab === 'safety' && (
+      {inApplianceDetail && checksTab === 'safety' && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
+            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             const classification = getApplianceSafetyClassification(appliance);
             const safeToUse = getApplianceSafeToUse(appliance);
@@ -3211,7 +3350,7 @@ export function CertificateWizard({
         </div>
       )}
 
-      {checksTab === 'house' && (
+      {!inApplianceDetail && (
         <div className="space-y-4">
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Whole-house safety (optional)</p>
@@ -3324,17 +3463,17 @@ export function CertificateWizard({
         <button
           type="button"
           onClick={() => {
-            if (checksTab === 'inspection') goBackOneStep();
+            if (!inApplianceDetail) goBackOneStep();
+            else if (checksTab === 'inspection') setStep(2);
             else if (checksTab === 'readings') setChecksTab('inspection');
-            else if (checksTab === 'safety') setChecksTab('readings');
-            else setChecksTab('safety');
+            else setChecksTab('readings');
           }}
           disabled={isPending}
           className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
         >
           Back
         </button>
-        {checksTab === 'house' ? (
+        {!inApplianceDetail ? (
           <button
             type="button"
             onClick={handleChecksNext}
@@ -3346,13 +3485,24 @@ export function CertificateWizard({
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </button>
+        ) : checksTab === 'safety' ? (
+          <button
+            type="button"
+            onClick={closeToHub}
+            disabled={isPending}
+            className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#1a7a52] text-[14px] font-medium text-white disabled:opacity-50"
+          >
+            Done · back to list
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          </button>
         ) : (
           <button
             type="button"
             onClick={() => {
               if (checksTab === 'inspection') setChecksTab('readings');
-              else if (checksTab === 'readings') setChecksTab('safety');
-              else setChecksTab('house');
+              else setChecksTab('safety');
             }}
             disabled={isPending}
             className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
