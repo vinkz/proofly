@@ -30,11 +30,11 @@ import { CP12_TEMPLATE_VERSION } from '@/lib/cp12/field-config';
 import { composeCp12DefectSummary, type Cp12DefectAppliance } from '@/lib/cp12/defect-summary';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 import {
-  renderGasServicePdf,
   type ApplianceInput as GasServiceApplianceInput,
   type GasServiceFieldMap,
 } from '@/server/pdf/renderGasServicePdf';
-import { renderGasWarningNoticePdf } from '@/server/pdf/renderGasWarningNoticePdf';
+import { renderGasServiceV2Pdf } from '@/server/pdf/renderGasServiceV2';
+import { renderGasWarningNoticeV2Pdf } from '@/server/pdf/renderGasWarningNoticeV2';
 import type { Customer } from '@/server/customer-service';
 import { getCustomerById, upsertCustomerFromJobFields } from '@/server/customer-service';
 import { formatJobAddress } from '@/lib/address';
@@ -2822,7 +2822,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     },
   ].filter((row) => Object.values(row).some((val) => typeof val === 'string' && val.trim().length > 0));
 
-  const pdfBytes = await renderGasServicePdf({
+  const pdfBytes = await renderGasServiceV2Pdf({
     fields: gasServiceFields,
     appliances,
     issuedAt,
@@ -3529,7 +3529,7 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       },
     );
 
-    const pdfBytes = await renderGasWarningNoticePdf({
+    const pdfBytes = await renderGasWarningNoticeV2Pdf({
       fields: gasWarningFields,
       issuedAt: gasWarningFields.issued_at ?? issuedAtIso,
       recordId: gasWarningFields.record_id ?? input.jobId,
