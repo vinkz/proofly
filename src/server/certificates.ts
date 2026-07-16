@@ -2818,7 +2818,12 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
       flueTerminationSatisfactory: pickText(getFieldText('appliance_flueing_safe'), getFieldText('service_flue_checked')),
       spillageTest: pickText(getFieldText('emission_combustion_test'), getFieldText('service_visual_inspection')),
       applianceSafeToUse: pickText(getFieldText('appliance_safe'), derivedApplianceSafe),
-      remedialActionTaken: pickText(getFieldText('defects_details'), getFieldText('defects_found')),
+      // Only the actual remedial-detail text — never the defects_found yes/no flag.
+      // Falling back to 'no' here made a clean service render a false "DEFECT
+      // IDENTIFIED" badge and a "Defect / remedial: no" line (the flag is not a
+      // remedial description). Validation already requires defects_details when a
+      // defect is present, so no fallback is needed.
+      remedialActionTaken: getFieldText('defects_details'),
     },
   ].filter((row) => Object.values(row).some((val) => typeof val === 'string' && val.trim().length > 0));
 

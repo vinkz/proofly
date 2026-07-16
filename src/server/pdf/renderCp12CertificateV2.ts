@@ -268,45 +268,63 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
     }
     y -= 15;
 
-    // captured attributes as a compact two-column grid — render-if-present only
-    const attrs: Array<[string, string]> = [];
-    const push = (label: string, v?: string) => { const t = text(v); if (t) attrs.push([label, t]); };
-    push('Location', app.location);
-    push('Type', app.type);
-    push('Flue type', app.flueType);
-    push('Flue location', app.flueLocation);
-    push('Operating pressure', app.operatingPressure);
-    push('Heat input', app.heatInput);
-    push('Safety device', app.safetyDevice);
-    push('Ventilation', app.ventilationSatisfactory);
-    push('Flue termination', app.flueTerminationSatisfactory);
-    push('Spillage test', app.spillageTest);
-    push('Serviced', app.applianceServiced);
-    push('Safe to use', app.applianceSafeToUse);
+    // Identity + safety verdict — part of the Reg 36(3) appliance description
+    // required for every appliance/flue listed (audit/cp12-field-analysis.md).
+    const identityAttrs: Array<[string, string]> = [];
+    const pushIdentity = (label: string, v?: string) => { const t = text(v); if (t) identityAttrs.push([label, t]); };
+    pushIdentity('Location', app.location);
+    pushIdentity('Type', app.type);
+    pushIdentity('Safe to use', app.applianceSafeToUse);
+
+    // Readings & checks — conventional detail (audit: "readings, CO alarms, next
+    // inspection date..." are Tier-2, not part of the Reg 36(3) legal minimum).
+    const readingAttrs: Array<[string, string]> = [];
+    const pushReading = (label: string, v?: string) => { const t = text(v); if (t) readingAttrs.push([label, t]); };
+    pushReading('Flue type', app.flueType);
+    pushReading('Flue location', app.flueLocation);
+    pushReading('Operating pressure', app.operatingPressure);
+    pushReading('Heat input', app.heatInput);
+    pushReading('Safety device', app.safetyDevice);
+    pushReading('Ventilation', app.ventilationSatisfactory);
+    pushReading('Flue termination', app.flueTerminationSatisfactory);
+    pushReading('Spillage test', app.spillageTest);
+    pushReading('Serviced', app.applianceServiced);
+
     const aColW = (CONTENT_W - colGap) / 2;
     const aLabelW = 108;
-    for (let r = 0; r < attrs.length; r += 2) {
-      ensure(13);
-      const row = attrs.slice(r, r + 2);
-      row.forEach(([label, v], c) => {
-        const x = M + c * (aColW + colGap);
-        draw(label, x, y, 8.5, font, C.muted);
-        const vLines = wrap(v, 9, font, aColW - aLabelW);
-        draw(vLines[0] + (vLines.length > 1 ? '…' : ''), x + aLabelW, y, 9, font, C.dark);
-      });
-      y -= 13;
-    }
+    const drawAttrGrid = (attrs: Array<[string, string]>) => {
+      for (let r = 0; r < attrs.length; r += 2) {
+        ensure(13);
+        const row = attrs.slice(r, r + 2);
+        row.forEach(([label, v], c) => {
+          const x = M + c * (aColW + colGap);
+          draw(label, x, y, 8.5, font, C.muted);
+          const vLines = wrap(v, 9, font, aColW - aLabelW);
+          draw(vLines[0] + (vLines.length > 1 ? '…' : ''), x + aLabelW, y, 9, font, C.dark);
+        });
+        y -= 13;
+      }
+    };
+    drawAttrGrid(identityAttrs);
+
     // Combustion readings render full-width so CO/CO₂/ratio are never truncated.
     const combHigh = [app.combustionHighCoPpm && `CO ${text(app.combustionHighCoPpm)}ppm`, app.combustionHighCo2 && `CO2 ${text(app.combustionHighCo2)}%`, app.combustionHighRatio && `ratio ${text(app.combustionHighRatio)}`].filter(Boolean).join('  /  ') || text(app.combustionHigh);
     const combLow = [app.combustionLowCoPpm && `CO ${text(app.combustionLowCoPpm)}ppm`, app.combustionLowCo2 && `CO2 ${text(app.combustionLowCo2)}%`, app.combustionLowRatio && `ratio ${text(app.combustionLowRatio)}`].filter(Boolean).join('  /  ') || text(app.combustionLow);
     const combLabelW = 128;
-    [['Combustion (high)', combHigh], ['Combustion (low)', combLow]].forEach(([label, v]) => {
-      if (!v) return;
-      ensure(13);
-      draw(label, M, y, 8.5, font, C.muted);
-      draw(v, M + combLabelW, y, 9, font, C.dark);
-      y -= 13;
-    });
+
+    if (readingAttrs.length || combHigh || combLow) {
+      ensure(11);
+      draw('READINGS & CHECKS', M, y, 7.5, bold, C.muted);
+      y -= 11;
+      drawAttrGrid(readingAttrs);
+      [['Combustion (high)', combHigh], ['Combustion (low)', combLow]].forEach(([label, v]) => {
+        if (!v) return;
+        ensure(13);
+        draw(label, M, y, 8.5, font, C.muted);
+        draw(v, M + combLabelW, y, 9, font, C.dark);
+        y -= 13;
+      });
+    }
     // per-appliance Reg 26(9) — reflects the actual captured flag
     const reg = affirmative(app.reg26Confirmed) ? 'Reg 26(9): confirmed for this appliance/flue' : 'Reg 26(9): not confirmed';
     draw(reg, M, y, 8.5, bold, affirmative(app.reg26Confirmed) ? C.safeFg : C.dangerFg); y -= 13;

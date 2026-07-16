@@ -30,6 +30,12 @@ const text = (value: unknown) => String(value ?? '').trim();
 const affirmative = (value: unknown) =>
   value === true || ['yes', 'y', 'true', '1', 'pass', 'ok', 'safe', 'satisfactory'].includes(text(value).toLowerCase());
 const negative = (value: unknown) => ['no', 'n', 'false', '0', 'fail', 'unsafe'].includes(text(value).toLowerCase());
+// A remedial field holding a bare yes/no answer or "none" is not a real defect
+// description — don't let such a value alone trigger the DEFECT badge.
+const isMeaningfulRemedial = (value: unknown) => {
+  const v = text(value).toLowerCase();
+  return v.length > 0 && !['no', 'n', 'false', '0', 'none', 'n/a', 'na', 'nil'].includes(v);
+};
 
 function addMonths(dmyOrIso: string, months: number): string | null {
   const dmy = dmyOrIso.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -179,7 +185,7 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
   const serviceDate = text(f.issuedDate) || input.issuedAt.toLocaleDateString('en-GB');
   draw('Reference', rX, rY, 8.5, font, C.muted); draw(text(f.certNumber) || input.recordId, rX + 66, rY, 9.5, bold, C.black); rY -= 13;
   draw('Service date', rX, rY, 8.5, font, C.muted); draw(serviceDate, rX + 66, rY, 9.5, bold, C.black); rY -= 16;
-  const defect = negative(f.applianceSafe) || Boolean(text(appliance?.remedialActionTaken));
+  const defect = negative(f.applianceSafe) || isMeaningfulRemedial(appliance?.remedialActionTaken);
   if (defect) badge('DEFECT IDENTIFIED', rX, rY, C.warnBg, C.warnFg);
   else if (affirmative(f.applianceSafe)) badge('APPLIANCE SAFE', rX, rY, C.safeBg, C.safeFg);
   rY -= 4;
@@ -210,7 +216,7 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
     (lines.length ? lines : ['—']).forEach((ln) => { draw(ln, x, cy, 9.5, font, C.dark); cy -= 12; });
     return cy;
   };
-  const pe = col('PROPERTY ADDRESS', propLines, M);
+  const pe = col('PROPERTY ADDRESS (SERVICE LOCATION)', propLines, M);
   const ce = col('CLIENT', clientLines, M + colW + colGap);
   y = Math.min(pe, ce) - 4;
 
@@ -239,11 +245,17 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
     ['Combustion test', text(f.emissionCombustionTest)],
   ] as Array<[string, string]>).filter(([, v]) => v));
 
-  // combustion readings — render-if-captured, full width so nothing truncates
+  // combustion readings — render-if-captured. These are Benchmark/manufacturer
+  // convention (mandatory only at commissioning, not at a routine service — see
+  // audit/gas-service-field-analysis.md), NOT part of the Reg 26(9) legal minimum
+  // above, so they get their own section rather than sitting under it.
   const combHigh = [f.highCombustionCoPpm && `CO ${text(f.highCombustionCoPpm)}ppm`, f.highCombustionCo2 && `CO2 ${text(f.highCombustionCo2)}%`, f.highCombustionRatio && `ratio ${text(f.highCombustionRatio)}`].filter(Boolean).join('  /  ');
   const combLow = [f.lowCombustionCoPpm && `CO ${text(f.lowCombustionCoPpm)}ppm`, f.lowCombustionCo2 && `CO2 ${text(f.lowCombustionCo2)}%`, f.lowCombustionRatio && `ratio ${text(f.lowCombustionRatio)}`].filter(Boolean).join('  /  ');
-  if (combHigh) kv('Combustion (high)', combHigh);
-  if (combLow) kv('Combustion (low)', combLow);
+  if (combHigh || combLow) {
+    section('Combustion readings');
+    if (combHigh) kv('Combustion (high)', combHigh);
+    if (combLow) kv('Combustion (low)', combLow);
+  }
 
   // ------------------------------------------------ service checks (Benchmark) — optional
   const serviceChecks: Array<[string, string]> = ([
@@ -271,11 +283,12 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
     ['System improvements recommended', text(f.systemImprovementsRecommended)],
     ['Warning notice explained', text(f.warningNoticeExplained)],
   ] as Array<[string, string]>).filter(([, v]) => v);
-  if (recs.length || text(f.engineerComments) || text(appliance?.remedialActionTaken)) {
+  const remedialText = isMeaningfulRemedial(appliance?.remedialActionTaken) ? text(appliance?.remedialActionTaken) : '';
+  if (recs.length || text(f.engineerComments) || remedialText) {
     section('Recommendations & comments');
     // Full-width so long recommendation labels never overlap their value.
     recs.forEach(([labelText, v]) => statement(`${labelText}: ${v}`, 9.5, C.dark));
-    if (text(appliance?.remedialActionTaken)) statement(`Defect / remedial: ${text(appliance?.remedialActionTaken)}`, 9.5, C.dark);
+    if (remedialText) statement(`Defect / remedial: ${remedialText}`, 9.5, C.dark);
     if (text(f.engineerComments)) statement(text(f.engineerComments), 9.5, C.dark);
   }
 
