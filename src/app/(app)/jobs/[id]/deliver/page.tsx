@@ -106,32 +106,13 @@ export default async function DeliverPage({ params }: { params: Promise<{ id: st
           </div>
         </section>
 
-        {/* Invoice — honest non-blocking */}
-        <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-5 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Invoice</p>
-              <p className="mt-0.5 text-[12px] text-[var(--color-text-tertiary)]">
-                {bundle.hasInvoice && bundle.invoiceStatus === 'issued'
-                  ? 'Issued — not attached to this delivery'
-                  : bundle.hasInvoice
-                    ? 'Draft — not included yet'
-                    : 'Not created — not included'}
-              </p>
-            </div>
-            {invoiceItem?.href ? (
-              <Link
-                href={invoiceItem.href}
-                className="h-[30px] shrink-0 rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] inline-flex items-center"
-              >
-                {bundle.hasInvoice ? 'View' : 'Create'}
-              </Link>
-            ) : null}
-          </div>
-        </section>
-
-        {/* Send panel */}
-        <SendPanel bundle={bundle} />
+        {/* Send panel — the invoice prompt appears here after sending, not before */}
+        <SendPanel
+          bundle={bundle}
+          invoiceHref={invoiceItem?.href ?? null}
+          invoiceExists={bundle.hasInvoice}
+          invoicePromptDismissed={state.invoicePromptDismissed}
+        />
 
         {/* Public link copy */}
         <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-5 py-4">

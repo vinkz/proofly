@@ -191,7 +191,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
           </div>
         </div>
         <p className="mt-2 text-[13px] text-[var(--color-text-secondary)]">
-          Review required documents before sending the handover bundle. Invoice is optional and does not block issuing.
+          Review required documents before sending the handover bundle. You can add an invoice after it&apos;s sent.
         </p>
       </div>
 
@@ -208,10 +208,20 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
               No required certificates inferred for this job.
             </p>
           )}
-          <div className="pb-1 pt-5">
-            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Optional</p>
-          </div>
-          {state.optional.map((item) => <ChecklistRow key={item.key ?? item.id} item={item} />)}
+          {(() => {
+            // Invoice is intentionally not shown here: the engineer is prompted to
+            // create/send it after the handover bundle is sent, not before.
+            const optionalShown = state.optional.filter((item) => item.id !== 'invoice');
+            if (!optionalShown.length) return null;
+            return (
+              <>
+                <div className="pb-1 pt-5">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Optional</p>
+                </div>
+                {optionalShown.map((item) => <ChecklistRow key={item.key ?? item.id} item={item} />)}
+              </>
+            );
+          })()}
         </div>
 
         {/* Send readiness panel */}

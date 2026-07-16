@@ -1621,6 +1621,8 @@ export type JobCompletionState = {
   // "Booked / Request sent" labels and gates the send button.
   renewalBookedDate: string | null;
   renewalRequestedAt: string | null;
+  // Whether the engineer dismissed the post-send invoice prompt for this job.
+  invoicePromptDismissed: boolean;
 };
 
 const dateOnlyOrEmpty = (value: unknown): string => {
@@ -1958,7 +1960,23 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
     hasLandlordEmail,
     renewalBookedDate,
     renewalRequestedAt,
+    invoicePromptDismissed: fieldValue('invoice_prompt_dismissed').trim() === 'true',
   };
+}
+
+// Persist that the engineer dismissed the post-send "create/send invoice" prompt
+// for this job, so it does not reappear on later visits to the delivery page.
+export async function dismissInvoicePrompt(jobId: string) {
+  if (!JobId.safeParse(jobId).success) throw new Error('Job not found');
+  const { sb, job } = await fetchOwnedJob(jobId, { write: true });
+  await persistJobFields(
+    sb,
+    job.id as string,
+    [{ job_id: job.id as string, field_key: 'invoice_prompt_dismissed', value: 'true' }],
+    'dismissInvoicePrompt',
+  );
+  revalidatePath(`/jobs/${jobId}/deliver`);
+  return { ok: true as const };
 }
 
 export async function getJobWizardState(jobId: string): Promise<JobWizardState> {

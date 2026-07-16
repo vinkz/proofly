@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react';
 
+import Link from 'next/link';
+
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import {
   sendDeliveryBundle,
@@ -9,6 +11,7 @@ import {
   type DeliveryBundle,
   type DeliveryRecipient,
 } from '@/server/delivery';
+import { dismissInvoicePrompt } from '@/server/jobs';
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
@@ -79,7 +82,17 @@ function WhatsAppButton({ bundle, recipient }: { bundle: DeliveryBundle; recipie
   );
 }
 
-export function SendPanel({ bundle }: { bundle: DeliveryBundle }) {
+export function SendPanel({
+  bundle,
+  invoiceHref,
+  invoiceExists,
+  invoicePromptDismissed,
+}: {
+  bundle: DeliveryBundle;
+  invoiceHref: string | null;
+  invoiceExists: boolean;
+  invoicePromptDismissed: boolean;
+}) {
   // Default to sending both the landlord and tenant their copy; the engineer can narrow it.
   const [recipient, setRecipient] = useState<DeliveryRecipient>('both');
   const [landlordEmail, setLandlordEmail] = useState(bundle.landlordEmail ?? '');
@@ -88,6 +101,19 @@ export function SendPanel({ bundle }: { bundle: DeliveryBundle }) {
   const [sentTo, setSentTo] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [invoiceDismissed, setInvoiceDismissed] = useState(invoicePromptDismissed);
+
+  const handleDismissInvoicePrompt = () => {
+    setInvoiceDismissed(true);
+    startTransition(async () => {
+      try {
+        await dismissInvoicePrompt(bundle.jobId);
+      } catch {
+        // Non-critical: the prompt is hidden locally regardless; it may reappear
+        // on a later visit if persisting the dismissal failed.
+      }
+    });
+  };
 
   const recipientEmail =
     recipient === 'landlord'
@@ -156,6 +182,35 @@ export function SendPanel({ bundle }: { bundle: DeliveryBundle }) {
         >
           {bundle.publicHref}
         </a>
+
+        {!invoiceDismissed && invoiceHref ? (
+          <div className="mt-4 rounded-[12px] border-[0.5px] border-white/15 bg-white/[0.06] p-4">
+            <p className="text-[13px] font-medium text-white">
+              {invoiceExists ? 'Invoice ready to send' : 'Bill for this job?'}
+            </p>
+            <p className="mt-0.5 text-[12px] text-white/60">
+              {invoiceExists
+                ? 'You have a draft invoice for this job — review and send it to the landlord.'
+                : 'Create an invoice for this job now, or add it later from the job.'}
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <Link
+                href={invoiceHref}
+                className="inline-flex h-[36px] flex-1 items-center justify-center rounded-[10px] bg-white text-[13px] font-medium text-[#111] transition-opacity hover:opacity-90"
+              >
+                {invoiceExists ? 'Review invoice' : 'Create invoice'}
+              </Link>
+              <button
+                type="button"
+                onClick={handleDismissInvoicePrompt}
+                disabled={isPending}
+                className="inline-flex h-[36px] items-center justify-center rounded-[10px] border-[0.5px] border-white/20 px-3 text-[13px] font-medium text-white/70 transition-colors hover:text-white disabled:opacity-50"
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
