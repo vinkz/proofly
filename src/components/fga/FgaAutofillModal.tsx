@@ -195,6 +195,8 @@ export function FgaAutofillModal({
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         <Input
+                          type="text"
+                          inputMode="decimal"
                           value={valueState[field.key] ?? ''}
                           onChange={(event) =>
                             setValueState((prev) => ({ ...prev, [field.key]: event.target.value }))

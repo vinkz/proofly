@@ -135,6 +135,14 @@ const firstDateFromPreferredDates = (value: string | null | undefined) => {
   return match?.[0] ?? '';
 };
 
+// Local "now" formatted for a <input type="datetime-local"> value, so a fresh Service
+// job defaults the scheduled date/time instead of forcing the engineer to pick it.
+const nowForDatetimeLocal = () => {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 16);
+};
+
 const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
   if (
     error instanceof Error &&
@@ -299,7 +307,9 @@ export function SoloJobForm({
   const [city, setCity] = useState(requestAddress.city);
   const [postcode, setPostcode] = useState(requestAddress.postcode);
   const [sitePhone, setSitePhone] = useState(initialRequest?.tenantPhone ?? initialRequest?.landlordPhone ?? '');
-  const [scheduledFor, setScheduledFor] = useState(requestPreferredDate ? `${requestPreferredDate}T09:00` : '');
+  const [scheduledFor, setScheduledFor] = useState(
+    requestPreferredDate ? `${requestPreferredDate}T09:00` : nowForDatetimeLocal(),
+  );
   const [jobType, setJobType] = useState<JobType>(
     initialSelection?.jobType ?? (initialRequest?.jobType === 'service' ? 'service' : 'safety_check'),
   );
@@ -449,7 +459,7 @@ export function SoloJobForm({
     setCity(address.city);
     setPostcode(address.postcode);
     setSitePhone(siteContact);
-    setScheduledFor(preferredDate ? `${preferredDate}T09:00` : '');
+    setScheduledFor(preferredDate ? `${preferredDate}T09:00` : nowForDatetimeLocal());
     setInspectionDate(preferredDate);
     setJobType(initialRequest.jobType === 'service' ? 'service' : 'safety_check');
     setJobTypeTouched(true);

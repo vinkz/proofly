@@ -600,11 +600,12 @@ export function BreakdownWizard({
                   onChange={(value) => setFields((prev) => ({ ...prev, combustion_co2: value }))}
                   placeholder="CO2 (%) (optional)"
                 />
-                <Input
+                <UnitNumberInput
+                  label="Ratio"
+                  unit="ratio"
                   value={fields.combustion_ratio}
-                  onChange={(e) => setFields((prev) => ({ ...prev, combustion_ratio: e.target.value }))}
+                  onChange={(value) => setFields((prev) => ({ ...prev, combustion_ratio: value }))}
                   placeholder="CO/CO2 ratio (optional)"
-                  className="rounded-2xl"
                 />
               </div>
             </div>
