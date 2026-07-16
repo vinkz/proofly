@@ -77,6 +77,15 @@ const SAFETY_CHECK_ITEMS: CheckItem[] = [
   { key: 'tightness_test_carried_out', label: 'Tightness Test carried out' },
 ];
 
+// Which SAFETY_CHECK_ITEMS satisfy a Reg 26(9) outcome that gates issue
+// (validateGasServiceForIssue's REG_26_9_OUTCOMES) vs conventional Benchmark
+// checks that don't block issue — see audit/gas-service-field-analysis.md.
+const SAFETY_CHECK_REQUIRED_KEYS = new Set<keyof BoilerServiceChecks>([
+  'appliance_operating_correctly',
+  'appliance_flueing_safe',
+  'appliance_ventilation_safe',
+]);
+
 const CENTRAL_HEATING_CHECK_ITEMS: CheckItem[] = [
   { key: 'boiler_working_correctly', label: 'Boiler/warm air working correctly' },
   { key: 'cylinder_condition_checked', label: 'Hot water cylinder condition checked and in working order' },
@@ -91,6 +100,14 @@ const ADVICE_CHECK_ITEMS: CheckItem[] = [
   { key: 'co_alarm_fitted', label: 'Approved audible Carbon Monoxide Alarm fitted*' },
   { key: 'appliance_safe', label: 'Appliance is safe' },
   { key: 'all_functional_parts_available', label: 'All functional parts available' },
+];
+
+// Structured advice to the customer. These print in the certificate's
+// "Recommendations & comments" section when answered (conventional, not required).
+const RECOMMENDATION_CHECK_ITEMS: CheckItem[] = [
+  { key: 'appliance_replacement_recommended', label: 'Appliance replacement recommended' },
+  { key: 'system_improvements_recommended', label: 'System improvements recommended' },
+  { key: 'warning_notice_explained', label: 'Warning notice explained to customer' },
 ];
 
 // Where each completion-checklist "Go" link lands focus once its step is shown.
@@ -236,6 +253,43 @@ const addOneYear = (dateOnly: string) => {
   parsed.setUTCFullYear(parsed.getUTCFullYear() + 1);
   return parsed.toISOString().slice(0, 10);
 };
+
+const SERVICE_SUMMARY_QUICK_PHRASES = [
+  'Annual service carried out in line with manufacturer schedule.',
+  'Serviced boiler, no defects found, appliance safe to use.',
+  'Full service completed; all safety checks passed.',
+  'Routine service — cleaned components, checked seals and condensate trap.',
+];
+
+const RECOMMENDATIONS_QUICK_PHRASES = [
+  'No further action required.',
+  'Monitor operating pressure at next visit.',
+  'Recommend power flush at next service.',
+  'Advise customer to book next service in 12 months.',
+];
+
+// Appends a tapped boilerplate phrase to existing free text, adding sentence-ending
+// punctuation between them so multiple chips can be combined into readable prose.
+const appendQuickPhrase = (current: string, phrase: string) => {
+  const trimmed = current.trim();
+  if (!trimmed) return phrase;
+  const needsPunctuation = !/[.!?]$/.test(trimmed);
+  return `${trimmed}${needsPunctuation ? '.' : ''} ${phrase}`;
+};
+
+// Flags whether a group of fields is part of the Reg 26(9) legal minimum or just
+// Benchmark/manufacturer convention — see audit/gas-service-field-analysis.md.
+function RequirementTag({ kind }: { kind: 'required' | 'conventional' }) {
+  return (
+    <span
+      className={`ml-1.5 normal-case tracking-normal ${
+        kind === 'required' ? 'text-[var(--color-action)]' : 'text-[rgba(255,255,255,0.35)]'
+      }`}
+    >
+      · {kind === 'required' ? 'Required (Reg 26(9))' : 'Conventional (Benchmark)'}
+    </span>
+  );
+}
 
 type AddressLookupApiResponse = {
   suggestions?: AddressLookupSuggestion[];
@@ -1827,7 +1881,10 @@ export function BoilerServiceWizard({
             <div className="space-y-4">
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">Gas pressure / rate</p>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">
+                    Gas pressure / rate
+                    <RequirementTag kind="required" />
+                  </p>
                   <Cp12VoiceReadings
                     jobId={jobId}
                     scope="pressure"
@@ -1853,7 +1910,10 @@ export function BoilerServiceWizard({
               </div>
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">High reading</p>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">
+                    High reading
+                    <RequirementTag kind="conventional" />
+                  </p>
                   <Cp12VoiceReadings
                     jobId={jobId}
                     scope="high"
@@ -1885,7 +1945,10 @@ export function BoilerServiceWizard({
               </div>
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">Low reading</p>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">
+                    Low reading
+                    <RequirementTag kind="conventional" />
+                  </p>
                   <Cp12VoiceReadings
                     jobId={jobId}
                     scope="low"
@@ -1923,8 +1986,29 @@ export function BoilerServiceWizard({
             subtitle={`${safetyCompleted}/${safetyTotal} complete`}
             defaultOpen={firstIncompleteKey === 'safety'}
           >
-            <div className="space-y-2">
-              {SAFETY_CHECK_ITEMS.map(renderCheckToggleWithComment)}
+            <div className="space-y-3">
+              <div>
+                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">
+                  Reg 26(9) safety examination
+                  <RequirementTag kind="required" />
+                </p>
+                <div className="space-y-2">
+                  {SAFETY_CHECK_ITEMS.filter((item) => SAFETY_CHECK_REQUIRED_KEYS.has(item.key)).map(
+                    renderCheckToggleWithComment,
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">
+                  Additional service checks
+                  <RequirementTag kind="conventional" />
+                </p>
+                <div className="space-y-2">
+                  {SAFETY_CHECK_ITEMS.filter((item) => !SAFETY_CHECK_REQUIRED_KEYS.has(item.key)).map(
+                    renderCheckToggleWithComment,
+                  )}
+                </div>
+              </div>
             </div>
           </CollapsibleSection>
 
@@ -1998,25 +2082,69 @@ export function BoilerServiceWizard({
               </div>
             ) : null}
             <CollapsibleSection
-              title="Summary & recommendations"
-              subtitle={summaryComplete ? 'Required notes complete' : 'Required notes missing'}
+              title="Summary & recommendations (optional)"
+              subtitle={summaryComplete ? 'Warranty / Benchmark · notes added' : 'Warranty / Benchmark · not required'}
               defaultOpen={firstIncompleteKey === 'summary'}
             >
               <div className="grid gap-3 sm:grid-cols-2">
-                <Textarea
-                  id="boiler-service-summary"
-                  value={checks.service_summary}
-                  onChange={(e) => setCheckValue('service_summary', e.target.value)}
-                  placeholder="Service summary (required)"
-                  className="min-h-[80px]"
-                />
-                <Textarea
-                  id="boiler-recommendations"
-                  value={checks.recommendations}
-                  onChange={(e) => setCheckValue('recommendations', e.target.value)}
-                  placeholder="Recommendations (required)"
-                  className="min-h-[80px]"
-                />
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {SERVICE_SUMMARY_QUICK_PHRASES.map((phrase) => (
+                      <button
+                        key={phrase}
+                        type="button"
+                        onClick={() =>
+                          setCheckValue('service_summary', appendQuickPhrase(checks.service_summary, phrase))
+                        }
+                        className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)] hover:text-[var(--color-text-primary)]"
+                      >
+                        {phrase}
+                      </button>
+                    ))}
+                  </div>
+                  <Textarea
+                    id="boiler-service-summary"
+                    value={checks.service_summary}
+                    onChange={(e) => setCheckValue('service_summary', e.target.value)}
+                    placeholder="Service summary (optional)"
+                    className="min-h-[80px]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {RECOMMENDATIONS_QUICK_PHRASES.map((phrase) => (
+                      <button
+                        key={phrase}
+                        type="button"
+                        onClick={() =>
+                          setCheckValue('recommendations', appendQuickPhrase(checks.recommendations, phrase))
+                        }
+                        className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)] hover:text-[var(--color-text-primary)]"
+                      >
+                        {phrase}
+                      </button>
+                    ))}
+                  </div>
+                  <Textarea
+                    id="boiler-recommendations"
+                    value={checks.recommendations}
+                    onChange={(e) => setCheckValue('recommendations', e.target.value)}
+                    placeholder="Recommendations (optional)"
+                    className="min-h-[80px]"
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.5px] text-[rgba(255,255,255,0.5)]">
+                  Advice to customer
+                  <RequirementTag kind="conventional" />
+                </p>
+                <p className="mb-2 text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">
+                  Answers here print in the certificate&apos;s Recommendations &amp; comments section.
+                </p>
+                <div className="space-y-2">
+                  {RECOMMENDATION_CHECK_ITEMS.map(renderCheckToggle)}
+                </div>
               </div>
             </CollapsibleSection>
             <CollapsibleSection
@@ -2062,7 +2190,7 @@ export function BoilerServiceWizard({
               </div>
             </CollapsibleSection>
             <CollapsibleSection
-              title="Next service due"
+              title="Next service due (optional)"
               subtitle={checks.next_service_due ? formatNextServiceDate(checks.next_service_due) : 'Set a reminder'}
               defaultOpen={firstIncompleteKey === 'next'}
             >

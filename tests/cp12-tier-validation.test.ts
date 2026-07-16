@@ -45,6 +45,14 @@ describe('validateCp12TierOne', () => {
     expect(validateCp12TierOne({ fields: validFields, appliances: [validAppliance] })).toEqual([]);
   });
 
+  it('does not require a separate record-level Regulation 26(9) flag (per-appliance is sufficient)', () => {
+    const errors = validateCp12TierOne({
+      fields: { ...validFields, reg_26_9_confirmed: false },
+      appliances: [validAppliance], // per-appliance reg_26_9_confirmed: true
+    });
+    expect(errors).toEqual([]);
+  });
+
   it('accepts a record with no customer signature (customer signature is optional)', () => {
     const errors = validateCp12TierOne({
       fields: { ...validFields, customer_signature_path: '', customer_signature: '', customer_signature_url: '' },

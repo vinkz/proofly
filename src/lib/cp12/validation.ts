@@ -60,9 +60,8 @@ export function validateCp12TierOne(input: Cp12TierOneInput): string[] {
   // Deliberately do not fall back to property_address: a landlord who lives at the
   // property may enter the same text, but it must have been captured as their address.
   if (!landlordAddress(fields)) errors.push(`${CP12_FIELD_CONFIG.landlord_address.label} is required`);
-  if (!isAffirmative(fields.reg_26_9_confirmed)) {
-    errors.push(`${CP12_FIELD_CONFIG.reg_26_9_confirmed.label} is required`);
-  }
+  // Regulation 26(9) is confirmed per appliance/flue (checked below), not as a
+  // separate record-level flag — the standalone confirmation was redundant.
 
   const activeAppliances = (appliances ?? []).filter((appliance) => hasText(appliance.appliance_type) || hasText(appliance.location) || hasText(appliance.make_model));
   if (!activeAppliances.length) {

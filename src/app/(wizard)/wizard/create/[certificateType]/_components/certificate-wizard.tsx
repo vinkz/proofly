@@ -17,7 +17,6 @@ import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { type CertificateType, type Cp12Appliance, type Cp12SafetyClassification, type PhotoCategory } from '@/types/certificates';
 import {
-  createCp12RemoteSignatureRequest,
   saveCp12JobInfo,
   uploadJobPhoto,
   updateField,
@@ -61,6 +60,7 @@ import {
   cp12FieldVisibility,
   resolveCp12Category,
   resolveCp12Subtype,
+  type Cp12ApplianceCategory,
 } from '@/lib/cp12/applianceConfig';
 
 type WizardProps = {
@@ -143,10 +143,19 @@ const addOneYearDateOnly = (value: string | null | undefined): string => {
   return date.toISOString().slice(0, 10);
 };
 
-const splitMakeModel = (value: string) => {
+const splitMakeModel = (value: string, category: Cp12ApplianceCategory = 'boiler') => {
   const trimmed = value.trim();
   if (!trimmed) return { make: '', model: '' };
-  const knownMake = KNOWN_MAKES.find((make) => trimmed.toLowerCase().startsWith(make.toLowerCase()));
+  // The appliance editor lets the user pick from a category-specific catalog (hob/cooker,
+  // gas fire, water heater, etc. each have their own makes), so the split has to check
+  // those makes too — not just the boiler-only KNOWN_MAKES — or non-boiler makes fall
+  // through to the "unrecognised" branch and the whole string lands in `make` with `model`
+  // left blank.
+  const categoryMakes = getApplianceCatalog(category)
+    .getMakes()
+    .filter((make) => make.toLowerCase() !== 'other');
+  const candidateMakes = Array.from(new Set([...categoryMakes, ...KNOWN_MAKES])).sort((a, b) => b.length - a.length);
+  const knownMake = candidateMakes.find((make) => trimmed.toLowerCase().startsWith(make.toLowerCase()));
   if (knownMake) {
     return { make: knownMake, model: trimmed.slice(knownMake.length).trim() };
   }
@@ -296,7 +305,6 @@ const CP12_ACTION_REQUIRED_PRESETS = ACTION_REQUIRED_PRESETS;
 const CP12_CHECKLIST_FOCUS_SELECTORS: Record<string, string> = {
   landlord: '[data-testid="cp12-landlord-name"]',
   'job-address': '#cp12-job-address-name',
-  reg26: '#cp12-reg26',
   signatures: '#cp12-signatures',
 };
 
@@ -586,11 +594,6 @@ export function CertificateWizard({
   const [showCustomerSignature, setShowCustomerSignature] = useState(
     Boolean((resolvedInitialInfo.customer_signature ?? '') || (resolvedInitialInfo.customer_signature_path ?? '')),
   );
-  const [remoteSignatureLink, setRemoteSignatureLink] = useState(
-    resolvedInitialInfo.cp12_remote_signature_token
-      ? `/sign/cp12/${resolvedInitialInfo.cp12_remote_signature_token}`
-      : '',
-  );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
@@ -809,8 +812,15 @@ export function CertificateWizard({
     if (!nextJobAddress.job_postcode.trim()) nextJobAddress.job_postcode = infoOverride.postcode.trim();
     if (!nextJobAddress.job_tel.trim()) nextJobAddress.job_tel = infoOverride.customer_phone.trim();
 
+    // Reg 26(9) is confirmed per appliance in the wizard; the record-level flag is
+    // now derived (true only when every appliance is confirmed) so the persisted
+    // field and the server's appliance-level fallback stay coherent without a
+    // separate manual checkbox.
+    const reg26Confirmed = appliances.length > 0 && appliances.every((a) => Boolean(a.reg_26_9_confirmed));
+
     const data = {
       ...infoOverride,
+      reg_26_9_confirmed: reg26Confirmed,
       inspection_date: infoOverride.inspection_date || completionDate,
       property_address: buildPropertyAddressFromJobAddress(nextJobAddress),
       postcode: nextJobAddress.job_postcode || infoOverride.postcode,
@@ -851,33 +861,7 @@ export function CertificateWizard({
       },
       jobPayload,
     };
-  }, [completionDate, evidenceFields, info, jobAddress, resolvedInitialInfo]);
-
-  const handleReg26ConfirmationChange = (checked: boolean) => {
-    const nextInfo = { ...info, reg_26_9_confirmed: checked };
-    setInfo(nextInfo);
-
-    if (!isOnline) return;
-
-    startTransition(async () => {
-      try {
-        const payload = buildCp12DraftPersistencePayload(nextInfo);
-        await saveCp12JobInfo({ jobId, data: payload.jobPayload });
-        setInfo(payload.data);
-        setJobAddress(payload.jobAddress);
-        markSynced(
-          { ...cp12Draft, jobAddress: payload.jobAddress, info: payload.data },
-          { ...cp12DraftSyncState, jobAddress: payload.jobAddress, info: payload.data },
-        );
-      } catch (error) {
-        pushToast({
-          title: 'Could not save Regulation 26(9) confirmation',
-          description: error instanceof Error ? error.message : 'Try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
+  }, [appliances, completionDate, evidenceFields, info, jobAddress, resolvedInitialInfo]);
 
   const syncCp12OfflineDraft = useCallback(async () => {
     if (!isCp12 || isOfflineDraftSyncing) return;
@@ -1569,55 +1553,6 @@ export function CertificateWizard({
     });
   };
 
-  const handleCreateRemoteSignatureLink = () => {
-    startTransition(async () => {
-      try {
-        if (isCp12) {
-          await persistCp12IssueState();
-          const errors = validateCurrentCp12({ requireCustomerSignature: false });
-          if (errors.length) {
-            pushToast({
-              title: 'CP12 requirements missing',
-              description: errors.join('; '),
-              variant: 'error',
-            });
-            return;
-          }
-        }
-
-        const result = await createCp12RemoteSignatureRequest({
-          jobId,
-          fields: {
-            engineer_signature: engineerSignature,
-            engineer_signature_path: engineerSignaturePath || undefined,
-            completion_date: completionDate,
-            next_inspection_due: evidenceFields.next_inspection_due ?? '',
-          },
-        });
-        const absoluteUrl =
-          result.shareUrl.startsWith('http') || typeof window === 'undefined'
-            ? result.shareUrl
-            : new URL(result.shareUrl, window.location.origin).toString();
-        setRemoteSignatureLink(absoluteUrl);
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(absoluteUrl);
-        }
-        clearDraft();
-        pushToast({
-          title: 'Remote signature link created',
-          description: 'The link has been copied to your clipboard.',
-          variant: 'success',
-        });
-      } catch (error) {
-        pushToast({
-          title: 'Could not create signature link',
-          description: error instanceof Error ? error.message : 'Try again.',
-          variant: 'error',
-        });
-      }
-    });
-  };
-
   const goBackOneStep = () => setStep((prev) => Math.max(firstStep, prev - 1));
 
   const setApplianceField = (index: number, key: keyof Cp12Appliance, value: string) => {
@@ -1746,6 +1681,15 @@ export function CertificateWizard({
     setActiveApplianceIndex(null);
     setStep(2);
   };
+  // Back from the checks step: within an appliance, step back through the
+  // sub-tabs (safety → readings → inspection) before returning to identity,
+  // so "Back" mirrors the forward Next path instead of always jumping out.
+  const handleChecksBack = () => {
+    if (activeApplianceIndex === null) { goBackOneStep(); return; }
+    if (checksTab === 'safety') setChecksTab('readings');
+    else if (checksTab === 'readings') setChecksTab('inspection');
+    else setStep(2);
+  };
   const removeActiveAppliance = () => {
     if (activeApplianceIndex == null) return;
     const idx = activeApplianceIndex;
@@ -1811,7 +1755,7 @@ export function CertificateWizard({
   const applianceProfiles = useMemo<ApplianceStepValues[]>(
     () =>
       (appliances.length ? appliances : [emptyAppliance]).map((appliance) => {
-        const { make, model } = splitMakeModel(appliance.make_model ?? '');
+        const { make, model } = splitMakeModel(appliance.make_model ?? '', resolveCp12Category(appliance.appliance_type));
         return {
           type: resolveCp12Category(appliance.appliance_type),
           subtype: resolveCp12Subtype(
@@ -2004,13 +1948,8 @@ export function CertificateWizard({
       });
     }
 
-    items.push({
-      id: 'reg26',
-      label: 'Regulation 26(9) confirmed',
-      ok: booleanFromField(info.reg_26_9_confirmed),
-      action: () => setStep(4),
-      blocking: true,
-    });
+    // Regulation 26(9) is confirmed per appliance in the appliance checks above,
+    // so there is no separate record-level confirmation item here.
 
     // Tier 1 — only the engineer signature is mandatory (HSE).
     items.push({
@@ -2110,7 +2049,6 @@ export function CertificateWizard({
     if (id === 'landlord') return 10;
     if (id === 'job-address') return 11;
     if (id.startsWith('appliance-')) return 20 + (Number(id.slice('appliance-'.length)) || 0);
-    if (id === 'reg26') return 40;
     if (id === 'signatures') return 41;
     if (id === 'completion') return 42;
     return 99;
@@ -2521,7 +2459,7 @@ export function CertificateWizard({
                 className="rounded-[8px]"
               />
               <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
-                Shown as &quot;Name&quot; in the Job Address section of the certificate. The tenant email pre-fills
+                Shown as the first line of the Property Address block on the certificate. The tenant email pre-fills
                 &quot;Send to tenant&quot; on the completion page.
               </p>
               <div className="relative sm:col-span-2">
@@ -2574,7 +2512,7 @@ export function CertificateWizard({
               <Input
                 value={jobAddress.job_address_line2}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_line2: e.target.value }))}
-                placeholder="Job address line 2"
+                placeholder="Property address line 2"
                 className="rounded-[8px] sm:col-span-2"
               />
               <Input
@@ -2606,7 +2544,7 @@ export function CertificateWizard({
                 className="rounded-[8px]"
               />
               <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
-                Shown as &apos;Tel. No&apos; in the Job Address section of the certificate.
+                Kept on the job for contacting the site. Not printed on the certificate.
               </p>
             </div>
           </div>
@@ -2940,12 +2878,12 @@ export function CertificateWizard({
       total={totalSteps}
       title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
       status={inApplianceDetail ? 'On-site checks' : 'Whole-installation checks'}
-      onBack={inApplianceDetail ? () => setStep(2) : goBackOneStep}
+      onBack={handleChecksBack}
     >
       {offlineDraftBanner}
       <p className="mb-3 text-[12px] leading-[1.5] text-[var(--color-text-tertiary)]">
         {inApplianceDetail
-          ? 'Required: the Regulation 26(9) confirmation. Readings and Safety are optional — they appear on the certificate only if you record them.'
+          ? 'Only the Regulation 26(9) confirmation is legally required. Everything else — Readings, Safety and the additional inspection detail — is conventional and prints on the certificate only if you record it.'
           : 'Whole-installation checks are optional — they appear on the certificate only if you record them. Continue to signatures when ready.'}
       </p>
       {inApplianceDetail ? (
@@ -2953,8 +2891,8 @@ export function CertificateWizard({
         {(
           [
             { id: 'inspection', label: 'Inspection', count: inspectionCount },
-            { id: 'readings', label: 'Readings', count: readingsCount },
-            { id: 'safety', label: 'Safety', count: safetyCount },
+            { id: 'readings', label: 'Readings (optional)', count: readingsCount },
+            { id: 'safety', label: 'Safety (optional)', count: safetyCount },
           ] as {
             id: 'inspection' | 'readings' | 'safety' | 'house';
             label: string;
@@ -3022,39 +2960,48 @@ export function CertificateWizard({
                     </label>
                   </div>
                 ) : null}
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                    <EnumChips
-                      label="Landlord's appliance"
-                      value={normalizeYesNoValue(appliance.landlords_appliance)}
-                      options={CP12_YES_NO_OPTIONS}
-                      onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
-                    />
-                  </div>
-                  <label className="flex items-start gap-2 rounded-[10px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3 text-[13px] text-[var(--color-text-primary)]">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 accent-[var(--color-action)]"
-                      checked={appliance.reg_26_9_confirmed ?? false}
-                      onChange={(event) => setApplianceBooleanField(index, 'reg_26_9_confirmed', event.target.checked)}
-                    />
-                    <span>Regulation 26(9) checks completed for this appliance or flue</span>
-                  </label>
-                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                    <EnumChips
-                      label="Appliance inspected"
-                      value={normalizeYesNoValue(appliance.appliance_inspected)}
-                      options={CP12_YES_NO_OPTIONS}
-                      onChange={(val) => setApplianceField(index, 'appliance_inspected', yesNoLabel(val as YesNoValue))}
-                    />
-                  </div>
-                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                    <EnumChips
-                      label="Appliance serviced"
-                      value={normalizeYesNoValue(appliance.appliance_serviced)}
-                      options={CP12_YES_NO_OPTIONS}
-                      onChange={(val) => setApplianceField(index, 'appliance_serviced', yesNoLabel(val as YesNoValue))}
-                    />
+                <label className="flex items-start gap-2 rounded-[10px] border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] p-3 text-[13px] text-[var(--color-text-primary)]">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-[var(--color-action)]"
+                    checked={appliance.reg_26_9_confirmed ?? false}
+                    onChange={(event) => setApplianceBooleanField(index, 'reg_26_9_confirmed', event.target.checked)}
+                  />
+                  <span>
+                    Regulation 26(9) checks completed for this appliance or flue
+                    <span className="ml-1 font-medium text-[var(--color-action)]">· Required</span>
+                  </span>
+                </label>
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                    Additional detail
+                    <span className="ml-1 normal-case tracking-normal text-[var(--color-text-tertiary)]">· Conventional (optional)</span>
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                      <EnumChips
+                        label="Landlord's appliance"
+                        value={normalizeYesNoValue(appliance.landlords_appliance)}
+                        options={CP12_YES_NO_OPTIONS}
+                        onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
+                      />
+                    </div>
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                      <EnumChips
+                        label="Appliance inspected"
+                        value={normalizeYesNoValue(appliance.appliance_inspected)}
+                        options={CP12_YES_NO_OPTIONS}
+                        onChange={(val) => setApplianceField(index, 'appliance_inspected', yesNoLabel(val as YesNoValue))}
+                      />
+                    </div>
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                      <EnumChips
+                        label="Appliance serviced"
+                        value={normalizeYesNoValue(appliance.appliance_serviced)}
+                        options={CP12_YES_NO_OPTIONS}
+                        onChange={(val) => setApplianceField(index, 'appliance_serviced', yesNoLabel(val as YesNoValue))}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3370,6 +3317,10 @@ export function CertificateWizard({
                             className="min-h-[80px]"
                           />
                         </div>
+                        <p className="text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">
+                          On-site actions taken (GIUSP). The Gas Warning Notice certificate itself is generated
+                          later from the completion checklist — these just record what you did at the property.
+                        </p>
                         <div className="grid gap-2 text-[13px] text-[var(--color-text-primary)] sm:grid-cols-3">
                           <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
                             <input
@@ -3378,7 +3329,7 @@ export function CertificateWizard({
                               checked={appliance.warning_notice_issued ?? false}
                               onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
                             />
-                            <span>Warning notice issued</span>
+                            <span>Warning notice given to customer on site</span>
                           </label>
                           <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
                             <input
@@ -3525,12 +3476,7 @@ export function CertificateWizard({
       <div id="cp12-step3-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         <button
           type="button"
-          onClick={() => {
-            if (!inApplianceDetail) goBackOneStep();
-            else if (checksTab === 'inspection') setStep(2);
-            else if (checksTab === 'readings') setChecksTab('inspection');
-            else setChecksTab('readings');
-          }}
+          onClick={handleChecksBack}
           disabled={isPending}
           className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
         >
@@ -3555,7 +3501,7 @@ export function CertificateWizard({
             disabled={isPending}
             className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[22px] bg-[#1a7a52] text-[14px] font-medium text-white disabled:opacity-50"
           >
-            Done · back to list
+            Save · appliance list
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 6L9 17l-5-5" />
             </svg>
@@ -3600,27 +3546,6 @@ export function CertificateWizard({
     >
       <div className="space-y-3">
         {offlineDraftBanner}
-        <label
-          className={`flex cursor-pointer items-start gap-3 rounded-[12px] border bg-[var(--color-background-primary)] p-3 ${
-            info.reg_26_9_confirmed
-              ? 'border-[0.5px] border-[var(--color-border-tertiary)]'
-              : 'border-[var(--color-amber)] bg-[var(--color-amber-bg)]'
-          }`}
-        >
-          <input
-            id="cp12-reg26"
-            type="checkbox"
-            className="mt-1 h-4 w-4 accent-[var(--color-action)]"
-            checked={info.reg_26_9_confirmed}
-            onChange={(e) => handleReg26ConfirmationChange(e.target.checked)}
-          />
-          <div>
-            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Regulation 26(9) confirmed</p>
-            <p className="text-[12px] text-[var(--color-text-tertiary)]">
-              Confirm this before issuing the CP12. It is saved with the final certificate details.
-            </p>
-          </div>
-        </label>
         {cp12RequiredItemsPanel}
         {!info.landlord_email.trim() ? (
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] p-4 text-[13px] text-[var(--color-text-primary)]">
@@ -3693,39 +3618,6 @@ export function CertificateWizard({
           }}
         />
         </div>
-        {remoteSignatureLink ? (
-          <div className="rounded-[16px] border-[0.5px] border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-[13px] font-medium text-emerald-900">Remote landlord signature link ready</p>
-            <p className="mt-1 text-[12px] text-emerald-800">
-              Share this link with the landlord or responsible person to review and sign the CP12 remotely.
-            </p>
-            <div className="mt-3 rounded-[8px] border-[0.5px] border-emerald-200 bg-[var(--color-background-primary)] px-3 py-2 text-[12px] text-emerald-950">
-              {remoteSignatureLink}
-            </div>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={async () => {
-                  if (navigator.clipboard?.writeText) {
-                    await navigator.clipboard.writeText(remoteSignatureLink);
-                    pushToast({ title: 'Signature link copied', variant: 'success' });
-                  }
-                }}
-              >
-                Copy link
-              </Button>
-              <Link
-                href={remoteSignatureLink}
-                target="_blank"
-                className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-medium text-emerald-900 ring-1 ring-emerald-200"
-              >
-                Open signature page
-              </Link>
-            </div>
-          </div>
-        ) : null}
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
           <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Completion</p>
           <Input
@@ -3768,14 +3660,6 @@ export function CertificateWizard({
           className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)]"
         >
           Edit
-        </button>
-        <button
-          type="button"
-          disabled={isBusy || !isOnline}
-          onClick={handleCreateRemoteSignatureLink}
-          className="flex h-[44px] flex-1 items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
-        >
-          {!isOnline ? 'Online required' : isPending ? 'Preparing…' : 'Send to landlord'}
         </button>
         <button
           type="button"
