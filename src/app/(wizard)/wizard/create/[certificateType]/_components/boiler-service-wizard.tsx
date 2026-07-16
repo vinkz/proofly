@@ -1284,13 +1284,6 @@ export function BoilerServiceWizard({
     handleGenerateRef.current();
   }, [boilerMissingItems.length, isOnline, isPending, queuedIssue]);
 
-  const formatNextServiceDate = (dateStr: string) => {
-    if (!dateStr) return dateStr;
-    const d = new Date(`${dateStr}T00:00:00`);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-  };
-
   // Walk the engineer top-to-bottom: profile (href) items first, then by step.
   const sortedBoilerMissing = [...boilerMissingItems].sort(
     (a, b) => (a.href ? 0 : a.step ?? 99) - (b.href ? 0 : b.step ?? 99),
@@ -2081,12 +2074,9 @@ export function BoilerServiceWizard({
                 </Button>
               </div>
             ) : null}
-            <CollapsibleSection
-              title="Summary & recommendations (optional)"
-              subtitle={summaryComplete ? 'Warranty / Benchmark · notes added' : 'Warranty / Benchmark · not required'}
-              defaultOpen={firstIncompleteKey === 'summary'}
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Summary &amp; recommendations (optional)</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap gap-1.5">
                     {SERVICE_SUMMARY_QUICK_PHRASES.map((phrase) => (
@@ -2146,13 +2136,10 @@ export function BoilerServiceWizard({
                   {RECOMMENDATION_CHECK_ITEMS.map(renderCheckToggle)}
                 </div>
               </div>
-            </CollapsibleSection>
-            <CollapsibleSection
-              title="Defects & parts"
-              subtitle={checks.defects_found === 'yes' ? 'Defects recorded' : 'No defects'}
-              defaultOpen={firstIncompleteKey === 'defects'}
-            >
-              <div className="space-y-3">
+            </div>
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Defects &amp; parts</p>
+              <div className="mt-3 space-y-3">
                 <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                   <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Defects found?</p>
                   <div className="mt-2 flex gap-2">
@@ -2188,21 +2175,7 @@ export function BoilerServiceWizard({
                   <p className="text-[12px] text-[var(--color-text-tertiary)]">No defects recorded for this service.</p>
                 )}
               </div>
-            </CollapsibleSection>
-            <CollapsibleSection
-              title="Next service due (optional)"
-              subtitle={checks.next_service_due ? formatNextServiceDate(checks.next_service_due) : 'Set a reminder'}
-              defaultOpen={firstIncompleteKey === 'next'}
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                  type="date"
-                  value={checks.next_service_due}
-                  onChange={(e) => setCheckValue('next_service_due', e.target.value)}
-                  min={jobInfo.service_date || jobAddress.job_visit_date || completionDate || undefined}
-                />
-              </div>
-            </CollapsibleSection>
+            </div>
             <div id="boiler-signatures" className="space-y-3">
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
               {showCustomerSignature ? (
@@ -2226,8 +2199,21 @@ export function BoilerServiceWizard({
                 className="mt-2"
               />
             </div>
-            <details className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-              <summary className="cursor-pointer text-[13px] font-medium text-[var(--color-text-primary)]">Internal evidence (optional)</summary>
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Next service due (optional)</p>
+              <Input
+                type="date"
+                value={checks.next_service_due}
+                onChange={(e) => setCheckValue('next_service_due', e.target.value)}
+                min={jobInfo.service_date || jobAddress.job_visit_date || completionDate || undefined}
+                className="mt-2"
+              />
+              <p className="mt-1.5 text-[12px] text-[var(--color-text-tertiary)]">
+                Auto-set to 12 months after completion. Edit if the next service should fall on a different date.
+              </p>
+            </div>
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Evidence photos (optional)</p>
               <div className="mt-3">
                 <EvidenceCard
                   title="Upload photos"
@@ -2237,7 +2223,7 @@ export function BoilerServiceWizard({
                   onPhotoUpload={handleEvidenceUpload(FINAL_EVIDENCE_DEFAULT)}
                 />
               </div>
-            </details>
+            </div>
           </div>
           <div id="boiler-step4-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
             <button
