@@ -167,13 +167,9 @@ const SoloJobSchema = z
           message: 'Job postcode is required',
         });
       }
-      if (!value.jobAddressTel || value.jobAddressTel.trim().length < 1) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['jobAddressTel'],
-          message: 'Site telephone is required',
-        });
-      }
+      // Site telephone is an internal, optional contact detail — it is not printed
+      // on the certificate and the UI labels it "Optional", so it must not block
+      // job creation.
       if (!value.landlordName || value.landlordName.trim().length < 1) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -492,6 +488,9 @@ export async function listJobs() {
   if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
 
   const columnVariants = [
+    // certificate_type / parent_job_id are legacy migration columns; the 42703
+    // fallback below drops to a variant without them if a DB doesn't have them yet.
+    'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, completed_at, engineer_signature_path, client_signature_path, job_type, certificate_type, parent_job_id',
     'id, client_name, address, status, created_at, user_id, scheduled_for, title, technician_name, template_id, completed_at, engineer_signature_path, client_signature_path, job_type',
     'id, client_name, address, status, created_at, user_id',
   ];
@@ -1053,7 +1052,17 @@ export async function getPrefillJobSummary(jobId: string, token: string) {
 }
 
 export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
-  const input = SoloJobSchema.parse(payload);
+  let input: z.infer<typeof SoloJobSchema>;
+  try {
+    input = SoloJobSchema.parse(payload);
+  } catch (error) {
+    // Surface the first field message (e.g. "Landlord / owner name is required")
+    // rather than the raw ZodError JSON, which was leaking into the UI toast.
+    if (error instanceof z.ZodError) {
+      throw new Error(error.issues[0]?.message ?? 'Please check the job details and try again.');
+    }
+    throw error;
+  }
   const readClient = await supabaseServerReadOnly();
   const user = await getSupabaseUser(readClient);
   if (!user) throw new Error('Unauthorized');
@@ -1848,7 +1857,7 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
             : gwnJob
               ? `/wizard/create/gas_warning_notice?jobId=${gwnJob.id}`
               : `/wizard/create/gas_warning_notice?parentJobId=${jobId}&applianceKey=${applianceKey}`,
-        editHref: gwnJob ? `/wizard/create/gas_warning_notice?jobId=${gwnJob.id}` : null,
+        editHref: gwnJob ? `/wizard/create/gas_warning_notice?jobId=${gwnJob.id}&edit=1` : null,
         completedAt: null,
       });
     });
@@ -1867,7 +1876,7 @@ export async function getJobCompletionState(jobId: string): Promise<JobCompletio
       href: gasWarningNoticeCertificate
         ? `/jobs/${jobId}/pdf?certificateType=gas_warning_notice`
         : `/wizard/create/gas_warning_notice?jobId=${jobId}`,
-      editHref: gasWarningNoticeCertificate ? `/wizard/create/gas_warning_notice?jobId=${jobId}` : null,
+      editHref: gasWarningNoticeCertificate ? `/wizard/create/gas_warning_notice?jobId=${jobId}&edit=1` : null,
       completedAt:
         typeof gasWarningNoticeCertificate?.issued_at === 'string'
           ? gasWarningNoticeCertificate.issued_at

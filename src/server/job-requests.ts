@@ -459,8 +459,12 @@ export async function getOrCreateEngineerRequestLink() {
   };
   const slug = await persistEngineerRequestSlug(admin, user.id, buildReadableRequestSlug(slugInput), slugInput);
 
-  revalidatePath('/dashboard');
-  revalidatePath('/jobs/new');
+  // NOTE: do NOT call revalidatePath() here. This function is awaited during the
+  // render of the New Job page (a Server Component), and revalidatePath() during
+  // render is unsupported by Next.js — it threw and crashed a brand-new engineer's
+  // first visit to /jobs/new (the slug is created lazily on that first render).
+  // The freshly-created slug is returned directly, and the dashboard re-reads it on
+  // its next load, so no explicit revalidation is needed.
   const path = `/request/${slug}`;
   return { slug, path, url: `${getSiteUrl()}${path}` };
 }
@@ -792,6 +796,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
       '',
       `Property: ${propertyAddress}`,
       `Work needed: ${formatJobType(request.jobType)}`,
+      `Preferred date: ${request.preferredDates || 'Flexible'}`,
       `Engineer: ${engineerPublicName}`,
       `Submitted: ${formatDate(new Date().toISOString())}`,
       '',
@@ -804,6 +809,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
         infoCard('Your request', [
           { label: 'Property', value: propertyAddress },
           { label: 'Work needed', value: formatJobType(request.jobType) },
+          { label: 'Preferred date', value: request.preferredDates || 'Flexible' },
           { label: 'Engineer', value: engineerPublicName || 'Your engineer' },
           { label: 'Submitted', value: formatDate(new Date().toISOString()) },
         ]),

@@ -1457,6 +1457,10 @@ export function BoilerServiceWizard({
           total={totalSteps}
           title="Job Address & Client"
           status="Visit details"
+          // "Back" from the first step returns to the job's completion checklist — the
+          // hub where a combined CP12 + service job lists both certificates, so the
+          // engineer can switch which one to work on rather than only closing out.
+          onBack={() => router.push(`/jobs/${jobId}/complete`)}
           actionsHideWhenVisibleId="boiler-step1-footer-actions"
           actions={
             <button
@@ -1498,12 +1502,12 @@ export function BoilerServiceWizard({
                 </div>
                 <div>
                   <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                    Tenant name
+                    Flat / unit
                   </label>
                   <Input
                     value={jobAddress.job_address_name}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                    placeholder="Tenant name"
+                    placeholder="Flat / unit (optional)"
                     className="mt-1"
                   />
                 </div>

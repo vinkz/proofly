@@ -579,7 +579,12 @@ export async function sendInvoiceEmail(invoiceId: string, toEmail: string, pdfUr
   const rows = (lineItems ?? []) as Array<{ description?: string | null; quantity?: number | string | null; unit_price?: number | string | null }>;
   const total = rows.reduce((sum, row) => sum + Number(row.quantity ?? 1) * Number(row.unit_price ?? 0), 0);
   const companyName = titleCase(profile.company_name || profile.full_name || 'CertNow engineer');
-  const address = joinAddress([invoiceRow.client_address_override, job.address], 'the property');
+  // The "Property" / "work at" line is the address where the work was done — the
+  // linked job's property address. It must not include the landlord's separate
+  // billing/correspondence address (client_address_override), which previously got
+  // concatenated in, producing a muddled "work at <billing>, <property>" string.
+  // Fall back to the billing address only for standalone invoices with no job.
+  const address = joinAddress([job.address || invoiceRow.client_address_override], 'the property');
   const work = rows.map((row) => row.description).filter(Boolean).join(', ') || job.job_type || 'Gas safety work';
   const subject = `Invoice ${invoiceRow.invoice_number} from ${companyName}`;
 
@@ -632,7 +637,12 @@ export async function setInvoiceMeta(invoiceId: string, meta: InvoiceMetaInput) 
   const { sb, user } = await getAuthedClient();
 
   const updates: Record<string, unknown> = {};
-  if (meta.status !== undefined) updates.status = meta.status;
+  if (meta.status !== undefined) {
+    // The invoices_status_check constraint allows only draft/issued/paid/void.
+    // 'unpaid'/'overdue' are display-only states — map them to the persisted
+    // 'issued' so a stray caller can never violate the constraint on save.
+    updates.status = meta.status === 'unpaid' || meta.status === 'overdue' ? 'issued' : meta.status;
+  }
   if (meta.issue_date !== undefined) updates.issue_date = meta.issue_date;
   if (meta.due_date !== undefined) updates.due_date = meta.due_date;
   if (meta.notes !== undefined) updates.notes = meta.notes;

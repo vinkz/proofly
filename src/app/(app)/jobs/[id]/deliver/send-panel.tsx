@@ -9,11 +9,25 @@ import {
   sendDeliveryBundle,
   updateDeliveryRecipientEmails,
   type DeliveryBundle,
-  type DeliveryRecipient,
 } from '@/server/delivery';
 import { dismissInvoicePrompt } from '@/server/jobs';
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
+/**
+ * Normalises a stored phone number into a wa.me target (digits only, no '+').
+ * UK-focused: a leading 0 is treated as the UK national prefix and swapped for 44.
+ * Returns null when there aren't enough digits to form a usable number.
+ */
+const toWhatsAppNumber = (raw: string | null | undefined): string | null => {
+  if (!raw) return null;
+  let value = raw.replace(/[^\d+]/g, '');
+  if (value.startsWith('+')) value = value.slice(1);
+  else if (value.startsWith('00')) value = value.slice(2);
+  else if (value.startsWith('0')) value = `44${value.slice(1)}`;
+  value = value.replace(/\D/g, '');
+  return value.length >= 8 ? value : null;
+};
 
 function EmailField({
   label,
@@ -46,11 +60,8 @@ function EmailField({
   );
 }
 
-function WhatsAppButton({ bundle, recipient }: { bundle: DeliveryBundle; recipient: DeliveryRecipient }) {
-  const name =
-    recipient === 'tenant'
-      ? (bundle.tenantName ?? 'there')
-      : (bundle.landlordName ?? 'there');
+function WhatsAppButton({ bundle }: { bundle: DeliveryBundle }) {
+  const name = bundle.landlordName ?? 'there';
   const message = [
     `Hi ${name},`,
     '',
@@ -65,7 +76,12 @@ function WhatsAppButton({ bundle, recipient }: { bundle: DeliveryBundle; recipie
     .join('\n')
     .trim();
 
-  const href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  // When a landlord number is on file, open a chat with them directly; otherwise
+  // fall back to WhatsApp's contact picker.
+  const number = toWhatsAppNumber(bundle.landlordPhone);
+  const href = number
+    ? `https://wa.me/${number}?text=${encodeURIComponent(message)}`
+    : `https://wa.me/?text=${encodeURIComponent(message)}`;
 
   return (
     <a
@@ -93,10 +109,10 @@ export function SendPanel({
   invoiceExists: boolean;
   invoicePromptDismissed: boolean;
 }) {
-  // Default to sending both the landlord and tenant their copy; the engineer can narrow it.
-  const [recipient, setRecipient] = useState<DeliveryRecipient>('both');
+  // The certificate always goes to the landlord (the responsible person). It is the
+  // landlord's legal duty to forward a copy to tenants within 28 days, so we no
+  // longer send to tenants directly.
   const [landlordEmail, setLandlordEmail] = useState(bundle.landlordEmail ?? '');
-  const [tenantEmail, setTenantEmail] = useState(bundle.tenantEmail ?? '');
   const [sent, setSent] = useState(false);
   const [sentTo, setSentTo] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -115,39 +131,20 @@ export function SendPanel({
     });
   };
 
-  const recipientEmail =
-    recipient === 'landlord'
-      ? landlordEmail.trim()
-      : recipient === 'tenant'
-        ? tenantEmail.trim()
-        : [landlordEmail.trim(), tenantEmail.trim()].filter(Boolean).join(' & ');
-  const landlordEmailValidOrBlank = !landlordEmail.trim() || isValidEmail(landlordEmail);
-  const tenantEmailValidOrBlank = !tenantEmail.trim() || isValidEmail(tenantEmail);
-
-  const canSend = Boolean(
-    (recipient === 'landlord' && isValidEmail(landlordEmail)) ||
-      (recipient === 'tenant' && isValidEmail(tenantEmail)) ||
-      (recipient === 'both' &&
-        landlordEmailValidOrBlank &&
-        tenantEmailValidOrBlank &&
-        (isValidEmail(landlordEmail) || isValidEmail(tenantEmail))),
-  );
+  const canSend = isValidEmail(landlordEmail);
 
   const handleSend = () => {
     setError(null);
     startTransition(async () => {
       try {
-        const saveResult = await updateDeliveryRecipientEmails(bundle.jobId, {
-          landlordEmail,
-          tenantEmail,
-        });
+        const saveResult = await updateDeliveryRecipientEmails(bundle.jobId, { landlordEmail });
         if (!saveResult.ok) {
           setError(saveResult.error ?? 'Could not save recipient email.');
           return;
         }
-        const result = await sendDeliveryBundle(bundle.jobId, recipient, 'email');
+        const result = await sendDeliveryBundle(bundle.jobId);
         if (result.ok) {
-          track(ANALYTICS_EVENTS.certificateSent, { recipient_type: recipient });
+          track(ANALYTICS_EVENTS.certificateSent, { recipient_type: 'landlord' });
           setSent(true);
           setSentTo(result.recipientsSent);
         } else {
@@ -182,6 +179,11 @@ export function SendPanel({
         >
           {bundle.publicHref}
         </a>
+
+        {/* Also offer WhatsApp after emailing so the engineer can send via both. */}
+        <div className="mt-4">
+          <WhatsAppButton bundle={bundle} />
+        </div>
 
         {!invoiceDismissed && invoiceHref ? (
           <div className="mt-4 rounded-[12px] border-[0.5px] border-white/15 bg-white/[0.06] p-4">
@@ -218,61 +220,28 @@ export function SendPanel({
   return (
     <div className="rounded-[16px] bg-[#111] p-5 text-white">
       <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-white/50">Send documents</p>
-      <h2 className="mt-2 text-[18px] font-semibold">Send to recipient</h2>
+      <h2 className="mt-2 text-[18px] font-semibold">Send to landlord</h2>
       <p className="mt-1 text-[13px] text-white/60">
-        Certificate PDF will be attached. Recipient gets a permanent link — no login needed.
+        Certificate PDF will be attached. The landlord gets a permanent link — no login needed. Send by email,
+        WhatsApp, or both.
       </p>
 
-      {/* Recipient toggle */}
-      <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-[10px] bg-white/10 p-1">
-        {(
-          [
-            { value: 'landlord', label: 'Landlord' },
-            { value: 'tenant', label: 'Tenant' },
-            { value: 'both', label: 'Both' },
-          ] as const
-        ).map(({ value, label }) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setRecipient(value)}
-            className={`h-[32px] rounded-[8px] text-[12px] font-medium transition-colors ${
-              recipient === value
-                ? 'bg-white text-[#111]'
-                : 'text-white/60 hover:text-white/90'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Recipient detail */}
-      <div className="mt-3 space-y-3 rounded-[10px] border-[0.5px] border-white/10 px-3 py-3">
-        {recipient === 'landlord' || recipient === 'both' ? (
-          <EmailField
-            label="Landlord email"
-            value={landlordEmail}
-            onChange={setLandlordEmail}
-            placeholder="landlord@example.com"
-          />
-        ) : null}
-        {recipient === 'tenant' || recipient === 'both' ? (
-          <EmailField
-            label="Tenant email"
-            value={tenantEmail}
-            onChange={setTenantEmail}
-            placeholder="tenant@example.com"
-          />
-        ) : null}
-        {!recipientEmail ? (
-          <p className="text-[12px] text-white/35">Add an email here to send without returning to Step 1.</p>
+      {/* Landlord email */}
+      <div className="mt-4 space-y-3 rounded-[10px] border-[0.5px] border-white/10 px-3 py-3">
+        <EmailField
+          label="Landlord email"
+          value={landlordEmail}
+          onChange={setLandlordEmail}
+          placeholder="landlord@example.com"
+        />
+        {!landlordEmail.trim() ? (
+          <p className="text-[12px] text-white/35">
+            Add a landlord email to send the bundle by email — or share via WhatsApp below.
+          </p>
         ) : null}
       </div>
 
-      {error ? (
-        <p className="mt-3 text-[12px] text-[var(--color-red)]">{error}</p>
-      ) : null}
+      {error ? <p className="mt-3 text-[12px] text-[var(--color-red)]">{error}</p> : null}
 
       <button
         type="button"
@@ -284,7 +253,7 @@ export function SendPanel({
       </button>
 
       <div className="mt-2.5">
-        <WhatsAppButton bundle={bundle} recipient={recipient} />
+        <WhatsAppButton bundle={bundle} />
       </div>
 
       <a

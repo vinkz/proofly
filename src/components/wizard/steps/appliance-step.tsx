@@ -248,12 +248,10 @@ export function ApplianceStep({
         updated.model = '';
       }
       const catalog = getCatalog(updated.type);
-      if (key === 'make') {
-        const models = catalog.getModelsForMake(value);
-        if (updated.model && models.length && !models.includes(updated.model)) {
-          updated.model = '';
-        }
-      }
+      // NOTE: do not clear the model when a known make is chosen. A model that
+      // isn't in the make's catalog is kept as a manual ("Not listed") entry — the
+      // render below handles that — so free-typed model text is never silently lost
+      // when the engineer picks the make afterwards.
       if (key === 'model' || key === 'make') {
         const entry = catalog.getEntry(updated.make ?? '', updated.model ?? '');
         return applyEntryDefaults(updated, entry);

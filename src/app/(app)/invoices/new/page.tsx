@@ -59,8 +59,23 @@ export default async function NewInvoicePage({
     if (existingErr) throw new Error(existingErr.message);
     if (existing?.id) redirect(`/invoices/${existing.id}${editorQuery}`);
 
-    const invoice = await createInvoiceForJob(jobId);
-    redirect(`/invoices/${invoice.id}${editorQuery}`);
+    // Create the invoice, but never crash the whole route if the job can't be found
+    // or invoiced (e.g. a stale/non-owned jobId, or a linked follow-up job like a
+    // Gas Warning Notice that isn't independently invoiceable). Fall back to the job
+    // picker instead of throwing an unhandled "Job not found" runtime error.
+    let createdInvoiceId: string | null = null;
+    try {
+      const invoice = await createInvoiceForJob(jobId);
+      createdInvoiceId = invoice.id;
+    } catch (error) {
+      console.warn('NewInvoicePage: createInvoiceForJob failed', {
+        jobId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (createdInvoiceId) redirect(`/invoices/${createdInvoiceId}${editorQuery}`);
+    // Job wasn't invoiceable — show the picker so the user can choose a valid job.
+    redirect('/invoices/new');
   }
 
   if (guided === '1') {
@@ -107,6 +122,9 @@ export default async function NewInvoicePage({
     .from('jobs')
     .select('id, client_name, address, title, status, created_at, job_code')
     .eq('user_id', user.id)
+    // Exclude linked follow-up jobs (e.g. Gas Warning Notices) — they are billed as
+    // part of their parent job, not invoiced on their own.
+    .is('parent_job_id', null)
     .order('created_at', { ascending: false })
     .limit(50) as Promise<{ data: JobSummary[] | null; error: { message: string } | null }>);
   if (jobsErr) throw new Error(jobsErr.message);

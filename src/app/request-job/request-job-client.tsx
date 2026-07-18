@@ -1,6 +1,6 @@
 'use client';
 
-import { useDeferredValue, useEffect, useState, useTransition } from 'react';
+import { useDeferredValue, useEffect, useRef, useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -100,7 +100,6 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
   const [engineerPhone, setEngineerPhone] = useState('');
 
   // Job details
-  const [tenantName, setTenantName] = useState('');
   const [sitePhone, setSitePhone] = useState('');
   const [accessNotes, setAccessNotes] = useState('');
   const [jobType, setJobType] = useState<'cp12' | 'service' | 'both' | 'other'>('cp12');
@@ -114,8 +113,20 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
   const [stepError, setStepError] = useState<string | null>(null);
 
   const deferredAddressSearchQuery = useDeferredValue(addressLine1.trim());
+  // When we fill the address line from a chosen suggestion, that state change would
+  // otherwise re-trigger the search effect and immediately re-open the dropdown (it
+  // "gets stuck"). Record the just-filled value here so the effect skips exactly that
+  // one search.
+  const skipAddressSearchForRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (skipAddressSearchForRef.current !== null && skipAddressSearchForRef.current === deferredAddressSearchQuery) {
+      skipAddressSearchForRef.current = null;
+      setAddressSuggestions([]);
+      setIsAddressLookupPending(false);
+      return;
+    }
+
     if (!deferredAddressSearchQuery) {
       setAddressSuggestions([]);
       setSelectedAddressMatchId(null);
@@ -171,7 +182,10 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       const payload = (await response.json()) as AddressLookupApiResponse;
       if (!response.ok || !payload.address) throw new Error(payload.error || 'Lookup failed');
       const address = payload.address;
-      setAddressLine1(address.line1 || suggestion.label);
+      const filledLine1 = address.line1 || suggestion.label;
+      // Suppress the one search the setAddressLine1 below would otherwise trigger.
+      skipAddressSearchForRef.current = filledLine1.trim();
+      setAddressLine1(filledLine1);
       setAddressLine2(address.line2 || '');
       setCity(address.city || '');
       setPostcode(address.postcode || '');
@@ -259,7 +273,6 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
           propertyAddress,
           propertyPostcode: postcode,
           jobType,
-          tenantName,
           tenantPhone: sitePhone,
           accessNotes,
           preferredDates: preferredDate,
@@ -273,16 +286,12 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         });
         const confirmation =
           result.landlordConfirmationStatus === 'sent'
-            ? 'A confirmation email has been sent to you.'
-            : 'Your request is saved; email delivery is not configured yet.';
+            ? 'A confirmation has been emailed to you.'
+            : 'Your request has been saved.';
         const engineerNotice =
-          result.engineerNotificationStatus === 'sent'
-            ? ' The engineer contact has also been emailed.'
-            : result.engineerNotificationStatus === 'skipped_same_recipient'
-              ? ' The engineer email was skipped because the landlord and engineer email are the same. The request is still on the engineer dashboard.'
-            : result.engineerNotificationStatus === 'not_configured'
-              ? ' The engineer email was not sent because email delivery is not configured or no engineer email was supplied.'
-              : ' The engineer email could not be sent, but the request details were saved.';
+          result.engineerNotificationStatus === 'not_configured'
+            ? ''
+            : ' The request has been sent to your engineer.';
         setMessage(`${confirmation}${engineerNotice}`);
         if (result.engineerActionUrl) {
           setEngineerShareUrl(result.engineerActionUrl);
@@ -307,7 +316,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-[18px] py-4">
             <p className="text-[15px] font-medium text-[var(--color-text-primary)]">Share with the engineer</p>
             <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-              If you only have their mobile number, send this request link by WhatsApp so they can open or claim it.
+              You can also share this request with your engineer on WhatsApp.
             </p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <Button asChild variant="action">
@@ -395,7 +404,8 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
           ) : (
             <>
               <p className="mb-4 text-[13px] text-[var(--color-text-secondary)]">
-                Enter your engineer&apos;s details. CertNow will send them this job request.
+                Enter your engineer&apos;s details. If they&apos;re already on CertNow we&apos;ll send them this
+                request straight away — if not, we&apos;ll send them a request to join.
               </p>
               <div className="grid gap-3">
                 <Input
@@ -496,7 +506,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
               <div>
                 <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Do you live at the property being inspected?</p>
                 <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
-                  Only if your address in Step 2 is the same property — copies your name, phone and address here.
+                  Only if your address in Step 2 is the same property — copies your phone and address here.
                 </p>
               </div>
               <Button
@@ -509,12 +519,9 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
                 Copy details
               </Button>
             </div>
-            <Input
-              autoComplete="off"
-              value={tenantName}
-              onChange={(e) => setTenantName(e.target.value)}
-              placeholder="Tenant name"
-            />
+            {/* Tenant name intentionally not collected here — omitted for privacy, in
+                line with the rest of the app. The tenant / site phone is kept below
+                so the engineer has an on-site contact. */}
             {/* Address autocomplete */}
             <div className="relative">
               <Input

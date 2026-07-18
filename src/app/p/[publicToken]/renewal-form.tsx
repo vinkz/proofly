@@ -10,6 +10,13 @@ const toDateOnly = (value: string) => {
 
 const todayDateOnly = () => new Date().toISOString().slice(0, 10);
 
+const JOB_TYPE_OPTIONS = [
+  { value: 'safety_check', label: 'Gas safety check' },
+  { value: 'safety_check_service', label: 'Safety + service' },
+] as const;
+
+type RenewalJobType = (typeof JOB_TYPE_OPTIONS)[number]['value'];
+
 export function PropertyRenewalForm({
   token,
   ctaLabel = 'Request renewal',
@@ -21,6 +28,7 @@ export function PropertyRenewalForm({
   defaultDate?: string;
   confirmMode?: boolean;
 }) {
+  const [jobType, setJobType] = useState<RenewalJobType>('safety_check');
   const [tenantName, setTenantName] = useState('');
   const [tenantPhone, setTenantPhone] = useState('');
   const [accessNotes, setAccessNotes] = useState('');
@@ -61,6 +69,7 @@ export function PropertyRenewalForm({
           try {
             const result = await submitPropertyRenewalRequest({
               token,
+              jobType,
               tenantName,
               tenantPhone,
               accessNotes,
@@ -75,6 +84,28 @@ export function PropertyRenewalForm({
         });
       }}
     >
+      <div>
+        <label className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">
+          What do you need?
+        </label>
+        <div className="grid grid-cols-2 gap-1.5 rounded-[10px] bg-[var(--color-background-secondary)] p-1">
+          {JOB_TYPE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setJobType(opt.value)}
+              aria-pressed={jobType === opt.value}
+              className={`h-9 rounded-[8px] text-[13px] font-medium transition-colors ${
+                jobType === opt.value
+                  ? 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]'
+                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <input type="text" placeholder="Tenant name" value={tenantName} onChange={(e) => setTenantName(e.target.value)} className={inputClass} />
       <input type="tel" inputMode="tel" autoComplete="off" placeholder="Tenant phone" value={tenantPhone} onChange={(e) => setTenantPhone(e.target.value)} className={inputClass} />
       <textarea placeholder="Access notes (key box, parking, etc.)" value={accessNotes} onChange={(e) => setAccessNotes(e.target.value)} rows={2} className={`${inputClass} resize-none`} />

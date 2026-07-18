@@ -232,7 +232,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
           </h2>
           {state.canSend ? (
             <p className="mt-2 text-[13px] leading-[1.6] text-white/70">
-              All required documents are complete. Send to landlord or tenant.
+              All required documents are complete. Send to the landlord.
             </p>
           ) : (
             <>
@@ -278,7 +278,7 @@ export default async function JobCompletionPage({ params }: { params: Promise<{ 
                 href={state.publicHref}
                 className="flex-1 text-center text-[12px] text-white/50 transition-colors hover:text-white/70"
               >
-                Public view
+                Secure link
               </Link>
             ) : null}
           </div>

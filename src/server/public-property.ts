@@ -15,6 +15,7 @@ const RenewalRequestSchema = z.object({
   accessNotes: z.string().max(1000).optional().default(''),
   preferredDates: z.string().max(500).optional().default(''),
   preferredDate: z.string().max(20).optional().default(''),
+  jobType: z.enum(['safety_check', 'safety_check_service']).optional().default('safety_check'),
 });
 
 const pickText = (...values: Array<string | null | undefined>) => {
@@ -237,6 +238,7 @@ export async function submitPropertyRenewalRequest(input: z.infer<typeof Renewal
         tenantPhone: request.tenantPhone,
         accessNotes: request.accessNotes,
         propertyId: data.propertyId,
+        jobType: request.jobType,
       })
     : null;
 
@@ -251,7 +253,7 @@ export async function submitPropertyRenewalRequest(input: z.infer<typeof Renewal
     assigned_engineer_id: data.userId,
     request_type: 'renewal',
     source: 'property_vault',
-    job_type: 'safety_check',
+    job_type: request.jobType,
     landlord_name: landlordLabel,
     property_address: data.address,
     tenant_name: request.tenantName || null,
@@ -299,6 +301,7 @@ export async function submitPropertyRenewalRequest(input: z.infer<typeof Renewal
     tenantPhone: request.tenantPhone,
     accessNotes: request.accessNotes,
     renewalJobId,
+    jobType: request.jobType,
   });
 
   return { ok: true, engineer: data.engineer, scheduled: Boolean(acceptedDate) };

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
 import { PublicComplianceStatusRow } from '@/components/public-compliance-status';
 import { formatPublicDisplayDate, getPublicComplianceInfo } from '@/lib/public-compliance';
@@ -32,7 +33,7 @@ export default async function PropertyVaultPage({ params }: { params: Promise<{ 
       {/* Minimal header */}
       <header className="border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
         <div className="mx-auto flex h-12 max-w-lg items-center justify-between px-4">
-          <span className="text-[13px] font-semibold text-[var(--color-text-primary)]">CertNow</span>
+          <Image src="/certnow-logo.svg" alt="certnow" width={104} height={24} priority />
           <span className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Property Vault</span>
         </div>
       </header>

@@ -108,14 +108,23 @@ function computeInitialStatus(
 ): InvoiceStatus {
   const s = (status ?? '').toLowerCase();
   if (s === 'paid') return 'paid';
-  if (s === 'overdue') return 'overdue';
-  if (
-    dueDate &&
-    !Number.isNaN(new Date(dueDate).getTime()) &&
-    new Date(dueDate) < new Date()
-  ) return 'overdue';
-  if (s === 'unpaid') return 'unpaid';
-  return 'draft';
+  if (s === '' || s === 'draft') return 'draft';
+  // Any persisted "sent" status (the DB uses 'issued'; legacy rows may hold
+  // 'unpaid'/'overdue') is shown as unpaid, or overdue once past the due date.
+  const isPastDue =
+    !!dueDate && !Number.isNaN(new Date(dueDate).getTime()) && new Date(dueDate) < new Date();
+  return isPastDue ? 'overdue' : 'unpaid';
+}
+
+// The DB persists a canonical lifecycle — draft → issued → paid (enforced by the
+// invoices_status_check constraint, which allows only draft/issued/paid/void).
+// 'unpaid'/'overdue' are display-only states derived from the due date, so collapse
+// them to 'issued' before saving — otherwise the write violates the constraint and
+// the status silently never advances past 'draft'.
+function toPersistedStatus(display: InvoiceStatus): 'draft' | 'issued' | 'paid' {
+  if (display === 'paid') return 'paid';
+  if (display === 'draft') return 'draft';
+  return 'issued';
 }
 
 function toInputDate(value: string | null | undefined): string {
@@ -243,7 +252,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   const persist = async () => {
     await upsertLineItems(invoice.id, items.filter((item) => item.description?.trim().length));
     await setInvoiceMeta(invoice.id, {
-      status,
+      status: toPersistedStatus(status),
       due_date: dueDate || null,
       vat_rate: normalizeVatPercent(vatRate) / 100,
       notes,
@@ -295,7 +304,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
   const markSent = async () => {
     if (paid || sent) return;
     setSent(true);
-    await setInvoiceMeta(invoice.id, { status: pastDue ? 'overdue' : 'unpaid' });
+    await setInvoiceMeta(invoice.id, { status: 'issued' });
   };
 
   const togglePaid = () => {
@@ -304,7 +313,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       setPaid(next);
       try {
         const nextStatus: InvoiceStatus = next ? 'paid' : sent ? (pastDue ? 'overdue' : 'unpaid') : 'draft';
-        await setInvoiceMeta(invoice.id, { status: nextStatus });
+        await setInvoiceMeta(invoice.id, { status: toPersistedStatus(nextStatus) });
         pushToast({ title: next ? 'Marked as paid' : 'Marked as unpaid', variant: 'success' });
       } catch (error) {
         setPaid(!next);

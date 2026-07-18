@@ -96,8 +96,9 @@ const cardBodyClass = 'flex flex-col gap-[12px] p-4';
 export function ProfilePreferences({
   mode = 'settings',
   setupFocus = null,
-  missingProfileFields = [],
-  missingInvoiceFields = [],
+  // missingProfileFields / missingInvoiceFields are still accepted (see Props type)
+  // but the "Missing" hints are now derived from live field state below, so they are
+  // intentionally not destructured/used here.
   initialFullName = '',
   initialDateOfBirth = '',
   initialProfession = '',
@@ -146,7 +147,9 @@ export function ProfilePreferences({
       { key: 'Full name', value: fullName },
       { key: 'Date of birth', value: dateOfBirth },
       { key: 'Profession', value: profession },
-      { key: 'Engineer name', value: engineerName },
+      // Engineer name is optional — it defaults to the full name on certificates
+      // when blank, so it must not block saving (it was silently blocking the
+      // invoice/bank section's Save, which shares this handler).
       { key: 'Company', value: companyName },
       { key: 'Address line 1', value: companyAddressLine1 },
       { key: 'Postcode', value: companyPostcode },
@@ -274,15 +277,33 @@ export function ProfilePreferences({
       </button>
     </div>
   );
-  const profileCardMissingFields = missingProfileFields.filter((field) =>
-    ['Full name', 'Date of birth', 'Profession', 'Engineer ID card number', 'Gas Safe number'].includes(field),
-  );
-  const companyCardMissingFields = missingProfileFields.filter((field) =>
-    ['Company name', 'Company address line 1', 'Company postcode', 'Company phone'].includes(field),
-  );
+  // Compute the "missing" hints from the LIVE field state (not the server props,
+  // which are a snapshot from page load) so each card's "Missing: …" hint and amber
+  // ring clear as soon as the engineer fills the fields in.
+  const liveMissing = (fields: Array<{ key: string; value: string }>) =>
+    fields.filter((f) => !f.value || !f.value.trim()).map((f) => f.key);
+  const profileCardMissingFields = liveMissing([
+    { key: 'Full name', value: fullName },
+    { key: 'Date of birth', value: dateOfBirth },
+    { key: 'Profession', value: profession },
+    { key: 'Gas Safe number', value: gasSafeNumber },
+    { key: 'Engineer ID card number', value: engineerId },
+  ]);
+  const companyCardMissingFields = liveMissing([
+    { key: 'Company name', value: companyName },
+    { key: 'Company address line 1', value: companyAddressLine1 },
+    { key: 'Company postcode', value: companyPostcode },
+    { key: 'Company phone', value: companyPhone },
+  ]);
+  const invoiceCardMissingFields = liveMissing([
+    { key: 'Bank name', value: bankName },
+    { key: 'Account name', value: bankAccountName },
+    { key: 'Sort code', value: bankSortCode },
+    { key: 'Account number', value: bankAccountNumber },
+  ]);
   const profileSetupActive = mode === 'settings' && setupFocus === 'certificate' && profileCardMissingFields.length > 0;
   const companySetupActive = mode === 'settings' && setupFocus === 'certificate' && companyCardMissingFields.length > 0;
-  const invoiceSetupActive = mode === 'settings' && setupFocus === 'frictionless' && missingInvoiceFields.length > 0;
+  const invoiceSetupActive = mode === 'settings' && setupFocus === 'frictionless' && invoiceCardMissingFields.length > 0;
   const focusedCardClass = (active: boolean) => `${cardClass} scroll-mt-20 ${active ? 'ring-1 ring-[var(--color-amber)]' : ''}`;
   const missingHint = (items: string[]) =>
     items.length ? (
@@ -553,7 +574,7 @@ export function ProfilePreferences({
           <div>
             <p className={eyebrowClass}>Invoices</p>
             <h2 className={cardTitleClass}>Bank transfer & rates</h2>
-            {invoiceSetupActive ? missingHint(missingInvoiceFields) : null}
+            {invoiceSetupActive ? missingHint(invoiceCardMissingFields) : null}
           </div>
           {renderSaveControl(invoiceDirty)}
         </div>

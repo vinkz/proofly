@@ -5,6 +5,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFP
 
 import { CP12_TEMPLATE_VERSION, cp12FieldShouldRender } from '@/lib/cp12/field-config';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { formatUkDate } from './formatUkDate';
 import type { ApplianceInput, Cp12FieldMap } from './renderCp12Certificate';
 
 type RenderCp12V2Input = {
@@ -192,7 +193,7 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
   draw('CP12 · Gas Safety (Installation and Use) Regulations 1998', rX, rY, 6.8, font, C.muted); rY -= 16;
   const ref = text(input.fields.certNumber) || input.recordId;
   draw('Certificate', rX, rY, 8.5, font, C.muted); draw(ref, rX + 66, rY, 9.5, bold, C.black); rY -= 14;
-  const inspDate = text(input.fields.issueDate) || input.issuedAt.toLocaleDateString('en-GB');
+  const inspDate = formatUkDate(text(input.fields.issueDate)) || formatUkDate(input.issuedAt);
   draw('Inspection', rX, rY, 8.5, font, C.muted); draw(inspDate, rX + 66, rY, 9.5, bold, C.black); rY -= 16;
 
   // record-level status badge
@@ -207,7 +208,7 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
   y -= 4;
 
   // next-inspection callout (conventional but wanted; auto +12mo fallback)
-  const nextDue = text(input.fields.nextInspectionDue) || addMonths(inspDate, 12) || '';
+  const nextDue = formatUkDate(text(input.fields.nextInspectionDue)) || addMonths(inspDate, 12) || '';
   if (nextDue) {
     ensure(24);
     const label = `Next inspection due by ${nextDue}`;

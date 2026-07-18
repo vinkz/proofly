@@ -21,8 +21,6 @@ import { promoteDeliveredJobData } from '@/server/delivery-promotion';
 import { persistJobFields, type JobFieldEntry } from '@/server/job-fields';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 
-export type DeliveryRecipient = 'landlord' | 'tenant' | 'both';
-
 export type DeliveryCertificate = {
   id: string;
   certType: string;
@@ -39,8 +37,7 @@ export type DeliveryBundle = {
   publicHref: string;
   landlordName: string | null;
   landlordEmail: string | null;
-  tenantName: string | null;
-  tenantEmail: string | null;
+  landlordPhone: string | null;
   engineerName: string | null;
   engineerEmail: string | null;
   engineerCompanyName: string | null;
@@ -146,12 +143,11 @@ const normalizeOptionalEmail = (value: string | null | undefined) => {
 
 export async function updateDeliveryRecipientEmails(
   jobId: string,
-  input: { landlordEmail?: string | null; tenantEmail?: string | null },
+  input: { landlordEmail?: string | null },
 ): Promise<UpdateDeliveryRecipientEmailsResult> {
   try {
     const { sb, user } = await requireUser({ write: true });
     const landlordEmail = normalizeOptionalEmail(input.landlordEmail);
-    const tenantEmail = normalizeOptionalEmail(input.tenantEmail);
 
     const { data: job, error: jobErr } = await sb
       .from('jobs')
@@ -168,9 +164,6 @@ export async function updateDeliveryRecipientEmails(
         { job_id: jobId, field_key: 'landlord_email', value: landlordEmail },
         { job_id: jobId, field_key: 'customer_email', value: landlordEmail },
       );
-    }
-    if (tenantEmail) {
-      entries.push({ job_id: jobId, field_key: 'tenant_email', value: tenantEmail });
     }
 
     if (entries.length) {
@@ -214,12 +207,28 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
   if (!job) throw new Error('Job not found');
   if (job.user_id !== user.id) throw new Error('Unauthorized');
 
+  // Gas Warning Notices for unsafe appliances are issued on separate linked
+  // follow-up jobs (parent_job_id = this job), so their certificates live under a
+  // different job_id. Pull those child job ids too, otherwise the delivery bundle
+  // silently drops the warning notice PDFs.
+  const { data: childJobRows, error: childJobErr } = await admin
+    .from('jobs')
+    .select('id')
+    .eq('parent_job_id', jobId);
+  if (childJobErr) throw new Error(childJobErr.message);
+  const bundleJobIds = [
+    jobId,
+    ...((childJobRows ?? []) as Array<{ id: string | null }>)
+      .map((row) => row.id)
+      .filter((id): id is string => Boolean(id)),
+  ];
+
   const [{ data: certificateRows, error: certErr }, { data: fieldRows, error: fieldsErr }, profileResp, clientResp, invoiceResp, propertyResp] =
     await Promise.all([
       admin
         .from('certificates')
         .select('id, cert_type, issued_at, created_at, pdf_path, pdf_url')
-        .eq('job_id', jobId)
+        .in('job_id', bundleJobIds)
         .not('pdf_path', 'is', null)
         .order('created_at', { ascending: true }),
       admin.from('job_fields').select('field_key, value').eq('job_id', jobId),
@@ -229,7 +238,7 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
         .eq('id', job.user_id ?? '')
         .maybeSingle(),
       job.client_id
-        ? admin.from('clients').select('name, email').eq('id', job.client_id).maybeSingle()
+        ? admin.from('clients').select('name, email, phone').eq('id', job.client_id).maybeSingle()
         : Promise.resolve({ data: null, error: null }),
       (sb as unknown as UntypedSupabase)
         .from('invoices')
@@ -298,8 +307,14 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
     publicHref,
     landlordName: pickText(fieldMap.landlord_name, client?.name ?? null, job.client_name) || null,
     landlordEmail: pickText(fieldMap.landlord_email, client?.email ?? null) || null,
-    tenantName: pickText(fieldMap.tenant_name, fieldMap.job_address_name) || null,
-    tenantEmail: pickText(fieldMap.tenant_email) || null,
+    // Mobile first (best for WhatsApp), then landline, then the promoted client phone.
+    landlordPhone:
+      pickText(
+        fieldMap.landlord_mobile,
+        fieldMap.landlord_tel,
+        fieldMap.landlord_phone,
+        (client as { phone?: string | null } | null)?.phone ?? null,
+      ) || null,
     engineerName: pickText(profile?.default_engineer_name ?? null, profile?.full_name ?? null) || null,
     engineerEmail: pickText(profile?.company_email ?? null) || null,
     engineerCompanyName: pickText(profile?.company_name ?? null) || null,
@@ -317,13 +332,7 @@ export async function buildDeliveryBundle(jobId: string): Promise<DeliveryBundle
  * On success: marks job status = 'delivered', sets delivered_at = now().
  * Implemented by Codex (Milestone 5 server actions).
  */
-export async function sendDeliveryBundle(
-  jobId: string,
-  recipients: DeliveryRecipient,
-  method: 'email',
-): Promise<SendDeliveryResult> {
-  if (method !== 'email') return { ok: false, recipientsSent: [], error: 'Unsupported delivery method.' };
-
+export async function sendDeliveryBundle(jobId: string): Promise<SendDeliveryResult> {
   const { sb, user } = await requireUser({ write: true });
 
   // Promote job data to properties/clients before building bundle so that
@@ -335,19 +344,37 @@ export async function sendDeliveryBundle(
   }
 
   const bundle = await buildDeliveryBundle(jobId);
-  const recipientEmails = uniqueRecipients(
-    recipients === 'landlord'
-      ? [bundle.landlordEmail]
-      : recipients === 'tenant'
-        ? [bundle.tenantEmail]
-        : [bundle.landlordEmail, bundle.tenantEmail],
-  );
+  // The certificate always goes to the landlord (the responsible person); it is the
+  // landlord's duty to forward a copy to tenants within 28 days.
+  const recipientEmails = uniqueRecipients([bundle.landlordEmail]);
 
   if (recipientEmails.length === 0) {
-    return { ok: false, recipientsSent: [], error: 'No email address on file for selected recipients.' };
+    return { ok: false, recipientsSent: [], error: 'No landlord email address on file.' };
   }
 
   try {
+    const usedFilenames = new Set<string>();
+    const uniqueFilename = (label: string) => {
+      const base = filenameForCertificate(label);
+      if (!usedFilenames.has(base)) {
+        usedFilenames.add(base);
+        return base;
+      }
+      // Multiple certificates can share a label (e.g. one Gas Warning Notice per
+      // unsafe appliance). Suffix duplicates so neither attachment is overwritten.
+      const dot = base.lastIndexOf('.');
+      const stem = dot === -1 ? base : base.slice(0, dot);
+      const ext = dot === -1 ? '' : base.slice(dot);
+      let counter = 2;
+      let candidate = `${stem}_${counter}${ext}`;
+      while (usedFilenames.has(candidate)) {
+        counter += 1;
+        candidate = `${stem}_${counter}${ext}`;
+      }
+      usedFilenames.add(candidate);
+      return candidate;
+    };
+
     const attachments = await Promise.all(
       bundle.certificates
         .filter((certificate) => Boolean(certificate.previewUrl))
@@ -358,7 +385,7 @@ export async function sendDeliveryBundle(
           }
           const buffer = await response.arrayBuffer();
           return {
-            filename: filenameForCertificate(certificate.label),
+            filename: uniqueFilename(certificate.label),
             content: Buffer.from(buffer).toString('base64'),
           };
         }),

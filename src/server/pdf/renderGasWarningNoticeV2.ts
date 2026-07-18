@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { formatUkDate } from './formatUkDate';
 import { getGasWarningClassificationLabel, type GasWarningNoticeFields } from '@/types/gas-warning-notice';
 
 type RenderGasWarningV2Input = {
@@ -178,7 +179,7 @@ export async function renderGasWarningNoticeV2Pdf(input: RenderGasWarningV2Input
   let rY = headerTop;
   draw('GAS WARNING NOTICE', rX, rY, 11, bold, C.black); rY -= 13;
   draw('Unsafe situation record', rX, rY, 8, font, C.muted); rY -= 15;
-  const issueDate = text(f.issued_at) || new Date(input.issuedAt).toLocaleDateString('en-GB');
+  const issueDate = formatUkDate(text(f.issued_at)) || formatUkDate(input.issuedAt);
   draw('Reference', rX, rY, 8.5, font, C.muted); draw(text(f.record_id) || input.recordId, rX + 62, rY, 9.5, bold, C.black); rY -= 13;
   draw('Date', rX, rY, 8.5, font, C.muted); draw(issueDate, rX + 62, rY, 9.5, bold, C.black); rY -= 6;
 

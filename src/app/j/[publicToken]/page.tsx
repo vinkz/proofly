@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -52,7 +53,7 @@ export default async function PublicJobPage({
       {/* Header */}
       <header className="sticky top-0 z-10 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
         <div className="mx-auto flex h-12 max-w-xl items-center justify-between px-4">
-          <span className="text-[13px] font-semibold text-[var(--color-text-primary)]">CertNow</span>
+          <Image src="/certnow-logo.svg" alt="certnow" width={104} height={24} priority />
           <span className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-tertiary)]">
             Property record
           </span>

@@ -32,7 +32,19 @@ type BasicJob = {
   job_type?: string | null;
   title?: string | null;
   scheduled_for?: string | null;
+  certificate_type?: string | null;
+  parent_job_id?: string | null;
 };
+
+// A Gas Warning Notice raised from a CP12 is a linked follow-up job (parent_job_id
+// set). It is bundled under its parent on the parent's completion page, so it must
+// not appear as its own standalone card in the dashboard job lists.
+function isFollowUpJob(job: BasicJob): boolean {
+  return (
+    Boolean(job.parent_job_id) &&
+    (job.certificate_type === 'gas_warning_notice' || job.job_type === 'warning_notice')
+  );
+}
 type UpcomingJob = BasicJob & { prepComplete: boolean };
 const PREP_REQUIRED_FIELD_KEYS = [
   'job_address_name',
@@ -72,8 +84,8 @@ export default async function DashboardPage({
     listAwaitingLandlordJobsForDashboard(),
     getNextRenewalToSend(),
   ]);
-  const activeJobs = jobGroups.active as BasicJob[];
-  const completedJobs = jobGroups.completed as BasicJob[];
+  const activeJobs = (jobGroups.active as BasicJob[]).filter((job) => !isFollowUpJob(job));
+  const completedJobs = (jobGroups.completed as BasicJob[]).filter((job) => !isFollowUpJob(job));
 
   const now = new Date();
   const awaitingSignatures = activeJobs.filter((job) => job.status === 'awaiting_signatures').length;

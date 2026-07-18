@@ -87,6 +87,7 @@ export default async function CertificateWizardPage({
     startStep?: string;
     parentJobId?: string;
     applianceKey?: string;
+    edit?: string;
   }>;
 }) {
   const { certificateType } = await params;
@@ -270,7 +271,12 @@ export default async function CertificateWizardPage({
   // and it would also break the completion page's "Edit" of an already-issued
   // certificate. The completion checklist is the hub and links back here on purpose.
 
-  if (normalizedType === 'gas_warning_notice') {
+  // "Edit" from the completion checklist links here with edit=1. That row is only
+  // shown once the warning notice is completed, so without this opt-out the guard
+  // below would bounce every Edit click straight back to the completion screen.
+  const editIntent = resolvedSearchParams?.edit === '1';
+
+  if (normalizedType === 'gas_warning_notice' && !editIntent) {
     let shouldRedirectToCompletion = false;
     try {
       const completionState = await getJobCompletionState(jobId);

@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { formatUkDate } from './formatUkDate';
 import type { ApplianceInput, GasServiceFieldMap, RenderGasServiceInput } from './renderGasServicePdf';
 
 // House style shared with the CP12 / GWN v2 renderers: monochrome greys + status.
@@ -182,7 +183,7 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
   const rX = PAGE.w - M - 210;
   let rY = headerTop;
   draw('GAS APPLIANCE SERVICE RECORD', rX, rY, 10.5, bold, C.black); rY -= 15;
-  const serviceDate = text(f.issuedDate) || input.issuedAt.toLocaleDateString('en-GB');
+  const serviceDate = formatUkDate(text(f.issuedDate)) || formatUkDate(input.issuedAt);
   draw('Reference', rX, rY, 8.5, font, C.muted); draw(text(f.certNumber) || input.recordId, rX + 66, rY, 9.5, bold, C.black); rY -= 13;
   draw('Service date', rX, rY, 8.5, font, C.muted); draw(serviceDate, rX + 66, rY, 9.5, bold, C.black); rY -= 16;
   const defect = negative(f.applianceSafe) || isMeaningfulRemedial(appliance?.remedialActionTaken);
@@ -195,7 +196,7 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
   y -= 4;
 
   // next service due callout
-  const nextService = text(f.nextServiceDate) || addMonths(serviceDate, 12) || '';
+  const nextService = formatUkDate(text(f.nextServiceDate)) || addMonths(serviceDate, 12) || '';
   if (nextService) {
     ensure(24);
     page.drawRectangle({ x: M, y: y - 17, width: CONTENT_W, height: 20, color: C.panel });

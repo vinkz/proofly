@@ -809,11 +809,11 @@ export function GasWarningNoticeWizard({
                     className="rounded-[8px]"
                   />
                 </LabeledField>
-                <LabeledField label="Tenant name" className="sm:col-span-2">
+                <LabeledField label="Flat / unit" className="sm:col-span-2">
                   <Input
                     value={jobAddress.job_address_name}
                     onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                    placeholder="Tenant name"
+                    placeholder="Flat / unit (optional)"
                     className="rounded-[8px]"
                   />
                 </LabeledField>

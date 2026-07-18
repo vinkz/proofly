@@ -83,7 +83,8 @@ export function PrefillClient({
 
       <FormSection title="Access details">
         <div className="grid gap-2.5 sm:grid-cols-2">
-          <Input name="tenantName" autoComplete="off" placeholder="Tenant name (optional)" className="rounded-[10px]" />
+          {/* Tenant name intentionally omitted for privacy (removed app-wide); the
+              tenant phone is kept as an on-site contact for the engineer. */}
           <Input name="tenantPhone" type="tel" inputMode="tel" autoComplete="off" placeholder="Tenant phone (optional)" className="rounded-[10px]" />
           <Input name="preferredDates" type="date" className="rounded-[10px]" />
           <Input name="accessNotes" placeholder="Access notes" className="rounded-[10px] sm:col-span-2" />

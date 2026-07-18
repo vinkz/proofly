@@ -43,6 +43,12 @@ export const normalizeDateOnly = (value: string | null | undefined): string => {
  * the confirmed date and access notes — never a dangling request. Best-effort; returns null on any
  * failure so the landlord submission is never blocked.
  */
+/** The two renewal job types a landlord can self-book from the property vault. */
+export type RenewalJobType = 'safety_check' | 'safety_check_service';
+
+const certTypesForRenewal = (jobType: RenewalJobType): string[] =>
+  jobType === 'safety_check_service' ? ['cp12', 'boiler_service'] : ['cp12'];
+
 export async function ensureRenewalJobForSource(
   admin: AdminClient,
   params: {
@@ -52,9 +58,12 @@ export async function ensureRenewalJobForSource(
     tenantPhone: string;
     accessNotes: string;
     propertyId?: string | null;
+    /** What the landlord chose to book. Defaults to a safety check only. */
+    jobType?: RenewalJobType;
   },
 ): Promise<string | null> {
   const { sourceJob, acceptedDate, tenantName, tenantPhone, accessNotes, propertyId } = params;
+  const jobType: RenewalJobType = params.jobType ?? 'safety_check';
   try {
     const existing = await admin
       .from('job_fields')
@@ -90,8 +99,9 @@ export async function ensureRenewalJobForSource(
           address: propertyAddress || sourceJob.address || null,
           status: 'active',
           user_id: sourceJob.user_id,
-          job_type: 'safety_check',
-          title: `CP12 for ${landlordName || 'upcoming job'}`,
+          job_type: jobType,
+          cert_types: certTypesForRenewal(jobType),
+          title: `${jobType === 'safety_check_service' ? 'Gas safety + service' : 'CP12'} for ${landlordName || 'upcoming job'}`,
           ...(propertyId ? { property_id: propertyId } : {}),
         } as never)
         .select('id')
@@ -114,6 +124,16 @@ export async function ensureRenewalJobForSource(
         .filter((row): row is { job_id: string; field_key: string; value: string } => Boolean(row));
       carryRows.push({ job_id: renewalJobId, field_key: 'follow_up_source_job_id', value: sourceJob.id });
       await admin.from('job_fields').insert(carryRows);
+    }
+
+    // If the landlord added a service, make sure the renewal job (which may be a
+    // pre-existing safety-check-only follow-up) reflects both certificates. Upgrade
+    // only — a plain safety-check choice never strips a service off an existing job.
+    if (jobType === 'safety_check_service') {
+      await admin
+        .from('jobs')
+        .update({ job_type: 'safety_check_service', cert_types: certTypesForRenewal('safety_check_service') } as never)
+        .eq('id', renewalJobId);
     }
 
     if (acceptedDate) {
@@ -165,8 +185,10 @@ export async function notifyEngineerOfRenewalResponse(params: {
   tenantPhone: string;
   accessNotes: string;
   renewalJobId: string | null;
+  jobType?: RenewalJobType;
 }) {
   const { admin, engineerUserId, address, landlordName, acceptedDate, preferredDates, tenantName, tenantPhone, accessNotes, renewalJobId } = params;
+  const jobType: RenewalJobType = params.jobType ?? 'safety_check';
   if (!engineerUserId || !isEmailConfigured()) return;
   try {
     const { data: profile } = await admin
@@ -194,6 +216,7 @@ export async function notifyEngineerOfRenewalResponse(params: {
     const rows: Array<{ label: string; value: string }> = [
       { label: 'Property', value: propertyLabel },
       { label: 'Landlord', value: titleCase(landlordName || 'Landlord') },
+      { label: 'Booking', value: jobType === 'safety_check_service' ? 'Gas safety + service' : 'Gas safety check' },
     ];
     if (dateConfirmed) rows.push({ label: 'Confirmed date', value: formatDate(acceptedDate) });
     if (preferredDates.trim()) rows.push({ label: 'Timing notes', value: preferredDates.trim() });

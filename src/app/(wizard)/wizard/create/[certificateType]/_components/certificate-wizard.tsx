@@ -1297,9 +1297,9 @@ export function CertificateWizard({
     startTransition(async () => {
       try {
         const payload = buildCp12DraftPersistencePayload();
-        if (!payload.jobAddress.job_address_name.trim()) {
-          throw new Error('Tenant name is required');
-        }
+        // Flat/unit reference is optional — the property address (line 1 / town /
+        // postcode) identifies the premises. Not a legally required field and no
+        // longer captures the occupant's personal name.
         if (!info.landlord_name.trim()) {
           throw new Error('Landlord / owner name is required');
         }
@@ -2279,7 +2279,15 @@ export function CertificateWizard({
       total={totalSteps}
       title={isCp12 && infoSubStep === 1 ? 'Tenant & location' : isCp12 ? 'Landlord / owner' : 'People & location'}
       status={isCp12 ? `${certificateLabel} · ${infoSubStep === 1 ? '2' : '1'} of 2` : certificateLabel}
-      onBack={isCp12 && infoSubStep === 1 ? () => setInfoSubStep(0) : undefined}
+      onBack={
+        isCp12 && infoSubStep === 1
+          ? () => setInfoSubStep(0)
+          : // From the first step, "Back" returns to the job's completion checklist —
+            // the hub where a combined CP12 + service job lists both certificates so the
+            // engineer can switch which one to work on (instead of only being able to
+            // close out to the dashboard).
+            () => router.push(`/jobs/${jobId}/complete`)
+      }
       actionsHideWhenVisibleId="cp12-step1-footer-actions"
       actions={
         <button
@@ -2447,20 +2455,12 @@ export function CertificateWizard({
                 id="cp12-job-address-name"
                 value={jobAddress.job_address_name}
                 onChange={(e) => setJobAddress((prev) => ({ ...prev, job_address_name: e.target.value }))}
-                placeholder="Tenant name"
-                required
-                className="rounded-[8px]"
-              />
-              <Input
-                type="email"
-                value={info.tenant_email}
-                onChange={(e) => setInfo((prev) => ({ ...prev, tenant_email: e.target.value }))}
-                placeholder="Tenant email (optional)"
-                className="rounded-[8px]"
+                placeholder="Flat / unit (optional)"
+                className="rounded-[8px] sm:col-span-2"
               />
               <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
-                Shown as the first line of the Property Address block on the certificate. The tenant email pre-fills
-                &quot;Send to tenant&quot; on the completion page.
+                Flat or unit reference — shown as the first line of the Property Address block. Leave blank for a
+                whole-property address.
               </p>
               <div className="relative sm:col-span-2">
                 <Input
@@ -2534,18 +2534,6 @@ export function CertificateWizard({
                   className="rounded-[8px] sm:flex-1"
                 />
               </div>
-              <Input
-                type="tel"
-                inputMode="tel"
-                autoComplete="off"
-                value={jobAddress.job_tel}
-                onChange={(e) => setJobAddress((prev) => ({ ...prev, job_tel: e.target.value }))}
-                placeholder="Site telephone number"
-                className="rounded-[8px]"
-              />
-              <p className="text-[12px] text-[var(--color-text-tertiary)] sm:col-span-2">
-                Kept on the job for contacting the site. Not printed on the certificate.
-              </p>
             </div>
           </div>
 

@@ -311,7 +311,15 @@ export function SoloJobForm({
     requestPreferredDate ? `${requestPreferredDate}T09:00` : nowForDatetimeLocal(),
   );
   const [jobType, setJobType] = useState<JobType>(
-    initialSelection?.jobType ?? (initialRequest?.jobType === 'service' ? 'service' : 'safety_check'),
+    initialSelection?.jobType ??
+      // Map the landlord request's job type to the engineer's job type. A "both"
+      // request must become a combined safety_check_service job — otherwise it was
+      // silently downgraded to a CP12-only job, losing the requested service.
+      (initialRequest?.jobType === 'both'
+        ? 'safety_check_service'
+        : initialRequest?.jobType === 'service'
+          ? 'service'
+          : 'safety_check'),
   );
   // The job type must be chosen explicitly on a fresh create (no pre-selected
   // default). Prefilled flows (request/property/client) count as already chosen.
@@ -1578,14 +1586,16 @@ export function SoloJobForm({
           </div>
 
           {canShowContinue ? (
-            <button
-              type="button"
-              onClick={() => setStep(5)}
-              disabled={isPending}
-              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
-            >
-              Continue
-            </button>
+            <div className="sticky bottom-0 z-10 -mx-4 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 pb-3 pt-3">
+              <button
+                type="button"
+                onClick={() => setStep(5)}
+                disabled={isPending}
+                className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+              >
+                Continue
+              </button>
+            </div>
           ) : null}
         </>
       ) : null}
@@ -1625,7 +1635,7 @@ export function SoloJobForm({
               </div>
               <div>
                 <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                  Tenant name
+                  Flat / unit or property reference
                 </label>
                 <Input
                   value={jobAddressName}
@@ -1634,7 +1644,7 @@ export function SoloJobForm({
                       ? handleCp12PropertyReferenceInput(event.target.value)
                       : handlePropertyReferenceInput(event.target.value)
                   }
-                  placeholder="Tenant name"
+                  placeholder="e.g. Flat 2"
                   className="mt-1"
                   list={isCp12Upcoming ? undefined : 'job-property-reference-options'}
                   required
@@ -1745,7 +1755,41 @@ export function SoloJobForm({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Combined "safety check + service" jobs (including those opened from a
+              landlord request for BOTH certs): let the engineer see both are needed and
+              choose which to start with. The other is completed straight after. */}
+          {jobType === 'safety_check_service' ? (
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-4">
+              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                This job needs a CP12 and a boiler service — complete first?
+              </p>
+              <div className="mt-2 flex gap-2">
+                {([
+                  ['cp12', 'Landlord safety check'],
+                  ['boiler_service', 'Boiler service'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => setCombinedFirst(value)}
+                    className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
+                      combinedFirst === value
+                        ? 'bg-[#111] text-white'
+                        : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
+                No set order — complete the other one straight after; property and appliance details carry over.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="sticky bottom-0 z-10 -mx-4 flex items-center gap-2 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 pb-3 pt-3">
             <button
               type="button"
               className="h-[40px] rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
