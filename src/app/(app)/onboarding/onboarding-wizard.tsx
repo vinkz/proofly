@@ -1,6 +1,6 @@
 'use client';
 
-import { useDeferredValue, useEffect, useState, useTransition } from 'react';
+import { useDeferredValue, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
@@ -114,6 +114,10 @@ export function OnboardingWizard({
   const [engineerId, setEngineerId] = useState(initialEngineerId);
   const [gasSafeNumber, setGasSafeNumber] = useState(initialGasSafeNumber);
   const deferredCompanyAddressSearchQuery = useDeferredValue(companyAddressSearchQuery.trim());
+  // Filling the address line from a chosen suggestion would otherwise re-trigger the
+  // search effect and immediately re-open the dropdown (it "gets stuck"). This records
+  // the just-filled value so the effect skips exactly that one search.
+  const skipCompanyAddressSearchForRef = useRef<string | null>(null);
   const [step, setStep] = useState(() => {
     const requestedInitialStep = initialStep;
     if (
@@ -133,6 +137,12 @@ export function OnboardingWizard({
   });
 
   useEffect(() => {
+    if (skipCompanyAddressSearchForRef.current !== null && skipCompanyAddressSearchForRef.current === deferredCompanyAddressSearchQuery) {
+      skipCompanyAddressSearchForRef.current = null;
+      setCompanyAddressSuggestions([]);
+      setIsCompanyAddressLookupPending(false);
+      return;
+    }
     if (!deferredCompanyAddressSearchQuery) {
       setCompanyAddressSuggestions([]);
       setSelectedCompanyAddressMatchId(null);
@@ -205,6 +215,7 @@ export function OnboardingWizard({
       }
 
       const address = payload.address;
+      skipCompanyAddressSearchForRef.current = address.line1.trim();
       setCompanyAddressSearchQuery(address.line1);
       setCompanyAddressLine1(address.line1);
       setCompanyAddressLine2(address.line2);

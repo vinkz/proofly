@@ -139,13 +139,8 @@ const SoloJobSchema = z
       });
     }
     if (isSafetyCheck) {
-      if (!value.jobAddressName || value.jobAddressName.trim().length < 1) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['jobAddressName'],
-          message: 'Property name / reference is required',
-        });
-      }
+      // Flat / unit or property reference is optional — the address (line 1 / city /
+      // postcode) identifies the premises, and it was renamed away from "tenant name".
       if (!value.jobAddressLine1 || value.jobAddressLine1.trim().length < 1) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -1339,6 +1334,63 @@ export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
       ],
       'createSoloJob request link',
     );
+
+    // Confirm back to the landlord who raised the request that their engineer has
+    // accepted it and scheduled the visit — including the date/time the engineer set.
+    const landlordEmail = typeof request.landlord_email === 'string' ? request.landlord_email.trim() : '';
+    if (landlordEmail) {
+      const { data: engProfile } = await sb
+        .from('profiles')
+        .select('default_engineer_name, full_name, company_name, company_email')
+        .eq('id', user.id)
+        .maybeSingle();
+      const p = (engProfile ?? {}) as Record<string, string | null>;
+      const engineerPublicName = titleCase(
+        normalizeOptionalText(p.company_name) ??
+          normalizeOptionalText(p.default_engineer_name) ??
+          normalizeOptionalText(p.full_name) ??
+          'Your engineer',
+      );
+      const propertyAddress =
+        [input.jobAddressLine1 || input.addressLine1, input.jobAddressCity || input.city, input.jobAddressPostcode || input.postcode]
+          .map((value) => (value ?? '').trim())
+          .filter(Boolean)
+          .join(', ') || 'your property';
+      const dt = input.scheduledFor.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+      const scheduledLabel = dt
+        ? `${dt[3]}/${dt[2]}/${dt[1]} at ${dt[4]}:${dt[5]}`
+        : 'a date your engineer will confirm';
+      const subject = `Booking confirmed — ${propertyAddress}`;
+      await sendEmailSafely('createSoloJob.landlordBookingConfirmation', {
+        to: landlordEmail,
+        replyTo: normalizeOptionalText(p.company_email) ?? undefined,
+        subject,
+        text: [
+          'Hi,',
+          '',
+          `${engineerPublicName} has confirmed your gas safety booking at ${propertyAddress} for ${scheduledLabel}.`,
+          '',
+          `Property: ${propertyAddress}`,
+          `Scheduled: ${scheduledLabel}`,
+          `Engineer: ${engineerPublicName}`,
+          '',
+          `${engineerPublicName} will be in touch if anything needs to change.`,
+        ].join('\n'),
+        html: baseEmail(
+          [
+            emailTitle('Booking confirmed'),
+            emailSubtitle(`${engineerPublicName} has confirmed your gas safety booking at ${propertyAddress}.`),
+            infoCard('Your booking', [
+              { label: 'Property', value: propertyAddress },
+              { label: 'Scheduled', value: scheduledLabel },
+              { label: 'Engineer', value: engineerPublicName },
+            ]),
+            note(`${engineerPublicName} will be in touch if anything needs to change.`),
+          ].join(''),
+          { subject, sentOnBehalfOf: engineerPublicName },
+        ),
+      });
+    }
   }
 
   revalidatePath('/dashboard');

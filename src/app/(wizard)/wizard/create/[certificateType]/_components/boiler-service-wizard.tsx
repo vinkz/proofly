@@ -357,6 +357,11 @@ export function BoilerServiceWizard({
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const deferredAddressSearchQuery = useDeferredValue(addressSearchQuery.trim());
   const deferredCustomerAddressSearchQuery = useDeferredValue(customerAddressSearchQuery.trim());
+  // Filling an address line from a chosen suggestion would otherwise re-trigger the
+  // search effect and immediately re-open the dropdown (it "gets stuck"). These record
+  // the just-filled value so each effect skips exactly that one search.
+  const skipAddressSearchForRef = useRef<string | null>(null);
+  const skipCustomerAddressSearchForRef = useRef<string | null>(null);
   const customerAddressParts = splitAddressParts(
     resolvedFields.customer_address ?? initialJobContext?.customer?.address ?? '',
   );
@@ -611,6 +616,12 @@ export function BoilerServiceWizard({
   }, [hasUnsyncedChanges, isDraftReady, isOfflineDraftSyncing, isOnline, syncBoilerServiceOfflineDraft]);
 
   useEffect(() => {
+    if (skipAddressSearchForRef.current !== null && skipAddressSearchForRef.current === deferredAddressSearchQuery) {
+      skipAddressSearchForRef.current = null;
+      setAddressSuggestions([]);
+      setIsAddressLookupPending(false);
+      return;
+    }
     if (!deferredAddressSearchQuery) {
       setAddressSuggestions([]);
       setSelectedAddressMatchId(null);
@@ -665,6 +676,12 @@ export function BoilerServiceWizard({
   }, [deferredAddressSearchQuery]);
 
   useEffect(() => {
+    if (skipCustomerAddressSearchForRef.current !== null && skipCustomerAddressSearchForRef.current === deferredCustomerAddressSearchQuery) {
+      skipCustomerAddressSearchForRef.current = null;
+      setCustomerAddressSuggestions([]);
+      setIsCustomerAddressLookupPending(false);
+      return;
+    }
     if (!deferredCustomerAddressSearchQuery) {
       setCustomerAddressSuggestions([]);
       setSelectedCustomerAddressMatchId(null);
@@ -855,6 +872,7 @@ export function BoilerServiceWizard({
         property_address: address.summary || prev.property_address,
         postcode: address.postcode || prev.postcode,
       }));
+      skipAddressSearchForRef.current = (address.line1 || suggestion.label).trim();
       setAddressSearchQuery(address.line1 || suggestion.label);
       setAddressSuggestions([]);
       pushToast({ title: 'Address selected', variant: 'success' });
@@ -891,6 +909,7 @@ export function BoilerServiceWizard({
         customer_city: address.city,
         customer_postcode: address.postcode || prev.customer_postcode,
       }));
+      skipCustomerAddressSearchForRef.current = (address.line1 || suggestion.label).trim();
       setCustomerAddressSearchQuery(address.line1 || suggestion.label);
       setCustomerAddressSuggestions([]);
       pushToast({ title: 'Client address selected', variant: 'success' });

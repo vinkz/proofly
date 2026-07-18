@@ -425,6 +425,11 @@ export function CertificateWizard({
   const demoEnabled = DEMO_FILL_VISIBLE;
   const deferredAddressSearchQuery = useDeferredValue(addressSearchQuery.trim());
   const deferredLandlordAddressSearchQuery = useDeferredValue(landlordAddressSearchQuery.trim());
+  // Filling an address line from a chosen suggestion would otherwise re-trigger the
+  // search effect and immediately re-open the dropdown (it "gets stuck"). These record
+  // the just-filled value so each effect skips exactly that one search.
+  const skipAddressSearchForRef = useRef<string | null>(null);
+  const skipLandlordAddressSearchForRef = useRef<string | null>(null);
   const initialLandlordAddressParts = splitAddressParts(String(resolvedInitialInfo.landlord_address ?? ''));
   const initialLandlordLine1 = resolvedInitialInfo.landlord_address_line1 ?? initialLandlordAddressParts[0] ?? '';
   const initialLandlordLine2 =
@@ -914,6 +919,13 @@ export function CertificateWizard({
   useEffect(() => {
     if (!isCp12) return;
 
+    if (skipAddressSearchForRef.current !== null && skipAddressSearchForRef.current === deferredAddressSearchQuery) {
+      skipAddressSearchForRef.current = null;
+      setPostcodeSuggestions([]);
+      setIsPostcodeLookupPending(false);
+      return;
+    }
+
     if (!deferredAddressSearchQuery) {
       setPostcodeSuggestions([]);
       setSelectedPostcodeMatchId(null);
@@ -970,6 +982,13 @@ export function CertificateWizard({
 
   useEffect(() => {
     if (!isCp12) return;
+
+    if (skipLandlordAddressSearchForRef.current !== null && skipLandlordAddressSearchForRef.current === deferredLandlordAddressSearchQuery) {
+      skipLandlordAddressSearchForRef.current = null;
+      setLandlordAddressSuggestions([]);
+      setIsLandlordLookupPending(false);
+      return;
+    }
 
     if (!deferredLandlordAddressSearchQuery) {
       setLandlordAddressSuggestions([]);
@@ -1209,6 +1228,7 @@ export function CertificateWizard({
         property_address: address.summary || prev.property_address,
         postcode: address.postcode || prev.postcode,
       }));
+      skipAddressSearchForRef.current = (address.line1 || suggestion.label).trim();
       setAddressSearchQuery(address.line1 || suggestion.label);
       setPostcodeSuggestions([]);
       pushToast({ title: 'Address selected', variant: 'success' });
@@ -1246,6 +1266,7 @@ export function CertificateWizard({
         landlord_postcode: address.postcode || prev.landlord_postcode,
         landlord_address: buildLandlordAddress(address.line1, address.line2, address.city),
       }));
+      skipLandlordAddressSearchForRef.current = (address.line1 || suggestion.label).trim();
       setLandlordAddressSearchQuery(address.line1 || suggestion.label);
       setLandlordAddressSuggestions([]);
       pushToast({ title: 'Landlord address selected', variant: 'success' });

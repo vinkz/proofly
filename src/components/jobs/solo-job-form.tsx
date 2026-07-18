@@ -1,6 +1,6 @@
 'use client';
 
-import { useDeferredValue, useEffect, useMemo, useState, useTransition, type FormEvent } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { createSoloJob, requestLandlordJobPrefill } from '@/server/jobs';
@@ -292,7 +292,6 @@ export function SoloJobForm({
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('jobs_new', 'create'), []);
   const requestAddress = parseRequestAddress(initialRequest?.propertyAddress, initialRequest?.propertyPostcode);
   const requestPreferredDate = firstDateFromPreferredDates(initialRequest?.preferredDates);
-  const requestTenantName = initialRequest?.tenantName?.trim() ?? '';
   const initialClientId = initialSelection?.clientId ?? '';
   const initialPropertyId = initialSelection?.propertyId ?? '';
   const hasInitialSelection = Boolean(initialClientId || initialPropertyId);
@@ -302,7 +301,7 @@ export function SoloJobForm({
   const [clientPhone, setClientPhone] = useState(initialRequest?.landlordPhone ?? '');
   const [clientEmail, setClientEmail] = useState(initialRequest?.landlordEmail ?? '');
   const [selectedPropertyKey, setSelectedPropertyKey] = useState(initialPropertyId);
-  const [propertyName, setPropertyName] = useState(requestTenantName);
+  const [propertyName, setPropertyName] = useState('');
   const [addressLine1, setAddressLine1] = useState(requestAddress.line1);
   const [city, setCity] = useState(requestAddress.city);
   const [postcode, setPostcode] = useState(requestAddress.postcode);
@@ -330,7 +329,7 @@ export function SoloJobForm({
   // start with (there is no required order); the other is completed straight after.
   const [combinedFirst, setCombinedFirst] = useState<'cp12' | 'boiler_service' | null>(null);
   const [inspectionDate, setInspectionDate] = useState(requestPreferredDate);
-  const [jobAddressName, setJobAddressName] = useState(requestTenantName);
+  const [jobAddressName, setJobAddressName] = useState('');
   const [jobAddressLine1, setJobAddressLine1] = useState(requestAddress.line1);
   const [jobAddressLine2, setJobAddressLine2] = useState(requestAddress.line2);
   const [jobAddressCity, setJobAddressCity] = useState(requestAddress.city);
@@ -365,6 +364,11 @@ export function SoloJobForm({
   const partyNameValue = isCp12Upcoming ? landlordName : clientName;
   const deferredJobAddressSearchQuery = useDeferredValue(jobAddressLine1.trim());
   const deferredPartyAddressSearchQuery = useDeferredValue(landlordAddressLine1.trim());
+  // Filling an address line from a chosen suggestion would otherwise re-trigger the
+  // search effect and immediately re-open the dropdown (it "gets stuck"). These record
+  // the just-filled value so each effect skips exactly that one search.
+  const skipJobAddressSearchForRef = useRef<string | null>(null);
+  const skipPartyAddressSearchForRef = useRef<string | null>(null);
 
   const availableProperties = useMemo(
     () => (selectedClientId ? propertiesByClientId[selectedClientId] ?? [] : []),
@@ -462,16 +466,25 @@ export function SoloJobForm({
     setClientName(initialRequest.landlordName);
     setClientPhone(initialRequest.landlordPhone);
     setClientEmail(initialRequest.landlordEmail);
-    setPropertyName(initialRequest.tenantName.trim());
+    // Flat/unit reference isn't the tenant — don't seed it from the request's tenant name.
+    setPropertyName('');
     setAddressLine1(address.line1);
     setCity(address.city);
     setPostcode(address.postcode);
     setSitePhone(siteContact);
     setScheduledFor(preferredDate ? `${preferredDate}T09:00` : nowForDatetimeLocal());
     setInspectionDate(preferredDate);
-    setJobType(initialRequest.jobType === 'service' ? 'service' : 'safety_check');
+    // A "both" request must open as a combined safety_check_service job (so the engineer
+    // gets both certs and the "complete first" choice) — not silently a CP12-only job.
+    setJobType(
+      initialRequest.jobType === 'both'
+        ? 'safety_check_service'
+        : initialRequest.jobType === 'service'
+          ? 'service'
+          : 'safety_check',
+    );
     setJobTypeTouched(true);
-    setJobAddressName(initialRequest.tenantName.trim());
+    setJobAddressName('');
     setJobAddressLine1(address.line1);
     setJobAddressLine2(address.line2);
     setJobAddressCity(address.city);
@@ -658,6 +671,12 @@ export function SoloJobForm({
   }, [inspectionDate, isCp12Upcoming]);
 
   useEffect(() => {
+    if (skipJobAddressSearchForRef.current !== null && skipJobAddressSearchForRef.current === deferredJobAddressSearchQuery) {
+      skipJobAddressSearchForRef.current = null;
+      setJobAddressSuggestions([]);
+      setIsJobAddressLookupPending(false);
+      return;
+    }
     if (!deferredJobAddressSearchQuery) {
       setJobAddressSuggestions([]);
       setSelectedJobAddressMatchId(null);
@@ -713,6 +732,12 @@ export function SoloJobForm({
   }, [deferredJobAddressSearchQuery]);
 
   useEffect(() => {
+    if (skipPartyAddressSearchForRef.current !== null && skipPartyAddressSearchForRef.current === deferredPartyAddressSearchQuery) {
+      skipPartyAddressSearchForRef.current = null;
+      setPartyAddressSuggestions([]);
+      setIsPartyAddressLookupPending(false);
+      return;
+    }
     if (!deferredPartyAddressSearchQuery) {
       setPartyAddressSuggestions([]);
       setSelectedPartyAddressMatchId(null);
@@ -887,6 +912,7 @@ export function SoloJobForm({
         throw new Error(payload.error || 'Lookup failed');
       }
       const address = payload.address;
+      skipJobAddressSearchForRef.current = address.line1.trim();
       setJobAddressName((current) => current.trim() || address.name);
       setPropertyName((current) => current.trim() || address.name);
       setJobAddressLine1(address.line1);
@@ -924,6 +950,7 @@ export function SoloJobForm({
         throw new Error(payload.error || 'Lookup failed');
       }
       const address = payload.address;
+      skipPartyAddressSearchForRef.current = address.line1.trim();
       setLandlordAddressLine1(address.line1);
       setLandlordAddressLine2(address.line2);
       setLandlordCity(address.city);
@@ -1064,16 +1091,24 @@ export function SoloJobForm({
           variant: 'success',
         });
         if (submitMode === 'continue') {
-          const wizardRoute =
-            jobType === 'safety_check_service'
-              ? combinedFirst ?? 'cp12'
-              : WIZARD_ROUTE_BY_JOB_TYPE[jobType];
-          const shouldSkipFirstWizardStep =
-            Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice';
-          const href = shouldSkipFirstWizardStep
-            ? `/wizard/create/${wizardRoute}?jobId=${jobId}&startStep=2`
-            : `/wizard/create/${wizardRoute}?jobId=${jobId}`;
-          router.push(href);
+          if (jobType === 'safety_check_service' && !combinedFirst) {
+            // Combined CP12 + service job with no "complete first" choice made: land
+            // on the completion checklist (the hub) so the engineer sees both
+            // certificates and picks which to start, rather than being dropped
+            // straight into the CP12 wizard.
+            router.push(`/jobs/${jobId}/complete`);
+          } else {
+            const wizardRoute =
+              jobType === 'safety_check_service'
+                ? combinedFirst ?? 'cp12'
+                : WIZARD_ROUTE_BY_JOB_TYPE[jobType];
+            const shouldSkipFirstWizardStep =
+              Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice';
+            const href = shouldSkipFirstWizardStep
+              ? `/wizard/create/${wizardRoute}?jobId=${jobId}&startStep=2`
+              : `/wizard/create/${wizardRoute}?jobId=${jobId}`;
+            router.push(href);
+          }
         } else {
           router.push('/dashboard');
         }
@@ -1440,8 +1475,7 @@ export function SoloJobForm({
             <div className="rounded-[12px] border-[0.5px] border-[var(--color-action)]/30 bg-[var(--color-action-bg)] px-4 py-3">
               <p className="text-[13px] font-medium text-[var(--color-action)]">Landlord request details</p>
               <div className="mt-2 space-y-1">
-                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Tenant:</span> {initialRequest.tenantName || 'Not provided'}</p>
-                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
+                <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Site phone:</span> {initialRequest.tenantPhone || 'Not provided'}</p>
                 <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Preferred dates:</span> {initialRequest.preferredDates || 'Not provided'}</p>
                 <p className="text-[12px] text-[var(--color-text-secondary)]"><span className="font-medium text-[var(--color-text-primary)]">Access notes:</span> {initialRequest.accessNotes || 'Not provided'}</p>
               </div>
@@ -1644,10 +1678,9 @@ export function SoloJobForm({
                       ? handleCp12PropertyReferenceInput(event.target.value)
                       : handlePropertyReferenceInput(event.target.value)
                   }
-                  placeholder="e.g. Flat 2"
+                  placeholder="e.g. Flat 2 (optional)"
                   className="mt-1"
                   list={isCp12Upcoming ? undefined : 'job-property-reference-options'}
-                  required
                   disabled={isPending}
                 />
                 {!isCp12Upcoming && propertySuggestions.length ? (
