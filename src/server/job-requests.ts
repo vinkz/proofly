@@ -354,11 +354,19 @@ export type JobRequestPrefill = {
 };
 
 function normalizeRequest(row: Record<string, unknown>): DashboardJobRequest {
+  // The `job_type` column only ever stores 'cp12' or 'service', so a landlord's
+  // "both" request was collapsed to 'cp12'. The full intent survives in
+  // `cert_types` (['cp12','boiler_service'] === both), so recover it from there —
+  // this fixes both the dashboard label and the engineer prefill/review screen.
+  const certTypes = Array.isArray(row.cert_types) ? row.cert_types.map((value) => String(value)) : [];
+  const hasCp12 = certTypes.includes('cp12');
+  const hasBoilerService = certTypes.includes('boiler_service');
+  const jobTypeFromCertTypes = hasCp12 && hasBoilerService ? 'both' : hasBoilerService && !hasCp12 ? 'service' : null;
   return {
     id: String(row.id ?? ''),
     requestType: row.request_type === 'new_job' ? 'new_job' : 'renewal',
     source: String(row.source ?? 'public_job_page'),
-    jobType: String(row.job_type ?? 'cp12'),
+    jobType: jobTypeFromCertTypes ?? String(row.job_type ?? 'cp12'),
     propertyAddress: typeof row.property_address === 'string' ? row.property_address : null,
     landlordName: typeof row.landlord_name === 'string' ? row.landlord_name : null,
     landlordEmail: typeof row.landlord_email === 'string' ? row.landlord_email : null,
