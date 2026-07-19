@@ -55,6 +55,12 @@ export async function middleware(request: NextRequest) {
 
   if (user) return response;
 
+  if (request.nextUrl.pathname === '/dashboard' || request.nextUrl.pathname === '/dashboard/') {
+    const landingUrl = request.nextUrl.clone();
+    landingUrl.pathname = '/';
+    return NextResponse.redirect(landingUrl);
+  }
+
   const loginUrl = new URL('/login', request.url);
   loginUrl.searchParams.set('next', `${request.nextUrl.pathname}${request.nextUrl.search}`);
   return NextResponse.redirect(loginUrl);
