@@ -361,6 +361,7 @@ export default async function DashboardPage({
             <Link
               href={`/dashboard?date=${calendarMonth.previousMonthDate}`}
               aria-label="Previous month"
+              scroll={false}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)] hover:text-[var(--color-text-primary)]"
             >
               <ChevronLeftIcon />
@@ -368,6 +369,7 @@ export default async function DashboardPage({
             <Link
               href={`/dashboard?date=${calendarMonth.nextMonthDate}`}
               aria-label="Next month"
+              scroll={false}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-background-tertiary)] hover:text-[var(--color-text-primary)]"
             >
               <ChevronRightIcon />
@@ -408,6 +410,7 @@ export default async function DashboardPage({
               <Link
                 key={day.date}
                 href={`/dashboard?date=${day.date}`}
+                scroll={false}
                 className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-[8px] text-[13px] font-medium transition-colors ${cellTone}`}
               >
                 <span className={hasJobs || isToday || isSelected ? 'font-medium' : 'font-normal'}>
