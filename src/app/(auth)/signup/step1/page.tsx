@@ -59,12 +59,10 @@ export default function SignupStep1Page() {
         });
 
         if (result.needsEmailConfirmation) {
-          pushToast({
-            title: 'Check your email',
-            description: 'Confirm your email to continue into profile setup.',
-            variant: 'success',
-          });
-          router.push('/login');
+          // Send them to the dedicated verify screen (with resend), not a fleeting
+          // toast — email confirmation is a hard gate before profile setup. Don't
+          // fire signupCompleted here: the account isn't usable until confirmed.
+          router.push(`/signup/verify?email=${encodeURIComponent(parsed.data.email)}`);
           return;
         }
 

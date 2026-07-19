@@ -100,6 +100,23 @@ export async function signUpWithPassword(payload: unknown) {
   };
 }
 
+// Re-send the signup confirmation email (used by the "Verify your email" screen).
+// Mirrors the emailRedirectTo used at signup so the link lands back in onboarding.
+export async function resendSignupConfirmation(email: unknown) {
+  const parsed = z.string().email().parse(email);
+  const sb = await createAuthedSupabaseClient();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
+  const emailRedirectTo = siteUrl ? `${siteUrl}/auth/callback?next=${encodeURIComponent('/signup/step2')}` : undefined;
+
+  const { error } = await sb.auth.resend({
+    type: 'signup',
+    email: parsed,
+    options: { emailRedirectTo },
+  });
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
 export async function userHasPassword() {
   const sb = await supabaseServerReadOnly();
   const {
