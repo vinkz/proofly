@@ -592,21 +592,17 @@ function formatSelectedDate(dateString: string) {
 }
 
 function getUpcomingJobHref(job: BasicJob & { prepComplete?: boolean }) {
-  // A combined CP12 + service job uses its completion checklist as the hub — that's
-  // where the engineer lands after accepting, and where they open each certificate.
-  // Returning them there (rather than dropping them into the CP12 prep step) keeps
-  // the two certs visible and matches the accept flow.
-  if (job.job_type === 'safety_check_service') {
+  // CP12 / service jobs (single or combined) use their completion checklist as the
+  // hub — that's where the engineer lands after accepting or scheduling, and where
+  // they open each certificate (the wizard's own prep step runs when they start a
+  // cert). Returning them here, rather than dropping them into an editable prep
+  // form, keeps the job overview visible and matches the accept flow.
+  if (
+    job.job_type === 'safety_check' ||
+    job.job_type === 'safety_check_service' ||
+    job.job_type === 'service'
+  ) {
     return `/jobs/${job.id}/complete`;
-  }
-  if (job.job_type === 'safety_check') {
-    if (job.prepComplete === false) {
-      return `/wizard/create/cp12?jobId=${job.id}&prepare=1`;
-    }
-    return `/wizard/create/cp12?jobId=${job.id}`;
-  }
-  if (job.job_type === 'service') {
-    return `/wizard/create/boiler_service?jobId=${job.id}`;
   }
   if (job.job_type === 'warning_notice') {
     return `/wizard/create/gas_warning_notice?jobId=${job.id}`;
@@ -621,15 +617,8 @@ function getUpcomingJobActionLabel(job: BasicJob & { prepComplete?: boolean }) {
   if (isCompletedJob(job)) {
     return 'Review';
   }
-  // Combined jobs open their completion hub, so "Open" (not "Prepare"/"Start", which
-  // imply a single-certificate wizard step).
-  if (job.job_type === 'safety_check_service') {
-    return 'Open';
-  }
-  if (job.job_type === 'safety_check') {
-    if (job.prepComplete === false) return 'Prepare';
-    return 'Start';
-  }
+  // CP12 / service jobs open their completion hub, so "Open" (not "Prepare"/"Start",
+  // which imply being dropped straight into a single-certificate wizard step).
   return 'Open';
 }
 
@@ -789,7 +778,7 @@ function DashboardJobRow({ job, leadingDate = false }: { job: BasicJob & { prepC
     ctaClass = 'bg-[var(--color-cta)] text-[var(--color-cta-fg)]';
   } else if (actionLabel === 'Review') {
     ctaClass = 'bg-[var(--color-action-bg)] text-[var(--color-action)]';
-  } else if (actionLabel === 'Prepare' || actionLabel === 'Open') {
+  } else if (actionLabel === 'Open') {
     ctaClass =
       'border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] text-[var(--color-text-secondary)]';
   } else {
