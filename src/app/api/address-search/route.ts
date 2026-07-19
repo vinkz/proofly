@@ -6,6 +6,13 @@ import {
   type IdealAutocompleteResponse,
   type IdealResolveResponse,
 } from '@/lib/address-lookup';
+import { clientKeyFromRequest, rateLimit } from '@/lib/rate-limit';
+
+// This endpoint is reachable unauthenticated (the public /request booking page
+// uses it), and each call bills the Ideal Postcodes key. Cap per-IP throughput so
+// a scripted loop can't drain the key balance. Generous enough for real typing.
+const RATE_LIMIT_MAX = 40;
+const RATE_LIMIT_WINDOW_MS = 10_000;
 
 const getApiKey = () => process.env.IDEAL_POSTCODES_API_KEY?.trim() || '';
 const isAddressLookupDisabled = () =>
@@ -100,6 +107,18 @@ async function fetchJson(url: URL) {
 }
 
 export async function GET(request: Request) {
+  const limit = rateLimit(
+    `address-search:${clientKeyFromRequest(request)}`,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_MS,
+  );
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Too many address lookups. Please slow down and try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } },
+    );
+  }
+
   if (isAddressLookupDisabled()) {
     return NextResponse.json({ error: 'Address lookup disabled' }, { status: 403 });
   }

@@ -11,32 +11,15 @@ import {
   stripe,
 } from '@/lib/stripe';
 import { getSupabaseUser, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
-
-type BillingProfile = {
-  stripe_customer_id?: string | null;
-  subscription_status?: string | null;
-  subscription_interval?: string | null;
-  subscription_period_end?: string | null;
-  full_name?: string | null;
-};
-
-type UntypedQuery = {
-  select: (columns?: string, options?: { count?: 'exact'; head?: boolean }) => UntypedQuery;
-  insert: (payload: Record<string, unknown>) => UntypedQuery;
-  update: (payload: Record<string, unknown>) => UntypedQuery;
-  eq: (column: string, value: unknown) => UntypedQuery;
-  maybeSingle: () => Promise<{ data: unknown; error: { message: string } | null; count?: number | null }>;
-  single: () => Promise<{ data: unknown; error: { message: string } | null; count?: number | null }>;
-  then: Promise<{ data: unknown; error: { message: string } | null; count?: number | null }>['then'];
-};
-type UntypedSupabase = { from: (table: string) => UntypedQuery };
-
-const asUntyped = (value: unknown) => value as UntypedSupabase;
-
-function getCurrentBillingMonth(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
+import {
+  asUntyped,
+  checkCertificateAllowanceForUserId,
+  countUsage,
+  getCurrentBillingMonth,
+  hasActivePaidSubscription,
+  recordCertificateUsageForUserId,
+  type BillingProfile,
+} from '@/server/billing-internal';
 
 function getSiteUrl() {
   return (
@@ -60,52 +43,6 @@ async function getAuthedBillingContext() {
   return { user, supabase, db: asUntyped(supabase) };
 }
 
-function hasActivePaidSubscription(profile: BillingProfile | null | undefined) {
-  if (profile?.subscription_status !== 'active') return false;
-  const periodEnd = profile.subscription_period_end;
-  return !periodEnd || new Date(periodEnd) > new Date();
-}
-
-async function countUsage(db: UntypedSupabase, userId: string, billingMonth = getCurrentBillingMonth()) {
-  const { count } = await db
-    .from('certificate_usage')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('billing_month', billingMonth);
-  return count ?? 0;
-}
-
-async function checkCertificateAllowanceForUserId(
-  db: UntypedSupabase,
-  userId: string,
-  requiredCertificates = 1,
-): Promise<{
-  allowed: boolean;
-  used: number;
-  limit: number | null;
-  subscriptionStatus: string;
-}> {
-  const { data } = await db
-    .from('profiles')
-    .select('subscription_status, subscription_period_end')
-    .eq('id', userId)
-    .maybeSingle();
-  const profile = (data ?? null) as BillingProfile | null;
-  const status = profile?.subscription_status ?? 'free';
-
-  if (hasActivePaidSubscription(profile)) {
-    return { allowed: true, used: 0, limit: null, subscriptionStatus: status };
-  }
-
-  const used = await countUsage(db, userId);
-  return {
-    allowed: used + requiredCertificates <= FREE_TIER_MONTHLY_LIMIT,
-    used,
-    limit: FREE_TIER_MONTHLY_LIMIT,
-    subscriptionStatus: status,
-  };
-}
-
 export async function checkCertificateAllowance(requiredCertificates = 1): Promise<{
   allowed: boolean;
   used: number;
@@ -116,49 +53,9 @@ export async function checkCertificateAllowance(requiredCertificates = 1): Promi
   return checkCertificateAllowanceForUserId(db, user.id, requiredCertificates);
 }
 
-export async function checkCertificateAllowanceForUser(userId: string, requiredCertificates = 1) {
-  const supabase = await supabaseServerServiceRole();
-  return checkCertificateAllowanceForUserId(asUntyped(supabase), userId, requiredCertificates);
-}
-
-async function recordCertificateUsageForUserId(
-  db: UntypedSupabase,
-  userId: string,
-  jobId: string,
-  certificateType: string,
-): Promise<void> {
-  const billingMonth = getCurrentBillingMonth();
-  const { data: existing } = await db
-    .from('certificate_usage')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('job_id', jobId)
-    .eq('certificate_type', certificateType)
-    .maybeSingle();
-
-  if (existing) return;
-
-  const { error } = await db.from('certificate_usage').insert({
-    user_id: userId,
-    job_id: jobId,
-    certificate_type: certificateType,
-    billing_month: billingMonth,
-  });
-  if (error) throw new Error(error.message);
-}
-
 export async function recordCertificateUsage(jobId: string, certificateType: string): Promise<void> {
   const { user, db } = await getAuthedBillingContext();
   await recordCertificateUsageForUserId(db, user.id, jobId, certificateType);
-}
-
-export async function recordCertificateUsageForUser(
-  userId: string,
-  jobId: string,
-  certificateType: string,
-): Promise<void> {
-  const supabase = await supabaseServerServiceRole();
-  await recordCertificateUsageForUserId(asUntyped(supabase), userId, jobId, certificateType);
 }
 
 export async function getCertificateUsageSummary(): Promise<{

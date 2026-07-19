@@ -5,7 +5,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     // Playwright specs under tests/e2e run with @playwright/test, not Vitest.
-    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
+    // `.claude/worktrees/**` holds throwaway git worktrees from agent sessions; their
+    // stale test copies resolve `@/` against the root src and fail spuriously.
+    exclude: [...configDefaults.exclude, 'tests/e2e/**', '.claude/**'],
   },
   resolve: {
     alias: {

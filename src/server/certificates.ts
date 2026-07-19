@@ -40,7 +40,7 @@ import { getCustomerById, upsertCustomerFromJobFields } from '@/server/customer-
 import { formatJobAddress } from '@/lib/address';
 import type { JobAddress } from '@/server/address-service';
 import { upsertJobAddressForJob } from '@/server/address-service';
-import { checkCertificateAllowanceForUser, recordCertificateUsageForUser } from '@/server/billing';
+import { checkCertificateAllowanceForUser, recordCertificateUsageForUser } from '@/server/billing-internal';
 import { buildCertificatePublicId, buildClientRef, ensureJobCode, getNextJobCode } from '@/server/id-chain';
 import { persistJobFields, type JobFieldEntry } from '@/server/job-fields';
 

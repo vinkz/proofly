@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server';
 
 import { calculateGasRateForTool } from '@/server/gas-rate';
+import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 export async function POST(request: Request) {
+  // Only the signed-in /tools/gas-rate page calls this. Gate it so the compute
+  // isn't a free, unauthenticated endpoint.
+  const supabase = await supabaseServerReadOnly();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
   let payload: unknown;
   try {
     payload = await request.json();
