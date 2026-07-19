@@ -592,7 +592,14 @@ function formatSelectedDate(dateString: string) {
 }
 
 function getUpcomingJobHref(job: BasicJob & { prepComplete?: boolean }) {
-  if (job.job_type === 'safety_check' || job.job_type === 'safety_check_service') {
+  // A combined CP12 + service job uses its completion checklist as the hub — that's
+  // where the engineer lands after accepting, and where they open each certificate.
+  // Returning them there (rather than dropping them into the CP12 prep step) keeps
+  // the two certs visible and matches the accept flow.
+  if (job.job_type === 'safety_check_service') {
+    return `/jobs/${job.id}/complete`;
+  }
+  if (job.job_type === 'safety_check') {
     if (job.prepComplete === false) {
       return `/wizard/create/cp12?jobId=${job.id}&prepare=1`;
     }
@@ -614,7 +621,12 @@ function getUpcomingJobActionLabel(job: BasicJob & { prepComplete?: boolean }) {
   if (isCompletedJob(job)) {
     return 'Review';
   }
-  if (job.job_type === 'safety_check' || job.job_type === 'safety_check_service') {
+  // Combined jobs open their completion hub, so "Open" (not "Prepare"/"Start", which
+  // imply a single-certificate wizard step).
+  if (job.job_type === 'safety_check_service') {
+    return 'Open';
+  }
+  if (job.job_type === 'safety_check') {
     if (job.prepComplete === false) return 'Prepare';
     return 'Start';
   }
