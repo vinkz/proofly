@@ -388,11 +388,6 @@ export function SoloJobForm({
     [availableProperties, selectedPropertyKey],
   );
 
-  // The combined "complete first" choice is offered but must NOT gate progress —
-  // if skipped it defaults to CP12-first at routing (combinedFirst ?? 'cp12').
-  // Gating it here strands the form on later steps (no visible Continue button).
-  const canShowContinue = jobTypeTouched && clientChosen && propertyChosen;
-
   const goBack = () => {
     if (step === 5) {
       setStep(4);
@@ -1372,19 +1367,20 @@ export function SoloJobForm({
             </div>
           </div>
 
-          {canShowContinue ? (
-            <button
-              type="button"
-              onClick={() => {
-                setPath('self');
-                setStep(4);
-              }}
-              disabled={isPending}
-              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
-            >
-              Continue to details
-            </button>
-          ) : null}
+          {/* Always render Continue — disable until a landlord is chosen, but never
+              hide it. Property can be entered manually on the address step, so it must
+              not gate this button (a false propertyChosen used to strand the form). */}
+          <button
+            type="button"
+            onClick={() => {
+              setPath('self');
+              setStep(4);
+            }}
+            disabled={isPending || !clientChosen}
+            className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+          >
+            Continue to details
+          </button>
         </>
       ) : null}
 
@@ -1619,18 +1615,20 @@ export function SoloJobForm({
             </div>
           </div>
 
-          {canShowContinue ? (
-            <div className="sticky bottom-0 z-10 -mx-4 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 pb-3 pt-3">
-              <button
-                type="button"
-                onClick={() => setStep(5)}
-                disabled={isPending}
-                className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
-              >
-                Continue
-              </button>
-            </div>
-          ) : null}
+          {/* By step 4 the landlord/property selection is already done, so the
+              Continue button must ALWAYS render — never gate it on selection flags
+              (they can race to false and strand the user). Final validation happens
+              at submit. */}
+          <div className="sticky bottom-0 z-10 -mx-4 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 pb-3 pt-3">
+            <button
+              type="button"
+              onClick={() => setStep(5)}
+              disabled={isPending}
+              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            >
+              Continue
+            </button>
+          </div>
         </>
       ) : null}
 
