@@ -1,4 +1,5 @@
 import { SoloJobForm, type SavedPropertyOption } from '@/components/jobs/solo-job-form';
+import { RequestReview } from '@/components/jobs/request-review';
 import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
 import { getMissingOnboardingFields, isOnboardingProfileComplete } from '@/lib/onboarding-profile';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
@@ -303,48 +304,50 @@ export default async function NewJobPage({
     <div className="mx-auto max-w-xl space-y-4 px-4 py-6 sm:py-10">
       <div>
         <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-[var(--color-text-primary)]">
-          New job
+          {requestPrefill ? 'Review request' : 'New job'}
         </h1>
         <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-          Choose the job type, then fill in the details or ask the landlord to send them.
+          {requestPrefill
+            ? 'A landlord sent you this job. Check the details, confirm a date, and accept.'
+            : 'Choose the job type, then fill in the details or ask the landlord to send them.'}
         </p>
       </div>
 
-      {requestIdParam ? (
-        requestPrefill ? (
-          <div className="rounded-[12px] border-[0.5px] border-[var(--color-action)]/30 bg-[var(--color-action-bg)] px-4 py-3 text-[13px]">
-            <p className="font-medium text-[var(--color-action)]">Landlord request loaded</p>
-            <p className="mt-0.5 text-[var(--color-text-secondary)]">
-              Prefilling from {requestPrefill.landlordName || 'landlord'} for {requestPrefill.propertyAddress || 'the requested property'}.
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-[12px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] px-4 py-3 text-[13px]">
-            <p className="font-medium text-[var(--color-text-primary)]">Landlord request not loaded</p>
-            <p className="mt-0.5 text-[var(--color-text-secondary)]">
-              {requestPrefillError || `The request link was received, but no request row loaded for ID ${requestIdParam}.`}
-            </p>
-          </div>
-        )
+      {requestIdParam && !requestPrefill ? (
+        <div className="rounded-[12px] border-[0.5px] border-[var(--color-amber)]/30 bg-[var(--color-amber-bg)] px-4 py-3 text-[13px]">
+          <p className="font-medium text-[var(--color-text-primary)]">Landlord request not loaded</p>
+          <p className="mt-0.5 text-[var(--color-text-secondary)]">
+            {requestPrefillError || `The request link was received, but no request row loaded for ID ${requestIdParam}.`}
+          </p>
+        </div>
       ) : null}
 
       <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5">
-        <SoloJobForm
-          key={requestPrefill?.id ?? 'manual-job'}
-          clients={clients}
-          propertiesByClientId={propertiesByClientId}
-          initialRequest={requestPrefill}
-          requestUrl={requestLink?.url ?? null}
-          initialSelection={
-            initialClientId || initialPropertyId || initialJobType
-              ? {
-                  clientId: initialClientId,
-                  propertyId: initialPropertyId,
-                  jobType: initialJobType,
-                }
-              : null
-          }
-        />
+        {requestPrefill ? (
+          <RequestReview
+            key={requestPrefill.id}
+            initialRequest={requestPrefill}
+            clients={clients}
+            propertiesByClientId={propertiesByClientId}
+          />
+        ) : (
+          <SoloJobForm
+            key="manual-job"
+            clients={clients}
+            propertiesByClientId={propertiesByClientId}
+            initialRequest={null}
+            requestUrl={requestLink?.url ?? null}
+            initialSelection={
+              initialClientId || initialPropertyId || initialJobType
+                ? {
+                    clientId: initialClientId,
+                    propertyId: initialPropertyId,
+                    jobType: initialJobType,
+                  }
+                : null
+            }
+          />
+        )}
       </div>
     </div>
   );

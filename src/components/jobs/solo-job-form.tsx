@@ -1091,11 +1091,11 @@ export function SoloJobForm({
           variant: 'success',
         });
         if (submitMode === 'continue') {
-          if (jobType === 'safety_check_service' && !combinedFirst) {
-            // Combined CP12 + service job with no "complete first" choice made: land
-            // on the completion checklist (the hub) so the engineer sees both
-            // certificates and picks which to start, rather than being dropped
-            // straight into the CP12 wizard.
+          if (initialRequest || (jobType === 'safety_check_service' && !combinedFirst)) {
+            // Jobs created from a landlord request (and combined jobs with no
+            // "complete first" choice) land on the completion checklist — the engineer
+            // confirms the schedule here and opens a certificate wizard when they're
+            // ready to start, rather than being dropped straight into a wizard.
             router.push(`/jobs/${jobId}/complete`);
           } else {
             const wizardRoute =
@@ -1791,7 +1791,7 @@ export function SoloJobForm({
           {/* Combined "safety check + service" jobs (including those opened from a
               landlord request for BOTH certs): let the engineer see both are needed and
               choose which to start with. The other is completed straight after. */}
-          {jobType === 'safety_check_service' ? (
+          {jobType === 'safety_check_service' && !initialRequest ? (
             <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-4">
               <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                 This job needs a CP12 and a boiler service — complete first?
