@@ -26,7 +26,7 @@ export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-current-path', request.nextUrl.pathname);
   requestHeaders.set('x-current-search', request.nextUrl.search);
-  const response = NextResponse.next({
+  let response = NextResponse.next({
     request: {
       headers: requestHeaders,
     },
@@ -37,14 +37,21 @@ export async function middleware(request: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      get(name: string) {
-        return request.cookies.get(name)?.value;
+      getAll() {
+        return request.cookies.getAll();
       },
-      set(name: string, value: string, options) {
-        response.cookies.set({ name, value, ...options });
-      },
-      remove(name: string, options) {
-        response.cookies.set({ name, value: '', expires: new Date(0), ...options });
+      setAll(cookiesToSet) {
+        // When getUser() rotates the refresh token, forward the *new* cookies to
+        // the downstream request as well as the browser response. Without this,
+        // the Server Components in this same request keep reading the old cookie
+        // and re-refresh an already-rotated token, which fails as "invalid
+        // refresh token" -> null user -> a 500 on the page's own getUser().
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        requestHeaders.set('cookie', request.cookies.toString());
+        response = NextResponse.next({ request: { headers: requestHeaders } });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set({ name, value, ...options }),
+        );
       },
     },
   });

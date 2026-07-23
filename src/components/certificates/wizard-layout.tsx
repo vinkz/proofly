@@ -79,7 +79,15 @@ export function WizardLayout({
           </div>
           <span className="text-[11px] text-[var(--color-text-tertiary)]">Step {step} of {total}</span>
           <div className="flex flex-1 justify-end">
-            {actions && !hideActions ? <div>{actions}</div> : null}
+            {/* Keep the node mounted and only toggle visibility. Unmounting it
+                changed the sticky header's height, which shifted the observed
+                footer across the IntersectionObserver threshold and caused an
+                infinite setHideActions(true/false) layout-thrash loop. */}
+            {actions ? (
+              <div className={hideActions ? 'invisible' : undefined} aria-hidden={hideActions}>
+                {actions}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="mx-auto mb-[10px] mt-[10px] max-w-2xl">

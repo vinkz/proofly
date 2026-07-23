@@ -168,7 +168,7 @@ export async function getRecentJobAddressesForClient(clientId: string, excludeJo
     data: { user },
     error: userError,
   } = await sb.auth.getUser();
-  if (userError || !user) throw new Error(userError?.message ?? 'Unauthorized');
+  if (userError || !user) throw new Error('Unauthorized');
 
   const { data: jobs, error: jobsError } = await sb
     .from(JOBS_TABLE)

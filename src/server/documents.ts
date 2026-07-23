@@ -20,7 +20,7 @@ export async function savePdfToDocuments({
     data: { user },
     error: authErr,
   } = await sb.auth.getUser();
-  if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
+  if (authErr || !user) throw new Error('Unauthorized');
 
   const { data: job, error: jobErr } = await sb
     .from('jobs')

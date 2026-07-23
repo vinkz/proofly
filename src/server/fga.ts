@@ -37,7 +37,7 @@ export async function saveFgaReadings(input: SaveFgaReadingsInput): Promise<FgaR
     data: { user },
     error: authErr,
   } = await sb.auth.getUser();
-  if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
+  if (authErr || !user) throw new Error('Unauthorized');
 
   // fga_readings is newly added and not yet in generated types; use an untyped handle.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

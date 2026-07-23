@@ -460,7 +460,7 @@ async function requireUser(options: { write?: boolean } = {}) {
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
   return { sb, user };
 }
 
@@ -480,7 +480,7 @@ export async function listJobs() {
     data: { user },
     error: userErr,
   } = await sb.auth.getUser();
-  if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
+  if (userErr || !user) throw new Error('Unauthorized');
 
   const columnVariants = [
     // certificate_type / parent_job_id are legacy migration columns; the 42703
@@ -729,7 +729,7 @@ export async function createJob(form: FormData | Record<string, unknown>) {
     data: { user },
     error: userErr,
   } = await sb.auth.getUser();
-  if (userErr || !user) throw new Error(userErr?.message ?? 'Unauthorized');
+  if (userErr || !user) throw new Error('Unauthorized');
 
   const { data: template, error: tmplErr } = await sb
     .from('templates')
@@ -808,7 +808,7 @@ export async function createJobDraftFromClient(clientId: string) {
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const resolved = await resolveCustomerFromId({ customerId: clientId, sb, userId: user.id });
   const clientRecord = resolved?.customer ?? null;
@@ -1425,7 +1425,7 @@ export async function getJobWithChecklist(jobId: string) {
     data: { user },
     error: authErr,
   } = await sb.auth.getUser();
-  if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
+  if (authErr || !user) throw new Error('Unauthorized');
 
   const columnVariants = [
     'id, client_id, client_name, address, status, created_at, template_id, user_id, notes, title, scheduled_for, completed_at, engineer_signature_path, client_signature_path, technician_name, job_type',
@@ -2135,7 +2135,7 @@ export async function deletePhoto(params: { jobId: string; photoId: string; stor
     data: { user },
     error: authErr,
   } = await sb.auth.getUser();
-  if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
+  if (authErr || !user) throw new Error('Unauthorized');
 
   const { data: jobRecord, error: jobErr } = await sb.from('jobs').select('user_id').eq('id', typedJobId).maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
@@ -2234,7 +2234,7 @@ export async function deleteMyJobs() {
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const { error: deleteErr } = await sb.from('jobs').delete().eq('user_id', user.id);
   if (deleteErr) throw new Error(deleteErr.message);
@@ -2508,7 +2508,7 @@ export async function sendReportEmail(jobId: string, payload: FormData | Record<
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const { data: report, error: reportErr } = await sb
     .from('reports')

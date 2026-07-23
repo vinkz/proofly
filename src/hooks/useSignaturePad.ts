@@ -39,11 +39,25 @@ export const useSignaturePad = () => {
       return true;
     };
 
+    // Defer resize-driven canvas mutations to the next frame. Writing
+    // canvas.width/height from inside the ResizeObserver callback can make the
+    // browser report "ResizeObserver loop completed with undelivered
+    // notifications"; scheduling the work with rAF keeps it out of the delivery
+    // cycle. The size guards in syncCanvasSize prevent redundant reflows.
+    let observerFrame: number | null = null;
+    const scheduleCanvasSync = () => {
+      if (observerFrame !== null) return;
+      observerFrame = window.requestAnimationFrame(() => {
+        observerFrame = null;
+        syncCanvasSize();
+      });
+    };
+
     syncCanvasSize();
     const frame = window.requestAnimationFrame(syncCanvasSize);
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncCanvasSize);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleCanvasSync);
     observer?.observe(canvas);
-    window.addEventListener('resize', syncCanvasSize);
+    window.addEventListener('resize', scheduleCanvasSync);
 
     const preventPageGesture = (event: Event) => {
       if (event.cancelable) event.preventDefault();
@@ -148,8 +162,9 @@ export const useSignaturePad = () => {
 
     return () => {
       window.cancelAnimationFrame(frame);
+      if (observerFrame !== null) window.cancelAnimationFrame(observerFrame);
       observer?.disconnect();
-      window.removeEventListener('resize', syncCanvasSize);
+      window.removeEventListener('resize', scheduleCanvasSync);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);

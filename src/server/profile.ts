@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { unstable_noStore as noStore } from 'next/cache';
+import { redirect } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
@@ -30,7 +31,13 @@ const getMissingColumnFromSchemaError = (message: string) =>
 async function requireUser(options: { write?: boolean } = {}) {
   const sb = options.write ? await supabaseServerAction() : await supabaseServerReadOnly();
   const user = await getSupabaseUser(sb);
-  if (!user) throw new Error('Unauthorized');
+  if (!user) {
+    // Page loads (read) send the visitor to log in rather than rendering a 500
+    // error screen. Write server actions keep throwing so the caller can surface
+    // an inline error instead of navigating away mid-mutation.
+    if (options.write) throw new Error('Unauthorized');
+    redirect('/login');
+  }
   return { sb, user };
 }
 

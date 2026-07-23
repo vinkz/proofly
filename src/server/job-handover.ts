@@ -46,7 +46,7 @@ export async function getJobHandoverBundle(jobId: string): Promise<JobHandoverBu
     data: { user },
     error: userError,
   } = await sb.auth.getUser();
-  if (userError || !user) throw new Error(userError?.message ?? 'Unauthorized');
+  if (userError || !user) throw new Error('Unauthorized');
 
   const { data: job, error: jobError } = await sb
     .from('jobs')

@@ -123,7 +123,7 @@ export async function userHasPassword() {
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const identities = (
     user as { identities?: Array<{ provider?: string; identity_data?: Record<string, unknown> }> }

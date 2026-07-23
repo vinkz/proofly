@@ -38,7 +38,7 @@ export async function uploadJobFile(input: UploadJobFileInput): Promise<{
     data: { user },
     error: authErr,
   } = await sb.auth.getUser();
-  if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
+  if (authErr || !user) throw new Error('Unauthorized');
 
   // job_files table is newly added and not in generated types; use an untyped handle.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -114,7 +114,7 @@ export async function getSignedJobFileUrl({
     data: { user },
     error: authErr,
   } = await sb.auth.getUser();
-  if (authErr || !user) throw new Error(authErr?.message ?? 'Unauthorized');
+  if (authErr || !user) throw new Error('Unauthorized');
 
   // job_files/reports tables are new; use an untyped handle for lookups.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -32,7 +32,7 @@ async function requireUser(options: { write?: boolean } = {}) {
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
   return { sb, user };
 }
 

@@ -135,6 +135,8 @@ export function GoogleAuthButton({
     const el = containerRef.current;
     if (!el) return;
     let cancelled = false;
+    let observer: ResizeObserver | null = null;
+    let renderFrame: number | null = null;
 
     (async () => {
       const [rawNonce, hashedNonce] = await generateNonce();
@@ -146,8 +148,10 @@ export function GoogleAuthButton({
         nonce: hashedNonce,
         ux_mode: 'popup',
       });
+      let lastRenderedWidth = -1;
       const render = () => {
         if (!containerRef.current) return;
+        lastRenderedWidth = Math.min(Math.max(containerRef.current.offsetWidth, 200), 400);
         containerRef.current.innerHTML = '';
         gis.renderButton(containerRef.current, {
           type: 'standard',
@@ -156,14 +160,27 @@ export function GoogleAuthButton({
           text: 'continue_with',
           shape: 'rectangular',
           logo_alignment: 'left',
-          width: Math.min(Math.max(containerRef.current.offsetWidth, 200), 400),
+          width: lastRenderedWidth,
+        });
+      };
+      // Re-rendering the Google button rewrites the container's DOM, so doing it
+      // synchronously inside the ResizeObserver callback can trigger the browser's
+      // "ResizeObserver loop..." notice. Defer to rAF and skip when the clamped
+      // width is unchanged (height changes don't affect the button).
+      const scheduleRender = () => {
+        if (renderFrame !== null) return;
+        renderFrame = window.requestAnimationFrame(() => {
+          renderFrame = null;
+          if (cancelled || !containerRef.current) return;
+          const nextWidth = Math.min(Math.max(containerRef.current.offsetWidth, 200), 400);
+          if (nextWidth === lastRenderedWidth) return;
+          render();
         });
       };
       render();
       setReady(true);
-      const observer = new ResizeObserver(render);
+      observer = new ResizeObserver(scheduleRender);
       observer.observe(el);
-      return () => observer.disconnect();
     })().catch((error) => {
       pushToast({
         title: 'Google sign-in unavailable',
@@ -174,6 +191,8 @@ export function GoogleAuthButton({
 
     return () => {
       cancelled = true;
+      if (renderFrame !== null) window.cancelAnimationFrame(renderFrame);
+      observer?.disconnect();
     };
   }, [clientId, handleCredential, pushToast]);
 

@@ -247,7 +247,7 @@ export async function listClients(search?: string): Promise<ClientListItem[]> {
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const clientsQuery = sb
     .from('clients')
@@ -275,7 +275,7 @@ export async function listClientsWithCompliance(search?: string): Promise<Client
 
   const sb = await supabaseServerReadOnly();
   const { data: { user }, error } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const allClientIds = clients.flatMap((c) => c.client_ids ?? [c.id]);
 
@@ -370,7 +370,7 @@ export async function createClient(payload: FormData | Record<string, unknown>) 
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const { data: existingClients, error: existingErr } = await sb
     .from('clients')
@@ -441,7 +441,7 @@ export async function getClientDetail(id: string) {
     data: { user },
     error,
   } = await sb.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const { data: clientRows, error: clientErr } = await sb
     .from('clients')
@@ -665,7 +665,7 @@ export async function updateClient(payload: FormData | Record<string, unknown>) 
     data: { user },
     error,
   } = await readClient.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const sb = await supabaseServerAction();
 
@@ -726,7 +726,7 @@ export async function deleteClient(id: string) {
     data: { user },
     error,
   } = await readClient.auth.getUser();
-  if (error || !user) throw new Error(error?.message ?? 'Unauthorized');
+  if (error || !user) throw new Error('Unauthorized');
 
   const sb = await supabaseServerAction();
 
