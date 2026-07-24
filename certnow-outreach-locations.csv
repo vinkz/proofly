@@ -1,0 +1,113 @@
+Town,Region,Postcode area,Search status
+Bath,South West England,BA,Ready
+Bristol,South West England,BS,Ready
+Gloucester,South West England,GL,Ready
+Cheltenham,South West England,GL,Ready
+Swindon,South West England,SN,Ready
+Bournemouth,South West England,BH,Ready
+Plymouth,South West England,PL,Ready
+Exeter,South West England,EX,Ready
+Cardiff,Wales,CF,Ready
+Newport,Wales,NP,Ready
+Swansea,Wales,SA,Ready
+Wrexham,Wales,LL,Ready
+Stoke-on-Trent,West Midlands,ST,Ready
+Preston,North West England,PR,Ready
+Blackpool,North West England,FY,Ready
+Nottingham,East Midlands,NG,Ready
+Leicester,East Midlands,LE,Ready
+Derby,East Midlands,DE,Ready
+Northampton,East Midlands,NN,Ready
+Reading,South East England,RG,Ready
+Oxford,South East England,OX,Ready
+Milton Keynes,South East England,MK,Ready
+Southampton,South East England,SO,Ready
+Portsmouth,South East England,PO,Ready
+Brighton and Hove,South East England,BN,Ready
+Luton,East of England,LU,Ready
+Peterborough,East of England,PE,Ready
+Cambridge,East of England,CB,Ready
+Norwich,East of England,NR,Ready
+Middlesbrough,North East England,TS,Ready
+York,Yorkshire and the Humber,YO,Ready
+Hull,Yorkshire and the Humber,HU,Ready
+Edinburgh,Scotland,EH,Ready
+Glasgow,Scotland,G,Ready
+Aberdeen,Scotland,AB,Ready
+Dundee,Scotland,DD,Ready
+Stirling,Scotland,FK,Ready
+Inverness,Scotland,IV,Ready
+Perth,Scotland,PH,Ready
+Belfast,Northern Ireland,BT,Ready
+Derry,Northern Ireland,BT,Ready
+Lisburn,Northern Ireland,BT,Ready
+Newry,Northern Ireland,BT,Ready
+Barking and Dagenham,London,"IG, RM",Ready
+Barnet,London,"EN, HA, N, NW",Ready
+Bexley,London,"DA, SE",Ready
+Brent,London,"HA, NW, W",Ready
+Bromley,London,"BR, DA, SE, TN",Ready
+Camden,London,"EC, N, NW, WC",Ready
+City of London,London,"EC, WC",Ready
+Croydon,London,"CR, SE, SW",Ready
+Ealing,London,"UB, W",Ready
+Enfield,London,"EN, N",Ready
+Greenwich,London,"DA, SE",Ready
+Hackney,London,"E, EC, N",Ready
+Hammersmith and Fulham,London,"SW, W",Ready
+Haringey,London,N,Ready
+Harrow,London,HA,Ready
+Havering,London,"IG, RM",Ready
+Hillingdon,London,"HA, UB, TW",Ready
+Hounslow,London,"TW, W",Ready
+Islington,London,"EC, N",Ready
+Kensington and Chelsea,London,"SW, W",Ready
+Kingston upon Thames,London,"KT, SW",Ready
+Lambeth,London,"SE, SW",Ready
+Lewisham,London,"BR, SE",Ready
+Merton,London,"CR, KT, SM, SW",Ready
+Newham,London,E,Ready
+Redbridge,London,"E, IG, RM",Ready
+Richmond upon Thames,London,"KT, SW, TW",Ready
+Southwark,London,SE,Ready
+Sutton,London,"CR, KT, SM",Ready
+Tower Hamlets,London,"E, EC",Ready
+Waltham Forest,London,"E, IG",Ready
+Wandsworth,London,SW,Ready
+Westminster,London,"NW, SW, W, WC",Ready
+Bolton,Greater Manchester,BL,Ready
+Bury,Greater Manchester,BL,Ready
+Manchester,Greater Manchester,M,Ready
+Oldham,Greater Manchester,OL,Ready
+Rochdale,Greater Manchester,OL,Ready
+Salford,Greater Manchester,M,Ready
+Stockport,Greater Manchester,SK,Ready
+Tameside,Greater Manchester,"OL, SK",Ready
+Trafford,Greater Manchester,"M, WA",Ready
+Wigan,Greater Manchester,WN,Ready
+Knowsley,Merseyside,L,Ready
+Liverpool,Merseyside,L,Ready
+St Helens,Merseyside,WA,Ready
+Sefton,Merseyside,"L, PR",Ready
+Wirral,Merseyside,CH,Ready
+Barnsley,South Yorkshire,S,Ready
+Doncaster,South Yorkshire,DN,Ready
+Rotherham,South Yorkshire,S,Ready
+Sheffield,South Yorkshire,S,Ready
+Gateshead,Tyne and Wear,NE,Ready
+Newcastle upon Tyne,Tyne and Wear,NE,Ready
+North Tyneside,Tyne and Wear,NE,Ready
+South Tyneside,Tyne and Wear,NE,Ready
+Sunderland,Tyne and Wear,"SR, DH",Ready
+Birmingham,West Midlands,B,Ready
+Coventry,West Midlands,CV,Ready
+Dudley,West Midlands,DY,Ready
+Sandwell,West Midlands,"B, DY",Ready
+Solihull,West Midlands,B,Ready
+Walsall,West Midlands,WS,Ready
+Wolverhampton,West Midlands,WV,Ready
+Bradford,West Yorkshire,BD,Ready
+Calderdale,West Yorkshire,HX,Ready
+Kirklees,West Yorkshire,"HD, WF",Ready
+Leeds,West Yorkshire,"LS, WF",Ready
+Wakefield,West Yorkshire,WF,Ready
