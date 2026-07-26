@@ -23,11 +23,9 @@ import { validateGwnForIssue } from '@/lib/gwn/validation';
 import type { GeneralWorksPhotoCategory } from '@/types/general-works';
 import { GENERAL_WORKS_PHOTO_CATEGORIES, GENERAL_WORKS_REQUIRED_FIELDS } from '@/types/general-works';
 import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
-import { type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
-import { renderCp12CertificateV2Pdf } from '@/server/pdf/renderCp12CertificateV2';
-import { cp12ApplianceTypeLabel, resolveCp12Category, resolveCp12Subtype } from '@/lib/cp12/applianceConfig';
+import { renderCp12CertificatePdf } from '@/server/pdf/renderCp12Certificate';
 import { CP12_TEMPLATE_VERSION } from '@/lib/cp12/field-config';
-import { composeCp12DefectSummary, type Cp12DefectAppliance } from '@/lib/cp12/defect-summary';
+import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 import {
   type ApplianceInput as GasServiceApplianceInput,
@@ -401,54 +399,6 @@ function getGasWarningClassification(appliance: Cp12Appliance): 'ar' | 'id' | nu
   if (/\bid\b/.test(normalized) || normalized.includes('immediately dangerous')) return 'id';
   if (/\bar\b/.test(normalized) || normalized.includes('at risk')) return 'ar';
   return null;
-}
-
-function formatCp12SafetyClassification(value: string | null | undefined) {
-  const normalized = String(value ?? '').trim().toLowerCase();
-  if (normalized === 'safe') return 'Safe';
-  if (normalized === 'ncs' || normalized === 'not to current standards') return 'Not to Current Standards';
-  if (normalized === 'ar' || normalized === 'at risk' || normalized === 'at_risk') return 'At Risk';
-  if (normalized === 'id' || normalized === 'immediately dangerous' || normalized === 'immediately_dangerous') {
-    return 'Immediately Dangerous';
-  }
-  return '';
-}
-
-function formatCp12ApplianceSafeToUse(appliance: Pick<Cp12Appliance, 'safety_classification' | 'classification_code' | 'safety_rating'>) {
-  const normalized = String(
-    appliance.safety_classification || appliance.classification_code || appliance.safety_rating || '',
-  )
-    .trim()
-    .toLowerCase();
-  if (!normalized) return '';
-  if (normalized === 'safe' || normalized === 'ncs' || normalized === 'not to current standards') return 'Yes';
-  if (
-    normalized === 'ar' ||
-    normalized === 'at risk' ||
-    normalized === 'at_risk' ||
-    normalized === 'id' ||
-    normalized === 'immediately dangerous' ||
-    normalized === 'immediately_dangerous'
-  ) {
-    return 'No';
-  }
-  return '';
-}
-
-function buildCp12ApplianceUnsafePdfSummary(appliance: Cp12Appliance) {
-  const classification = formatCp12SafetyClassification(
-    appliance.safety_classification || appliance.classification_code || appliance.safety_rating,
-  );
-  if (!classification || classification === 'Safe') return '';
-
-  const parts = [
-    `Class: ${classification}`,
-    appliance.defect_notes?.trim() ? `Defect: ${appliance.defect_notes.trim()}` : '',
-    `Warning notice: ${appliance.warning_notice_issued ? 'Yes' : 'No'}`,
-    appliance.actions_taken?.trim() ? `Action: ${appliance.actions_taken.trim()}` : '',
-  ].filter(Boolean);
-
-  return parts.join('; ');
 }
 
 function isIssuedCertificateRecord(certificate: CertificateRecord | null) {
@@ -3032,166 +2982,22 @@ async function generateCp12CertificateForJob(params: {
   const limitReached = await getLimitReachedResultForFinalIssue(previewOnly, userId);
   if (limitReached) return limitReached;
 
-  const toText = (val: unknown) => (val === undefined || val === null ? '' : String(val));
-  const splitAddressParts = (value: unknown) =>
-    String(value ?? '')
-      .split(/[\r\n,]+/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-  const extractPostcode = (value: unknown) => {
-    const match = String(value ?? '').toUpperCase().match(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/);
-    return match ? match[0].replace(/\s+/g, ' ').trim() : '';
-  };
-  const buildCombustionSummary = (coPpm: string, co2: string, ratio: string, legacy?: string) => {
-    const parts = [coPpm && `${coPpm}ppm`, co2 && `${co2}%`, ratio && ratio].filter(Boolean);
-    if (parts.length) return parts.join(' / ');
-    return legacy ?? '';
-  };
-  const fallbackJobAddressParts = splitAddressParts(
-    mergedFieldMap.property_address ?? mergedFieldMap.address ?? propertyAddress.summary ?? '',
-  );
-  const jobAddressLine1 = toText(mergedFieldMap.job_address_line1 ?? fallbackJobAddressParts[0] ?? '');
-  const jobAddressLine2 = toText(mergedFieldMap.job_address_line2 ?? fallbackJobAddressParts[1] ?? '');
-  const jobAddressTown = toText(
-    mergedFieldMap.job_address_city ?? (fallbackJobAddressParts.length > 2 ? fallbackJobAddressParts.slice(2).join('\n') : ''),
-  );
-  const jobAddressPostcode = pickText(
-    toText(mergedFieldMap.job_postcode ?? ''),
-    toText(mergedFieldMap.property_postcode ?? ''),
-    propertyAddress.postcode,
-    toText(mergedFieldMap.postcode ?? ''),
-  );
-  const jobAddressName = toText(mergedFieldMap.job_address_name ?? mergedFieldMap.property_name ?? '');
-  const jobAddressTel = toText(mergedFieldMap.job_tel ?? '');
-  const fallbackLandlordParts = splitAddressParts(mergedFieldMap.landlord_address ?? customer.address ?? '');
-  const landlordLine1 = toText(mergedFieldMap.landlord_address_line1 ?? fallbackLandlordParts[0] ?? '');
-  const landlordLine2 = toText(
-    mergedFieldMap.landlord_address_line2 ??
-      (fallbackLandlordParts.length > 2 ? fallbackLandlordParts.slice(1, -1).join('\n') : ''),
-  );
-  const landlordCity = toText(
-    mergedFieldMap.landlord_city ??
-      mergedFieldMap.landlord_town ??
-      (fallbackLandlordParts.length > 1 ? fallbackLandlordParts.at(-1) ?? '' : ''),
-  );
-  const landlordPostcode = toText(
-    mergedFieldMap.landlord_postcode ?? extractPostcode(mergedFieldMap.landlord_address ?? ''),
-  );
-  const landlordTel = toText(mergedFieldMap.landlord_tel ?? '');
-  const cp12Fields: Cp12FieldMap = {
-    certNumber: toText(mergedFieldMap.record_id ?? mergedFieldMap.certificate_number ?? publicId),
-    issueDate: toText(mergedFieldMap.inspection_date ?? mergedFieldMap.scheduled_for ?? '') || undefined,
-    nextInspectionDue: toText(mergedFieldMap.next_inspection_due ?? mergedFieldMap.completion_date ?? ''),
-    landlordName: toText(mergedFieldMap.landlord_name ?? customer.name ?? ''),
-    landlordCompany: toText(mergedFieldMap.landlord_company ?? customer.organization ?? ''),
-    landlordAddressLine1: landlordLine1,
-    landlordAddressLine2: landlordLine2,
-    landlordTown: landlordCity,
-    landlordPostcode: landlordPostcode,
-    landlordTel: landlordTel,
-    propertyAddressName: jobAddressName,
-    propertyAddressLine1: jobAddressLine1,
-    propertyAddressLine2: jobAddressLine2,
-    propertyTown: jobAddressTown,
-    propertyPostcode: jobAddressPostcode,
-    propertyTel: jobAddressTel,
-    companyName: toText(mergedFieldMap.company_name ?? ''),
-    companyAddressLine1: toText(mergedFieldMap.company_address ?? ''),
-    companyTown: '',
-    companyPostcode: '',
-    companyPhone: toText(mergedFieldMap.company_phone ?? ''),
-    companyEmail: toText(mergedFieldMap.company_email ?? ''),
-    gasSafeRegistrationNumber: toText(mergedFieldMap.gas_safe_number ?? ''),
-    engineerName: toText(mergedFieldMap.engineer_name ?? ''),
-    engineerIdNumber: toText(mergedFieldMap.engineer_id ?? mergedFieldMap.engineer_id_card_number ?? ''),
-    engineerSignatureText: toText(mergedFieldMap.engineer_name ?? ''),
-    engineerSignatureUrl: toText(
-      mergedFieldMap.engineer_signature_path ??
-        mergedFieldMap.engineer_signature ??
-        mergedFieldMap.engineer_signature_url ??
-        '',
-    ),
-    engineerVisitTime: toText(mergedFieldMap.completion_date ?? ''),
-    responsiblePersonName: toText(customer.name ?? ''),
-    responsiblePersonSignatureText: toText(customer.name ?? ''),
-    responsiblePersonSignatureUrl: toText(
-      mergedFieldMap.customer_signature_path ??
-        mergedFieldMap.customer_signature ??
-        mergedFieldMap.customer_signature_url ??
-        '',
-    ),
-    responsiblePersonAcknowledgementDate: toText(mergedFieldMap.completion_date ?? ''),
-    // Fallback: if the record-level defect/remedial box was not filled, compose
-    // it from per-appliance failed checks + notes so the certificate never shows
-    // "None identified" while a defect exists on an appliance.
-    defectsIdentified:
-      toText(mergedFieldMap.defect_description ?? '') ||
-      composeCp12DefectSummary(appliancesForIssue as unknown as Cp12DefectAppliance[]).defect_description,
-    remedialWorksRequired:
-      toText(mergedFieldMap.remedial_action ?? '') ||
-      composeCp12DefectSummary(appliancesForIssue as unknown as Cp12DefectAppliance[]).remedial_action,
-    warningNoticeIssued: toText(mergedFieldMap.warning_notice_issued ?? ''),
-    additionalNotes: toText(mergedFieldMap.comments ?? mergedFieldMap.additional_notes ?? ''),
-    coAlarmFitted: toText(mergedFieldMap.co_alarm_fitted ?? ''),
-    coAlarmTested: toText(mergedFieldMap.co_alarm_tested ?? ''),
-    coAlarmSatisfactory: toText(mergedFieldMap.co_alarm_satisfactory ?? ''),
-    emergencyControlAccessible: toText(
-      mergedFieldMap.emergency_control_accessible ?? mergedFieldMap.emergency_control ?? '',
-    ),
-    gasTightnessSatisfactory: toText(mergedFieldMap.gas_tightness_satisfactory ?? ''),
-    pipeworkVisualSatisfactory: toText(mergedFieldMap.pipework_visual_satisfactory ?? ''),
-    equipotentialBondingSatisfactory: toText(mergedFieldMap.equipotential_bonding_satisfactory ?? ''),
-  };
-
-  const applianceInputs: ApplianceInput[] = appliancesForIssue.map((app) => {
-    const appExtras = app as Cp12Appliance & { appliance_make_model?: string };
-    const highCoPpm = toText(app.high_co_ppm ?? app.co_reading_high ?? '');
-    const highCo2 = toText(app.high_co2 ?? '');
-    const highRatio = toText(app.high_ratio ?? '');
-    const lowCoPpm = toText(app.low_co_ppm ?? app.co_reading_low ?? '');
-    const lowCo2 = toText(app.low_co2 ?? '');
-    const lowRatio = toText(app.low_ratio ?? '');
-    const applianceSafe = formatCp12ApplianceSafeToUse(app);
-    const category = resolveCp12Category(app.appliance_type);
-    const subtype = resolveCp12Subtype(category, app.appliance_subtype, app.appliance_type);
-    const typeLabel = cp12ApplianceTypeLabel(category, subtype);
-    return {
-      description: toText(app.make_model ?? appExtras.appliance_make_model ?? '') || typeLabel,
-      landlordAppliance: toText(app.landlords_appliance ?? ''),
-      applianceInspected: toText(app.appliance_inspected ?? ''),
-      location: toText(app.location ?? ''),
-      type: typeLabel,
-      category,
-      flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
-      flueLocation: toText(app.flue_location ?? app.location ?? ''),
-      operatingPressure: toText(app.operating_pressure ?? ''),
-      heatInput: toText(app.heat_input ?? ''),
-      safetyDevice: toText(app.safety_devices_correct ?? app.stability_test ?? ''),
-      ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
-      flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
-      spillageTest: toText(app.gas_tightness_test ?? ''),
-      applianceSafeToUse: applianceSafe,
-      remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),
-      combustionHighCoPpm: highCoPpm,
-      combustionHighCo2: highCo2,
-      combustionHighRatio: highRatio,
-      combustionLowCoPpm: lowCoPpm,
-      combustionLowCo2: lowCo2,
-      combustionLowRatio: lowRatio,
-      combustionHigh: buildCombustionSummary(highCoPpm, highCo2, highRatio, toText(app.co_reading_ppm ?? '')),
-      combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? '')),
-      combustionNotes: toText(app.combustion_notes ?? ''),
-      applianceServiced: toText(app.appliance_serviced ?? ''),
-      reg26Confirmed: Boolean(app.reg_26_9_confirmed),
-    };
-  });
-
-  const pdfBytes = await renderCp12CertificateV2Pdf({
-    fields: cp12Fields,
-    appliances: applianceInputs,
-    issuedAt,
+  const renderInput = buildCp12RenderInput({
+    fieldMap: mergedFieldMap,
+    appliances: appliancesForIssue,
     recordId: jobId,
+    certNumber: publicId,
+    issuedAt,
+    fallbacks: {
+      customerName: customer.name,
+      customerOrganization: customer.organization,
+      customerAddress: customer.address,
+      propertySummary: propertyAddress.summary,
+      propertyPostcode: propertyAddress.postcode,
+    },
   });
+
+  const pdfBytes = await renderCp12CertificatePdf(renderInput);
   console.info('CP12 PDF rendered', { jobId, templateVersion: CP12_TEMPLATE_VERSION, previewOnly });
   const cp12PdfHash8 = createHash('sha256').update(pdfBytes).digest('hex').slice(0, 8);
   const cp12DebugMode = process.env.CP12_PDF_DEBUG === '1';
