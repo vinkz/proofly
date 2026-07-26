@@ -242,6 +242,25 @@
     }
   }
 
+  @keyframes legal-rise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 8px, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  .legal-hero-enter {
+    animation: legal-rise 420ms ease-out both;
+  }
+
+  .legal-content-enter {
+    animation: legal-rise 460ms 80ms ease-out both;
+  }
+
   .brand-loader-logo {
     animation: brand-loader-breathe 2.4s ease-in-out infinite;
   }
@@ -290,6 +309,11 @@
   .brand-loader-logo,
   .brand-loader-shine,
   .brand-loader-bar {
+    animation: none !important;
+  }
+
+  .legal-hero-enter,
+  .legal-content-enter {
     animation: none !important;
   }
 

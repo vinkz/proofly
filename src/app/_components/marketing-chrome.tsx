@@ -46,11 +46,18 @@ export function MarketingFooter() {
         <Link href="/blog" className="text-[13px] text-[var(--color-text-secondary)]">
           Blog
         </Link>
-        {['Privacy', 'Terms', 'Contact'].map((l) => (
-          <Link key={l} href="#" className="text-[13px] text-[var(--color-text-secondary)]">
-            {l}
-          </Link>
-        ))}
+        <Link
+          href="/legal/privacy"
+          className="text-[13px] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+        >
+          Privacy
+        </Link>
+        <a
+          href="mailto:kelvin@certnow.uk"
+          className="text-[13px] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+        >
+          Contact
+        </a>
       </div>
     </footer>
   );
