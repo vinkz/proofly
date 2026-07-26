@@ -140,8 +140,8 @@ const landlordBenefits = [
   },
   {
     icon: <IconBellRinging />,
-    title: "Renewal reminders before you expire",
-    body: "You're reminded ahead of time and can re-book your engineer in a couple of taps, so a CP12 never lapses by accident.",
+    title: "Renewals stay visible",
+    body: "Your engineer is prompted when the certificate is due soon. When they send a renewal request, you can confirm a date from the property link.",
   },
   {
     icon: <IconShare />,
@@ -178,8 +178,8 @@ const features = [
   },
   {
     icon: <IconBellRinging />,
-    title: "Reminders sent automatically",
-    body: "Landlords get renewal reminders at 8 and 4 weeks out. You get one too — so nothing falls through the cracks.",
+    title: "Engineer renewal prompts",
+    body: "CertNow prompts you when a property is due soon. Review the job and choose when to send the landlord a renewal request.",
   },
   {
     icon: <IconLink />,
@@ -204,7 +204,7 @@ const steps = [
   },
   {
     title: "Sign and issue",
-    body: "Engineer and landlord sign on screen. CP12 is generated as a legally valid PDF and stored permanently.",
+    body: "Add the engineer signature on screen, include a customer signature when needed, then generate and store the completed CP12 PDF.",
   },
   {
     title: "Landlord gets a link",
@@ -212,26 +212,26 @@ const steps = [
   },
 ];
 
-const stats = [
-  { value: "Under 10 min", label: "Average CP12 time" },
-  { value: "100%", label: "Gas Safe compliant output" },
-  { value: "0", label: "Lost certificates" },
-  { value: "12 months", label: "Auto renewal cycle" },
+const proofPoints = [
+  { value: "On site", label: "Fill, sign and issue" },
+  { value: "1 link", label: "Property history to share" },
+  { value: "Engineer-led", label: "Renewal follow-up" },
+  { value: "14 days", label: "Free trial, no card" },
 ];
 
-const comparisonRows = [
-  { label: "Unlimited certificates", others: false, us: true },
-  { label: "Auto landlord reminders", others: false, us: true },
-  { label: "Shareable property links", others: false, us: true },
-  { label: "Renewals pre-filled", others: false, us: true },
-  { label: "Certificate storage", others: true, us: true },
-  { label: "Mobile-first wizard", others: false, us: true },
+const includedFeatures = [
+  "Unlimited certificates",
+  "Engineer renewal prompts",
+  "Shareable property links",
+  "Pre-filled return jobs",
+  "Certificate storage",
+  "Mobile-first wizard",
 ];
 
 const pricingItems = [
   "Unlimited CP12 and boiler service certificates",
   "Gas Warning Notice included",
-  "Automatic landlord reminders",
+  "Engineer renewal prompts",
   "Permanent certificate storage",
   "Shareable property links",
   "Invoicing and handover bundle",
@@ -311,7 +311,7 @@ function EngineersContent() {
       {/* Features */}
       <section className="bg-[var(--color-background-secondary)] px-5 py-10">
         <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
-          Why engineers use it
+          Built for the job
         </p>
         <div className="flex flex-col gap-3">
           {features.map((f) => (
@@ -356,13 +356,13 @@ function EngineersContent() {
         </div>
       </section>
 
-      {/* Social proof */}
+      {/* Product proof */}
       <section className="bg-[var(--color-background-secondary)] px-5 py-10">
         <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
-          By the numbers
+          What is included
         </p>
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          {stats.map((s) => (
+        <div className="grid grid-cols-2 gap-3">
+          {proofPoints.map((s) => (
             <div
               key={s.label}
               className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 text-center"
@@ -372,54 +372,21 @@ function EngineersContent() {
             </div>
           ))}
         </div>
-        <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-[18px]">
-          <p className="mb-[14px] text-[15px] italic leading-[1.65] text-[var(--color-text-primary)]">
-            &ldquo;Used to spend an hour doing paperwork after jobs. Now the CP12 is signed and sent before I&apos;m back in the van.&rdquo;
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-[#edf7f2] text-[12px] font-medium text-[#1a7a52]">
-              JT
-            </div>
-            <div>
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">James T.</p>
-              <p className="text-[12px] text-[var(--color-text-secondary)]">Gas Safe engineer, Manchester</p>
-            </div>
-          </div>
-        </div>
       </section>
 
-      {/* Comparison */}
+      {/* Included features */}
       <section className="bg-[var(--color-background-primary)] px-5 py-10">
         <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
-          How we compare
+          Included with CertNow
         </p>
         <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)]">
-          {/* Header */}
-          <div className="flex items-center border-b-[0.5px] border-[var(--color-border-tertiary)] px-4 py-3">
-            <div className="flex-1" />
-            <div className="w-[60px] text-center text-[12px] font-medium text-[var(--color-text-tertiary)]">Others</div>
-            <div className="w-[60px] text-center text-[12px] font-medium text-[#1a7a52]">CertNow</div>
-          </div>
-          {comparisonRows.map((row, i) => (
+          {includedFeatures.map((label, i) => (
             <div
-              key={row.label}
-              className={`flex items-center px-4 py-3 ${i < comparisonRows.length - 1 ? "border-b-[0.5px] border-[var(--color-border-tertiary)]" : ""}`}
+              key={label}
+              className={`flex items-center gap-3 px-4 py-3 ${i < includedFeatures.length - 1 ? "border-b-[0.5px] border-[var(--color-border-tertiary)]" : ""}`}
             >
-              <div className="flex-1 text-[13px] text-[var(--color-text-secondary)]">{row.label}</div>
-              <div className="flex w-[60px] justify-center">
-                {row.others ? (
-                  <span className="text-[#1a7a52]"><IconCheck size={15} /></span>
-                ) : (
-                  <span className="text-[13px] text-[var(--color-text-tertiary)]">—</span>
-                )}
-              </div>
-              <div className="flex w-[60px] justify-center">
-                {row.us ? (
-                  <span className="text-[#1a7a52]"><IconCheck size={15} /></span>
-                ) : (
-                  <span className="text-[13px] text-[var(--color-text-tertiary)]">—</span>
-                )}
-              </div>
+              <span className="shrink-0 text-[#1a7a52]"><IconCheck size={15} /></span>
+              <span className="text-[13px] text-[var(--color-text-secondary)]">{label}</span>
             </div>
           ))}
         </div>
@@ -437,7 +404,7 @@ function EngineersContent() {
             <span className="text-[16px] text-[#888]">/month</span>
           </div>
           <p className="mb-5 text-[14px] leading-[1.6] text-[#aaa]">
-            Unlimited certificates, reminders, and storage. Cancel any time.
+            Unlimited certificates, engineer renewal prompts, and storage. Cancel any time.
           </p>
           <div className="mb-5">
             {pricingItems.map((item, i) => (
@@ -468,7 +435,7 @@ function EngineersContent() {
           Stop doing paperwork tonight.
         </h2>
         <p className="mx-auto mb-6 max-w-[320px] text-[14px] leading-[1.6] text-[var(--color-text-secondary)]">
-          Join Gas Safe engineers who finish their CP12s on site and send a professional certificate before they drive away.
+          Complete your next CP12 on site and send the finished certificate before you drive away.
         </p>
         <Link
           href="/signup/step1"
@@ -520,7 +487,7 @@ function LandlordsContent() {
       {/* Why landlords use it */}
       <section className="bg-[var(--color-background-secondary)] px-5 py-10">
         <p className="mb-5 text-[11px] uppercase tracking-[1.5px] text-[var(--color-text-eyebrow)]">
-          Why landlords use it
+          What landlords get
         </p>
         <div className="flex flex-col gap-3">
           {landlordBenefits.map((b) => (
