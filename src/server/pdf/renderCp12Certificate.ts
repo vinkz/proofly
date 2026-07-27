@@ -14,6 +14,8 @@ export type ApplianceInput = {
   safetyDevice?: string;
   ventilationSatisfactory?: string;
   flueTerminationSatisfactory?: string;
+  /** Free-standing cooker stability bracket/chain. Hob/cooker categories only. */
+  cookerStability?: string;
   spillageTest?: string;
   applianceSafeToUse?: string;
   remedialActionTaken?: string;

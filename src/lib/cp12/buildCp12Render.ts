@@ -11,7 +11,12 @@
  * network. Type-only imports from the renderer keep it client-importable.
  */
 import { composeCp12DefectSummary, type Cp12DefectAppliance } from './defect-summary';
-import { cp12ApplianceTypeLabel, resolveCp12Category, resolveCp12Subtype } from './applianceConfig';
+import {
+  cp12ApplianceTypeLabel,
+  cp12FieldVisible,
+  resolveCp12Category,
+  resolveCp12Subtype,
+} from './applianceConfig';
 import type { Cp12Appliance } from '@/types/certificates';
 import type {
   ApplianceInput,
@@ -236,6 +241,19 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
     const category = resolveCp12Category(app.appliance_type);
     const subtype = resolveCp12Subtype(category, app.appliance_subtype, app.appliance_type);
     const typeLabel = cp12ApplianceTypeLabel(category, subtype);
+
+    // Only print checks that apply to this appliance category.
+    //
+    // The flue fields matter most: `flue_location` falls back to the appliance
+    // location, so without this a flueless hob printed "Flue location: Kitchen"
+    // — asserting a flue that does not exist on a document whose Reg 36(3)(d)
+    // content is a description and location of each appliance AND flue.
+    // applianceConfig is the single source of truth for what applies, and the
+    // form already hides these fields; this makes the certificate agree.
+    const applies = (field: Parameters<typeof cp12FieldVisible>[1]) => cp12FieldVisible(category, field);
+    const whenApplicable = (field: Parameters<typeof cp12FieldVisible>[1], value: string) =>
+      (applies(field) ? value : '');
+
     return {
       description: toText(app.make_model ?? appExtras.appliance_make_model ?? '') || typeLabel,
       landlordAppliance: toText(app.landlords_appliance ?? ''),
@@ -243,24 +261,28 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
       location: toText(app.location ?? ''),
       type: typeLabel,
       category,
-      flueType: toText(app.flue_type ?? app.ventilation_provision ?? ''),
-      flueLocation: toText(app.flue_location ?? app.location ?? ''),
+      flueType: whenApplicable('flue_type', toText(app.flue_type ?? app.ventilation_provision ?? '')),
+      flueLocation: whenApplicable('flue_type', toText(app.flue_location ?? app.location ?? '')),
       operatingPressure: toText(app.operating_pressure ?? ''),
       heatInput: toText(app.heat_input ?? ''),
       safetyDevice: toText(app.safety_devices_correct ?? app.stability_test ?? ''),
       ventilationSatisfactory: toText(app.ventilation_satisfactory ?? app.ventilation_provision ?? ''),
-      flueTerminationSatisfactory: toText(app.flue_condition ?? ''),
+      flueTerminationSatisfactory: whenApplicable('flue_condition', toText(app.flue_condition ?? '')),
+      // The category-specific check for free-standing cookers. It was captured
+      // and counted toward the defect summary but never reached the
+      // certificate, so a hob's one distinguishing check went unprinted.
+      cookerStability: whenApplicable('cooker_stability', toText(app.cooker_stability ?? '')),
       spillageTest: toText(app.gas_tightness_test ?? ''),
       applianceSafeToUse: applianceSafe,
       remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),
-      combustionHighCoPpm: highCoPpm,
-      combustionHighCo2: highCo2,
-      combustionHighRatio: highRatio,
-      combustionLowCoPpm: lowCoPpm,
-      combustionLowCo2: lowCo2,
-      combustionLowRatio: lowRatio,
-      combustionHigh: buildCombustionSummary(highCoPpm, highCo2, highRatio, toText(app.co_reading_ppm ?? '')),
-      combustionLow: buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? '')),
+      combustionHighCoPpm: whenApplicable('combustion', highCoPpm),
+      combustionHighCo2: whenApplicable('combustion', highCo2),
+      combustionHighRatio: whenApplicable('combustion', highRatio),
+      combustionLowCoPpm: whenApplicable('combustion', lowCoPpm),
+      combustionLowCo2: whenApplicable('combustion', lowCo2),
+      combustionLowRatio: whenApplicable('combustion', lowRatio),
+      combustionHigh: whenApplicable('combustion', buildCombustionSummary(highCoPpm, highCo2, highRatio, toText(app.co_reading_ppm ?? ''))),
+      combustionLow: whenApplicable('combustion', buildCombustionSummary(lowCoPpm, lowCo2, lowRatio, toText(app.co_reading_low ?? ''))),
       combustionNotes: toText(app.combustion_notes ?? ''),
       applianceServiced: toText(app.appliance_serviced ?? ''),
       reg26Confirmed: Boolean(app.reg_26_9_confirmed),

@@ -288,6 +288,7 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
     pushReading('Safety device', app.safetyDevice);
     pushReading('Ventilation', app.ventilationSatisfactory);
     pushReading('Flue termination', app.flueTerminationSatisfactory);
+    pushReading('Cooker stability', app.cookerStability);
     pushReading('Spillage test', app.spillageTest);
     pushReading('Serviced', app.applianceServiced);
 
