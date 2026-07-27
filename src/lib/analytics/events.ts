@@ -58,6 +58,17 @@ export const ANALYTICS_EVENTS = {
   freeBoilerServiceEmailSubmitted: 'free_boiler_service_email_submitted',
   /** Fires when the record has been emailed and saved to the visitor's device. */
   freeBoilerServiceDownloadCompleted: 'free_boiler_service_download_completed',
+
+  // --- Free gas rate calculator --------------------------------------------
+  // Only two events: the calculator produces no document, so it has no email
+  // wall and therefore no drop-off to measure. Its job is traffic and trust —
+  // judge it on visits and on how many go on to open a document tool.
+  /** Fires on the first input to the calculator. Once per session. */
+  freeGasRateStarted: 'free_gas_rate_started',
+  /** Fires when a calculation is asked for and produces a result. */
+  freeGasRateCalculated: 'free_gas_rate_calculated',
+  /** Fires when a free tool's cross-link to another free tool is followed. */
+  freeToolCrossLinkClicked: 'free_tool_cross_link_clicked',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];

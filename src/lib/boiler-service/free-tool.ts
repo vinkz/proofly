@@ -15,7 +15,7 @@
  * Benchmark convention. So there is no prescribed template awaiting Gas Safe
  * sign-off here, and this flag can be flipped independently of the CP12 one.
  */
-export const FREE_BOILER_SERVICE_NOINDEX = true;
+export const FREE_BOILER_SERVICE_NOINDEX = false;
 
 /** Public path of the free tool. Kept here so robots.ts cannot drift from it. */
 export const FREE_BOILER_SERVICE_ROUTE = '/free-boiler-service';

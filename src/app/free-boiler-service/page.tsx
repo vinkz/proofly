@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
-import { FREE_BOILER_SERVICE_NOINDEX } from '@/lib/boiler-service/free-tool';
+import { FREE_BOILER_SERVICE_NOINDEX, FREE_BOILER_SERVICE_ROUTE } from '@/lib/boiler-service/free-tool';
+import { FreeToolFooter } from '@/app/_components/free-tool-footer';
 import { FreeBoilerServiceForm } from './_components/free-boiler-service-form';
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function FreeBoilerServicePage() {
         </p>
       </header>
       <FreeBoilerServiceForm />
+      <FreeToolFooter currentRoute={FREE_BOILER_SERVICE_ROUTE} />
     </main>
   );
 }

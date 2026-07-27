@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import { FREE_TOOLS_ROUTE } from '@/lib/free-tools';
+
 import { Button } from '@/components/ui/button';
 
 /**
@@ -14,6 +16,12 @@ export function MarketingHeader() {
         <div className="flex items-baseline gap-5">
           <Link href="/">
             <span className="text-xl font-extrabold tracking-tight text-[var(--brand)]">certnow</span>
+          </Link>
+          <Link
+            href={FREE_TOOLS_ROUTE}
+            className="text-[14px] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+          >
+            Free tools
           </Link>
           <Link
             href="/blog"
@@ -42,7 +50,10 @@ export function MarketingFooter() {
       <p className="mb-4 text-[13px] leading-[1.6] text-[var(--color-text-tertiary)]">
         Built for Gas Safe engineers in the UK. certnow.uk
       </p>
-      <div className="flex gap-5">
+      <div className="flex flex-wrap gap-5">
+        <Link href={FREE_TOOLS_ROUTE} className="text-[13px] text-[var(--color-text-secondary)]">
+          Free tools
+        </Link>
         <Link href="/blog" className="text-[13px] text-[var(--color-text-secondary)]">
           Blog
         </Link>
