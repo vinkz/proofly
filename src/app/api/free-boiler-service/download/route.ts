@@ -10,7 +10,12 @@ import {
   recordFreeBoilerServiceLead,
   sendFreeBoilerServiceEmail,
 } from '@/server/free-boiler-service';
-import { emailCapReached, emailDownloadCountToday, freeCp12Reference } from '@/server/free-cp12';
+import {
+  emailCapReached,
+  emailDownloadCountToday,
+  freeCp12Reference,
+  reportFreeToolEmailFailure,
+} from '@/server/free-cp12';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -86,6 +91,7 @@ export async function POST(request: Request) {
   }
 
   if (delivery.status === 'failed') {
+    reportFreeToolEmailFailure('free_boiler_service', delivery.error);
     return NextResponse.json(
       { error: 'We could not email the record just now, but your download is ready below.', emailed: false, reference },
       { status: 200 },

@@ -2,6 +2,8 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 
+import * as Sentry from '@sentry/nextjs';
+
 import { FREE_CP12_LEAD_SOURCE, FREE_CP12_LIMITS } from '@/lib/cp12/free-tool';
 import { sendEmail, isEmailConfigured, type SendEmailResult } from '@/lib/resend';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
@@ -55,22 +57,55 @@ export function emailCapReached(count: number | null) {
  * Nothing about the certificate contents is recorded — not the property, not
  * the landlord, not the appliances, not the PDF.
  */
+/**
+ * Write the lead row, and make any failure loud.
+ *
+ * The caller deliberately swallows the result — the visitor still gets their
+ * certificate if capture fails, which is right for them and invisible to us.
+ * That combination is how a broken funnel runs for a week unnoticed, so a
+ * failure here is reported to Sentry rather than only logged. The email address
+ * is deliberately not attached to the report: it is the one piece of personal
+ * data these tools hold, and an error tracker is not where it belongs.
+ */
 export async function recordLead(
   email: string,
   source: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const report = (error: unknown, detail: string) => {
+    Sentry.captureException(error instanceof Error ? error : new Error(detail), {
+      tags: { area: 'free_tools', operation: 'lead_capture', source },
+      extra: { detail },
+    });
+  };
+
   try {
     const sb = await supabaseServerServiceRole();
     const { error } = await sb.from('free_tool_leads').insert({ email: email.toLowerCase(), source });
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      report(error, `free_tool_leads insert failed: ${error.message}`);
+      return { ok: false, error: error.message };
+    }
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    report(error, `free_tool_leads insert threw: ${message}`);
+    return { ok: false, error: message };
   }
 }
 
 export async function recordFreeCp12Lead(email: string) {
   return recordLead(email, FREE_CP12_LEAD_SOURCE);
+}
+
+/**
+ * A delivery failure is reported for the same reason a capture failure is: the
+ * visitor still gets their document from the browser, so nothing surfaces on
+ * its own. No recipient address is attached.
+ */
+export function reportFreeToolEmailFailure(source: string, detail?: string) {
+  Sentry.captureException(new Error(`free tool email delivery failed: ${detail ?? 'unknown'}`), {
+    tags: { area: 'free_tools', operation: 'email_delivery', source },
+  });
 }
 
 const NOT_KEPT = [

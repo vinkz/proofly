@@ -294,6 +294,79 @@ export async function getBusinessPulse(): Promise<BusinessPulse> {
   }
 }
 
+export type FreeToolSourceStat = {
+  source: string;
+  last24h: number;
+  last7d: number;
+};
+
+export type FreeToolsPulse = {
+  leads: PulseStat;
+  bySource: FreeToolSourceStat[];
+  /** ISO timestamp of the most recent lead, or null if none has ever landed. */
+  lastLeadAt: string | null;
+  total: number;
+  error: string | null;
+};
+
+/**
+ * Lead capture for the public free tools.
+ *
+ * These rows are the only thing those tools persist, and the write path is
+ * deliberately non-fatal — a visitor still gets their certificate if it fails.
+ * That means a broken funnel is invisible from the outside, so it gets a panel
+ * here as well as a Sentry report on failure.
+ *
+ * Counts and timestamps only. The email addresses are not surfaced: nothing in
+ * the app reads them, and an admin dashboard is not a reason to start.
+ */
+export async function getFreeToolsPulse(): Promise<FreeToolsPulse> {
+  const empty: FreeToolsPulse = {
+    leads: { last24h: 0, last7d: 0 },
+    bySource: [],
+    lastLeadAt: null,
+    total: 0,
+    error: null,
+  };
+
+  try {
+    const db = adminDb();
+    const [last24h, last7d, total, recent] = await Promise.all([
+      countRows(db, 'free_tool_leads', (q) => q.gte('created_at', iso(DAY_MS))),
+      countRows(db, 'free_tool_leads', (q) => q.gte('created_at', iso(7 * DAY_MS))),
+      countRows(db, 'free_tool_leads', (q) => q),
+      db
+        .from('free_tool_leads')
+        .select('source, created_at')
+        .gte('created_at', iso(7 * DAY_MS))
+        .order('created_at', { ascending: false })
+        .limit(1000),
+    ]);
+
+    if (recent.error) throw new Error(`free_tool_leads: ${recent.error.message}`);
+    const rows = (recent.data ?? []) as Array<{ source: string; created_at: string }>;
+
+    const dayAgo = iso(DAY_MS);
+    const bySource = new Map<string, FreeToolSourceStat>();
+    for (const row of rows) {
+      const stat = bySource.get(row.source) ?? { source: row.source, last24h: 0, last7d: 0 };
+      stat.last7d += 1;
+      if (row.created_at >= dayAgo) stat.last24h += 1;
+      bySource.set(row.source, stat);
+    }
+
+    return {
+      leads: { last24h, last7d },
+      bySource: [...bySource.values()].sort((a, b) => b.last7d - a.last7d),
+      lastLeadAt: rows[0]?.created_at ?? null,
+      total,
+      error: null,
+    };
+  } catch (error) {
+    return { ...empty, error: error instanceof Error ? error.message : 'Unknown database error' };
+  }
+}
+
 export type MoneyPanel = {
   activeSubs: number;
   pastDue: number;
@@ -365,6 +438,7 @@ export function getHealthChecks(input: {
   pulse: BusinessPulse;
   money: MoneyPanel;
   traffic: TrafficPanel;
+  freeTools: FreeToolsPulse;
 }): HealthCheck[] {
   const checks: HealthCheck[] = [];
 
@@ -396,6 +470,25 @@ export function getHealthChecks(input: {
     checks.push({ label: 'Billing', status: 'down', detail: input.money.stripeError });
   } else {
     checks.push({ label: 'Billing', status: 'ok', detail: 'Stripe API healthy' });
+  }
+
+  // Reads the free_tool_leads table specifically, so it fails if that table is
+  // missing or unreachable even when the rest of the database is fine — the one
+  // failure mode the tools themselves swallow on purpose.
+  if (input.freeTools.error) {
+    checks.push({ label: 'Free tool leads', status: 'down', detail: input.freeTools.error });
+  } else if (input.freeTools.total === 0) {
+    checks.push({
+      label: 'Free tool leads',
+      status: 'warn',
+      detail: 'Table reachable, no lead captured yet',
+    });
+  } else {
+    checks.push({
+      label: 'Free tool leads',
+      status: 'ok',
+      detail: `${input.freeTools.total} captured, ${input.freeTools.leads.last24h} in 24h`,
+    });
   }
 
   checks.push(

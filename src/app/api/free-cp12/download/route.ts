@@ -10,6 +10,7 @@ import {
   emailDownloadCountToday,
   freeCp12Reference,
   recordFreeCp12Lead,
+  reportFreeToolEmailFailure,
   sendFreeCp12Email,
 } from '@/server/free-cp12';
 
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
   }
 
   if (delivery.status === 'failed') {
+    reportFreeToolEmailFailure('free_cp12', delivery.error);
     return NextResponse.json(
       {
         error: 'We could not email the certificate just now, but your download is ready below.',

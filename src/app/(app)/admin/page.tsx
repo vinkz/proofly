@@ -4,11 +4,13 @@ import { formatDistanceToNow } from 'date-fns';
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import {
   getBusinessPulse,
+  getFreeToolsPulse,
   getHealthChecks,
   getMoney,
   getSentryIssues,
   getTraffic,
   isAdminEmail,
+  type FreeToolsPulse,
   type HealthCheck,
   type PulseStat,
   type SentryPanel,
@@ -198,19 +200,85 @@ const HEALTH_TONES: Record<HealthCheck['status'], { pill: string; label: string 
   down: { pill: 'bg-[var(--color-red-bg)] text-[var(--color-red)]', label: 'Down' },
 };
 
+/**
+ * Lead capture is the only thing the public free tools persist, and their write
+ * path is non-fatal by design — a visitor still gets their certificate when it
+ * fails. This panel is how that failure becomes visible; counts only, never the
+ * addresses.
+ */
+function FreeToolsPanel({ freeTools }: { freeTools: FreeToolsPulse }) {
+  if (freeTools.error) {
+    return (
+      <Card>
+        <CardContent className="pt-4">
+          <p className="text-[13px] text-[var(--color-red)]">Lead table error: {freeTools.error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-2 gap-2.5">
+        <StatTile label="Leads captured" stat={freeTools.leads} />
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-[24px] font-medium leading-none text-[var(--color-text-primary)]">
+              {freeTools.total}
+            </p>
+            <p className="mt-1.5 text-[13px] text-[var(--color-text-secondary)]">All time</p>
+            <p className="text-[12px] text-[var(--color-text-tertiary)]">
+              {freeTools.lastLeadAt ? `last ${timeAgo(freeTools.lastLeadAt)}` : 'none yet'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {freeTools.bySource.length ? (
+        <Card>
+          <CardContent className="space-y-1.5 pt-4">
+            {freeTools.bySource.map((row) => (
+              <div key={row.source} className="flex items-baseline justify-between gap-3">
+                <span className="text-[13px] text-[var(--color-text-secondary)]">{row.source}</span>
+                <span className="text-[13px] text-[var(--color-text-primary)]">
+                  {row.last24h} · {row.last7d}
+                  <span className="ml-1 text-[12px] text-[var(--color-text-tertiary)]">24h · 7d</span>
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-[13px] text-[var(--color-text-secondary)]">
+              No leads in the last 7 days.
+            </p>
+            <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
+              Expected until the tools have traffic. If they do have traffic and this stays empty,
+              check Sentry for free_tools / lead_capture.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default async function AdminMissionControlPage() {
   const supabase = await supabaseServerReadOnly();
   const user = await getSupabaseUser(supabase);
   if (!user) redirect('/login');
   if (!isAdminEmail(user.email)) redirect('/dashboard');
 
-  const [sentry, pulse, money, traffic] = await Promise.all([
+  const [sentry, pulse, money, traffic, freeTools] = await Promise.all([
     getSentryIssues(),
     getBusinessPulse(),
     getMoney(),
     getTraffic(),
+    getFreeToolsPulse(),
   ]);
-  const health = getHealthChecks({ sentry, pulse, money, traffic });
+  const health = getHealthChecks({ sentry, pulse, money, traffic, freeTools });
   const mrr = money.mrrPence === null ? null : (money.mrrPence / 100).toFixed(2);
 
   return (
@@ -264,6 +332,11 @@ export default async function AdminMissionControlPage() {
             </Card>
           </div>
         )}
+      </section>
+
+      <section className="space-y-2.5">
+        <SectionLabel>Free tools · leads captured</SectionLabel>
+        <FreeToolsPanel freeTools={freeTools} />
       </section>
 
       <section className="space-y-2.5">
