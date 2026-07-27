@@ -17,7 +17,10 @@ async function createAuthedSupabaseClient() {
   assertSupabaseEnv();
   const cookieStore = await cookies();
 
-  return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+  // Anon key, not the service-role key. These are GoTrue sign-in/sign-up calls,
+  // which never needed elevated rights -- but the client was one `.from()` away
+  // from silently bypassing every RLS policy in the database.
+  return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value;

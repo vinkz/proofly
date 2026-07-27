@@ -1,0 +1,11 @@
+Contact: mailto:general@certnow.uk
+Expires: 2027-07-27T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://certnow.uk/.well-known/security.txt
+
+# CertNow takes reports about our users' data seriously.
+# If you believe you have found a vulnerability, please email the address
+# above. Include enough detail to reproduce the issue and we will confirm
+# receipt. We will not pursue legal action against researchers who report
+# in good faith, act in proportion, and avoid accessing or altering other
+# people's data beyond what is needed to demonstrate the problem.
