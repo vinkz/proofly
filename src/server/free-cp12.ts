@@ -55,17 +55,22 @@ export function emailCapReached(count: number | null) {
  * Nothing about the certificate contents is recorded — not the property, not
  * the landlord, not the appliances, not the PDF.
  */
-export async function recordFreeCp12Lead(email: string): Promise<{ ok: boolean; error?: string }> {
+export async function recordLead(
+  email: string,
+  source: string,
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const sb = await supabaseServerServiceRole();
-    const { error } = await sb
-      .from('free_tool_leads')
-      .insert({ email: email.toLowerCase(), source: FREE_CP12_LEAD_SOURCE });
+    const { error } = await sb.from('free_tool_leads').insert({ email: email.toLowerCase(), source });
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
+}
+
+export async function recordFreeCp12Lead(email: string) {
+  return recordLead(email, FREE_CP12_LEAD_SOURCE);
 }
 
 const NOT_KEPT = [

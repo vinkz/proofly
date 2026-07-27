@@ -46,6 +46,18 @@ export const ANALYTICS_EVENTS = {
   freeCp12EmailSubmitted: 'free_cp12_email_submitted',
   /** Fires when the PDF has been emailed and saved to the visitor's device. */
   freeCp12DownloadCompleted: 'free_cp12_download_completed',
+
+  // --- Free, no-signup boiler service record generator ---------------------
+  // Same four-step funnel as the CP12 tool so the two acquisition surfaces can
+  // be compared directly. Watch the generated -> email_submitted gap here too.
+  /** Fires on the first edit to the free boiler service form. Once per session. */
+  freeBoilerServiceFormStarted: 'free_boiler_service_form_started',
+  /** Fires when the record renders successfully and is previewed. */
+  freeBoilerServiceGenerated: 'free_boiler_service_generated',
+  /** Fires when an email is submitted at the download step. Never carries the address. */
+  freeBoilerServiceEmailSubmitted: 'free_boiler_service_email_submitted',
+  /** Fires when the record has been emailed and saved to the visitor's device. */
+  freeBoilerServiceDownloadCompleted: 'free_boiler_service_download_completed',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];
