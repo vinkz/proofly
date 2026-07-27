@@ -16,6 +16,30 @@ import type { Cp12RenderSource } from './buildCp12Render';
 
 const str = (max = 200) => z.string().max(max).optional().default('');
 
+/**
+ * The GIUSP answers a warning notice needs and a CP12 does not. Only asked when
+ * an appliance is classified At Risk or Immediately Dangerous. Yes/No/'' rather
+ * than booleans so "not answered" stays distinguishable from "no" — the issue
+ * gate treats those differently for Immediately Dangerous.
+ */
+const yesNo = z.enum(['Yes', 'No', '']).optional().default('');
+
+export const FreeUnsafeSituationSchema = z.object({
+  customer_present: yesNo,
+  customer_informed: yesNo,
+  notice_left_on_premises: yesNo,
+  gas_supply_isolated: yesNo,
+  appliance_capped_off: yesNo,
+  customer_refused_isolation: yesNo,
+  danger_label_fitted: yesNo,
+  emergency_services_contacted: yesNo,
+  /** RIDDOR 2013 Reg 6(2): ID fittings are reportable to HSE within 14 days. */
+  riddor_reported: yesNo,
+  riddor_reference: z.string().max(80).optional().default(''),
+});
+
+export type FreeUnsafeSituation = z.output<typeof FreeUnsafeSituationSchema>;
+
 export const FreeCp12ApplianceSchema = z.object({
   // Category, per CP12_APPLIANCE_CONFIG. Free text is tolerated and normalised
   // by resolveCp12Category so an unexpected value can never drop an appliance.
@@ -49,6 +73,7 @@ export const FreeCp12ApplianceSchema = z.object({
   actions_required: str(1000),
   warning_notice_issued: z.boolean().optional().default(false),
   reg_26_9_confirmed: z.boolean().optional().default(false),
+  unsafe_situation: FreeUnsafeSituationSchema.optional().default(() => FreeUnsafeSituationSchema.parse({})),
 });
 
 export type FreeCp12ApplianceInput = z.input<typeof FreeCp12ApplianceSchema>;

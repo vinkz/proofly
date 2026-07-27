@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
 import { FREE_CP12_LIMITS } from '@/lib/cp12/free-tool';
-import {
-  FreeCp12PayloadSchema,
-  freeCp12ToRenderSource,
-  freeCp12ValidationInput,
-} from '@/lib/cp12/freeCp12Payload';
-import { validateCp12TierOne } from '@/lib/cp12/validation';
+import { FreeCp12PayloadSchema } from '@/lib/cp12/freeCp12Payload';
 import { clientKeyFromRequest, rateLimit } from '@/lib/rate-limit';
-import { renderCp12CertificatePdf } from '@/server/pdf/renderCp12Certificate';
+import { buildFreeCp12Documents, freeSubmissionIssues } from '@/server/free-cp12-documents';
 import {
   emailCapReached,
   emailDownloadCountToday,
@@ -83,19 +77,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const errors = validateCp12TierOne(freeCp12ValidationInput(payload));
+  const reference = freeCp12Reference();
+  const issuedAt = new Date();
+
+  const errors = freeSubmissionIssues(payload, { recordId: reference, issuedAt });
   if (errors.length) {
     return NextResponse.json({ error: 'The certificate is not complete yet.', issues: errors }, { status: 422 });
   }
 
-  const reference = freeCp12Reference();
-  const pdfBytes = await renderCp12CertificatePdf(
-    buildCp12RenderInput(
-      freeCp12ToRenderSource(payload, { recordId: reference, certNumber: reference, issuedAt: new Date() }),
-    ),
-  );
+  const documents = await buildFreeCp12Documents(payload, { reference, issuedAt });
 
-  const delivery = await sendFreeCp12Email({ to: email, pdfBytes, reference });
+  const delivery = await sendFreeCp12Email({ to: email, documents, reference });
 
   // The lead row is written whenever an address was submitted in earnest, even
   // if Resend is misconfigured or bounces — the visitor still got their

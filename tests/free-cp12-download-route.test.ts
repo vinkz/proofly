@@ -170,6 +170,31 @@ describe('free CP12 download route', () => {
     expect(blocked.headers.get('Retry-After')).toBeTruthy();
   });
 
+  it('attaches every document, and still writes only one lead row', async () => {
+    const unsafe = payload();
+    unsafe.appliances[0].safety_classification = 'id';
+    unsafe.appliances[0].defect_notes = 'Cracked heat exchanger';
+    unsafe.appliances[0].actions_taken = 'Capped and labelled';
+    unsafe.appliances[0].unsafe_situation = {
+      customer_present: 'Yes',
+      customer_informed: 'Yes',
+      gas_supply_isolated: 'Yes',
+      danger_label_fitted: 'Yes',
+      riddor_reported: 'Yes',
+    };
+    unsafe.fields.defect_description = 'Cracked heat exchanger';
+    unsafe.fields.remedial_action = 'Capped and labelled';
+
+    const response = await post({ email: 'engineer@example.com', payload: unsafe });
+    expect(response.status).toBe(200);
+
+    // CP12 + one warning notice.
+    expect(sentEmails[0].attachments).toHaveLength(2);
+    expect(sentEmails[0].subject).toMatch(/warning notice/i);
+    // The email wall still captures exactly one address, once.
+    expect(inserted).toHaveLength(1);
+  });
+
   it('still delivers the certificate when the lead row cannot be written', async () => {
     // A capture failure must not cost the visitor the certificate they came for.
     const response = await post({ email: 'engineer@example.com', payload: payload() });

@@ -32,7 +32,9 @@ import {
   freeCp12ValidationInput,
   type FreeCp12Appliance,
   type FreeCp12Payload,
+  type FreeUnsafeSituation,
 } from '@/lib/cp12/freeCp12Payload';
+import { freeGwnIssues, gwnClassificationFor } from '@/lib/cp12/freeGwn';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 
 const PASS_FAIL = [
@@ -51,6 +53,21 @@ const CLASSIFICATIONS = [
 ];
 
 type Stage = 'form' | 'preview' | 'done';
+
+type GeneratedDocument = {
+  kind: 'cp12' | 'gas_warning_notice';
+  title: string;
+  filename: string;
+  reference: string;
+  base64: string;
+};
+
+const base64ToBlob = (base64: string) => {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: 'application/pdf' });
+};
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -84,13 +101,137 @@ function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid gap-4 sm:grid-cols-2">{children}</div>;
 }
 
+/**
+ * The GIUSP answers a Gas Warning Notice needs and a CP12 does not.
+ *
+ * Shown only when an appliance is At Risk or Immediately Dangerous. The ID
+ * branch carries real duties — GIUSP requires the label and either isolation or
+ * a recorded refusal, and RIDDOR Reg 6(2) requires an HSE report within 14 days
+ * — so those questions appear rather than being assumed.
+ */
+function UnsafeSituation({
+  classification,
+  value,
+  onChange,
+}: {
+  classification: 'IMMEDIATELY_DANGEROUS' | 'AT_RISK';
+  value: FreeUnsafeSituation;
+  onChange: (patch: Partial<FreeUnsafeSituation>) => void;
+}) {
+  const isId = classification === 'IMMEDIATELY_DANGEROUS';
+  const present = value.customer_present === 'Yes';
+  const notPresent = value.customer_present === 'No';
+
+  return (
+    <div className="rounded-[12px] border-[0.5px] border-[var(--color-red)] bg-[var(--color-background-secondary)] p-4">
+      <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
+        {isId ? 'Immediately Dangerous' : 'At Risk'} — a warning notice will be issued with the
+        certificate
+      </p>
+      <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
+        {isId
+          ? 'GIUSP requires a Danger — Do Not Use label and either isolation or a recorded refusal. The fitting must also be reported to HSE under RIDDOR within 14 days.'
+          : 'Turn off with permission and issue a warning notice. A Danger — Do Not Use label is not applied to a pure At Risk situation.'}
+      </p>
+
+      <div className="mt-4 grid gap-4">
+        <EnumChips
+          label="Was the responsible person present?"
+          value={value.customer_present}
+          options={YES_NO}
+          onChange={(v) => onChange({ customer_present: v as FreeUnsafeSituation['customer_present'] })}
+        />
+        {present ? (
+          <EnumChips
+            label="Responsible person informed of the danger"
+            value={value.customer_informed}
+            options={YES_NO}
+            onChange={(v) => onChange({ customer_informed: v as FreeUnsafeSituation['customer_informed'] })}
+          />
+        ) : null}
+        {notPresent ? (
+          <EnumChips
+            label="Notice left on the premises"
+            value={value.notice_left_on_premises}
+            options={YES_NO}
+            onChange={(v) =>
+              onChange({ notice_left_on_premises: v as FreeUnsafeSituation['notice_left_on_premises'] })
+            }
+          />
+        ) : null}
+
+        <EnumChips
+          label="Gas supply isolated"
+          value={value.gas_supply_isolated}
+          options={YES_NO}
+          onChange={(v) => onChange({ gas_supply_isolated: v as FreeUnsafeSituation['gas_supply_isolated'] })}
+        />
+        {value.gas_supply_isolated === 'No' ? (
+          <EnumChips
+            label="Responsible person refused isolation"
+            value={value.customer_refused_isolation}
+            options={YES_NO}
+            onChange={(v) =>
+              onChange({ customer_refused_isolation: v as FreeUnsafeSituation['customer_refused_isolation'] })
+            }
+          />
+        ) : null}
+        <EnumChips
+          label="Appliance capped off"
+          value={value.appliance_capped_off}
+          options={YES_NO}
+          onChange={(v) => onChange({ appliance_capped_off: v as FreeUnsafeSituation['appliance_capped_off'] })}
+        />
+        {isId ? (
+          <EnumChips
+            label="Danger — Do Not Use label fitted"
+            value={value.danger_label_fitted}
+            options={YES_NO}
+            onChange={(v) => onChange({ danger_label_fitted: v as FreeUnsafeSituation['danger_label_fitted'] })}
+          />
+        ) : null}
+        <EnumChips
+          label="Emergency service provider contacted"
+          value={value.emergency_services_contacted}
+          options={YES_NO}
+          onChange={(v) =>
+            onChange({ emergency_services_contacted: v as FreeUnsafeSituation['emergency_services_contacted'] })
+          }
+        />
+
+        {isId ? (
+          <>
+            <EnumChips
+              label="Reported to HSE under RIDDOR"
+              value={value.riddor_reported}
+              options={YES_NO}
+              onChange={(v) => onChange({ riddor_reported: v as FreeUnsafeSituation['riddor_reported'] })}
+            />
+            <Field
+              label="RIDDOR or emergency reference (optional)"
+              hint="Either the report flag above or a reference here satisfies the record."
+            >
+              <Input
+                value={value.riddor_reference}
+                onChange={(e) => onChange({ riddor_reference: e.target.value })}
+              />
+            </Field>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function FreeCp12Form() {
   const [payload, setPayload] = useState<FreeCp12Payload>(() => emptyFreeCp12Payload());
   const [stage, setStage] = useState<Stage>('form');
   const [busy, setBusy] = useState(false);
   const [issues, setIssues] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
+  const [activeDoc, setActiveDoc] = useState(0);
+  const [docUrls, setDocUrls] = useState<string[]>([]);
   const [email, setEmail] = useState('');
   const [emailed, setEmailed] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
@@ -98,16 +239,15 @@ export function FreeCp12Form() {
   const [combustionOptIn, setCombustionOptIn] = useState<Record<number, boolean>>({});
 
   const startedRef = useRef(false);
-  const pdfBlobRef = useRef<Blob | null>(null);
   const pad = useSignaturePad();
 
-  // Revoke the preview object URL when it is replaced or the tab closes, so the
-  // certificate does not linger in memory longer than the visit.
+  // Revoke the preview object URLs when they are replaced or the tab closes, so
+  // the documents do not linger in memory longer than the visit.
   useEffect(() => {
     return () => {
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+      docUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [pdfUrl]);
+  }, [docUrls]);
 
   const markStarted = useCallback(() => {
     if (startedRef.current) return;
@@ -129,6 +269,27 @@ export function FreeCp12Form() {
       setPayload((prev) => ({
         ...prev,
         appliances: prev.appliances.map((a, i) => (i === index ? { ...a, ...patch } : a)),
+      }));
+    },
+    [markStarted],
+  );
+
+  /**
+   * Merge into one appliance's unsafe-situation answers.
+   *
+   * Functional rather than spreading the appliance captured in the current
+   * render: the GIUSP block is a column of chips, and two taps landing in the
+   * same React batch would otherwise both merge into the same stale object and
+   * the first answer would be lost.
+   */
+  const setUnsafeSituation = useCallback(
+    (index: number, patch: Partial<FreeUnsafeSituation>) => {
+      markStarted();
+      setPayload((prev) => ({
+        ...prev,
+        appliances: prev.appliances.map((a, i) =>
+          i === index ? { ...a, unsafe_situation: { ...a.unsafe_situation, ...patch } } : a,
+        ),
       }));
     },
     [markStarted],
@@ -157,7 +318,13 @@ export function FreeCp12Form() {
    */
   const localIssues = useMemo(() => {
     try {
-      return validateCp12TierOne(freeCp12ValidationInput(payload));
+      return [
+        ...validateCp12TierOne(freeCp12ValidationInput(payload)),
+        // Warning-notice gate too, so an unsafe appliance surfaces its GIUSP
+        // gaps here rather than only after a round trip. The reference and
+        // timestamp are server-generated; placeholders keep them non-blocking.
+        ...freeGwnIssues(payload, { recordId: 'preview', issuedAt: new Date() }),
+      ];
     } catch {
       return [];
     }
@@ -197,12 +364,16 @@ export function FreeCp12Form() {
         setError(data.error ?? 'Something went wrong generating the certificate.');
         return;
       }
-      const blob = await response.blob();
-      pdfBlobRef.current = blob;
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-      setPdfUrl(URL.createObjectURL(blob));
+      const data = (await response.json()) as { reference: string; documents: GeneratedDocument[] };
+      docUrls.forEach((url) => URL.revokeObjectURL(url));
+      setDocuments(data.documents);
+      setDocUrls(data.documents.map((doc) => URL.createObjectURL(base64ToBlob(doc.base64))));
+      setActiveDoc(0);
       setStage('preview');
-      track(ANALYTICS_EVENTS.freeCp12Generated, { appliance_count: payload.appliances.length });
+      track(ANALYTICS_EVENTS.freeCp12Generated, {
+        appliance_count: payload.appliances.length,
+        warning_notice_count: data.documents.filter((d) => d.kind === 'gas_warning_notice').length,
+      });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
       setError('Could not reach the server. Check your connection and try again.');
@@ -212,16 +383,16 @@ export function FreeCp12Form() {
   };
 
   const saveToDevice = () => {
-    const blob = pdfBlobRef.current;
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'cp12-landlord-gas-safety-record.pdf';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    documents.forEach((doc) => {
+      const url = URL.createObjectURL(base64ToBlob(doc.base64));
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = doc.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    });
   };
 
   const handleDownload = async (event: React.FormEvent) => {
@@ -261,13 +432,21 @@ export function FreeCp12Form() {
   if (stage === 'done') {
     return (
       <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5 sm:p-6">
-        <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">Your CP12 is downloaded</h2>
+        <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
+          {documents.length > 1 ? 'Your documents are downloaded' : 'Your CP12 is downloaded'}
+        </h2>
         <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
           {emailed
             ? 'A copy is on its way to your inbox as well.'
-            : 'The file has saved to your device. We could not email a copy this time.'}
+            : 'The files have saved to your device. We could not email a copy this time.'}
           {reference ? ` Reference ${reference}.` : ''}
         </p>
+        {documents.some((d) => d.kind === 'gas_warning_notice') ? (
+          <p className="mt-2 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+            Your warning notice downloaded alongside the certificate. Immediately Dangerous fittings
+            must be reported to HSE under RIDDOR within 14 days.
+          </p>
+        ) : null}
 
         {/* The honest pitch. Inline, once, no modal. */}
         <div className="mt-5 rounded-[12px] bg-[var(--color-background-secondary)] p-4">
@@ -313,21 +492,53 @@ export function FreeCp12Form() {
           </Button>
         </div>
 
+        {documents.length > 1 ? (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {documents.map((doc, i) => (
+              <button
+                key={doc.reference}
+                type="button"
+                onClick={() => setActiveDoc(i)}
+                className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                  i === activeDoc
+                    ? 'bg-[var(--color-text-primary)] text-[var(--color-background-primary)]'
+                    : 'bg-[var(--color-background-tertiary)] text-[var(--color-text-secondary)]'
+                }`}
+              >
+                {doc.title}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div className="overflow-hidden rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
-          <iframe src={pdfUrl ?? undefined} title="CP12 preview" className="h-[70vh] w-full border-0" />
+          <iframe
+            key={docUrls[activeDoc]}
+            src={docUrls[activeDoc] ?? undefined}
+            title={documents[activeDoc]?.title ?? 'CP12 preview'}
+            className="h-[70vh] w-full border-0"
+          />
         </div>
         <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
           Preview not showing?{' '}
-          <a
-            className="underline"
-            href={pdfUrl ?? '#'}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a className="underline" href={docUrls[activeDoc] ?? '#'} target="_blank" rel="noreferrer">
             Open the PDF in a new tab
           </a>
           .
         </p>
+
+        {documents.some((d) => d.kind === 'gas_warning_notice') ? (
+          <div className="mt-4 rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+              A warning notice has been produced alongside the certificate
+            </p>
+            <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+              Give a copy to the responsible person. Immediately Dangerous fittings must also be
+              reported to HSE under RIDDOR within 14 days — that report is not something this tool
+              can make for you.
+            </p>
+          </div>
+        ) : null}
 
         <form
           onSubmit={handleDownload}
@@ -722,13 +933,15 @@ export function FreeCp12Form() {
                     onChange={(e) => setAppliance(index, { actions_taken: e.target.value })}
                   />
                 </Field>
-                <EnumChips
-                  label="Warning notice issued"
-                  value={appliance.warning_notice_issued ? 'Yes' : 'No'}
-                  options={YES_NO}
-                  onChange={(value) => setAppliance(index, { warning_notice_issued: value === 'Yes' })}
-                />
               </>
+            ) : null}
+
+            {gwnClassificationFor(appliance) ? (
+              <UnsafeSituation
+                classification={gwnClassificationFor(appliance)!}
+                value={appliance.unsafe_situation}
+                onChange={(patch) => setUnsafeSituation(index, patch)}
+              />
             ) : null}
 
             <label className="flex items-start gap-3 rounded-[12px] bg-[var(--color-background-secondary)] p-3">

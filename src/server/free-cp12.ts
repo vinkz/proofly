@@ -68,47 +68,56 @@ export async function recordFreeCp12Lead(email: string): Promise<{ ok: boolean; 
   }
 }
 
-const FILENAME = 'cp12-landlord-gas-safety-record.pdf';
+const NOT_KEPT = [
+  'We did not keep a copy. We store your email address and nothing else, so if you lose these',
+  'files we cannot re-send them. A CertNow account keeps every certificate you issue, lets you',
+  'reissue them, and gives each one a shareable link for the landlord.',
+].join(' ');
 
-/** Email the finished certificate to the visitor as an attachment. */
+/** Email the finished documents to the visitor as attachments. */
 export async function sendFreeCp12Email(params: {
   to: string;
-  pdfBytes: Uint8Array;
+  documents: Array<{ kind: string; title: string; filename: string; bytes: Uint8Array }>;
   reference: string;
 }): Promise<SendEmailResult> {
   if (!isEmailConfigured()) return { status: 'not_configured' };
 
+  const notices = params.documents.filter((doc) => doc.kind === 'gas_warning_notice');
+  const noticeLine = notices.length
+    ? `Also attached: ${notices.length} Gas Warning Notice${notices.length > 1 ? 's' : ''} for the unsafe ` +
+      'appliance(s) recorded on the certificate. Give a copy to the responsible person. Remember that ' +
+      'Immediately Dangerous fittings must be reported to HSE under RIDDOR within 14 days.'
+    : '';
+
   const text = [
-    'Your CP12 is attached.',
+    notices.length ? 'Your CP12 and warning notice(s) are attached.' : 'Your CP12 is attached.',
     '',
     `Reference: ${params.reference}`,
     '',
     'This is a complete Landlord Gas Safety Record — no watermark, nothing held back.',
+    ...(noticeLine ? ['', noticeLine] : []),
     '',
-    "We did not keep a copy. We store your email address and nothing else, so if you lose this",
-    'file we cannot re-send it. A CertNow account keeps every certificate you issue, lets you',
-    'reissue them, and gives each one a shareable link for the landlord.',
+    NOT_KEPT,
   ].join('\n');
 
   const html = [
-    '<p>Your CP12 is attached.</p>',
+    `<p>${notices.length ? 'Your CP12 and warning notice(s) are attached.' : 'Your CP12 is attached.'}</p>`,
     `<p><strong>Reference:</strong> ${params.reference}</p>`,
     '<p>This is a complete Landlord Gas Safety Record — no watermark, nothing held back.</p>',
-    '<p>We did not keep a copy. We store your email address and nothing else, so if you lose this ' +
-      'file we cannot re-send it. A CertNow account keeps every certificate you issue, lets you ' +
-      'reissue them, and gives each one a shareable link for the landlord.</p>',
+    ...(noticeLine ? [`<p>${noticeLine}</p>`] : []),
+    `<p>${NOT_KEPT}</p>`,
   ].join('');
 
   return sendEmail({
     to: params.to,
-    subject: `Your CP12 certificate (${params.reference})`,
+    subject: notices.length
+      ? `Your CP12 and warning notice (${params.reference})`
+      : `Your CP12 certificate (${params.reference})`,
     text,
     html,
-    attachments: [
-      {
-        filename: FILENAME,
-        content: Buffer.from(params.pdfBytes).toString('base64'),
-      },
-    ],
+    attachments: params.documents.map((doc) => ({
+      filename: doc.filename,
+      content: Buffer.from(doc.bytes).toString('base64'),
+    })),
   });
 }

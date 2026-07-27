@@ -1,21 +1,16 @@
 import { NextResponse } from 'next/server';
 
-import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
 import { FREE_CP12_LIMITS } from '@/lib/cp12/free-tool';
-import {
-  FreeCp12PayloadSchema,
-  freeCp12ToRenderSource,
-  freeCp12ValidationInput,
-} from '@/lib/cp12/freeCp12Payload';
-import { validateCp12TierOne } from '@/lib/cp12/validation';
+import { FreeCp12PayloadSchema } from '@/lib/cp12/freeCp12Payload';
 import { clientKeyFromRequest, rateLimit } from '@/lib/rate-limit';
-import { renderCp12CertificatePdf } from '@/server/pdf/renderCp12Certificate';
+import { buildFreeCp12Documents, freeSubmissionIssues } from '@/server/free-cp12-documents';
 import { freeCp12Reference } from '@/server/free-cp12';
 
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
- * Render a CP12 for an anonymous visitor and stream it straight back.
+ * Render a CP12 — and a Gas Warning Notice for any appliance classified At Risk
+ * or Immediately Dangerous — for an anonymous visitor.
  *
  * Nothing is written anywhere: no storage upload, no certificate row, no draft.
  * The bytes exist for the duration of the response and then only in the
@@ -53,30 +48,29 @@ export async function POST(request: Request) {
     );
   }
 
-  // The same statutory gate the paid flow applies before issuing.
-  const errors = validateCp12TierOne(freeCp12ValidationInput(parsed.data));
+  const reference = freeCp12Reference();
+  const issuedAt = new Date();
+
+  // The same statutory gates the paid flow applies before issuing — CP12 tier
+  // one, plus the GIUSP/RIDDOR gate for every warning notice implied.
+  const errors = freeSubmissionIssues(parsed.data, { recordId: reference, issuedAt });
   if (errors.length) {
     return NextResponse.json({ error: 'The certificate is not complete yet.', issues: errors }, { status: 422 });
   }
 
-  const reference = freeCp12Reference();
-  const pdfBytes = await renderCp12CertificatePdf(
-    buildCp12RenderInput(
-      freeCp12ToRenderSource(parsed.data, {
-        recordId: reference,
-        certNumber: reference,
-        issuedAt: new Date(),
-      }),
-    ),
-  );
+  const documents = await buildFreeCp12Documents(parsed.data, { reference, issuedAt });
 
-  return new NextResponse(pdfBytes as unknown as BodyInit, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': 'inline; filename="cp12-landlord-gas-safety-record.pdf"',
-      'Cache-Control': 'no-store',
-      'X-Robots-Tag': 'noindex, nofollow',
+  return NextResponse.json(
+    {
+      reference,
+      documents: documents.map((doc) => ({
+        kind: doc.kind,
+        title: doc.title,
+        filename: doc.filename,
+        reference: doc.reference,
+        base64: Buffer.from(doc.bytes).toString('base64'),
+      })),
     },
-  });
+    { headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' } },
+  );
 }

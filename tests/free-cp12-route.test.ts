@@ -68,13 +68,16 @@ describe('free CP12 generate route', () => {
     const response = await post(completePayload(), freshIp());
 
     expect(response.status).toBe(200);
-    expect(response.headers.get('Content-Type')).toBe('application/pdf');
     expect(response.headers.get('X-Robots-Tag')).toContain('noindex');
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const data = (await response.json()) as { documents: Array<{ kind: string; base64: string }> };
+    expect(data.documents).toHaveLength(1);
+    expect(data.documents[0].kind).toBe('cp12');
+
+    const bytes = Buffer.from(data.documents[0].base64, 'base64');
     expect(bytes.length).toBeGreaterThan(1000);
     // PDF magic number.
-    expect(String.fromCharCode(...bytes.slice(0, 5))).toBe('%PDF-');
+    expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
   });
 
   it('never reads or writes the database while generating', async () => {
@@ -112,7 +115,8 @@ describe('free CP12 generate route', () => {
 
     const response = await post(payload, freshIp());
     expect(response.status).toBe(200);
-    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+    const data = (await response.json()) as { documents: Array<{ base64: string }> };
+    expect(Buffer.from(data.documents[0].base64, 'base64').length).toBeGreaterThan(1000);
   });
 
   it('rate limits a single IP and fails with a message, not a stack trace', async () => {
