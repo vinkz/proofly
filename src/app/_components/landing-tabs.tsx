@@ -216,11 +216,11 @@ const proofPoints = [
   { value: "On site", label: "Fill, sign and issue" },
   { value: "1 link", label: "Property history to share" },
   { value: "Engineer-led", label: "Renewal follow-up" },
-  { value: "14 days", label: "Free trial, no card" },
+  { value: "10 free", label: "Certificates every month" },
 ];
 
 const includedFeatures = [
-  "Unlimited certificates",
+  "10 free certificates each month",
   "Engineer renewal prompts",
   "Shareable property links",
   "Pre-filled return jobs",
@@ -258,7 +258,7 @@ function EngineersContent() {
             className="inline-flex h-12 items-center justify-center gap-2 rounded-[26px] bg-[#111] px-6 text-[15px] font-medium text-white"
           >
             <IconPlayerPlay />
-            Start free trial
+            Create free account
           </Link>
           <Link
             href="#how-it-works"
@@ -268,7 +268,7 @@ function EngineersContent() {
           </Link>
         </div>
         <p className="mt-3 text-[12px] text-[var(--color-text-tertiary)]">
-          £12.99/month · No card required
+          10 certificates free each month · No card required
         </p>
       </section>
 
@@ -400,7 +400,7 @@ function EngineersContent() {
         <div className="rounded-[16px] bg-[#111] p-6">
           <p className="mb-2 text-[11px] uppercase tracking-[1px] text-[#888]">Solo engineer</p>
           <div className="mb-1 flex items-baseline gap-1">
-            <span className="text-[38px] font-medium text-white">£12.99</span>
+            <span className="text-[38px] font-medium text-white">£8.99</span>
             <span className="text-[16px] text-[#888]">/month</span>
           </div>
           <p className="mb-5 text-[14px] leading-[1.6] text-[#aaa]">
@@ -421,11 +421,11 @@ function EngineersContent() {
             href="/signup/step1"
             className="flex h-12 w-full items-center justify-center rounded-[26px] bg-[#1a7a52] text-[15px] font-medium text-white"
           >
-            Start free trial
+            Create free account
           </Link>
         </div>
         <p className="mt-4 text-center text-[12px] text-[var(--color-text-tertiary)]">
-          No card required. Full access from day one.
+          Start with 10 free certificates each month. Upgrade when you need unlimited.
         </p>
       </section>
 
@@ -441,7 +441,7 @@ function EngineersContent() {
           href="/signup/step1"
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-[28px] bg-[#111] text-[16px] font-medium text-white"
         >
-          Start free trial — free to try
+          Create free account — 10 certificates/month
           <IconArrowRight />
         </Link>
         <p className="mt-4 text-[13px] text-[var(--color-text-secondary)]">

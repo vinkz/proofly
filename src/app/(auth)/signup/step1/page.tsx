@@ -94,14 +94,14 @@ export default function SignupStep1Page() {
     <div className="pt-10">
       <h1 className="text-[24px] font-medium text-[var(--color-text-primary)]">Create your account</h1>
       <p className="mt-2 text-[13px] text-[var(--color-text-tertiary)]">
-        14-day free trial · No card required · Cancel anytime
+        10 certificates free each month · No card required
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '16px 0 24px' }}>
         {[
-          'Issue CP12 certificates on site in minutes',
+          'Issue CP12 certificates while you are on site',
           'Landlords get a permanent compliance link automatically',
-          'Renewal reminders sent automatically — never chase again',
+          'Engineer renewal prompts keep upcoming work visible',
         ].map((text) => (
           <div key={text} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{
