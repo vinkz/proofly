@@ -52,6 +52,9 @@ const CLASSIFICATIONS = [
   { label: 'ID', value: 'id' },
 ];
 
+/** Must match the array cap in FreeCp12PayloadSchema, or the server 400s opaquely. */
+const MAX_APPLIANCES = 12;
+
 type Stage = 'form' | 'preview' | 'done';
 
 type GeneratedDocument = {
@@ -280,9 +283,6 @@ export function FreeCp12Form() {
   const [email, setEmail] = useState('');
   const [emailed, setEmailed] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
-  // Categories whose combustion block is opt-in and has been opted into.
-  const [combustionOptIn, setCombustionOptIn] = useState<Record<number, boolean>>({});
-
   const startedRef = useRef(false);
   const pad = useSignaturePad();
 
@@ -342,7 +342,11 @@ export function FreeCp12Form() {
 
   const addAppliance = () => {
     markStarted();
-    setPayload((prev) => ({ ...prev, appliances: [...prev.appliances, emptyFreeCp12Appliance()] }));
+    setPayload((prev) =>
+      prev.appliances.length >= MAX_APPLIANCES
+        ? prev
+        : { ...prev, appliances: [...prev.appliances, emptyFreeCp12Appliance()] },
+    );
   };
 
   const removeAppliance = (index: number) => {
@@ -350,11 +354,6 @@ export function FreeCp12Form() {
       ...prev,
       appliances: prev.appliances.length > 1 ? prev.appliances.filter((_, i) => i !== index) : prev.appliances,
     }));
-    setCombustionOptIn((prev) => {
-      const next = { ...prev };
-      delete next[index];
-      return next;
-    });
   };
 
   /**
@@ -432,16 +431,32 @@ export function FreeCp12Form() {
     }
   };
 
+  const saveOne = (doc: GeneratedDocument) => {
+    const url = URL.createObjectURL(base64ToBlob(doc.base64));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = doc.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    // Revoking immediately can cancel the download in some browsers; give it a
+    // moment to start.
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
+
+  /**
+   * Save every document, spaced out.
+   *
+   * Browsers block a second automatic download from one gesture unless the user
+   * allows it — fired in a tight loop, an unsafe job's Gas Warning Notice would
+   * silently never arrive. Spacing them makes that far less likely, and the
+   * result page also lists each document with its own button so a blocked one
+   * is still one tap away.
+   */
   const saveToDevice = () => {
-    documents.forEach((doc) => {
-      const url = URL.createObjectURL(base64ToBlob(doc.base64));
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = doc.filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+    documents.forEach((doc, i) => {
+      if (i === 0) saveOne(doc);
+      else window.setTimeout(() => saveOne(doc), i * 800);
     });
   };
 
@@ -507,11 +522,29 @@ export function FreeCp12Form() {
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button asChild variant="primary">
-              <a href="/signup">Create an account</a>
+              <a href="/signup/step1">Create an account</a>
             </Button>
-            <Button variant="secondary" onClick={saveToDevice}>
-              Download again
-            </Button>
+          </div>
+        </div>
+
+        {/* Each document individually, so a browser that blocked the automatic
+            second download has not cost the engineer their warning notice. */}
+        <div className="mt-5">
+          <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">Your documents</p>
+          <div className="mt-2 grid gap-2">
+            {documents.map((doc) => (
+              <button
+                key={doc.reference}
+                type="button"
+                onClick={() => saveOne(doc)}
+                className="flex items-center justify-between gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] p-3 text-left transition-colors hover:bg-[var(--color-background-secondary)]"
+              >
+                <span className="text-[13px] text-[var(--color-text-primary)]">{doc.title}</span>
+                <span className="shrink-0 text-[12px] text-[var(--color-text-tertiary)] underline">
+                  Download
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -597,7 +630,16 @@ export function FreeCp12Form() {
           <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">Download it</h3>
           <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
             Where should we send a copy? Your email address is the only thing we keep — the
-            certificate itself is not stored.
+            certificate itself is not stored. 
+            <a
+              href="/legal/privacy#free-tools"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              How we use it
+            </a>
+            .
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
             <Input
@@ -781,7 +823,8 @@ export function FreeCp12Form() {
       {payload.appliances.map((appliance, index) => {
         const category = resolveCp12Category(appliance.appliance_type);
         const combustion = cp12FieldVisibility(category, 'combustion');
-        const showCombustion = combustion === 'shown' || (combustion === 'optional' && combustionOptIn[index]);
+        const showCombustion =
+          combustion === 'shown' || (combustion === 'optional' && appliance.combustion_opt_in);
         return (
           <Section key={index} title={`Appliance ${index + 1}`}>
             <EnumChips
@@ -907,11 +950,11 @@ export function FreeCp12Form() {
               ) : null}
             </div>
 
-            {combustion === 'optional' && !combustionOptIn[index] ? (
+            {combustion === 'optional' && !appliance.combustion_opt_in ? (
               <button
                 type="button"
                 className="justify-self-start text-[13px] font-medium text-[var(--color-text-secondary)] underline"
-                onClick={() => setCombustionOptIn((prev) => ({ ...prev, [index]: true }))}
+                onClick={() => setAppliance(index, { combustion_opt_in: true })}
               >
                 Add combustion readings
               </button>
@@ -1028,9 +1071,15 @@ export function FreeCp12Form() {
       })}
 
       <div className="mb-6">
-        <Button variant="secondary" onClick={addAppliance}>
-          Add another appliance
-        </Button>
+        {payload.appliances.length < MAX_APPLIANCES ? (
+          <Button variant="secondary" onClick={addAppliance}>
+            Add another appliance
+          </Button>
+        ) : (
+          <p className="text-[13px] text-[var(--color-text-tertiary)]">
+            {MAX_APPLIANCES} appliances is the limit for the free tool. An account has no limit.
+          </p>
+        )}
       </div>
 
       <Section title="Whole-property checks" collapsible hint="Leave blank if not checked.">

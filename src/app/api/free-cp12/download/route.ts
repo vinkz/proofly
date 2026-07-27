@@ -88,15 +88,17 @@ export async function POST(request: Request) {
 
   const documents = await buildFreeCp12Documents(payload, { reference, issuedAt });
 
-  const delivery = await sendFreeCp12Email({ to: email, documents, reference });
-
-  // The lead row is written whenever an address was submitted in earnest, even
-  // if Resend is misconfigured or bounces — the visitor still got their
-  // certificate, and the capture is the only thing we keep.
+  // Capture BEFORE sending. Resend is an external call; if it hangs long enough
+  // for the function to be killed we would lose the lead entirely, and the lead
+  // is the only thing this exchange gives us. Written whenever an address was
+  // submitted in earnest, even if delivery then fails — the visitor still has
+  // their certificate in the browser either way.
   const lead = await recordFreeCp12Lead(email);
   if (!lead.ok) {
     console.error('free CP12 lead capture failed', { error: lead.error });
   }
+
+  const delivery = await sendFreeCp12Email({ to: email, documents, reference });
 
   if (delivery.status === 'failed') {
     reportFreeToolEmailFailure('free_cp12', delivery.error);

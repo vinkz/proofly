@@ -83,12 +83,13 @@ export async function POST(request: Request) {
   const reference = freeCp12Reference();
   const pdfBytes = await buildFreeBoilerServicePdf(payload, { reference, issuedAt: new Date() });
 
-  const delivery = await sendFreeBoilerServiceEmail({ to: email, pdfBytes, reference });
-
+  // Capture before sending — see the note in the CP12 download route.
   const lead = await recordFreeBoilerServiceLead(email);
   if (!lead.ok) {
     console.error('free boiler service lead capture failed', { error: lead.error });
   }
+
+  const delivery = await sendFreeBoilerServiceEmail({ to: email, pdfBytes, reference });
 
   if (delivery.status === 'failed') {
     reportFreeToolEmailFailure('free_boiler_service', delivery.error);

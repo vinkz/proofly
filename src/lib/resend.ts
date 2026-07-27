@@ -83,6 +83,10 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   try {
     const response = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
+      // Without this a hung Resend connection holds the request open until the
+      // platform kills the function, which loses whatever the caller meant to do
+      // afterwards. Resend normally answers in well under a second.
+      signal: AbortSignal.timeout(15_000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',

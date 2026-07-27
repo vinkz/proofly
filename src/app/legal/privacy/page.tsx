@@ -230,6 +230,14 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong className="font-medium text-[var(--color-text-primary)]">
+                  Free tool information:
+                </strong>{' '}
+                the email address you give when you download a document from one of our free tools,
+                with the time and which tool it came from. We do not store the certificate or
+                record itself, or anything you typed into it.
+              </li>
+              <li>
+                <strong className="font-medium text-[var(--color-text-primary)]">
                   Technical and usage information:
                 </strong>{' '}
                 IP address, browser and device information, page visits, feature events, security
@@ -361,7 +369,45 @@ export default function PrivacyPage() {
             </p>
           </PrivacySection>
 
-          <PrivacySection id="sharing" number="06" title="Who we share it with">
+          <PrivacySection id="free-tools" number="06" title="Free tools">
+            <p>
+              We publish free tools that anyone can use without an account, including a CP12
+              generator, a boiler service record generator and a gas rate calculator. They are
+              deliberately built to keep as little as possible.
+            </p>
+            <p>
+              Nothing you type into a free tool is stored. The property address, landlord details,
+              appliance details, readings, classifications and your signature exist only for as
+              long as it takes to produce your PDF, and are then discarded. We keep no copy of the
+              document, which also means we cannot re-send one you have lost or reissue it later.
+            </p>
+            <p>
+              When you ask us to email the finished document we store your email address, the time,
+              and which tool you used. Nothing else. We use it to send you the document you asked
+              for and to contact you about CertNow. Our legal basis is legitimate interests in
+              promoting our own similar products to someone who has used one of them; you can
+              object at any time and we will stop.
+            </p>
+            <p>
+              The gas rate calculator asks for no email at all and runs entirely in your browser —
+              the figures you enter are never sent to us.
+            </p>
+            <div className="border-l-2 border-[var(--color-action)] bg-[var(--color-action-bg)] px-4 py-4">
+              <p className="font-medium text-[var(--color-text-primary)]">
+                You can ask us to delete your free tool email address at any time.
+              </p>
+              <p className="mt-1 text-[13px] leading-[1.6]">
+                Email{' '}
+                <InlineLink href={`mailto:${PRIVACY_EMAIL}?subject=Free%20tool%20email%20removal`}>
+                  {PRIVACY_EMAIL}
+                </InlineLink>
+                . Because we hold nothing but the address itself, removing it leaves no other
+                record of your visit.
+              </p>
+            </div>
+          </PrivacySection>
+
+          <PrivacySection id="sharing" number="07" title="Who we share it with">
             <p>
               We use specialist providers to operate CertNow. Depending on the feature, these
               currently include:
@@ -385,7 +431,7 @@ export default function PrivacyPage() {
             </p>
           </PrivacySection>
 
-          <PrivacySection id="international-transfers" number="07" title="International transfers">
+          <PrivacySection id="international-transfers" number="08" title="International transfers">
             <p>
               Some providers may process information outside the UK. Where UK data-protection law
               requires safeguards, we use providers and arrangements designed to protect the
@@ -395,7 +441,7 @@ export default function PrivacyPage() {
             </p>
           </PrivacySection>
 
-          <PrivacySection id="retention" number="08" title="How long we keep it">
+          <PrivacySection id="retention" number="09" title="How long we keep it">
             <p>
               We keep information only for as long as it is reasonably needed for the purpose for
               which it was collected, including providing the service, maintaining certificate and
@@ -421,6 +467,11 @@ export default function PrivacyPage() {
                 to be respected.
               </li>
               <li>
+                Free tool email addresses are kept while they remain useful for contacting you
+                about CertNow, and are deleted on request. The documents produced by those tools
+                are never stored at all.
+              </li>
+              <li>
                 Security logs and backups are retained on rolling schedules and then deleted or
                 overwritten.
               </li>
@@ -431,7 +482,7 @@ export default function PrivacyPage() {
             </p>
           </PrivacySection>
 
-          <PrivacySection id="security" number="09" title="Security and shared links">
+          <PrivacySection id="security" number="10" title="Security and shared links">
             <p>
               We use technical and organisational measures designed to protect information,
               including authenticated account access, scoped database permissions, restricted
@@ -450,7 +501,7 @@ export default function PrivacyPage() {
             </p>
           </PrivacySection>
 
-          <PrivacySection id="your-rights" number="10" title="Your rights">
+          <PrivacySection id="your-rights" number="11" title="Your rights">
             <p>
               Depending on the circumstances and legal basis, you may have rights to access,
               correct, erase or restrict personal information, receive a portable copy, and object
@@ -468,7 +519,7 @@ export default function PrivacyPage() {
             </p>
           </PrivacySection>
 
-          <PrivacySection id="cookies-and-analytics" number="11" title="Cookies and analytics">
+          <PrivacySection id="cookies-and-analytics" number="12" title="Cookies and analytics">
             <p>
               CertNow uses essential session technology to keep signed-in users authenticated and
               secure. These functions are necessary for the service.
@@ -487,7 +538,7 @@ export default function PrivacyPage() {
             </p>
           </PrivacySection>
 
-          <PrivacySection id="contact" number="12" title="Contact and complaints">
+          <PrivacySection id="contact" number="13" title="Contact and complaints">
             <p>
               To ask a question, exercise a privacy right or object to direct marketing, email{' '}
               <InlineLink href={`mailto:${PRIVACY_EMAIL}?subject=Privacy%20request`}>

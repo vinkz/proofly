@@ -73,6 +73,13 @@ export const FreeCp12ApplianceSchema = z.object({
   actions_required: str(1000),
   warning_notice_issued: z.boolean().optional().default(false),
   reg_26_9_confirmed: z.boolean().optional().default(false),
+  /**
+   * Whether the engineer opted into combustion readings for a category where
+   * they are optional. Stored on the appliance rather than by list position:
+   * keyed by index it survived a removal and reattached itself to whichever
+   * appliance slid into that slot.
+   */
+  combustion_opt_in: z.boolean().optional().default(false),
   unsafe_situation: FreeUnsafeSituationSchema.optional().default(() => FreeUnsafeSituationSchema.parse({})),
 });
 

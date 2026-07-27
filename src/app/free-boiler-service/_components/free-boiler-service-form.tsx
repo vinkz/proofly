@@ -268,7 +268,7 @@ export function FreeBoilerServiceForm() {
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button asChild variant="primary">
-              <a href="/signup">Create an account</a>
+              <a href="/signup/step1">Create an account</a>
             </Button>
             <Button variant="secondary" onClick={saveToDevice}>
               Download again
@@ -320,7 +320,16 @@ export function FreeBoilerServiceForm() {
           <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">Download it</h3>
           <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
             Where should we send a copy? Your email address is the only thing we keep — the record
-            itself is not stored.
+            itself is not stored.{' '}
+            <a
+              href="/legal/privacy#free-tools"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              How we use it
+            </a>
+            .
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
             <Input

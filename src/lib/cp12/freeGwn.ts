@@ -96,8 +96,13 @@ export function buildFreeGwnFields(
 
     classification,
     classification_code: classification === 'IMMEDIATELY_DANGEROUS' ? 'ID' : 'AR',
-    unsafe_situation_description: appliance.defect_notes,
-    actions_taken: appliance.actions_taken || appliance.actions_required,
+    // The CP12 gate accepts a defect recorded either per appliance or in the
+    // record-level box, but GAS_WARNING_REQUIRED_FOR_ISSUE needs the situation
+    // described on the notice itself. Fall back to the record-level text rather
+    // than blocking an engineer who filled in the other one.
+    unsafe_situation_description: appliance.defect_notes || payload.fields.defect_description,
+    actions_taken:
+      appliance.actions_taken || appliance.actions_required || payload.fields.remedial_action,
 
     gas_supply_isolated: situation.gas_supply_isolated === 'Yes',
     appliance_capped_off: situation.appliance_capped_off === 'Yes',
