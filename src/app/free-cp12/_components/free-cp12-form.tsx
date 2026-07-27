@@ -36,6 +36,11 @@ import {
 } from '@/lib/cp12/freeCp12Payload';
 import { freeGwnIssues, gwnClassificationFor } from '@/lib/cp12/freeGwn';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
+import { AddressLookupField } from '@/components/address/address-lookup-field';
+import type { AddressLookupResult } from '@/lib/address-lookup';
+import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
+import { getApplianceCatalog } from '@/lib/applianceCatalog/ukAppliances';
+import { CP12_FLUE_TYPES, CP12_LOCATIONS } from '@/types/cp12';
 
 const PASS_FAIL = [
   { label: 'Pass', value: 'pass' },
@@ -54,6 +59,12 @@ const CLASSIFICATIONS = [
 
 /** Must match the array cap in FreeCp12PayloadSchema, or the server 400s opaquely. */
 const MAX_APPLIANCES = 12;
+
+// Same option sets the paid wizard offers, so the two flows suggest the same
+// vocabulary. All three inputs stay free-text — the list is a shortcut, never a
+// constraint, because real properties have rooms these lists have never heard of.
+const LOCATION_OPTIONS = CP12_LOCATIONS.map((l) => ({ label: l.label, value: l.label }));
+const FLUE_TYPE_OPTIONS = CP12_FLUE_TYPES.map((f) => ({ label: f.label, value: f.label }));
 
 type Stage = 'form' | 'preview' | 'done';
 
@@ -374,6 +385,63 @@ export function FreeCp12Form() {
     }
   }, [payload]);
 
+  const applyPropertyAddress = useCallback(
+    (address: AddressLookupResult) => {
+      markStarted();
+      setPayload((prev) => ({
+        ...prev,
+        fields: {
+          ...prev.fields,
+          job_address_line1: address.line1 || address.summary,
+          job_address_line2: address.line2,
+          job_address_city: address.city,
+          job_postcode: address.postcode,
+        },
+      }));
+    },
+    [markStarted],
+  );
+
+  const applyLandlordAddress = useCallback(
+    (address: AddressLookupResult) => {
+      markStarted();
+      setPayload((prev) => ({
+        ...prev,
+        fields: {
+          ...prev.fields,
+          landlord_address_line1: address.line1 || address.summary,
+          landlord_address_line2: address.line2,
+          landlord_city: address.city,
+          landlord_postcode: address.postcode,
+        },
+      }));
+    },
+    [markStarted],
+  );
+
+  const hasPropertyAddress = Boolean(
+    payload.fields.job_address_line1.trim() || payload.fields.job_postcode.trim(),
+  );
+
+  /**
+   * A landlord living at the property still needs their address captured as
+   * theirs — the issue gate deliberately refuses to infer it. This copies it
+   * explicitly, which is the engineer asserting it, not us guessing.
+   */
+  const copyPropertyToLandlord = useCallback(() => {
+    markStarted();
+    setPayload((prev) => ({
+      ...prev,
+      fields: {
+        ...prev.fields,
+        landlord_address_line1: prev.fields.job_address_line1,
+        landlord_address_line2: prev.fields.job_address_line2,
+        landlord_city: prev.fields.job_address_city,
+        landlord_postcode: prev.fields.job_postcode,
+      },
+    }));
+  }, [markStarted]);
+
   const hasUnsafeAppliance = useMemo(
     () => payload.appliances.some((a) => gwnClassificationFor(a) !== null),
     [payload.appliances],
@@ -673,6 +741,11 @@ export function FreeCp12Form() {
             onChange={(e) => setField('inspection_date', e.target.value)}
           />
         </Field>
+        <AddressLookupField
+          label="Find the property address"
+          hint="Or type it in below."
+          onSelect={applyPropertyAddress}
+        />
         <Field label="Property address">
           <Input
             placeholder="Address line 1"
@@ -723,6 +796,21 @@ export function FreeCp12Form() {
             />
           </Field>
         </Grid>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" onClick={copyPropertyToLandlord} disabled={!hasPropertyAddress}>
+            Same as property address
+          </Button>
+          {!hasPropertyAddress ? (
+            <span className="text-[12px] text-[var(--color-text-tertiary)]">
+              Fill in the property address first
+            </span>
+          ) : null}
+        </div>
+        <AddressLookupField
+          label="Or find the landlord's address"
+          hint="Their correspondence address, if different."
+          onSelect={applyLandlordAddress}
+        />
         <Input
           placeholder="Address line 1"
           value={payload.fields.landlord_address_line1}
@@ -823,6 +911,8 @@ export function FreeCp12Form() {
       {payload.appliances.map((appliance, index) => {
         const category = resolveCp12Category(appliance.appliance_type);
         const combustion = cp12FieldVisibility(category, 'combustion');
+        // Boilers get the boiler catalogue, hobs the hob catalogue, and so on.
+        const catalog = getApplianceCatalog(category);
         const showCombustion =
           combustion === 'shown' || (combustion === 'optional' && appliance.combustion_opt_in);
         return (
@@ -842,30 +932,46 @@ export function FreeCp12Form() {
               />
             ) : null}
             <Grid>
-              <Field label="Location">
-                <Input
-                  placeholder="Kitchen"
-                  value={appliance.location}
-                  onChange={(e) => setAppliance(index, { location: e.target.value })}
-                />
-              </Field>
-              <Field label="Make and model">
-                <Input
-                  placeholder="Vaillant EcoTec"
-                  value={appliance.make_model}
-                  onChange={(e) => setAppliance(index, { make_model: e.target.value })}
-                />
-              </Field>
+              <SearchableSelect
+                label="Location"
+                value={appliance.location}
+                options={LOCATION_OPTIONS}
+                placeholder="Kitchen"
+                onChange={(value) => setAppliance(index, { location: value })}
+              />
+              <SearchableSelect
+                label="Make"
+                value={appliance.make}
+                options={catalog.getMakes().map((make) => ({ label: make, value: make }))}
+                placeholder="Vaillant"
+                onChange={(value) =>
+                  // Changing make invalidates the model, exactly as in the paid
+                  // wizard — otherwise a Worcester model can end up under Baxi.
+                  setAppliance(index, {
+                    make: value,
+                    model: value === appliance.make ? appliance.model : '',
+                  })
+                }
+              />
             </Grid>
+            <SearchableSelect
+              label="Model"
+              value={appliance.model}
+              options={catalog
+                .getModelsForMake(appliance.make)
+                .map((model) => ({ label: model, value: model }))}
+              placeholder={appliance.make ? 'Start typing a model' : 'Choose a make first'}
+              onChange={(value) => setAppliance(index, { model: value })}
+            />
 
             {cp12FieldVisible(category, 'flue_type') ? (
-              <Field label="Flue type">
-                <Input
-                  placeholder="Room sealed"
-                  value={appliance.flue_type}
-                  onChange={(e) => setAppliance(index, { flue_type: e.target.value })}
-                />
-              </Field>
+              <SearchableSelect
+                label="Flue type"
+                value={appliance.flue_type}
+                options={FLUE_TYPE_OPTIONS}
+                placeholder="Room sealed"
+                onChange={(value) => setAppliance(index, { flue_type: value })}
+              />
             ) : null}
 
             <Grid>

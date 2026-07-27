@@ -46,6 +46,13 @@ export const FreeCp12ApplianceSchema = z.object({
   appliance_type: str(40),
   appliance_subtype: str(40),
   location: str(120),
+  /**
+   * Make and model are captured separately so they can be driven by the shared
+   * appliance catalogue, and composed on the way to the renderer. make_model
+   * remains accepted as free text for anything the catalogue does not list.
+   */
+  make: str(80),
+  model: str(120),
   make_model: str(160),
 
   flue_type: str(60),
@@ -159,7 +166,8 @@ export function toCp12Appliance(input: FreeCp12Appliance): Cp12Appliance {
     landlords_appliance: 'Yes',
     appliance_inspected: 'Yes',
     location: input.location,
-    make_model: input.make_model,
+    make_model:
+      [input.make, input.model].map((part) => part.trim()).filter(Boolean).join(' ') || input.make_model,
     operating_pressure: input.operating_pressure,
     heat_input: input.heat_input,
     high_co_ppm: input.high_co_ppm,
@@ -239,7 +247,9 @@ export function freeCp12ValidationInput(payload: FreeCp12Payload) {
     appliances: payload.appliances.map((appliance) => ({
       appliance_type: appliance.appliance_type,
       location: appliance.location,
-      make_model: appliance.make_model,
+      make_model:
+        [appliance.make, appliance.model].map((p) => p.trim()).filter(Boolean).join(' ') ||
+        appliance.make_model,
       safety_classification: appliance.safety_classification,
       defect_notes: appliance.defect_notes,
       actions_taken: appliance.actions_taken,

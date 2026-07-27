@@ -27,6 +27,11 @@ import {
   type FreeBoilerServicePayload,
 } from '@/lib/boiler-service/freeBoilerServicePayload';
 import { validateGasServiceForIssue } from '@/lib/gas-service/validation';
+import { AddressLookupField } from '@/components/address/address-lookup-field';
+import type { AddressLookupResult } from '@/lib/address-lookup';
+import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
+import { getMakes, getModelsForMake } from '@/lib/applianceCatalog/ukBoilers';
+import { CP12_FLUE_TYPES, CP12_LOCATIONS } from '@/types/cp12';
 
 const PASS_FAIL = [
   { label: 'Pass', value: 'pass' },
@@ -36,6 +41,9 @@ const YES_NO = [
   { label: 'Yes', value: 'Yes' },
   { label: 'No', value: 'No' },
 ];
+const LOCATION_OPTIONS = CP12_LOCATIONS.map((l) => ({ label: l.label, value: l.label }));
+const FLUE_TYPE_OPTIONS = CP12_FLUE_TYPES.map((f) => ({ label: f.label, value: f.label }));
+
 const BOILER_TYPES = [
   { label: 'Combi', value: 'combi' },
   { label: 'System', value: 'system' },
@@ -157,6 +165,20 @@ export function FreeBoilerServiceForm() {
       return [];
     }
   }, [payload]);
+
+  const applyPropertyAddress = useCallback(
+    (address: AddressLookupResult) => {
+      markStarted();
+      setPayload((prev) => ({
+        ...prev,
+        job_address_line1: address.line1 || address.summary,
+        job_address_line2: address.line2,
+        job_address_city: address.city,
+        job_postcode: address.postcode,
+      }));
+    },
+    [markStarted],
+  );
 
   const captureSignature = () => {
     if (!pad.hasInk()) {
@@ -358,6 +380,11 @@ export function FreeBoilerServiceForm() {
         <FieldLabel label="Service date">
           <Input type="date" value={payload.service_date} onChange={(e) => set('service_date', e.target.value)} />
         </FieldLabel>
+        <AddressLookupField
+          label="Find the property address"
+          hint="Or type it in below."
+          onSelect={applyPropertyAddress}
+        />
         <FieldLabel label="Property address">
           <Input
             placeholder="Address line 1"
@@ -443,12 +470,28 @@ export function FreeBoilerServiceForm() {
 
       <Section title="Appliance">
         <Grid>
-          <FieldLabel label="Make">
-            <Input placeholder="Vaillant" value={payload.boiler_make} onChange={(e) => set('boiler_make', e.target.value)} />
-          </FieldLabel>
-          <FieldLabel label="Model">
-            <Input placeholder="EcoTec Plus 832" value={payload.boiler_model} onChange={(e) => set('boiler_model', e.target.value)} />
-          </FieldLabel>
+          <SearchableSelect
+            label="Make"
+            value={payload.boiler_make}
+            options={getMakes().map((make) => ({ label: make, value: make }))}
+            placeholder="Vaillant"
+            onChange={(value) => {
+              // Changing make invalidates the model, as in the paid wizard.
+              markStarted();
+              setPayload((prev) => ({
+                ...prev,
+                boiler_make: value,
+                boiler_model: value === prev.boiler_make ? prev.boiler_model : '',
+              }));
+            }}
+          />
+          <SearchableSelect
+            label="Model"
+            value={payload.boiler_model}
+            options={getModelsForMake(payload.boiler_make).map((m) => ({ label: m, value: m }))}
+            placeholder={payload.boiler_make ? 'Start typing a model' : 'Choose a make first'}
+            onChange={(value) => set('boiler_model', value)}
+          />
         </Grid>
         <EnumChips
           label="Type"
@@ -457,16 +500,24 @@ export function FreeBoilerServiceForm() {
           onChange={(value) => set('boiler_type', value)}
         />
         <Grid>
-          <FieldLabel label="Location">
-            <Input placeholder="Kitchen" value={payload.boiler_location} onChange={(e) => set('boiler_location', e.target.value)} />
-          </FieldLabel>
+          <SearchableSelect
+            label="Location"
+            value={payload.boiler_location}
+            options={LOCATION_OPTIONS}
+            placeholder="Kitchen"
+            onChange={(value) => set('boiler_location', value)}
+          />
           <FieldLabel label="Serial number (optional)">
             <Input value={payload.serial_number} onChange={(e) => set('serial_number', e.target.value)} />
           </FieldLabel>
         </Grid>
-        <FieldLabel label="Flue type (optional)">
-          <Input placeholder="Room sealed" value={payload.flue_type} onChange={(e) => set('flue_type', e.target.value)} />
-        </FieldLabel>
+        <SearchableSelect
+          label="Flue type (optional)"
+          value={payload.flue_type}
+          options={FLUE_TYPE_OPTIONS}
+          placeholder="Room sealed"
+          onChange={(value) => set('flue_type', value)}
+        />
       </Section>
 
       <Section

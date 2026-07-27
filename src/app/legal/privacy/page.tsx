@@ -389,6 +389,12 @@ export default function PrivacyPage() {
               object at any time and we will stop.
             </p>
             <p>
+              The free certificate tools offer address search. If you use it, what you type in the
+              search box is sent to our address provider (Ideal Postcodes) to return matches. We do
+              not store the search or the result. Typing the address in manually instead avoids that
+              entirely, and the manual fields are always available.
+            </p>
+            <p>
               The gas rate calculator asks for no email at all and runs entirely in your browser —
               the figures you enter are never sent to us.
             </p>
