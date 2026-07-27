@@ -66,6 +66,28 @@ Goal: see whether the problem is **traffic** (few people arrive) or
 **"First job created":** PostHog funnels count the *first* occurrence per person,
 so `job_created` doubles as "first job created" — no separate event needed.
 
+### Free CP12 tool funnel (`/free-cp12`)
+
+Top-of-funnel acquisition: an anonymous engineer generates a real CP12 with no
+account, and gives us an email address to download it.
+
+| # | Step | Event | Fired from |
+| --- | --- | --- | --- |
+| 1 | Page view | `$pageview` (auto) on `/free-cp12` | `posthog-provider.tsx` |
+| 2 | Form started | `free_cp12_form_started` | first edit to any field, once per session |
+| 3 | PDF generated | `free_cp12_generated` `{ appliance_count }` | preview renders successfully |
+| 4 | Email submitted | `free_cp12_email_submitted` | download form submit |
+| 5 | Download completed | `free_cp12_download_completed` `{ emailed }` | after the file saves |
+
+**The number to watch is step 3 → step 4:** the drop-off between generating a
+certificate and being willing to hand over an email address. That gap is the
+cost of the email wall. Steps 4 → 5 should be near-total; a gap there means
+delivery or rate limiting is failing, not that people changed their minds.
+
+`free_cp12_email_submitted` deliberately carries **no** email address or any
+other property — see the PII rule above. The address lives only in
+`free_tool_leads`, which is the sole thing the tool persists.
+
 ### Identity / stitching caveat (cookieless trade-off)
 
 Memory persistence keeps a stable `distinct_id` across **client-side**

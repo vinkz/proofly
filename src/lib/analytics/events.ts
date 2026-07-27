@@ -33,6 +33,19 @@ export const ANALYTICS_EVENTS = {
   certificateSent: 'certificate_sent',
   /** Fires when an engineer creates a new invoice for a job. */
   invoiceCreated: 'invoice_created',
+
+  // --- Free, no-signup CP12 generator -------------------------------------
+  // The funnel these four form is the point of the tool: the gap between
+  // free_cp12_generated and free_cp12_email_submitted is the drop-off at the
+  // email wall, and is the number to watch. Keep them in this order.
+  /** Fires on the first edit to the free CP12 form. Once per session. */
+  freeCp12FormStarted: 'free_cp12_form_started',
+  /** Fires when the free CP12 PDF renders successfully and is previewed. */
+  freeCp12Generated: 'free_cp12_generated',
+  /** Fires when an email is submitted at the download step. Never carries the address. */
+  freeCp12EmailSubmitted: 'free_cp12_email_submitted',
+  /** Fires when the PDF has been emailed and saved to the visitor's device. */
+  freeCp12DownloadCompleted: 'free_cp12_download_completed',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];
