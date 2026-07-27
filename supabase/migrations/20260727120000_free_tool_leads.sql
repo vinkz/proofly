@@ -12,8 +12,11 @@ create table if not exists public.free_tool_leads (
 );
 
 -- Supports the per-email-per-day cap, which counts recent rows for an address.
+-- Addresses are lower-cased on write (see recordFreeCp12Lead), so the cap
+-- queries the column directly and a plain column index is what gets used — an
+-- expression index on lower(email) would not serve `where email = $1`.
 create index if not exists free_tool_leads_email_created_at_idx
-on public.free_tool_leads (lower(email), created_at desc);
+on public.free_tool_leads (email, created_at desc);
 
 create index if not exists free_tool_leads_created_at_idx
 on public.free_tool_leads (created_at desc);
