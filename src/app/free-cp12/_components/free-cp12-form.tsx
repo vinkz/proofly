@@ -69,13 +69,58 @@ const base64ToBlob = (base64: string) => {
   return new Blob([bytes], { type: 'application/pdf' });
 };
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+const SECTION_CLASS =
+  'mb-6 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 sm:p-5';
+
+/**
+ * A form section. Sections holding only optional fields collapse by default, so
+ * the required path down the page stays short — this is filled in on a phone,
+ * often one-handed, and scrolling past checks you are not going to record is
+ * the main cost of covering every appliance type properly.
+ *
+ * Uses native <details>: it is keyboard and screen-reader accessible for free,
+ * survives without JS, and browser find-in-page opens it.
+ */
+function Section({
+  title,
+  hint,
+  collapsible = false,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  collapsible?: boolean;
+  children: React.ReactNode;
+}) {
+  if (!collapsible) {
+    return (
+      <section className={SECTION_CLASS}>
+        <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">{title}</h2>
+        {hint ? <p className="mt-1 text-[13px] text-[var(--color-text-tertiary)]">{hint}</p> : null}
+        <div className="mt-4 grid gap-4">{children}</div>
+      </section>
+    );
+  }
+
   return (
-    <section className="mb-6 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 sm:p-5">
-      <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">{title}</h2>
-      {hint ? <p className="mt-1 text-[13px] text-[var(--color-text-tertiary)]">{hint}</p> : null}
+    <details className={`${SECTION_CLASS} group`}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <span>
+          <span className="text-[15px] font-semibold text-[var(--color-text-primary)]">{title}</span>
+          <span className="ml-2 rounded-full bg-[var(--color-background-tertiary)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-text-tertiary)]">
+            Optional
+          </span>
+          {hint ? <span className="mt-1 block text-[13px] text-[var(--color-text-tertiary)]">{hint}</span> : null}
+        </span>
+        <span
+          aria-hidden
+          className="shrink-0 text-[13px] text-[var(--color-text-tertiary)] transition-transform group-open:rotate-180"
+        >
+          ▾
+        </span>
+      </summary>
       <div className="mt-4 grid gap-4">{children}</div>
-    </section>
+    </details>
   );
 }
 
@@ -329,6 +374,11 @@ export function FreeCp12Form() {
       return [];
     }
   }, [payload]);
+
+  const hasUnsafeAppliance = useMemo(
+    () => payload.appliances.some((a) => gwnClassificationFor(a) !== null),
+    [payload.appliances],
+  );
 
   const captureSignature = () => {
     if (!pad.hasInk()) {
@@ -665,7 +715,7 @@ export function FreeCp12Form() {
         </Field>
       </Section>
 
-      <Section title="You and your business" hint="This is what appears at the top of the certificate.">
+      <Section title="You" hint="Required — this identifies who carried out the check.">
         <Grid>
           <Field label="Engineer name">
             <Input
@@ -681,14 +731,21 @@ export function FreeCp12Form() {
             />
           </Field>
         </Grid>
+      </Section>
+
+      <Section
+        title="Your business details"
+        collapsible
+        hint="Appears in the certificate header. Omitted from the PDF if left blank."
+      >
         <Grid>
-          <Field label="ID card number (optional)">
+          <Field label="ID card number">
             <Input
               value={payload.fields.engineer_id_card_number}
               onChange={(e) => setField('engineer_id_card_number', e.target.value)}
             />
           </Field>
-          <Field label="Business name (optional)">
+          <Field label="Business name">
             <Input
               value={payload.fields.company_name}
               onChange={(e) => setField('company_name', e.target.value)}
@@ -696,7 +753,7 @@ export function FreeCp12Form() {
           </Field>
         </Grid>
         <Grid>
-          <Field label="Business phone (optional)">
+          <Field label="Business phone">
             <Input
               type="tel"
               inputMode="tel"
@@ -704,7 +761,7 @@ export function FreeCp12Form() {
               onChange={(e) => setField('company_phone', e.target.value)}
             />
           </Field>
-          <Field label="Business email (optional)">
+          <Field label="Business email">
             <Input
               type="email"
               inputMode="email"
@@ -713,7 +770,7 @@ export function FreeCp12Form() {
             />
           </Field>
         </Grid>
-        <Field label="Business address (optional)">
+        <Field label="Business address">
           <Input
             value={payload.fields.company_address}
             onChange={(e) => setField('company_address', e.target.value)}
@@ -976,7 +1033,7 @@ export function FreeCp12Form() {
         </Button>
       </div>
 
-      <Section title="Whole-property checks" hint="Optional. Leave blank if not checked.">
+      <Section title="Whole-property checks" collapsible hint="Leave blank if not checked.">
         <Grid>
           <EnumChips
             label="CO alarm fitted"
@@ -1019,7 +1076,15 @@ export function FreeCp12Form() {
 
       <Section
         title="Defects and remedial action"
-        hint="Leave blank if there were none — the certificate will say so."
+        // Reg 36(3)(e)/(f) content: optional to fill while everything is safe
+        // (the certificate prints "None identified"), but required the moment an
+        // appliance is unsafe — so it stops collapsing at that point.
+        collapsible={!hasUnsafeAppliance}
+        hint={
+          hasUnsafeAppliance
+            ? 'Required — an appliance on this record is unsafe.'
+            : 'Leave blank if there were none — the certificate will say so.'
+        }
       >
         <Field label="Defects identified">
           <Textarea

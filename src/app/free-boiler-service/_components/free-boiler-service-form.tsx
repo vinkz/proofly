@@ -46,13 +46,58 @@ const BOILER_TYPES = [
 type Stage = 'form' | 'preview' | 'done';
 type Field = keyof FreeBoilerServicePayload;
 
-function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+const SECTION_CLASS =
+  'mb-6 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 sm:p-5';
+
+/**
+ * A form section. Sections holding only optional fields collapse by default, so
+ * the required path down the page stays short — this is filled in on a phone,
+ * often one-handed. That matters more here than on the CP12: the required spine
+ * is tiny and most of this form is Benchmark convention.
+ *
+ * Uses native <details>: keyboard and screen-reader accessible for free,
+ * survives without JS, and browser find-in-page opens it.
+ */
+function Section({
+  title,
+  hint,
+  collapsible = false,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  collapsible?: boolean;
+  children: React.ReactNode;
+}) {
+  if (!collapsible) {
+    return (
+      <section className={SECTION_CLASS}>
+        <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">{title}</h2>
+        {hint ? <p className="mt-1 text-[13px] text-[var(--color-text-tertiary)]">{hint}</p> : null}
+        <div className="mt-4 grid gap-4">{children}</div>
+      </section>
+    );
+  }
+
   return (
-    <section className="mb-6 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 sm:p-5">
-      <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">{title}</h2>
-      {hint ? <p className="mt-1 text-[13px] text-[var(--color-text-tertiary)]">{hint}</p> : null}
+    <details className={`${SECTION_CLASS} group`}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <span>
+          <span className="text-[15px] font-semibold text-[var(--color-text-primary)]">{title}</span>
+          <span className="ml-2 rounded-full bg-[var(--color-background-tertiary)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-text-tertiary)]">
+            Optional
+          </span>
+          {hint ? <span className="mt-1 block text-[13px] text-[var(--color-text-tertiary)]">{hint}</span> : null}
+        </span>
+        <span
+          aria-hidden
+          className="shrink-0 text-[13px] text-[var(--color-text-tertiary)] transition-transform group-open:rotate-180"
+        >
+          ▾
+        </span>
+      </summary>
       <div className="mt-4 grid gap-4">{children}</div>
-    </section>
+    </details>
   );
 }
 
@@ -327,7 +372,7 @@ export function FreeBoilerServiceForm() {
         </Grid>
       </Section>
 
-      <Section title="Customer" hint="Optional — a service record is not a landlord document.">
+      <Section title="Customer" collapsible hint="A service record is not a landlord document.">
         <Grid>
           <FieldLabel label="Name">
             <Input value={payload.customer_name} onChange={(e) => set('customer_name', e.target.value)} />
@@ -343,7 +388,7 @@ export function FreeBoilerServiceForm() {
         </Grid>
       </Section>
 
-      <Section title="You and your business">
+      <Section title="You" hint="Required — this identifies who carried out the work.">
         <Grid>
           <FieldLabel label="Engineer name">
             <Input value={payload.engineer_name} onChange={(e) => set('engineer_name', e.target.value)} />
@@ -356,11 +401,18 @@ export function FreeBoilerServiceForm() {
             />
           </FieldLabel>
         </Grid>
+      </Section>
+
+      <Section
+        title="Your business details"
+        collapsible
+        hint="Appears in the record header. Omitted from the PDF if left blank."
+      >
         <Grid>
-          <FieldLabel label="Business name (optional)">
+          <FieldLabel label="Business name">
             <Input value={payload.company_name} onChange={(e) => set('company_name', e.target.value)} />
           </FieldLabel>
-          <FieldLabel label="Business phone (optional)">
+          <FieldLabel label="Business phone">
             <Input
               type="tel"
               inputMode="tel"
@@ -369,6 +421,15 @@ export function FreeBoilerServiceForm() {
             />
           </FieldLabel>
         </Grid>
+        <FieldLabel label="ID card number">
+          <Input
+            value={payload.engineer_id_card_number}
+            onChange={(e) => set('engineer_id_card_number', e.target.value)}
+          />
+        </FieldLabel>
+        <FieldLabel label="Business address">
+          <Input value={payload.company_address} onChange={(e) => set('company_address', e.target.value)} />
+        </FieldLabel>
       </Section>
 
       <Section title="Appliance">
@@ -444,7 +505,7 @@ export function FreeBoilerServiceForm() {
         </FieldLabel>
       </Section>
 
-      <Section title="Service tasks" hint="Benchmark convention — optional, never blocks the record.">
+      <Section title="Service tasks" collapsible hint="Benchmark convention — never blocks the record.">
         <EnumChips
           label="Visual inspection"
           value={payload.service_visual_inspection}
@@ -483,7 +544,7 @@ export function FreeBoilerServiceForm() {
         />
       </Section>
 
-      <Section title="Combustion readings" hint="Optional here; mandatory at commissioning under Benchmark.">
+      <Section title="Combustion readings" collapsible hint="Mandatory at commissioning under Benchmark, optional for a service.">
         <div className="grid gap-3 sm:grid-cols-3">
           <FieldLabel label="High CO (ppm)">
             <Input inputMode="decimal" value={payload.high_co_ppm} onChange={(e) => set('high_co_ppm', e.target.value)} />
