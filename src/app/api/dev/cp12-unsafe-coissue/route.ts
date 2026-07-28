@@ -45,6 +45,21 @@ export async function GET() {
     const before = await checkCertificateAllowanceForUser(user.id);
     steps.push(`allowance before: used ${before.used} of ${before.limit ?? 'unlimited'}`);
 
+    // Issuing needs an allowance slot. Say so plainly rather than letting the
+    // run fail somewhere in the middle and look like a co-issue bug.
+    if (!before.allowed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            `No certificate allowance left this month (${before.used} of ${before.limit}). ` +
+            'Clear this account\'s rows in certificate_usage for the current billing month, or run as an account with room.',
+          allowance: before,
+        },
+        { status: 409 },
+      );
+    }
+
     const { jobId } = await createJob({ certificateType: 'cp12', title: 'Co-issue smoke test' });
     steps.push(`job ${jobId}`);
 
@@ -186,7 +201,10 @@ export async function GET() {
       },
       jobId,
       steps,
-      cleanup: `Delete job ${jobId} and any linked notice job when you are done.`,
+      cleanup:
+        `Delete job ${jobId}` +
+        (notices.length ? ` and notice job ${notices.map((n) => n.jobId).join(', ')}` : '') +
+        ', and the certificate_usage row this run added.',
     });
   } catch (error) {
     return NextResponse.json(

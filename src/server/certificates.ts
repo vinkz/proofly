@@ -3034,6 +3034,53 @@ async function issueAttachedGasWarningNotices(params: {
       });
       gwnJobId = ensured.jobId;
 
+      // Seed the notice from its parent CP12 and PERSIST it.
+      //
+      // applyCp12SourceDefaultsForGasWarningNotice normally runs when the
+      // engineer opens the notice wizard, and only mutates the record used to
+      // render that form — the values reach job_fields when the wizard saves.
+      // Issuing without anyone opening it therefore validated against empty
+      // fields, so the appliance location, type, classification, defect and
+      // actions all have to be written here first.
+      const admin = await supabaseServerServiceRole();
+      const { data: gwnJobRow, error: gwnJobErr } = await admin
+        .from('jobs')
+        .select('*')
+        .eq('id', gwnJobId)
+        .maybeSingle();
+      if (gwnJobErr || !gwnJobRow) {
+        throw new Error(gwnJobErr?.message ?? 'Warning notice job not found');
+      }
+
+      const { data: existingFields } = await admin
+        .from(JOB_FIELDS_TABLE)
+        .select('field_key, value')
+        .eq('job_id', gwnJobId);
+      const fieldRecord: Record<string, string | null> = Object.fromEntries(
+        ((existingFields ?? []) as unknown as JobFieldRow[]).map((row) => [
+          row.field_key,
+          typeof row.value === 'string' ? row.value : row.value == null ? null : String(row.value),
+        ]),
+      );
+
+      const before = JSON.stringify(fieldRecord);
+      await applyCp12SourceDefaultsForGasWarningNotice({
+        sb: admin,
+        job: gwnJobRow as unknown as JobRow,
+        fields: fieldRecord,
+      });
+
+      if (JSON.stringify(fieldRecord) !== before) {
+        await persistJobFields(
+          admin,
+          gwnJobId,
+          Object.entries(fieldRecord)
+            .filter(([, value]) => value !== null && value !== undefined)
+            .map(([field_key, value]) => ({ job_id: gwnJobId, field_key, value: value as string })),
+          'issueAttachedGasWarningNotices',
+        );
+      }
+
       await generateCertificatePdf({
         jobId: gwnJobId,
         certificateType: 'gas_warning_notice',

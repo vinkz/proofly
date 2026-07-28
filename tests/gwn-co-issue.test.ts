@@ -34,7 +34,17 @@ describe('co-issued gas warning notices', () => {
     expect(fn).toMatch(/\} catch \(error\) \{/);
     // Records the failure and carries on rather than rethrowing.
     expect(fn).toMatch(/issued: false, error: message/);
-    expect(fn).not.toMatch(/throw /);
+
+    // Anything that does throw must be inside the try, so it is caught here
+    // rather than escaping and failing the certificate.
+    const tryAt = fn.indexOf('try {');
+    const catchAt = fn.indexOf('} catch (error) {');
+    for (const match of fn.matchAll(/throw /g)) {
+      expect(match.index).toBeGreaterThan(tryAt);
+      expect(match.index).toBeLessThan(catchAt);
+    }
+    // And the catch itself never rethrows.
+    expect(fn.slice(catchAt)).not.toMatch(/throw /);
   });
 
   it('reports each notice so a failure stays visible', () => {
@@ -85,5 +95,42 @@ describe('co-issued gas warning notices', () => {
 
   it('reminds about the RIDDOR duty once a notice has been issued', () => {
     expect(completion).toMatch(/RIDDOR within 14 days/);
+  });
+});
+
+/**
+ * The first real run of this path failed because the notice was issued against
+ * empty fields: applyCp12SourceDefaultsForGasWarningNotice normally runs when
+ * the engineer opens the notice wizard, and only mutates the record used to
+ * render that form. Nothing reached job_fields until the wizard saved, so
+ * issuing without opening it validated against nothing.
+ */
+describe('the co-issued notice is seeded before it is issued', () => {
+  const fn = server.slice(
+    server.indexOf('async function issueAttachedGasWarningNotices'),
+    server.indexOf('const GeneratePdfSchema'),
+  );
+
+  it('seeds from the parent CP12', () => {
+    expect(fn).toMatch(/await applyCp12SourceDefaultsForGasWarningNotice\(\{/);
+  });
+
+  it('persists the seeded values, since the seeder only mutates in memory', () => {
+    expect(fn).toMatch(/await persistJobFields\(/);
+  });
+
+  it('seeds before issuing, not after', () => {
+    const seededAt = fn.indexOf('applyCp12SourceDefaultsForGasWarningNotice');
+    const persistedAt = fn.indexOf('persistJobFields');
+    const issuedAt = fn.indexOf('await generateCertificatePdf({');
+    expect(seededAt).toBeGreaterThan(-1);
+    expect(persistedAt).toBeGreaterThan(seededAt);
+    expect(issuedAt).toBeGreaterThan(persistedAt);
+  });
+
+  it('reads the notice job and its existing fields first', () => {
+    // Existing answers must not be clobbered — applyDefault only fills blanks.
+    expect(fn).toMatch(/\.from\(JOB_FIELDS_TABLE\)/);
+    expect(fn).toMatch(/const before = JSON\.stringify\(fieldRecord\)/);
   });
 });
