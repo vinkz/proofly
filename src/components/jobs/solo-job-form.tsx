@@ -108,7 +108,16 @@ const WIZARD_ROUTE_BY_JOB_TYPE: Record<JobType, string> = {
   general: 'general_works',
 };
 
-const LAUNCH_VISIBLE_JOB_TYPES: readonly JobType[] = ['safety_check', 'service', 'safety_check_service'];
+// A Gas Warning Notice usually arises from a CP12 and is raised from it, but
+// not always: a breakdown or service visit can turn one up with no certificate
+// involved, and GIUSP does not wait for a CP12. Without this the only route to
+// a notice was through a CP12, which left that case with nowhere to go.
+const LAUNCH_VISIBLE_JOB_TYPES: readonly JobType[] = [
+  'safety_check',
+  'service',
+  'safety_check_service',
+  'warning_notice',
+];
 
 const splitAddressParts = (value: string | null | undefined) =>
   String(value ?? '')

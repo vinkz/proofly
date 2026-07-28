@@ -3183,7 +3183,22 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     if (validationErrors.length) {
       throw new Error(`Gas warning notice validation failed: ${validationErrors.join('; ')}`);
     }
-    const limitReached = await getLimitReachedResultForFinalIssue(previewOnly, user.id);
+    // A Gas Warning Notice raised from a CP12 carries the CP12's job as its
+    // parent. That notice is part of the same visit — not a second piece of
+    // work — so it is issued without spending a certificate from the monthly
+    // allowance. A standalone notice (no parent) is charged as normal.
+    const attachedToParentJob = Boolean(
+      (
+        await sb
+          .from('jobs')
+          .select('parent_job_id')
+          .eq('id', input.jobId)
+          .maybeSingle()
+      ).data?.parent_job_id,
+    );
+    const limitReached = attachedToParentJob
+      ? null
+      : await getLimitReachedResultForFinalIssue(previewOnly, user.id);
     if (limitReached) return limitReached;
 
     const admin = createClient<Database>(
@@ -3259,7 +3274,9 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
     if (certErr) {
       throw new Error(certErr.message);
     }
-    await recordCertificateUsageForUser(user.id, input.jobId, 'gas_warning_notice');
+    if (!attachedToParentJob) {
+      await recordCertificateUsageForUser(user.id, input.jobId, 'gas_warning_notice');
+    }
     await admin
       .from('jobs')
       .update({ status: 'issued' } as Record<string, unknown>)
