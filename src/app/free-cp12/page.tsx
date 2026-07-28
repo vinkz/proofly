@@ -28,11 +28,13 @@ export default function FreeCp12Page() {
           Fill this in and get a complete Landlord Gas Safety Record as a PDF. No account, no
           watermark, nothing held back. It covers every gas appliance type, not just boilers.
         </p>
+        {/* Reads as the next sentence of the paragraph above. It sits outside the
+            <p> because a paragraph may only contain phrasing content. */}
+        <SampleCp12Preview />
         <p className="mt-3 max-w-[62ch] text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
           Nothing you type here is saved. Close the tab and it is gone — so finish in one sitting.
         </p>
       </header>
-      <SampleCp12Preview />
       <FreeCp12Form />
       <FreeToolFooter currentRoute={FREE_CP12_ROUTE} />
     </main>
