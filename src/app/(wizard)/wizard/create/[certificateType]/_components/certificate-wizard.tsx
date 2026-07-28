@@ -43,6 +43,13 @@ import { getApplianceCatalog } from '@/lib/applianceCatalog/ukAppliances';
 import { Cp12VoiceReadings } from '@/components/cp12/cp12-voice-readings';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
+import { UnsafeSituationFields } from '@/components/cp12/unsafe-situation';
+import {
+  GIUSP_ANSWER_KEYS,
+  giuspFieldKey,
+  readGiuspAnswers,
+  type GiuspAnswerKey,
+} from '@/lib/cp12/giusp';
 import { composeCp12DefectSummary, cp12ApplianceHasFailedCheck, cp12FailedChecks } from '@/lib/cp12/defect-summary';
 import {
   ACTION_REQUIRED_PRESETS,
@@ -848,6 +855,11 @@ export function CertificateWizard({
       data,
       jobAddress: nextJobAddress,
       jobFields: {
+        // Namespaced GIUSP answers for any unsafe appliance. Written alongside
+        // the rest so a part-filled notice survives a reload like everything else.
+        ...Object.fromEntries(
+          Object.entries(evidenceFields).filter(([key]) => key.startsWith('giusp__')),
+        ),
         job_reference: nextJobAddress.job_reference,
         job_address_name: nextJobAddress.job_address_name,
         job_address_line1: nextJobAddress.job_address_line1,
@@ -867,6 +879,28 @@ export function CertificateWizard({
       jobPayload,
     };
   }, [appliances, completionDate, evidenceFields, info, jobAddress, resolvedInitialInfo]);
+
+  /**
+   * GIUSP answers for one appliance's warning notice.
+   *
+   * Held in evidenceFields under the shared per-appliance namespace, so they
+   * ride the existing saveJobFields path and land on the parent CP12 job. The
+   * notice reads them across when it is seeded — see
+   * applyCp12SourceDefaultsForGasWarningNotice.
+   */
+  const applianceGiuspKey = (index: number) => `appliance_${index + 1}`;
+
+  const giuspAnswersFor = useCallback(
+    (index: number) => readGiuspAnswers(evidenceFields, applianceGiuspKey(index)),
+    [evidenceFields],
+  );
+
+  const setGiuspAnswer = useCallback((index: number, key: GiuspAnswerKey, value: string) => {
+    setEvidenceFields((prev) => ({
+      ...prev,
+      [giuspFieldKey(`appliance_${index + 1}`, key)]: value,
+    }));
+  }, []);
 
   const syncCp12OfflineDraft = useCallback(async () => {
     if (!isCp12 || isOfflineDraftSyncing) return;
@@ -3327,8 +3361,9 @@ export function CertificateWizard({
                           />
                         </div>
                         <p className="text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">
-                          On-site actions taken (GIUSP). The Gas Warning Notice certificate itself is generated
-                          later from the completion checklist — these just record what you did at the property.
+                          On-site actions taken (GIUSP). These carry straight onto the Gas Warning
+                          Notice for this appliance, which is issued alongside the certificate and
+                          does not use up one of your monthly certificates.
                         </p>
                         <div className="grid gap-2 text-[13px] text-[var(--color-text-primary)] sm:grid-cols-3">
                           <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
@@ -3359,6 +3394,14 @@ export function CertificateWizard({
                             <span>Danger Do Not Use attached</span>
                           </label>
                         </div>
+
+                        {classification === 'ar' || classification === 'id' ? (
+                          <UnsafeSituationFields
+                            classification={classification === 'id' ? 'IMMEDIATELY_DANGEROUS' : 'AT_RISK'}
+                            answers={giuspAnswersFor(index)}
+                            onChange={(key, value) => setGiuspAnswer(index, key, value)}
+                          />
+                        ) : null}
                       </div>
                     ) : (
                       <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">

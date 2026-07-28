@@ -35,6 +35,7 @@ import {
   type FreeUnsafeSituation,
 } from '@/lib/cp12/freeCp12Payload';
 import { freeGwnIssues, gwnClassificationFor } from '@/lib/cp12/freeGwn';
+import { UnsafeSituationFields } from '@/components/cp12/unsafe-situation';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 import { AddressLookupField } from '@/components/address/address-lookup-field';
 import type { AddressLookupResult } from '@/lib/address-lookup';
@@ -170,128 +171,6 @@ function Field({
 
 function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid gap-4 sm:grid-cols-2">{children}</div>;
-}
-
-/**
- * The GIUSP answers a Gas Warning Notice needs and a CP12 does not.
- *
- * Shown only when an appliance is At Risk or Immediately Dangerous. The ID
- * branch carries real duties — GIUSP requires the label and either isolation or
- * a recorded refusal, and RIDDOR Reg 6(2) requires an HSE report within 14 days
- * — so those questions appear rather than being assumed.
- */
-function UnsafeSituation({
-  classification,
-  value,
-  onChange,
-}: {
-  classification: 'IMMEDIATELY_DANGEROUS' | 'AT_RISK';
-  value: FreeUnsafeSituation;
-  onChange: (patch: Partial<FreeUnsafeSituation>) => void;
-}) {
-  const isId = classification === 'IMMEDIATELY_DANGEROUS';
-  const present = value.customer_present === 'Yes';
-  const notPresent = value.customer_present === 'No';
-
-  return (
-    <div className="rounded-[12px] border-[0.5px] border-[var(--color-red)] bg-[var(--color-background-secondary)] p-4">
-      <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
-        {isId ? 'Immediately Dangerous' : 'At Risk'} — a warning notice will be issued with the
-        certificate
-      </p>
-      <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
-        {isId
-          ? 'GIUSP requires a Danger — Do Not Use label and either isolation or a recorded refusal. The fitting must also be reported to HSE under RIDDOR within 14 days.'
-          : 'Turn off with permission and issue a warning notice. A Danger — Do Not Use label is not applied to a pure At Risk situation.'}
-      </p>
-
-      <div className="mt-4 grid gap-4">
-        <EnumChips
-          label="Was the responsible person present?"
-          value={value.customer_present}
-          options={YES_NO}
-          onChange={(v) => onChange({ customer_present: v as FreeUnsafeSituation['customer_present'] })}
-        />
-        {present ? (
-          <EnumChips
-            label="Responsible person informed of the danger"
-            value={value.customer_informed}
-            options={YES_NO}
-            onChange={(v) => onChange({ customer_informed: v as FreeUnsafeSituation['customer_informed'] })}
-          />
-        ) : null}
-        {notPresent ? (
-          <EnumChips
-            label="Notice left on the premises"
-            value={value.notice_left_on_premises}
-            options={YES_NO}
-            onChange={(v) =>
-              onChange({ notice_left_on_premises: v as FreeUnsafeSituation['notice_left_on_premises'] })
-            }
-          />
-        ) : null}
-
-        <EnumChips
-          label="Gas supply isolated"
-          value={value.gas_supply_isolated}
-          options={YES_NO}
-          onChange={(v) => onChange({ gas_supply_isolated: v as FreeUnsafeSituation['gas_supply_isolated'] })}
-        />
-        {value.gas_supply_isolated === 'No' ? (
-          <EnumChips
-            label="Responsible person refused isolation"
-            value={value.customer_refused_isolation}
-            options={YES_NO}
-            onChange={(v) =>
-              onChange({ customer_refused_isolation: v as FreeUnsafeSituation['customer_refused_isolation'] })
-            }
-          />
-        ) : null}
-        <EnumChips
-          label="Appliance capped off"
-          value={value.appliance_capped_off}
-          options={YES_NO}
-          onChange={(v) => onChange({ appliance_capped_off: v as FreeUnsafeSituation['appliance_capped_off'] })}
-        />
-        {isId ? (
-          <EnumChips
-            label="Danger — Do Not Use label fitted"
-            value={value.danger_label_fitted}
-            options={YES_NO}
-            onChange={(v) => onChange({ danger_label_fitted: v as FreeUnsafeSituation['danger_label_fitted'] })}
-          />
-        ) : null}
-        <EnumChips
-          label="Emergency service provider contacted"
-          value={value.emergency_services_contacted}
-          options={YES_NO}
-          onChange={(v) =>
-            onChange({ emergency_services_contacted: v as FreeUnsafeSituation['emergency_services_contacted'] })
-          }
-        />
-
-        {isId ? (
-          <>
-            <EnumChips
-              label="Reported to HSE under RIDDOR"
-              value={value.riddor_reported}
-              options={YES_NO}
-              onChange={(v) => onChange({ riddor_reported: v as FreeUnsafeSituation['riddor_reported'] })}
-            />
-            <Field
-              label="RIDDOR or emergency reference (optional)"
-              hint="Either the report flag above or a reference here satisfies the record."
-            >
-              <Input
-                value={value.riddor_reference}
-                onChange={(e) => onChange({ riddor_reference: e.target.value })}
-              />
-            </Field>
-          </>
-        ) : null}
-      </div>
-    </div>
-  );
 }
 
 export function FreeCp12Form() {
@@ -1222,10 +1101,10 @@ export function FreeCp12Form() {
             ) : null}
 
             {gwnClassificationFor(appliance) ? (
-              <UnsafeSituation
+              <UnsafeSituationFields
                 classification={gwnClassificationFor(appliance)!}
-                value={appliance.unsafe_situation}
-                onChange={(patch) => setUnsafeSituation(index, patch)}
+                answers={appliance.unsafe_situation}
+                onChange={(key, value) => setUnsafeSituation(index, { [key]: value })}
               />
             ) : null}
 
