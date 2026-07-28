@@ -134,7 +134,9 @@ export default async function JobPdfPage({
   }>;
   const showGasWarningNoticeCta =
     (selectedCertificateType === 'cp12' || certificate?.cert_type === 'cp12') && linkedGasWarningNoticeJobs.length > 0;
-  const firstGasWarningNoticeJob = linkedGasWarningNoticeJobs[0] ?? null;
+  const pendingGasWarningNoticeJobs = linkedGasWarningNoticeJobs.filter(
+    (notice) => notice.status !== 'issued',
+  );
   const resumeRecord = jobRecord?.record as Record<string, unknown> | null | undefined;
   const resumeCertificateType =
     typeof resumeRecord?.resume_certificate_type === 'string' ? resumeRecord.resume_certificate_type : null;
@@ -169,18 +171,38 @@ export default async function JobPdfPage({
         </p>
       </div>
 
-      {showGasWarningNoticeCta && firstGasWarningNoticeJob ? (
+      {showGasWarningNoticeCta ? (
         <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-          <p className="text-sm font-semibold text-amber-950">Unsafe appliance follow-up required</p>
-          <p className="mt-1 text-sm text-amber-900/80">
-            A linked Gas Warning Notice draft is ready for this CP12.
+          {/* Notices for unsafe appliances are issued alongside the certificate.
+              Anything still unissued failed to issue automatically — usually
+              because its GIUSP answers were incomplete — so the manual route is
+              offered as the recovery path rather than as a parallel flow. */}
+          <p className="text-sm font-semibold text-amber-950">
+            {pendingGasWarningNoticeJobs.length > 0
+              ? 'Gas Warning Notice still to issue'
+              : 'Gas Warning Notice issued'}
           </p>
-          <Link
-            href={`/wizard/create/gas_warning_notice?jobId=${firstGasWarningNoticeJob.id}`}
-            className="mt-3 inline-flex rounded-full bg-[var(--action)] px-4 py-2 text-sm font-semibold text-white shadow-sm"
-          >
-            Issue Gas Warning Notice
-          </Link>
+          <p className="mt-1 text-sm text-amber-900/80">
+            {pendingGasWarningNoticeJobs.length > 0
+              ? 'A notice for an unsafe appliance on this certificate has not been issued yet. Open it to finish and issue.'
+              : 'A notice was issued with this certificate for each unsafe appliance. Give a copy to the responsible person — and remember an Immediately Dangerous fitting must be reported to HSE under RIDDOR within 14 days.'}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {linkedGasWarningNoticeJobs.map((notice) => (
+              <Link
+                key={notice.id}
+                href={
+                  notice.status === 'issued'
+                    ? `/jobs/${notice.id}/pdf?type=gas_warning_notice`
+                    : `/wizard/create/gas_warning_notice?jobId=${notice.id}`
+                }
+                className="inline-flex rounded-full bg-[var(--action)] px-4 py-2 text-sm font-semibold text-white shadow-sm"
+              >
+                {notice.status === 'issued' ? 'View' : 'Finish and issue'}
+                {notice.title ? ` — ${notice.title.replace(/^Gas Warning Notice — /, '')}` : ''}
+              </Link>
+            ))}
+          </div>
         </div>
       ) : null}
 

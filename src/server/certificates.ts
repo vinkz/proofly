@@ -2978,11 +2978,76 @@ async function generateCp12CertificateForJob(params: {
     appliances,
     issuedAt: issuedAt.toISOString(),
   });
+  // After the certificate is committed, never before: a notice that cannot be
+  // issued must not cost the engineer a valid CP12.
+  const gasWarningNoticeJobs = await issueAttachedGasWarningNotices({
+    parentJobId: jobId,
+    appliances: appliancesForIssue,
+  });
+
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/jobs/${jobId}/complete`);
   revalidatePath('/jobs');
   revalidatePath('/dashboard');
-  return { pdfUrl: finalSignedUrl, jobId, gasWarningNoticeJobs: [] };
+  return { pdfUrl: finalSignedUrl, jobId, gasWarningNoticeJobs };
+}
+
+export type AttachedGasWarningNotice = {
+  jobId: string;
+  applianceKey: string;
+  classification: 'ar' | 'id';
+  issued: boolean;
+  error?: string;
+};
+
+/**
+ * Issue a Gas Warning Notice for every unsafe appliance on a just-issued CP12.
+ *
+ * Called only after the certificate is fully committed, and never throws. A
+ * notice that cannot be issued — most often because the GIUSP answers are
+ * incomplete — must not fail or roll back a valid certificate. The caller
+ * reports the failure and the existing manual route on the completion screen
+ * becomes the recovery path rather than a second way of doing the same thing.
+ *
+ * Goes through generateCertificatePdf rather than a private copy of the issue
+ * logic, so a co-issued notice gets exactly the same validation, storage,
+ * record and reminder handling as one issued by hand. Attached notices do not
+ * consume a certificate from the monthly allowance — see the parent_job_id
+ * check in the gas_warning_notice branch.
+ */
+async function issueAttachedGasWarningNotices(params: {
+  parentJobId: string;
+  appliances: Cp12Appliance[];
+}): Promise<AttachedGasWarningNotice[]> {
+  const results: AttachedGasWarningNotice[] = [];
+
+  for (const [index, appliance] of params.appliances.entries()) {
+    const classification = getGasWarningClassification(appliance);
+    if (!classification) continue;
+
+    const applianceKey = `appliance_${index + 1}`;
+    let gwnJobId = '';
+    try {
+      const ensured = await ensureGasWarningNoticeJob({
+        parentJobId: params.parentJobId,
+        applianceKey,
+      });
+      gwnJobId = ensured.jobId;
+
+      await generateCertificatePdf({
+        jobId: gwnJobId,
+        certificateType: 'gas_warning_notice',
+        previewOnly: false,
+      });
+      results.push({ jobId: gwnJobId, applianceKey, classification, issued: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to issue the warning notice';
+      console.error('attached gas warning notice failed', { parentJobId: params.parentJobId, applianceKey, message });
+      results.push({ jobId: gwnJobId, applianceKey, classification, issued: false, error: message });
+    }
+  }
+
+  return results;
 }
 
 const GeneratePdfSchema = z.object({
