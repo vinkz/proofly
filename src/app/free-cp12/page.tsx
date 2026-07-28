@@ -3,7 +3,8 @@ import type { Metadata } from 'next';
 import { FREE_CP12_NOINDEX, FREE_CP12_ROUTE } from '@/lib/cp12/free-tool';
 import { FreeToolFooter } from '@/app/_components/free-tool-footer';
 import { FreeCp12Form } from './_components/free-cp12-form';
-import { SampleCp12Preview } from './_components/sample-preview';
+import { SampleDocumentPreview } from '@/app/_components/sample-document-preview';
+import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 
 export const metadata: Metadata = {
   title: 'Free CP12 generator — Landlord Gas Safety Record | CertNow',
@@ -30,7 +31,11 @@ export default function FreeCp12Page() {
         </p>
         {/* Reads as the next sentence of the paragraph above. It sits outside the
             <p> because a paragraph may only contain phrasing content. */}
-        <SampleCp12Preview />
+        <SampleDocumentPreview
+          src="/api/free-cp12/sample"
+          title="Example CP12"
+          viewedEvent={ANALYTICS_EVENTS.freeCp12SampleViewed}
+        />
         <p className="mt-3 max-w-[62ch] text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
           Nothing you type here is saved. Close the tab and it is gone — so finish in one sitting.
         </p>

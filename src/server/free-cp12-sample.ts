@@ -3,6 +3,7 @@ import 'server-only';
 import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
 import { FreeCp12PayloadSchema, freeCp12ToRenderSource } from '@/lib/cp12/freeCp12Payload';
 import { renderCp12CertificatePdf } from '@/server/pdf/renderCp12Certificate';
+import { watermarkAsSample } from '@/server/sample-watermark';
 
 /**
  * A filled-in example CP12, so an engineer can see what they will get before
@@ -12,9 +13,7 @@ import { renderCp12CertificatePdf } from '@/server/pdf/renderCp12Certificate';
  * mocked-up screenshot would drift from the template the moment either changed,
  * and this is the page that has to earn the five minutes.
  *
- * Everything in it is obviously fictitious, and the sample is watermarked. That
- * is the one place a watermark belongs: the real output must never carry one,
- * and a sample must never be mistakable for a real record.
+ * Everything in it is obviously fictitious, and the sample is watermarked.
  */
 const SAMPLE = FreeCp12PayloadSchema.parse({
   fields: {
@@ -81,37 +80,6 @@ const SAMPLE = FreeCp12PayloadSchema.parse({
   ],
 });
 
-/** Diagonal SAMPLE watermark, drawn over every page after the content. */
-async function watermark(bytes: Uint8Array): Promise<Uint8Array> {
-  const { PDFDocument, StandardFonts, degrees, rgb } = await import('pdf-lib');
-  const pdf = await PDFDocument.load(bytes);
-  const font = await pdf.embedFont(StandardFonts.HelveticaBold);
-
-  for (const page of pdf.getPages()) {
-    const { width, height } = page.getSize();
-    page.drawText('SAMPLE', {
-      x: width * 0.12,
-      y: height * 0.34,
-      size: 110,
-      font,
-      color: rgb(0.85, 0.85, 0.85),
-      opacity: 0.45,
-      rotate: degrees(38),
-    });
-    page.drawText('Example only — not a valid gas safety record', {
-      x: width * 0.12,
-      y: height * 0.3,
-      size: 12,
-      font,
-      color: rgb(0.6, 0.6, 0.6),
-      opacity: 0.9,
-      rotate: degrees(38),
-    });
-  }
-
-  return new Uint8Array(await pdf.save());
-}
-
 export async function renderSampleCp12(): Promise<Uint8Array> {
   const bytes = await renderCp12CertificatePdf(
     buildCp12RenderInput(
@@ -123,5 +91,5 @@ export async function renderSampleCp12(): Promise<Uint8Array> {
       }),
     ),
   );
-  return watermark(bytes);
+  return watermarkAsSample(bytes);
 }

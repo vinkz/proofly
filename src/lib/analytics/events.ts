@@ -70,11 +70,13 @@ export const ANALYTICS_EVENTS = {
   /** Fires when a free tool's cross-link to another free tool is followed. */
   freeToolCrossLinkClicked: 'free_tool_cross_link_clicked',
   /**
-   * Fires when the example CP12 is opened before starting the form. Watch this
-   * against free_cp12_form_started: if people open the sample and leave, the
+   * Fires when the example CP12 is opened before starting the form. Watch these
+   * against the matching form_started: if people open the sample and leave, the
    * template is the problem, not the form length.
    */
   freeCp12SampleViewed: 'free_cp12_sample_viewed',
+  /** Same, for the boiler service record. */
+  freeBoilerServiceSampleViewed: 'free_boiler_service_sample_viewed',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];
