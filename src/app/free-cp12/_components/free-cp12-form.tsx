@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
-import { useSignaturePad } from '@/hooks/useSignaturePad';
+import { SignaturePad } from '@/components/certificates/signature-pad';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import {
   CP12_APPLIANCE_CATEGORIES,
@@ -307,7 +307,6 @@ export function FreeCp12Form() {
   const [emailed, setEmailed] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
   const startedRef = useRef(false);
-  const pad = useSignaturePad();
 
   // Revoke the preview object URLs when they are replaced or the tab closes, so
   // the documents do not linger in memory longer than the visit.
@@ -495,19 +494,7 @@ export function FreeCp12Form() {
     [payload.appliances],
   );
 
-  const captureSignature = () => {
-    if (!pad.hasInk()) {
-      setError('Draw your signature in the box first.');
-      return;
-    }
-    setField('engineer_signature', pad.toDataUrl());
-    setError(null);
-  };
 
-  const clearSignature = () => {
-    pad.clear();
-    setField('engineer_signature', '');
-  };
 
   const handleGenerate = async () => {
     setError(null);
@@ -1415,20 +1402,12 @@ export function FreeCp12Form() {
       </Section>
 
       <Section title="Your signature">
-        <div className="touch-none rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-3">
-          <canvas ref={pad.canvasRef} className="h-[140px] w-full rounded-[8px] bg-white" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={captureSignature}>
-            {payload.fields.engineer_signature ? 'Replace signature' : 'Use this signature'}
-          </Button>
-          <Button variant="ghost" onClick={clearSignature}>
-            Clear
-          </Button>
-        </div>
-        {payload.fields.engineer_signature ? (
-          <p className="text-[13px] text-[var(--color-text-tertiary)]">Signature captured.</p>
-        ) : null}
+        <SignaturePad
+          label="Engineer"
+          captured={Boolean(payload.fields.engineer_signature)}
+          onCapture={(dataUrl) => setField('engineer_signature', dataUrl)}
+          onClear={() => setField('engineer_signature', '')}
+        />
       </Section>
 
       {issues.length ? (

@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
-import { useSignaturePad } from '@/hooks/useSignaturePad';
+import { SignaturePad } from '@/components/certificates/signature-pad';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import {
   emptyFreeBoilerServicePayload,
@@ -136,7 +136,6 @@ export function FreeBoilerServiceForm() {
 
   const startedRef = useRef(false);
   const pdfBlobRef = useRef<Blob | null>(null);
-  const pad = useSignaturePad();
 
   useEffect(() => {
     return () => {
@@ -180,14 +179,6 @@ export function FreeBoilerServiceForm() {
     [markStarted],
   );
 
-  const captureSignature = () => {
-    if (!pad.hasInk()) {
-      setError('Draw your signature in the box first.');
-      return;
-    }
-    set('engineer_signature', pad.toDataUrl());
-    setError(null);
-  };
 
   const handleGenerate = async () => {
     setError(null);
@@ -653,26 +644,12 @@ export function FreeBoilerServiceForm() {
       </Section>
 
       <Section title="Your signature">
-        <div className="touch-none rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-3">
-          <canvas ref={pad.canvasRef} className="h-[140px] w-full rounded-[8px] bg-white" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={captureSignature}>
-            {payload.engineer_signature ? 'Replace signature' : 'Use this signature'}
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              pad.clear();
-              set('engineer_signature', '');
-            }}
-          >
-            Clear
-          </Button>
-        </div>
-        {payload.engineer_signature ? (
-          <p className="text-[13px] text-[var(--color-text-tertiary)]">Signature captured.</p>
-        ) : null}
+        <SignaturePad
+          label="Engineer"
+          captured={Boolean(payload.engineer_signature)}
+          onCapture={(dataUrl) => set('engineer_signature', dataUrl)}
+          onClear={() => set('engineer_signature', '')}
+        />
       </Section>
 
       {issues.length ? (
