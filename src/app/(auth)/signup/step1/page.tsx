@@ -58,6 +58,11 @@ export default function SignupStep1Page() {
           password: parsed.data.password,
         });
 
+        if (!result.ok) {
+          pushToast({ title: 'Could not create account', description: result.message, variant: 'error' });
+          return;
+        }
+
         if (result.needsEmailConfirmation) {
           // Send them to the dedicated verify screen (with resend), not a fleeting
           // toast — email confirmation is a hard gate before profile setup. Don't
@@ -80,10 +85,10 @@ export default function SignupStep1Page() {
           variant: 'success',
         });
         router.push('/signup/step2');
-      } catch (error) {
+      } catch {
         pushToast({
           title: 'Could not create account',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: 'Something went wrong on our side. Please try again.',
           variant: 'error',
         });
       }

@@ -20,6 +20,7 @@ import { mergeJobContextFields, type InitialJobContext } from './initial-job-con
 import type { PhotoCategory } from '@/types/certificates';
 import { FgaAutofillModal } from '@/components/fga/FgaAutofillModal';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
+import { toUserMessage } from '@/lib/user-errors';
 
 const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
 
@@ -329,7 +330,7 @@ export function CommissioningWizard({
         } catch (error) {
           pushToast({
             title: 'Upload failed',
-            description: error instanceof Error ? error.message : 'Please try again.',
+            description: toUserMessage(error, 'Please try again.'),
             variant: 'error',
           });
         }
@@ -400,7 +401,7 @@ export function CommissioningWizard({
       } catch (error) {
         pushToast({
           title: 'Could not generate checklist',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

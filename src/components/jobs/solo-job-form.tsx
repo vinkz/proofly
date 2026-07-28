@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { RequestLandlordDetailsCard } from '@/components/jobs/request-landlord-details-card';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
+import { toUserMessage } from '@/lib/user-errors';
 
 export type SavedPropertyOption = {
   key: string;
@@ -160,7 +161,7 @@ const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
     return null;
   }
 
-  return error instanceof Error ? error.message : fallback;
+  return toUserMessage(error, fallback);
 };
 
 const JOB_DEMO_VALUES: Record<
@@ -866,7 +867,7 @@ export function SoloJobForm({
         });
         setLandlordRequestMessage('Prefill request sent. The job is waiting on the landlord.');
       } catch (error) {
-        setLandlordRequestError(error instanceof Error ? error.message : 'Could not send request.');
+        setLandlordRequestError(toUserMessage(error, 'Could not send request.'));
       }
     });
   };
@@ -930,10 +931,10 @@ export function SoloJobForm({
       pushToast({ title: 'Address selected', variant: 'success' });
     } catch (error) {
       setSelectedJobAddressMatchId(null);
-      setJobAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      setJobAddressSearchError(toUserMessage(error, 'Try again.'));
       pushToast({
         title: 'Address not found',
-        description: error instanceof Error ? error.message : 'Try again.',
+        description: toUserMessage(error, 'Try again.'),
         variant: 'error',
       });
     } finally {
@@ -963,10 +964,10 @@ export function SoloJobForm({
       pushToast({ title: `${partyCardTitle} address selected`, variant: 'success' });
     } catch (error) {
       setSelectedPartyAddressMatchId(null);
-      setPartyAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      setPartyAddressSearchError(toUserMessage(error, 'Try again.'));
       pushToast({
         title: 'Address not found',
-        description: error instanceof Error ? error.message : 'Try again.',
+        description: toUserMessage(error, 'Try again.'),
         variant: 'error',
       });
     } finally {
@@ -1120,7 +1121,7 @@ export function SoloJobForm({
       } catch (error) {
         pushToast({
           title: 'Could not create job',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

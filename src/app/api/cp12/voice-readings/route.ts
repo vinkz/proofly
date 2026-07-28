@@ -4,6 +4,7 @@ import { parseCp12VoiceReadings, type Cp12VoiceReadingScope } from '@/lib/cp12/v
 import { getOpenAIClient } from '@/lib/openai';
 import { getPostHogClient } from '@/lib/posthog-server';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { toUserMessage } from '@/lib/user-errors';
 
 export const runtime = 'nodejs';
 
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
     const result = parseCp12VoiceReadings(transcription.text ?? '', { scope });
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Voice transcription failed';
+    const message = toUserMessage(error, 'Voice transcription failed');
     getPostHogClient()?.capture({
       distinctId: user.id,
       event: '$ai_generation',

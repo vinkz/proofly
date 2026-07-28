@@ -7,6 +7,7 @@ import { finalizeJobReport } from '@/server/jobs';
 import type { ReportKind } from '@/types/reports';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function GenerateWizardReportButton({ jobId, reportKind }: { jobId: string; reportKind: ReportKind }) {
   const [isPending, startTransition] = useTransition();
@@ -23,7 +24,7 @@ export function GenerateWizardReportButton({ jobId, reportKind }: { jobId: strin
       } catch (error) {
         pushToast({
           title: 'Unable to generate report',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

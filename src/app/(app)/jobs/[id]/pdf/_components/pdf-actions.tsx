@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { sendPdfToClient } from '@/server/communications';
 import { useToast } from '@/components/ui/use-toast';
 import type { CertificateType } from '@/types/certificates';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function PdfActions({
   jobId,
@@ -36,7 +37,7 @@ export function PdfActions({
       } catch (error) {
         pushToast({
           title: 'Could not send',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }

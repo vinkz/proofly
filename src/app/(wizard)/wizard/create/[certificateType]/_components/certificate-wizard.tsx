@@ -69,6 +69,7 @@ import {
   resolveCp12Subtype,
   type Cp12ApplianceCategory,
 } from '@/lib/cp12/applianceConfig';
+import { toUserMessage } from '@/lib/user-errors';
 
 type WizardProps = {
   jobId: string;
@@ -179,7 +180,7 @@ const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
     return null;
   }
 
-  return error instanceof Error ? error.message : fallback;
+  return toUserMessage(error, fallback);
 };
 
 type Cp12InfoState = {
@@ -921,7 +922,7 @@ export function CertificateWizard({
       setOfflineDraftSyncErrorCount(0);
       pushToast({ title: 'Offline draft synced', variant: 'success' });
     } catch (error) {
-      setOfflineDraftSyncError(error instanceof Error ? error.message : 'Could not sync offline draft.');
+      setOfflineDraftSyncError(toUserMessage(error, 'Could not sync offline draft.'));
       setOfflineDraftSyncErrorCount((count) => count + 1);
     } finally {
       setIsOfflineDraftSyncing(false);
@@ -1208,7 +1209,7 @@ export function CertificateWizard({
       } catch (error) {
         pushToast({
           title: 'Could not fill demo data',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }
@@ -1229,7 +1230,7 @@ export function CertificateWizard({
         } catch (error) {
           pushToast({
             title: 'Upload failed',
-            description: error instanceof Error ? error.message : 'Try again.',
+            description: toUserMessage(error, 'Try again.'),
             variant: 'error',
           });
         }
@@ -1268,10 +1269,10 @@ export function CertificateWizard({
       pushToast({ title: 'Address selected', variant: 'success' });
     } catch (error) {
       setSelectedPostcodeMatchId(null);
-      setAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      setAddressSearchError(toUserMessage(error, 'Try again.'));
       pushToast({
         title: 'Address not found',
-        description: error instanceof Error ? error.message : 'Try again.',
+        description: toUserMessage(error, 'Try again.'),
         variant: 'error',
       });
     } finally {
@@ -1306,10 +1307,10 @@ export function CertificateWizard({
       pushToast({ title: 'Landlord address selected', variant: 'success' });
     } catch (error) {
       setSelectedLandlordMatchId(null);
-      setLandlordAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      setLandlordAddressSearchError(toUserMessage(error, 'Try again.'));
       pushToast({
         title: 'Address not found',
-        description: error instanceof Error ? error.message : 'Try again.',
+        description: toUserMessage(error, 'Try again.'),
         variant: 'error',
       });
     } finally {
@@ -1397,7 +1398,7 @@ export function CertificateWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save job info',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }
@@ -1425,7 +1426,7 @@ export function CertificateWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save CP12 checks',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }
@@ -1572,7 +1573,7 @@ export function CertificateWizard({
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       } finally {
@@ -1601,7 +1602,7 @@ export function CertificateWizard({
       } catch (error) {
         pushToast({
           title: 'Could not prepare boiler service',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }
@@ -1783,7 +1784,7 @@ export function CertificateWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save field',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }
@@ -1800,7 +1801,7 @@ export function CertificateWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save field',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }
@@ -2753,7 +2754,7 @@ export function CertificateWizard({
                 } catch (error) {
                   pushToast({
                     title: 'Upload failed',
-                    description: error instanceof Error ? error.message : 'Try again.',
+                    description: toUserMessage(error, 'Try again.'),
                     variant: 'error',
                   });
                 }
@@ -3629,7 +3630,7 @@ export function CertificateWizard({
                 } catch (error) {
                   pushToast({
                     title: 'Could not save signature',
-                    description: error instanceof Error ? error.message : 'Try again.',
+                    description: toUserMessage(error, 'Try again.'),
                     variant: 'error',
                   });
                 }
@@ -3662,7 +3663,7 @@ export function CertificateWizard({
               } catch (error) {
                 pushToast({
                   title: 'Could not save signature',
-                  description: error instanceof Error ? error.message : 'Try again.',
+                  description: toUserMessage(error, 'Try again.'),
                   variant: 'error',
                 });
               }

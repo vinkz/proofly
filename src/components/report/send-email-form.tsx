@@ -7,6 +7,7 @@ import { sendReportEmail } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 interface ReportEmailFormProps {
   jobId: string;
@@ -31,7 +32,7 @@ export function ReportEmailForm({ jobId }: ReportEmailFormProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to send',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

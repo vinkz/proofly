@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { deleteClient } from '@/server/clients';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function DeleteClientButton({ clientId }: { clientId: string }) {
   const [isPending, startTransition] = useTransition();
@@ -25,7 +26,7 @@ export function DeleteClientButton({ clientId }: { clientId: string }) {
       } catch (error) {
         pushToast({
           title: 'Unable to delete client',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

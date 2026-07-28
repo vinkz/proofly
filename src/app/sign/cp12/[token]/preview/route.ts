@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getCp12RemoteSignaturePreviewUrl } from '@/server/certificates';
+import { toUserMessage } from '@/lib/user-errors';
 
 export async function GET(
   _request: Request,
@@ -12,7 +13,7 @@ export async function GET(
     return NextResponse.redirect(pdfUrl);
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to generate preview' },
+      { error: toUserMessage(error, 'Unable to generate preview') },
       { status: 400 },
     );
   }

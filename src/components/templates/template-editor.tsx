@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { toUserMessage } from '@/lib/user-errors';
 
 interface TemplateEditorProps {
   template: TemplateModel;
@@ -72,7 +73,7 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to save settings',
-          description: error instanceof Error ? error.message : 'Try again later.',
+          description: toUserMessage(error, 'Try again later.'),
           variant: 'error',
         });
       }
@@ -89,7 +90,7 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to save items',
-          description: error instanceof Error ? error.message : 'Check item details and try again.',
+          description: toUserMessage(error, 'Check item details and try again.'),
           variant: 'error',
         });
       }
@@ -105,7 +106,7 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to duplicate template',
-          description: error instanceof Error ? error.message : 'Try again later.',
+          description: toUserMessage(error, 'Try again later.'),
           variant: 'error',
         });
       }
@@ -122,7 +123,7 @@ export default function TemplateEditor({ template }: TemplateEditorProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to delete template',
-          description: error instanceof Error ? error.message : 'Try again later.',
+          description: toUserMessage(error, 'Try again later.'),
           variant: 'error',
         });
       }

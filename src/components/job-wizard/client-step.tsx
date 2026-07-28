@@ -10,6 +10,7 @@ import { createJobDraftFromClient } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toUserMessage } from '@/lib/user-errors';
 
 interface ClientPickerProps {
   clients: ClientListItem[];
@@ -29,7 +30,7 @@ export function ClientPicker({ clients }: ClientPickerProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to start job',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }
@@ -96,7 +97,7 @@ export function NewClientForm() {
       } catch (error) {
         pushToast({
           title: 'Unable to create client',
-          description: error instanceof Error ? error.message : 'Check details and try again.',
+          description: toUserMessage(error, 'Check details and try again.'),
           variant: 'error',
         });
       }

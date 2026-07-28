@@ -42,6 +42,7 @@ import { useWizardStepHistory } from '@/hooks/use-wizard-step-history';
 import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
+import { toUserMessage } from '@/lib/user-errors';
 
 type BoilerServiceWizardProps = {
   jobId: string;
@@ -308,7 +309,7 @@ const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
     return null;
   }
 
-  return error instanceof Error ? error.message : fallback;
+  return toUserMessage(error, fallback);
 };
 
 // Show the same neutral fallback as /jobs/new instead of the raw provider error
@@ -587,7 +588,7 @@ export function BoilerServiceWizard({
       setOfflineDraftSyncErrorCount(0);
       pushToast({ title: 'Offline draft synced', variant: 'success' });
     } catch (error) {
-      setOfflineDraftSyncError(error instanceof Error ? error.message : 'Could not sync offline draft.');
+      setOfflineDraftSyncError(toUserMessage(error, 'Could not sync offline draft.'));
       setOfflineDraftSyncErrorCount((count) => count + 1);
     } finally {
       setIsOfflineDraftSyncing(false);
@@ -818,7 +819,7 @@ export function BoilerServiceWizard({
       } catch (error) {
         pushToast({
           title: 'Could not autofill test data',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -839,7 +840,7 @@ export function BoilerServiceWizard({
         } catch (error) {
           pushToast({
             title: 'Upload failed',
-            description: error instanceof Error ? error.message : 'Please try again.',
+            description: toUserMessage(error, 'Please try again.'),
             variant: 'error',
           });
         }
@@ -878,10 +879,10 @@ export function BoilerServiceWizard({
       pushToast({ title: 'Address selected', variant: 'success' });
     } catch (error) {
       setSelectedAddressMatchId(null);
-      setAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      setAddressSearchError(toUserMessage(error, 'Try again.'));
       pushToast({
         title: 'Address not found',
-        description: error instanceof Error ? error.message : 'Try again.',
+        description: toUserMessage(error, 'Try again.'),
         variant: 'error',
       });
     } finally {
@@ -915,10 +916,10 @@ export function BoilerServiceWizard({
       pushToast({ title: 'Client address selected', variant: 'success' });
     } catch (error) {
       setSelectedCustomerAddressMatchId(null);
-      setCustomerAddressSearchError(error instanceof Error ? error.message : 'Try again.');
+      setCustomerAddressSearchError(toUserMessage(error, 'Try again.'));
       pushToast({
         title: 'Address not found',
-        description: error instanceof Error ? error.message : 'Try again.',
+        description: toUserMessage(error, 'Try again.'),
         variant: 'error',
       });
     } finally {
@@ -968,7 +969,7 @@ export function BoilerServiceWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save job details',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -997,7 +998,7 @@ export function BoilerServiceWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save details',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -1036,7 +1037,7 @@ export function BoilerServiceWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save checks',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -1155,7 +1156,7 @@ export function BoilerServiceWizard({
         if (showBoilerValidationError(error)) return;
         pushToast({
           title: 'Could not generate PDF',
-          description: error instanceof Error ? error.message : 'Please check required fields and try again.',
+          description: toUserMessage(error, 'Please check required fields and try again.'),
           variant: 'error',
         });
       }
@@ -1221,7 +1222,7 @@ export function BoilerServiceWizard({
         } catch (error) {
           pushToast({
             title: 'Could not save signature',
-            description: error instanceof Error ? error.message : 'Please try again.',
+            description: toUserMessage(error, 'Please try again.'),
             variant: 'error',
           });
         }

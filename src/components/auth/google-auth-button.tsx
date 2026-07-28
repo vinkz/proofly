@@ -6,6 +6,7 @@ import posthog from 'posthog-js';
 import { useToast } from '@/components/ui/use-toast';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { supabaseBrowser } from '@/lib/supabaseClient';
+import { toUserMessage } from '@/lib/user-errors';
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 
@@ -122,7 +123,7 @@ export function GoogleAuthButton({
       } catch (error) {
         pushToast({
           title: 'Google sign-in failed',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -184,7 +185,7 @@ export function GoogleAuthButton({
     })().catch((error) => {
       pushToast({
         title: 'Google sign-in unavailable',
-        description: error instanceof Error ? error.message : 'Could not load Google.',
+        description: toUserMessage(error, 'Could not load Google.'),
         variant: 'error',
       });
     });

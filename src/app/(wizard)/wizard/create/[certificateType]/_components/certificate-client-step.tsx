@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
+import { toUserMessage } from '@/lib/user-errors';
 
 type ClientFormValues = {
   name: string;
@@ -76,7 +77,7 @@ export function CertificateClientStep({
       } catch (error) {
         pushToast({
           title: 'Unable to start job',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }
@@ -126,7 +127,7 @@ export function CertificateClientStep({
       } catch (error) {
         pushToast({
           title: 'Unable to create client',
-          description: error instanceof Error ? error.message : 'Check details and try again.',
+          description: toUserMessage(error, 'Check details and try again.'),
           variant: 'error',
         });
       }

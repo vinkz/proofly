@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { calculateGasRateForTool } from '@/server/gas-rate';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
+import { toUserMessage } from '@/lib/user-errors';
 
 export async function POST(request: Request) {
   // Only the signed-in /tools/gas-rate page calls this. Gate it so the compute
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     const result = await calculateGasRateForTool(payload as Parameters<typeof calculateGasRateForTool>[0]);
     return NextResponse.json(result, { status: result.ok ? 200 : 400 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to calculate gas rate.';
+    const message = toUserMessage(error, 'Unable to calculate gas rate.');
     const status = /unauthorized/i.test(message) ? 401 : 500;
     return NextResponse.json({ ok: false, error: message }, { status });
   }

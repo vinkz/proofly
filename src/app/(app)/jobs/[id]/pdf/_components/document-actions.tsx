@@ -4,6 +4,7 @@ import { useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { toUserMessage } from '@/lib/user-errors';
 
 type DocumentActionsProps = {
   pdfUrl: string | null;
@@ -42,7 +43,7 @@ export function DocumentActions({ pdfUrl }: DocumentActionsProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to share',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }

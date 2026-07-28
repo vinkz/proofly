@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 interface JobDetailsFormProps {
   jobId: string;
@@ -37,7 +38,7 @@ export function JobDetailsForm({ jobId, defaultValues }: JobDetailsFormProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to save',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

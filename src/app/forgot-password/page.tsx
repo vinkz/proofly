@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
 import { requestPasswordReset } from '@/server/password';
+import { toUserMessage } from '@/lib/user-errors';
 
 const EmailSchema = z.object({
   email: z.string().email({ message: 'Enter a valid email' }),
@@ -37,7 +38,7 @@ export default function ForgotPasswordPage() {
       } catch (error) {
         pushToast({
           title: 'Could not send reset link',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

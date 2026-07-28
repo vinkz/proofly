@@ -7,6 +7,7 @@ import type { TemplateModel } from '@/types/template';
 import { setJobTemplate } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 interface TemplateSectionProps {
   jobId: string;
@@ -28,7 +29,7 @@ export function TemplateSection({ jobId, label, templates }: TemplateSectionProp
       } catch (error) {
         pushToast({
           title: 'Unable to attach template',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

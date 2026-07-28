@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import type { TemplateModel } from '@/types/template';
 import { createJob } from '@/server/jobs';
+import { toUserMessage } from '@/lib/user-errors';
 
 const jobSchema = z.object({
   client_name: z.string().trim().min(2, 'Client name is required'),
@@ -73,7 +74,7 @@ export default function NewJobModal({ templates }: { templates: TemplateModel[] 
         console.error(error);
         pushToast({
           title: 'Could not create job',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

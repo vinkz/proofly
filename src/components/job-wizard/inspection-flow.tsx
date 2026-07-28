@@ -11,6 +11,7 @@ import { updateChecklistItem, uploadPhoto } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 type ChecklistResult = Database['public']['Tables']['job_items']['Row']['result'];
 
@@ -62,7 +63,7 @@ export function InspectionFlow({ jobId, items, photos }: InspectionFlowProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to update status',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }
@@ -78,7 +79,7 @@ export function InspectionFlow({ jobId, items, photos }: InspectionFlowProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to save note',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }
@@ -97,7 +98,7 @@ export function InspectionFlow({ jobId, items, photos }: InspectionFlowProps) {
       } catch (error) {
         pushToast({
           title: 'Upload failed',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

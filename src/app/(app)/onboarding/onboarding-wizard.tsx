@@ -16,6 +16,7 @@ import {
 } from '@/lib/onboarding-profile';
 import { TRADE_TYPES } from '@/lib/profile-options';
 import { updateProfileBasics } from '@/server/profile';
+import { toUserMessage } from '@/lib/user-errors';
 
 type OnboardingWizardProps = {
   initialFullName?: string;
@@ -183,7 +184,7 @@ export function OnboardingWizard({
         );
       } catch (error) {
         if (controller.signal.aborted) return;
-        const message = error instanceof Error ? error.message : 'Try another search.';
+        const message = toUserMessage(error, 'Try another search.');
         setCompanyAddressSuggestions([]);
         setSelectedCompanyAddressMatchId(null);
         setCompanyAddressSearchError(formatAddressLookupError(message));
@@ -227,7 +228,7 @@ export function OnboardingWizard({
         variant: 'success',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Try again.';
+      const message = toUserMessage(error, 'Try again.');
       const friendly = formatAddressLookupError(message);
       setSelectedCompanyAddressMatchId(null);
       setCompanyAddressSearchError(friendly);
@@ -361,7 +362,7 @@ export function OnboardingWizard({
       } catch (error) {
         pushToast({
           title: 'Unable to save',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

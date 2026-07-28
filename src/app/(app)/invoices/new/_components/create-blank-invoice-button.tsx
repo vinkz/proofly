@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { useToast } from '@/components/ui/use-toast';
 import { createBlankInvoice } from '@/server/invoices';
+import { toUserMessage } from '@/lib/user-errors';
 
 type ClientOption = {
   id: string;
@@ -25,7 +26,7 @@ export function CreateBlankInvoiceButton({ clients }: { clients: ClientOption[] 
       } catch (error) {
         pushToast({
           title: 'Unable to create invoice',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

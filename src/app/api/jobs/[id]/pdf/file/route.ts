@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getCertificatePdfFile, getReportPdfFile } from '@/server/certificates';
 import { CERTIFICATE_TYPES, type CertificateType } from '@/types/certificates';
+import { toUserMessage } from '@/lib/user-errors';
 
 /**
  * Streams a job's PDF (certificate or report) through our own domain so the
@@ -31,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to load PDF';
+    const message = toUserMessage(error, 'Unable to load PDF');
     const status = /unauthorized|rls mismatch/i.test(message) ? 403 : 404;
     return NextResponse.json({ error: message }, { status });
   }

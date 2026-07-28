@@ -10,6 +10,7 @@ import {
   type Cp12VoiceReadingScope,
   type Cp12VoiceReadingsParsed,
 } from '@/lib/cp12/voice-readings';
+import { toUserMessage } from '@/lib/user-errors';
 
 type Props = {
   jobId: string;
@@ -196,7 +197,7 @@ export function Cp12VoiceReadings({
         return;
       }
       setState('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Voice transcription failed');
+      setErrorMessage(toUserMessage(error, 'Voice transcription failed'));
     } finally {
       abortControllerRef.current = null;
     }
@@ -262,7 +263,7 @@ export function Cp12VoiceReadings({
     } catch (error) {
       stopTracks();
       setState('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Could not start microphone recording');
+      setErrorMessage(toUserMessage(error, 'Could not start microphone recording'));
     }
   };
 

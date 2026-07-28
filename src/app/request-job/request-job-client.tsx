@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { submitStandaloneLandlordJobRequest } from '@/server/job-requests';
 import type { AddressLookupSuggestion } from '@/lib/address-lookup';
+import { toUserMessage } from '@/lib/user-errors';
 
 export type ScopedRequestEngineer = {
   requestLinkSlug: string;
@@ -40,7 +41,7 @@ const getAddressLookupErrorMessage = (error: unknown, fallback: string) => {
   ) {
     return null;
   }
-  return error instanceof Error ? error.message : fallback;
+  return toUserMessage(error, fallback);
 };
 
 // Public-facing form: never show the raw provider error (e.g. Ideal Postcodes 402) in red.
@@ -192,7 +193,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       setAddressSuggestions([]);
     } catch (selectError) {
       setSelectedAddressMatchId(null);
-      setAddressSearchError(selectError instanceof Error ? selectError.message : 'Try again.');
+      setAddressSearchError(toUserMessage(selectError, 'Try again.'));
     } finally {
       setIsAddressLookupPending(false);
     }
@@ -300,7 +301,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
           );
         }
       } catch (submitError) {
-        setError(submitError instanceof Error ? submitError.message : 'Could not submit request.');
+        setError(toUserMessage(submitError, 'Could not submit request.'));
       }
     });
   };

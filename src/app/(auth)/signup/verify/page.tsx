@@ -50,17 +50,21 @@ function VerifyEmailInner() {
     }
     startTransition(async () => {
       try {
-        await resendSignupConfirmation(email);
+        const result = await resendSignupConfirmation(email);
+        if (!result.ok) {
+          pushToast({ title: 'Could not resend', description: result.message, variant: 'error' });
+          return;
+        }
         setCooldown(RESEND_COOLDOWN_SECONDS);
         pushToast({
           title: 'Confirmation email sent',
           description: `We’ve sent another link to ${email}.`,
           variant: 'success',
         });
-      } catch (error) {
+      } catch {
         pushToast({
           title: 'Could not resend',
-          description: error instanceof Error ? error.message : 'Please try again in a moment.',
+          description: 'Something went wrong on our side. Please try again in a moment.',
           variant: 'error',
         });
       }

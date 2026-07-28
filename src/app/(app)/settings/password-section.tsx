@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 
 import { useToast } from '@/components/ui/use-toast';
 import { changePassword } from '@/server/password';
+import { toUserMessage } from '@/lib/user-errors';
 
 const inputClass =
   'mt-1 h-[38px] w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-[11px] text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-action)] disabled:opacity-50';
@@ -28,7 +29,7 @@ export function PasswordSection({ hasPassword, email }: { hasPassword: boolean; 
       } catch (error) {
         pushToast({
           title: 'Could not update password',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

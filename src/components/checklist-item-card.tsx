@@ -20,6 +20,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useJobProgress } from '@/components/job-progress-context';
+import { toUserMessage } from '@/lib/user-errors';
 
 type GalleryPhoto = {
   id: string;
@@ -117,7 +118,7 @@ export function ChecklistItemCard({ jobId, item, photos, nextItemId }: Checklist
           setPulse(false);
           pushToast({
             title: 'Update failed',
-            description: error instanceof Error ? error.message : 'Try again in a moment.',
+            description: toUserMessage(error, 'Try again in a moment.'),
             variant: 'error',
           });
         }
@@ -140,7 +141,7 @@ export function ChecklistItemCard({ jobId, item, photos, nextItemId }: Checklist
             setPulse(false);
             pushToast({
               title: 'Could not save note',
-              description: error instanceof Error ? error.message : 'Try again in a moment.',
+              description: toUserMessage(error, 'Try again in a moment.'),
               variant: 'error',
             });
           }
@@ -211,7 +212,7 @@ export function ChecklistItemCard({ jobId, item, photos, nextItemId }: Checklist
       URL.revokeObjectURL(objectUrl);
       pushToast({
         title: 'Photo upload failed',
-        description: error instanceof Error ? error.message : 'Try again with a different image.',
+        description: toUserMessage(error, 'Try again with a different image.'),
         variant: 'error',
       });
     } finally {
@@ -237,7 +238,7 @@ export function ChecklistItemCard({ jobId, item, photos, nextItemId }: Checklist
         } catch (error) {
           pushToast({
             title: 'Could not remove photo',
-            description: error instanceof Error ? error.message : 'Please try again in a moment.',
+            description: toUserMessage(error, 'Please try again in a moment.'),
             variant: 'error',
           });
         }

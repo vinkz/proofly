@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { SignaturePad } from '@/components/certificates/signature-pad';
 import { useToast } from '@/components/ui/use-toast';
+import { toUserMessage } from '@/lib/user-errors';
 
 type SignatureCardProps = {
   label: string;
@@ -37,7 +38,7 @@ export function SignatureCard({ label, existingUrl, onUpload }: SignatureCardPro
     } catch (error) {
       pushToast({
         title: 'Could not save signature',
-        description: error instanceof Error ? error.message : 'Please try again.',
+        description: toUserMessage(error, 'Please try again.'),
         variant: 'error',
       });
     } finally {

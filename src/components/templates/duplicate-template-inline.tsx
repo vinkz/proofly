@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { duplicateTemplate } from '@/server/templates';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function DuplicateTemplateInline({ templateId }: { templateId: string }) {
   const [isPending, startTransition] = useTransition();
@@ -21,7 +22,7 @@ export function DuplicateTemplateInline({ templateId }: { templateId: string }) 
       } catch (error) {
         pushToast({
           title: 'Unable to duplicate template',
-          description: error instanceof Error ? error.message : 'Try again later.',
+          description: toUserMessage(error, 'Try again later.'),
           variant: 'error',
         });
       }

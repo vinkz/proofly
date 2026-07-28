@@ -8,6 +8,7 @@ import { deleteJob } from '@/server/jobs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
+import { toUserMessage } from '@/lib/user-errors';
 
 type StatusFilter = 'all' | 'draft' | 'active' | 'awaiting_signatures' | 'awaiting_report' | 'completed';
 
@@ -101,7 +102,7 @@ export function DeleteJobsMenu({ jobs }: { jobs: JobSummary[] }) {
       } catch (error) {
         pushToast({
           title: 'Unable to delete jobs',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

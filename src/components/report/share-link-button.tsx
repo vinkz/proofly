@@ -5,6 +5,7 @@ import { useTransition } from 'react';
 import { createReportSignedUrl } from '@/server/jobs';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { useToast } from '@/components/ui/use-toast';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function ShareReportLinkButton({ jobId }: { jobId: string }) {
   const [isPending, startTransition] = useTransition();
@@ -29,7 +30,7 @@ export function ShareReportLinkButton({ jobId }: { jobId: string }) {
       } catch (error) {
         pushToast({
           title: 'Unable to create link',
-          description: error instanceof Error ? error.message : 'Try again later.',
+          description: toUserMessage(error, 'Try again later.'),
           variant: 'error',
         });
       }

@@ -32,6 +32,7 @@ import type { CertificateType, Cp12Appliance, PhotoCategory } from '@/types/cert
 import { mergeJobContextFields, type InitialJobContext } from './initial-job-context';
 import { buildWizardDraftStorageKey, useWizardDraft } from '@/hooks/use-wizard-draft';
 import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
+import { toUserMessage } from '@/lib/user-errors';
 
 const DEMO_AUTOFILL_VISIBLE = process.env.NEXT_PUBLIC_SHOW_DEMO_AUTOFILL === 'true';
 
@@ -578,7 +579,7 @@ export function GasWarningNoticeWizard({
         } catch (error) {
           pushToast({
             title: 'Upload failed',
-            description: error instanceof Error ? error.message : 'Please try again.',
+            description: toUserMessage(error, 'Please try again.'),
             variant: 'error',
           });
         }
@@ -615,7 +616,7 @@ export function GasWarningNoticeWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save job details',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -634,7 +635,7 @@ export function GasWarningNoticeWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save appliance details',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -652,7 +653,7 @@ export function GasWarningNoticeWizard({
       } catch (error) {
         pushToast({
           title: 'Could not save acknowledgement',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -730,7 +731,7 @@ export function GasWarningNoticeWizard({
       } catch (error) {
         pushToast({
           title: 'Could not generate PDF',
-          description: error instanceof Error ? error.message : 'Please check required fields and try again.',
+          description: toUserMessage(error, 'Please check required fields and try again.'),
           variant: 'error',
         });
       }
@@ -753,7 +754,7 @@ export function GasWarningNoticeWizard({
         } catch (error) {
           pushToast({
             title: 'Could not save signature',
-            description: error instanceof Error ? error.message : 'Please try again.',
+            description: toUserMessage(error, 'Please try again.'),
             variant: 'error',
           });
         }

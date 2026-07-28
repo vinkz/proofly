@@ -6,6 +6,7 @@ import { useTransition } from 'react';
 
 import { useToast } from '@/components/ui/use-toast';
 import { setInvoiceMeta } from '@/server/invoices';
+import { toUserMessage } from '@/lib/user-errors';
 
 export type InvoiceCardSummary = {
   id: string;
@@ -76,7 +77,7 @@ function InvoiceSection({
       } catch (error) {
         pushToast({
           title: 'Unable to update invoice',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

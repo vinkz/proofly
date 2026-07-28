@@ -7,6 +7,7 @@ import { listClients } from '@/server/clients';
 import { getJobRequestPrefill, getOrCreateEngineerRequestLink, type JobRequestPrefill } from '@/server/job-requests';
 import { getProfile } from '@/server/profile';
 import { JOB_TYPES, type JobType } from '@/types/job-records';
+import { toUserMessage } from '@/lib/user-errors';
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
@@ -89,7 +90,7 @@ export default async function NewJobPage({
     try {
       requestPrefill = await getJobRequestPrefill(requestIdParam);
     } catch (error) {
-      requestPrefillError = error instanceof Error ? error.message : 'Unable to load landlord request.';
+      requestPrefillError = toUserMessage(error, 'Unable to load landlord request.');
     }
   }
   const requestLink = requestIdParam ? null : await getOrCreateEngineerRequestLink();

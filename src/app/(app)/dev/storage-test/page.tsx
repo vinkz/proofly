@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { supabaseBrowser } from '@/lib/supabaseClient';
 import { uploadJobFile } from '@/server/job-files';
+import { toUserMessage } from '@/lib/user-errors';
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
@@ -51,7 +52,7 @@ export default function StorageTestPage() {
       setStatus('success');
     } catch (error) {
       setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
+      setErrorMessage(toUserMessage(error, 'Upload failed'));
       return;
     }
   };

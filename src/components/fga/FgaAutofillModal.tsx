@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { parseFgaText } from '@/lib/fga/parseFgaText';
 import { saveFgaReadings } from '@/server/fga';
 import { uploadJobFile } from '@/server/job-files';
+import { toUserMessage } from '@/lib/user-errors';
 
 type FgaValues = {
   co_ppm?: number;
@@ -114,7 +115,7 @@ export function FgaAutofillModal({
       onApplied(payload);
       setStatusMessage('Saved readings and applied to fields.');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to save readings.');
+      setErrorMessage(toUserMessage(error, 'Failed to save readings.'));
     } finally {
       setSaving(false);
     }
@@ -133,7 +134,7 @@ export function FgaAutofillModal({
       setStatusMessage('Saved as evidence. Paste readings to auto-fill.');
       setUploadFile(null);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to upload evidence.');
+      setErrorMessage(toUserMessage(error, 'Failed to upload evidence.'));
     } finally {
       setUploading(false);
     }

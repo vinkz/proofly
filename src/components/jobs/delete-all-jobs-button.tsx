@@ -5,6 +5,7 @@ import { useTransition } from 'react';
 import { deleteMyJobs } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function DeleteAllJobsButton() {
   const [isPending, startTransition] = useTransition();
@@ -21,7 +22,7 @@ export function DeleteAllJobsButton() {
       } catch (error) {
         pushToast({
           title: 'Could not delete jobs',
-          description: error instanceof Error ? error.message : 'Try again.',
+          description: toUserMessage(error, 'Try again.'),
           variant: 'error',
         });
       }

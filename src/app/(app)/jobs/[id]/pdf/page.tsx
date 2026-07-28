@@ -16,6 +16,7 @@ import {
   getDefaultEditStepForCertificateType,
   getResumeStepFromRecord,
 } from '@/lib/certificate-resume';
+import { toUserMessage } from '@/lib/user-errors';
 
 const parseCertificateType = (value: string | undefined): CertificateType | null => {
   if (!value) return null;
@@ -95,7 +96,7 @@ export default async function JobPdfPage({
       });
       pdfUrl = `/api/jobs/${id}/pdf/file?type=${encodeURIComponent(selectedCertificateType)}`;
     } catch (error) {
-      pdfError = error instanceof Error ? error.message : 'Unable to load PDF.';
+      pdfError = toUserMessage(error, 'Unable to load PDF.');
     }
   } else {
     const certificateState = await getCertificateState(certificate ?? null);
@@ -107,7 +108,7 @@ export default async function JobPdfPage({
         });
         pdfUrl = `/api/jobs/${id}/pdf/file`;
       } catch (error) {
-        pdfError = error instanceof Error ? error.message : 'Unable to load PDF.';
+        pdfError = toUserMessage(error, 'Unable to load PDF.');
       }
     } else if (report?.storage_path) {
       pdfUrl = `/api/jobs/${id}/pdf/file?source=report`;

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { deleteJob } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
 import { Button, type ButtonProps } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 type DeleteJobButtonProps = {
   jobId: string;
@@ -38,7 +39,7 @@ export function DeleteJobButton({ jobId, variant = 'outline', className = '', st
       } catch (error) {
         pushToast({
           title: 'Unable to delete job',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

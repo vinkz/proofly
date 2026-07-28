@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { saveSignatures } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
 import { useSignaturePad } from '@/hooks/useSignaturePad';
+import { toUserMessage } from '@/lib/user-errors';
 
 type Signer = 'plumber' | 'client';
 
@@ -47,7 +48,7 @@ export function SignatureModal({ jobId, signatures }: SignatureModalProps) {
       } catch (error) {
         pushToast({
           title: 'Could not save signature',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

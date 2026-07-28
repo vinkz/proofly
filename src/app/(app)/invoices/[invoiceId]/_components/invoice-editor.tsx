@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { useToast } from '@/components/ui/use-toast';
 import { setInvoiceMeta, upsertLineItems, sendInvoiceEmail, type InvoiceLineItemInput, type InvoiceRow } from '@/server/invoices';
+import { toUserMessage } from '@/lib/user-errors';
 
 type ClientSummary = {
   name: string;
@@ -281,7 +282,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       } catch (error) {
         pushToast({
           title: 'Unable to save invoice',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -319,7 +320,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
         setPaid(!next);
         pushToast({
           title: 'Unable to update status',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -345,7 +346,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       } catch (error) {
         pushToast({
           title: 'Unable to email invoice',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -360,7 +361,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       } catch (error) {
         pushToast({
           title: 'Unable to generate preview',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -379,7 +380,7 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
       } catch (error) {
         pushToast({
           title: 'Unable to send WhatsApp',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

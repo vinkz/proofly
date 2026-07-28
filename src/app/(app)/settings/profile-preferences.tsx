@@ -18,6 +18,7 @@ import {
   type StandardRates,
 } from '@/lib/standard-rates';
 import { updateProfileBasics } from '@/server/profile';
+import { toUserMessage } from '@/lib/user-errors';
 
 type ProfilePreferencesProps = {
   mode?: 'settings' | 'onboarding';
@@ -223,7 +224,7 @@ export function ProfilePreferences({
       } catch (error) {
         pushToast({
           title: mode === 'onboarding' ? 'Unable to complete setup' : 'Unable to save settings',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

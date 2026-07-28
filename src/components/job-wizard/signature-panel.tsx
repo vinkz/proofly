@@ -7,6 +7,7 @@ import { saveSignatures } from '@/server/jobs';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { useSignaturePad } from '@/hooks/useSignaturePad';
+import { toUserMessage } from '@/lib/user-errors';
 
 type Signer = 'plumber' | 'client';
 
@@ -43,7 +44,7 @@ export function SignaturePanel({ jobId, existing }: SignaturePanelProps) {
       } catch (error) {
         pushToast({
           title: 'Unable to save signature',
-          description: error instanceof Error ? error.message : 'Try again shortly.',
+          description: toUserMessage(error, 'Try again shortly.'),
           variant: 'error',
         });
       }

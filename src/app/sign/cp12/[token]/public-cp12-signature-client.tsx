@@ -7,6 +7,7 @@ import { SignatureCard } from '@/components/certificates/signature-card';
 import { useToast } from '@/components/ui/use-toast';
 import { submitCp12RemoteCustomerSignature } from '@/server/certificates';
 import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function PublicCp12SignatureClient({ token }: { token: string }) {
   const { pushToast } = useToast();
@@ -51,7 +52,7 @@ export function PublicCp12SignatureClient({ token }: { token: string }) {
               } catch (error) {
                 pushToast({
                   title: 'Could not submit signature',
-                  description: error instanceof Error ? error.message : 'Please try again.',
+                  description: toUserMessage(error, 'Please try again.'),
                   variant: 'error',
                 });
               }

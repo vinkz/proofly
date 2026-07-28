@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { useToast } from '@/components/ui/use-toast';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function InvoicePdfActions({ invoiceId }: { invoiceId: string }) {
   const { pushToast } = useToast();
@@ -31,7 +32,7 @@ export function InvoicePdfActions({ invoiceId }: { invoiceId: string }) {
       } catch (error) {
         pushToast({
           title: 'Unable to generate PDF',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

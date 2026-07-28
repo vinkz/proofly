@@ -12,6 +12,7 @@ import {
   saveJobFields,
   updateField,
 } from '@/server/certificates';
+import { toUserMessage } from '@/lib/user-errors';
 
 /**
  * One-click check of the co-issue path: a CP12 with an Immediately Dangerous
@@ -189,7 +190,7 @@ export async function GET() {
     });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : 'Unknown error', steps },
+      { ok: false, error: toUserMessage(error, 'Unknown error'), steps },
       { status: 500 },
     );
   }

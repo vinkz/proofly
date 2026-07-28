@@ -27,17 +27,21 @@ export function LoginClient() {
   const handlePasswordLogin = () => {
     startTransition(async () => {
       try {
-        await signInWithPassword({ email, password });
+        const result = await signInWithPassword({ email, password });
+        if (!result.ok) {
+          pushToast({ title: 'Login failed', description: result.message, variant: 'error' });
+          return;
+        }
         const { data: { user } } = await supabaseBrowser().auth.getUser();
         if (user) {
           posthog.identify(user.id, { email: user.email });
         }
         track(ANALYTICS_EVENTS.userLoggedIn, { method: 'password' });
         router.push(nextPath);
-      } catch (error) {
+      } catch {
         pushToast({
           title: 'Login failed',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: 'Something went wrong on our side. Please try again.',
           variant: 'error',
         });
       }
@@ -47,17 +51,21 @@ export function LoginClient() {
   const handleMagicLink = () => {
     startTransition(async () => {
       try {
-        await signInWithMagicLink(email, nextPath);
+        const result = await signInWithMagicLink(email, nextPath);
+        if (!result.ok) {
+          pushToast({ title: 'Could not send link', description: result.message, variant: 'error' });
+          return;
+        }
         track(ANALYTICS_EVENTS.userLoggedIn, { method: 'magic_link' });
         pushToast({
           title: 'Check your email',
           description: 'Magic link sent. Open it to continue.',
           variant: 'success',
         });
-      } catch (error) {
+      } catch {
         pushToast({
           title: 'Could not send link',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: 'Something went wrong on our side. Please try again.',
           variant: 'error',
         });
       }

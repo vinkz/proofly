@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSignaturePad } from '@/hooks/useSignaturePad';
 import { useToast } from '@/components/ui/use-toast';
 import { saveProfileSignature, deleteProfileSignature } from '@/server/profile';
+import { toUserMessage } from '@/lib/user-errors';
 
 export function SavedSignatureSection({ existingUrl }: { existingUrl: string | null }) {
   const router = useRouter();
@@ -36,7 +37,7 @@ export function SavedSignatureSection({ existingUrl }: { existingUrl: string | n
       } catch (error) {
         pushToast({
           title: 'Could not save signature',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }
@@ -55,7 +56,7 @@ export function SavedSignatureSection({ existingUrl }: { existingUrl: string | n
       } catch (error) {
         pushToast({
           title: 'Could not remove signature',
-          description: error instanceof Error ? error.message : 'Please try again.',
+          description: toUserMessage(error, 'Please try again.'),
           variant: 'error',
         });
       }

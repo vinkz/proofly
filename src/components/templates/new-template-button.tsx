@@ -6,6 +6,7 @@ import { v4 as uuid } from 'uuid';
 
 import { createTemplate } from '@/server/templates';
 import { useToast } from '@/components/ui/use-toast';
+import { toUserMessage } from '@/lib/user-errors';
 
 export default function NewTemplateButton() {
   const router = useRouter();
@@ -34,7 +35,7 @@ export default function NewTemplateButton() {
       } catch (error) {
         pushToast({
           title: 'Unable to create template',
-          description: error instanceof Error ? error.message : 'Try again later.',
+          description: toUserMessage(error, 'Try again later.'),
           variant: 'error',
         });
       }
