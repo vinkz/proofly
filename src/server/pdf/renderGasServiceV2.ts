@@ -4,6 +4,7 @@ import { Buffer } from 'node:buffer';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { pdfSafeText } from '@/lib/pdf-text';
 import { formatUkDate } from './formatUkDate';
 import type { ApplianceInput, GasServiceFieldMap, RenderGasServiceInput } from './renderGasServicePdf';
 
@@ -27,7 +28,10 @@ const C = {
 };
 const PAGE = { w: 595.28, h: 841.89, margin: 42, footer: 34 };
 
-const text = (value: unknown) => String(value ?? '').trim();
+// Folded to what the standard fonts can encode. pdf-lib throws on anything
+// WinAnsi cannot represent, which would fail the whole render rather than
+// degrade one field — see @/lib/pdf-text.
+const text = (value: unknown) => pdfSafeText(value).trim();
 const affirmative = (value: unknown) =>
   value === true || ['yes', 'y', 'true', '1', 'pass', 'ok', 'safe', 'satisfactory'].includes(text(value).toLowerCase());
 const negative = (value: unknown) => ['no', 'n', 'false', '0', 'fail', 'unsafe'].includes(text(value).toLowerCase());

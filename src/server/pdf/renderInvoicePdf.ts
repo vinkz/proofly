@@ -1,5 +1,6 @@
 'use server';
 
+import { pdfSafeText } from '@/lib/pdf-text';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 type InvoiceProfile = {
@@ -163,12 +164,15 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Uint8Array>
     bold = false,
     color = C.dark,
   ) => {
-    if (!value?.trim()) return;
-    page.drawText(value, { x, y: yPos, size, font: bold ? fontBold : font, color });
+    // Folded to what the standard fonts can encode — see @/lib/pdf-text. A
+    // client name pdf-lib cannot draw would otherwise fail the whole invoice.
+    const safe = pdfSafeText(value);
+    if (!safe.trim()) return;
+    page.drawText(safe, { x, y: yPos, size, font: bold ? fontBold : font, color });
   };
 
   const tw = (value: string, size: number, bold = false) =>
-    (bold ? fontBold : font).widthOfTextAtSize(value, size);
+    (bold ? fontBold : font).widthOfTextAtSize(pdfSafeText(value), size);
 
   const drawTextRight = (value: string, edge: number, yPos: number, size = 10, bold = false, color = C.dark) =>
     drawText(value, edge - tw(value, size, bold), yPos, size, bold, color);
