@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { isAdminEmail } from '@/server/mission-control';
 import { getSupabaseUser, supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
@@ -26,6 +27,9 @@ import { toUserMessage } from '@/lib/user-errors';
  * Admin-only and never in production: it issues real certificates against real
  * data, which is not something any signed-in user should be able to trigger.
  */
+/** Guards against a browser firing this twice (prefetch plus navigation). */
+let inFlight = false;
+
 export async function GET() {
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json({ error: 'Not available in production' }, { status: 404 });
@@ -37,6 +41,14 @@ export async function GET() {
   if (!isAdminEmail(user.email)) {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 });
   }
+
+  if (inFlight) {
+    return NextResponse.json(
+      { ok: false, error: 'A run is already in progress — a browser prefetch usually causes this. Try again in a moment.' },
+      { status: 409 },
+    );
+  }
+  inFlight = true;
 
   const steps: string[] = [];
   const today = new Date().toISOString().slice(0, 10);
@@ -180,7 +192,18 @@ export async function GET() {
       .select('job_id, cert_type, created_at')
       .in('job_id', [jobId, ...notices.map((n) => n.jobId).filter(Boolean)]);
 
-    const consumed = (after.used ?? 0) - (before.used ?? 0);
+    // Scoped to the jobs this run created. A global before/after difference
+    // counts anything else that issued at the same time — which is exactly how
+    // a correct result first read as a failure.
+    const runJobIds = [jobId, ...notices.map((n) => n.jobId).filter(Boolean)];
+    // certificate_usage is absent from the generated Database types, which is
+    // why billing-internal reaches it through an untyped client too.
+    const usageDb = admin as unknown as SupabaseClient;
+    const { data: usageRows } = await usageDb
+      .from('certificate_usage')
+      .select('job_id, certificate_type')
+      .in('job_id', runJobIds);
+    const consumed = (usageRows ?? []).length;
 
     return NextResponse.json({
       ok:
@@ -196,7 +219,8 @@ export async function GET() {
       actual: {
         notices,
         allowanceConsumed: consumed,
-        allowance: { before: before.used, after: after.used, limit: after.limit },
+        allowanceRowsForThisRun: usageRows ?? [],
+        accountTotal: { before: before.used, after: after.used, limit: after.limit },
         certificateRows: certRows ?? [],
       },
       jobId,
