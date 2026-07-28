@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { FREE_CP12_NOINDEX, FREE_CP12_ROUTE } from '@/lib/cp12/free-tool';
 import { FreeToolFooter } from '@/app/_components/free-tool-footer';
 import { FreeCp12Form } from './_components/free-cp12-form';
+import { SampleCp12Preview } from './_components/sample-preview';
 
 export const metadata: Metadata = {
   title: 'Free CP12 generator — Landlord Gas Safety Record | CertNow',
@@ -31,6 +32,7 @@ export default function FreeCp12Page() {
           Nothing you type here is saved. Close the tab and it is gone — so finish in one sitting.
         </p>
       </header>
+      <SampleCp12Preview />
       <FreeCp12Form />
       <FreeToolFooter currentRoute={FREE_CP12_ROUTE} />
     </main>

@@ -41,6 +41,18 @@ import type { AddressLookupResult } from '@/lib/address-lookup';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { getApplianceCatalog } from '@/lib/applianceCatalog/ukAppliances';
 import { CP12_FLUE_TYPES, CP12_LOCATIONS } from '@/types/cp12';
+import { PresetChips } from '@/components/wizard/inputs/preset-chips';
+import {
+  ACTION_REQUIRED_PRESETS,
+  ACTION_TAKEN_PRESETS,
+  UNSAFE_SITUATION_PRESETS,
+} from '@/lib/gas-safety/unsafe-presets';
+import {
+  composeCp12DefectSummary,
+  cp12ApplianceHasFailedCheck,
+  cp12FailedChecks,
+  type Cp12DefectAppliance,
+} from '@/lib/cp12/defect-summary';
 
 const PASS_FAIL = [
   { label: 'Pass', value: 'pass' },
@@ -441,6 +453,42 @@ export function FreeCp12Form() {
       },
     }));
   }, [markStarted]);
+
+  /**
+   * Record-level defect / remedial text composed from the appliances.
+   *
+   * A failed safety check is itself a defect under Reg 36(3)(e), and its fix is
+   * the remedial action under (f). The paid flow already composes this at issue
+   * time when the boxes are blank; doing it in the form as well means the
+   * engineer sees and can correct what will actually print, instead of
+   * discovering it on the PDF.
+   */
+  const composed = useMemo(
+    () => composeCp12DefectSummary(payload.appliances as unknown as Cp12DefectAppliance[]),
+    [payload.appliances],
+  );
+
+  // Once the engineer types in a box, stop overwriting it.
+  const [defectsDirty, setDefectsDirty] = useState(false);
+  const [remedialDirty, setRemedialDirty] = useState(false);
+
+  useEffect(() => {
+    if (defectsDirty) return;
+    setPayload((prev) =>
+      prev.fields.defect_description === composed.defect_description
+        ? prev
+        : { ...prev, fields: { ...prev.fields, defect_description: composed.defect_description } },
+    );
+  }, [composed.defect_description, defectsDirty]);
+
+  useEffect(() => {
+    if (remedialDirty) return;
+    setPayload((prev) =>
+      prev.fields.remedial_action === composed.remedial_action
+        ? prev
+        : { ...prev, fields: { ...prev.fields, remedial_action: composed.remedial_action } },
+    );
+  }, [composed.remedial_action, remedialDirty]);
 
   const hasUnsafeAppliance = useMemo(
     () => payload.appliances.some((a) => gwnClassificationFor(a) !== null),
@@ -913,6 +961,11 @@ export function FreeCp12Form() {
         const combustion = cp12FieldVisibility(category, 'combustion');
         // Boilers get the boiler catalogue, hobs the hob catalogue, and so on.
         const catalog = getApplianceCatalog(category);
+        const defectView = appliance as unknown as Cp12DefectAppliance;
+        const failedChecks = cp12FailedChecks(defectView);
+        const needsDefectNotes =
+          cp12ApplianceHasFailedCheck(defectView) ||
+          Boolean(appliance.safety_classification && appliance.safety_classification !== 'safe');
         const showCombustion =
           combustion === 'shown' || (combustion === 'optional' && appliance.combustion_opt_in);
         return (
@@ -1125,21 +1178,60 @@ export function FreeCp12Form() {
               onChange={(value) => setAppliance(index, { safety_classification: value })}
             />
 
-            {appliance.safety_classification && appliance.safety_classification !== 'safe' ? (
-              <>
-                <Field label="Defect found">
-                  <Textarea
+            {/* A failed check is a defect in its own right (Reg 36(3)(e)), so the
+                notes open on any fail — not only once the appliance has been
+                classified. What is typed here feeds the record-level summary. */}
+            {needsDefectNotes ? (
+              <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4">
+                {failedChecks.length ? (
+                  <p className="mb-3 text-[13px] text-[var(--color-text-secondary)]">
+                    Failed: {failedChecks.join(', ')}. This appears in “Defects identified” below.
+                  </p>
+                ) : null}
+
+                {failedChecks.length && !appliance.safety_classification ? (
+                  <p className="mb-3 text-[13px] font-medium text-[var(--color-red)]">
+                    Classify this appliance above — a failed check needs a classification, and an
+                    At Risk or Immediately Dangerous one also produces a warning notice.
+                  </p>
+                ) : null}
+
+                <div className="grid gap-4">
+                  <Field label="Defect found">
+                    <Textarea
+                      value={appliance.defect_notes}
+                      onChange={(e) => setAppliance(index, { defect_notes: e.target.value })}
+                    />
+                  </Field>
+                  <PresetChips
+                    presets={UNSAFE_SITUATION_PRESETS}
                     value={appliance.defect_notes}
-                    onChange={(e) => setAppliance(index, { defect_notes: e.target.value })}
+                    onChange={(next) => setAppliance(index, { defect_notes: next })}
                   />
-                </Field>
-                <Field label="Action taken">
-                  <Textarea
+                  <Field label="Action taken">
+                    <Textarea
+                      value={appliance.actions_taken}
+                      onChange={(e) => setAppliance(index, { actions_taken: e.target.value })}
+                    />
+                  </Field>
+                  <PresetChips
+                    presets={ACTION_TAKEN_PRESETS}
                     value={appliance.actions_taken}
-                    onChange={(e) => setAppliance(index, { actions_taken: e.target.value })}
+                    onChange={(next) => setAppliance(index, { actions_taken: next })}
                   />
-                </Field>
-              </>
+                  <Field label="Action required (if it could not be fixed today)">
+                    <Textarea
+                      value={appliance.actions_required}
+                      onChange={(e) => setAppliance(index, { actions_required: e.target.value })}
+                    />
+                  </Field>
+                  <PresetChips
+                    presets={ACTION_REQUIRED_PRESETS}
+                    value={appliance.actions_required}
+                    onChange={(next) => setAppliance(index, { actions_required: next })}
+                  />
+                </div>
+              </div>
             ) : null}
 
             {gwnClassificationFor(appliance) ? (
@@ -1241,18 +1333,79 @@ export function FreeCp12Form() {
             : 'Leave blank if there were none — the certificate will say so.'
         }
       >
-        <Field label="Defects identified">
+        <Field
+          label="Defects identified"
+          hint={
+            defectsDirty
+              ? 'You have edited this, so it no longer updates automatically.'
+              : 'Filled in automatically from failed checks and appliance notes. Edit freely.'
+          }
+        >
           <Textarea
             value={payload.fields.defect_description}
-            onChange={(e) => setField('defect_description', e.target.value)}
+            onChange={(e) => {
+              setDefectsDirty(true);
+              setField('defect_description', e.target.value);
+            }}
           />
         </Field>
-        <Field label="Remedial action taken">
+        <PresetChips
+          presets={UNSAFE_SITUATION_PRESETS}
+          value={payload.fields.defect_description}
+          onChange={(next) => {
+            setDefectsDirty(true);
+            setField('defect_description', next);
+          }}
+        />
+        {defectsDirty && composed.defect_description ? (
+          <button
+            type="button"
+            className="justify-self-start text-[13px] font-medium text-[var(--color-text-secondary)] underline"
+            onClick={() => {
+              setDefectsDirty(false);
+              setField('defect_description', composed.defect_description);
+            }}
+          >
+            Reset to the automatic summary
+          </button>
+        ) : null}
+
+        <Field
+          label="Remedial action taken"
+          hint={
+            remedialDirty
+              ? 'You have edited this, so it no longer updates automatically.'
+              : 'Filled in automatically from the actions recorded on each appliance. Edit freely.'
+          }
+        >
           <Textarea
             value={payload.fields.remedial_action}
-            onChange={(e) => setField('remedial_action', e.target.value)}
+            onChange={(e) => {
+              setRemedialDirty(true);
+              setField('remedial_action', e.target.value);
+            }}
           />
         </Field>
+        <PresetChips
+          presets={ACTION_TAKEN_PRESETS}
+          value={payload.fields.remedial_action}
+          onChange={(next) => {
+            setRemedialDirty(true);
+            setField('remedial_action', next);
+          }}
+        />
+        {remedialDirty && composed.remedial_action ? (
+          <button
+            type="button"
+            className="justify-self-start text-[13px] font-medium text-[var(--color-text-secondary)] underline"
+            onClick={() => {
+              setRemedialDirty(false);
+              setField('remedial_action', composed.remedial_action);
+            }}
+          >
+            Reset to the automatic summary
+          </button>
+        ) : null}
         <Field label="Additional notes (optional)">
           <Textarea
             value={payload.fields.comments}
