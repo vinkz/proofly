@@ -1040,7 +1040,7 @@ export function FreeCp12Form() {
             <div className="grid gap-4">
               {cp12FieldVisible(category, 'safety_devices_correct') ? (
                 <EnumChips
-                  label="Safety devices operating correctly"
+                  label="Safety device(s) correct operation"
                   value={appliance.safety_devices_correct}
                   options={PASS_FAIL}
                   onChange={(value) => setAppliance(index, { safety_devices_correct: value })}
@@ -1048,7 +1048,7 @@ export function FreeCp12Form() {
               ) : null}
               {cp12FieldVisible(category, 'ventilation_satisfactory') ? (
                 <EnumChips
-                  label="Ventilation satisfactory"
+                  label="Ventilation provision satisfactory"
                   value={appliance.ventilation_satisfactory}
                   options={PASS_FAIL}
                   onChange={(value) => setAppliance(index, { ventilation_satisfactory: value })}
@@ -1056,7 +1056,7 @@ export function FreeCp12Form() {
               ) : null}
               {cp12FieldVisible(category, 'flue_condition') ? (
                 <EnumChips
-                  label="Visual condition of flue and termination"
+                  label="Visual condition of flue and termination satisfactory"
                   value={appliance.flue_condition}
                   options={PASS_FAIL}
                   onChange={(value) => setAppliance(index, { flue_condition: value })}
@@ -1072,7 +1072,7 @@ export function FreeCp12Form() {
               ) : null}
               {cp12FieldVisible(category, 'cooker_stability') ? (
                 <EnumChips
-                  label="Cooker stability bracket / chain"
+                  label="Cooker stability (bracket/chain)"
                   value={appliance.cooker_stability}
                   options={PASS_FAIL}
                   onChange={(value) => setAppliance(index, { cooker_stability: value })}
@@ -1159,7 +1159,7 @@ export function FreeCp12Form() {
             ) : null}
 
             <EnumChips
-              label="Classification"
+              label="Condition classification"
               value={appliance.safety_classification}
               options={CLASSIFICATIONS}
               onChange={(value) => setAppliance(index, { safety_classification: value })}
@@ -1184,7 +1184,7 @@ export function FreeCp12Form() {
                 ) : null}
 
                 <div className="grid gap-4">
-                  <Field label="Defect found">
+                  <Field label="Defect / unsafe situation">
                     <Textarea
                       value={appliance.defect_notes}
                       onChange={(e) => setAppliance(index, { defect_notes: e.target.value })}
@@ -1195,7 +1195,7 @@ export function FreeCp12Form() {
                     value={appliance.defect_notes}
                     onChange={(next) => setAppliance(index, { defect_notes: next })}
                   />
-                  <Field label="Action taken">
+                  <Field label="Actions taken">
                     <Textarea
                       value={appliance.actions_taken}
                       onChange={(e) => setAppliance(index, { actions_taken: e.target.value })}
@@ -1206,7 +1206,7 @@ export function FreeCp12Form() {
                     value={appliance.actions_taken}
                     onChange={(next) => setAppliance(index, { actions_taken: next })}
                   />
-                  <Field label="Action required (if it could not be fixed today)">
+                  <Field label="Actions required">
                     <Textarea
                       value={appliance.actions_required}
                       onChange={(e) => setAppliance(index, { actions_required: e.target.value })}
@@ -1282,25 +1282,31 @@ export function FreeCp12Form() {
             onChange={(value) => setField('co_alarm_tested', value)}
           />
           <EnumChips
+            label="CO alarm satisfactory"
+            value={payload.fields.co_alarm_satisfactory}
+            options={YES_NO}
+            onChange={(value) => setField('co_alarm_satisfactory', value)}
+          />
+          <EnumChips
             label="Emergency control accessible"
             value={payload.fields.emergency_control_accessible}
             options={YES_NO}
             onChange={(value) => setField('emergency_control_accessible', value)}
           />
           <EnumChips
-            label="Gas installation tightness"
+            label="Gas tightness satisfactory"
             value={payload.fields.gas_tightness_satisfactory}
             options={PASS_FAIL}
             onChange={(value) => setField('gas_tightness_satisfactory', value)}
           />
           <EnumChips
-            label="Visual pipework inspection"
+            label="Pipework visual inspection satisfactory"
             value={payload.fields.pipework_visual_satisfactory}
             options={PASS_FAIL}
             onChange={(value) => setField('pipework_visual_satisfactory', value)}
           />
           <EnumChips
-            label="Equipotential bonding"
+            label="Equipotential bonding satisfactory"
             value={payload.fields.equipotential_bonding_satisfactory}
             options={PASS_FAIL}
             onChange={(value) => setField('equipotential_bonding_satisfactory', value)}
