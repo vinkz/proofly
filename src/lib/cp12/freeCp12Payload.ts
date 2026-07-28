@@ -13,6 +13,11 @@ import { z } from 'zod';
 
 import type { Cp12Appliance } from '@/types/certificates';
 import type { Cp12RenderSource } from './buildCp12Render';
+import {
+  GIUSP_ANSWER_KEYS,
+  type GiuspAnswerKey,
+  type GiuspAnswers,
+} from './giusp';
 
 const str = (max = 200) => z.string().max(max).optional().default('');
 
@@ -39,6 +44,20 @@ export const FreeUnsafeSituationSchema = z.object({
 });
 
 export type FreeUnsafeSituation = z.output<typeof FreeUnsafeSituationSchema>;
+
+/**
+ * The free tool and the wizard must ask the same GIUSP questions. This fails to
+ * compile if the shared key list and this schema drift apart in either
+ * direction, which is cheaper than discovering it on a warning notice.
+ */
+type AssertSameKeys<A extends string, B extends string> = [A] extends [B]
+  ? [B] extends [A]
+    ? true
+    : never
+  : never;
+const _giuspKeysMatch: AssertSameKeys<GiuspAnswerKey, keyof FreeUnsafeSituation> = true;
+void _giuspKeysMatch;
+void GIUSP_ANSWER_KEYS;
 
 export const FreeCp12ApplianceSchema = z.object({
   // Category, per CP12_APPLIANCE_CONFIG. Free text is tolerated and normalised

@@ -26,6 +26,7 @@ import { renderGeneralWorksPdf } from '@/lib/pdf/general-works';
 import { renderCp12CertificatePdf } from '@/server/pdf/renderCp12Certificate';
 import { CP12_TEMPLATE_VERSION } from '@/lib/cp12/field-config';
 import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
+import { giuspAnswered, giuspAnswersToGwnFields, readGiuspAnswers } from '@/lib/cp12/giusp';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 import {
   type ApplianceInput as GasServiceApplianceInput,
@@ -480,6 +481,26 @@ async function applyCp12SourceDefaultsForGasWarningNotice(params: {
   applyDefault('danger_do_not_use_label_fitted', sourceAppliance.danger_do_not_use_attached ? 'true' : undefined);
   applyDefault('customer_informed', sourceAppliance.warning_notice_issued ? 'true' : undefined);
   applyDefault('customer_understands_risks', sourceAppliance.warning_notice_issued ? 'true' : undefined);
+
+  // GIUSP answers captured against this appliance during the CP12, carried
+  // across so the engineer is not asked the same questions twice. They live in
+  // job_fields on the parent under a per-appliance namespace, which is why this
+  // needed no schema change. Mapped through the shared function so the wizard
+  // and the free tool interpret an answer identically.
+  if (!sourceApplianceKey) return;
+  const giusp = readGiuspAnswers(sourceFieldMap, sourceApplianceKey);
+  if (!giuspAnswered(giusp)) return;
+
+  const mapped = giuspAnswersToGwnFields(giusp) as Record<string, unknown>;
+  for (const [key, value] of Object.entries(mapped)) {
+    if (typeof value === 'boolean') {
+      // Only assert a flag the engineer actually set; leaving the rest unset
+      // keeps "not answered" distinct from "no", which the ID gate relies on.
+      if (value) applyDefault(key, 'true');
+      continue;
+    }
+    applyDefault(key, typeof value === 'string' && value.trim() ? value : undefined);
+  }
 }
 
 async function findCertificateRecord(

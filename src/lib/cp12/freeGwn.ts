@@ -16,6 +16,7 @@
  */
 import { cp12ApplianceTypeLabel, resolveCp12Category, resolveCp12Subtype } from './applianceConfig';
 import type { FreeCp12Appliance, FreeCp12Payload } from './freeCp12Payload';
+import { giuspAnswersToGwnFields } from './giusp';
 import { validateGwnForIssue } from '@/lib/gwn/validation';
 import type { GasWarningClassification, GasWarningNoticeFields } from '@/types/gas-warning-notice';
 
@@ -71,8 +72,6 @@ export function buildFreeGwnFields(
   const subtype = resolveCp12Subtype(category, appliance.appliance_subtype, appliance.appliance_type);
   const situation = appliance.unsafe_situation;
 
-  const customerPresent = situation.customer_present === 'Yes';
-
   return {
     property_address: freeCp12PropertyAddress(payload),
     postcode: payload.fields.job_postcode,
@@ -104,18 +103,9 @@ export function buildFreeGwnFields(
     actions_taken:
       appliance.actions_taken || appliance.actions_required || payload.fields.remedial_action,
 
-    gas_supply_isolated: situation.gas_supply_isolated === 'Yes',
-    appliance_capped_off: situation.appliance_capped_off === 'Yes',
-    customer_refused_isolation: situation.customer_refused_isolation === 'Yes',
-    danger_do_not_use_label_fitted: situation.danger_label_fitted === 'Yes',
-    emergency_services_contacted: situation.emergency_services_contacted === 'Yes',
-
-    customer_present: customerPresent,
-    customer_informed: customerPresent && situation.customer_informed === 'Yes',
-    notice_left_on_premises: !customerPresent && situation.notice_left_on_premises === 'Yes',
-
-    riddor_11_1_reported: situation.riddor_reported === 'Yes',
-    emergency_reference: situation.riddor_reference,
+    // The GIUSP answers map onto the notice through the shared function, so the
+    // free tool and the wizard cannot interpret them differently.
+    ...giuspAnswersToGwnFields(situation),
 
     engineer_name: payload.fields.engineer_name,
     engineer_company: payload.fields.company_name,
