@@ -917,16 +917,16 @@ export function FreeCp12Form() {
         hint="Appears in the certificate header. Omitted from the PDF if left blank."
       >
         <Grid>
-          <Field label="ID card number">
-            <Input
-              value={payload.fields.engineer_id_card_number}
-              onChange={(e) => setField('engineer_id_card_number', e.target.value)}
-            />
-          </Field>
           <Field label="Business name">
             <Input
               value={payload.fields.company_name}
               onChange={(e) => setField('company_name', e.target.value)}
+            />
+          </Field>
+          <Field label="ID card number">
+            <Input
+              value={payload.fields.engineer_id_card_number}
+              onChange={(e) => setField('engineer_id_card_number', e.target.value)}
             />
           </Field>
         </Grid>
