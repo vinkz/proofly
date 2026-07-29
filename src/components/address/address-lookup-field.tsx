@@ -25,10 +25,22 @@ type Props = {
   label: string;
   hint?: string;
   onSelect: (address: AddressLookupResult) => void;
+  value?: string;
+  onValueChange?: (value: string) => void;
+  placeholder?: string;
+  autoComplete?: string;
 };
 
-export function AddressLookupField({ label, hint, onSelect }: Props) {
-  const [query, setQuery] = useState('');
+export function AddressLookupField({
+  label,
+  hint,
+  onSelect,
+  value,
+  onValueChange,
+  placeholder = 'Start typing a postcode or address',
+  autoComplete = 'off',
+}: Props) {
+  const [internalQuery, setInternalQuery] = useState('');
   const [suggestions, setSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,6 +49,14 @@ export function AddressLookupField({ label, hint, onSelect }: Props) {
   const [disabled, setDisabled] = useState(false);
   const listId = useId();
   const boxRef = useRef<HTMLDivElement | null>(null);
+  const skipSearchForRef = useRef<string | null>(null);
+  const query = value ?? internalQuery;
+  const isManualAddressInput = value !== undefined || onValueChange !== undefined;
+
+  const updateQuery = (nextValue: string) => {
+    if (value === undefined) setInternalQuery(nextValue);
+    onValueChange?.(nextValue);
+  };
 
   useEffect(() => {
     const onDocClick = (event: MouseEvent) => {
@@ -49,6 +69,12 @@ export function AddressLookupField({ label, hint, onSelect }: Props) {
   useEffect(() => {
     if (disabled) return;
     const trimmed = query.trim();
+    if (skipSearchForRef.current === trimmed) {
+      skipSearchForRef.current = null;
+      setSuggestions([]);
+      setOpen(false);
+      return;
+    }
     if (trimmed.length < MIN_QUERY) {
       setSuggestions([]);
       return;
@@ -89,7 +115,6 @@ export function AddressLookupField({ label, hint, onSelect }: Props) {
 
   const choose = async (suggestion: AddressLookupSuggestion) => {
     setOpen(false);
-    setQuery(suggestion.address || suggestion.label);
     setBusy(true);
     try {
       const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`);
@@ -99,6 +124,11 @@ export function AddressLookupField({ label, hint, onSelect }: Props) {
       }
       const data = (await response.json()) as { address?: AddressLookupResult };
       if (data.address) {
+        const resolvedLine1 =
+          data.address.line1 || data.address.summary || suggestion.address || suggestion.label;
+        skipSearchForRef.current = resolvedLine1.trim();
+        setSuggestions([]);
+        updateQuery(resolvedLine1);
         onSelect(data.address);
         setNote(null);
       }
@@ -112,7 +142,7 @@ export function AddressLookupField({ label, hint, onSelect }: Props) {
   // Hide a dead control — but never yank it out from under someone mid-word.
   // Once they have typed, keep it and explain, so what they typed stays on
   // screen and they can see why nothing is happening.
-  if (disabled && !suggestions.length && !query.trim()) {
+  if (disabled && !isManualAddressInput && !suggestions.length && !query.trim()) {
     return null;
   }
 
@@ -124,10 +154,10 @@ export function AddressLookupField({ label, hint, onSelect }: Props) {
         </span>
         <Input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => updateQuery(e.target.value)}
           onFocus={() => setOpen(suggestions.length > 0)}
-          placeholder="Start typing a postcode or address"
-          autoComplete="off"
+          placeholder={placeholder}
+          autoComplete={autoComplete}
           aria-expanded={open}
           aria-controls={listId}
         />

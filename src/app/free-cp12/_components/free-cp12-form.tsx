@@ -312,6 +312,12 @@ export function FreeCp12Form() {
   const hasPropertyAddress = Boolean(
     payload.fields.job_address_line1.trim() || payload.fields.job_postcode.trim(),
   );
+  const landlordAddressMatchesProperty =
+    hasPropertyAddress &&
+    payload.fields.landlord_address_line1.trim() === payload.fields.job_address_line1.trim() &&
+    payload.fields.landlord_address_line2.trim() === payload.fields.job_address_line2.trim() &&
+    payload.fields.landlord_city.trim() === payload.fields.job_address_city.trim() &&
+    payload.fields.landlord_postcode.trim() === payload.fields.job_postcode.trim();
 
   /**
    * A landlord living at the property still needs their address captured as
@@ -710,40 +716,51 @@ export function FreeCp12Form() {
             />
           </Field>
         </Grid>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="secondary" onClick={copyPropertyToLandlord} disabled={!hasPropertyAddress}>
-            Same as property address
-          </Button>
-          {!hasPropertyAddress ? (
-            <span className="text-[12px] text-[var(--color-text-tertiary)]">
-              Fill in the property address first
-            </span>
-          ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">
+            Correspondence address
+          </span>
+          <button
+            type="button"
+            onClick={copyPropertyToLandlord}
+            disabled={!hasPropertyAddress}
+            className="rounded-[8px] bg-[var(--color-action-bg)] px-3 py-2 text-[13px] font-semibold text-[var(--color-action)] transition-colors hover:brightness-95 focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-action-ring)] disabled:cursor-not-allowed disabled:bg-[var(--color-background-tertiary)] disabled:text-[var(--color-text-tertiary)]"
+          >
+            {landlordAddressMatchesProperty
+              ? 'Using property address'
+              : 'Use same as property address'}
+          </button>
         </div>
+        {!hasPropertyAddress ? (
+          <span className="-mt-2 text-[12px] text-[var(--color-text-tertiary)]">
+            Add the property address first to use it here.
+          </span>
+        ) : null}
         <AddressLookupField
-          label="Or find the landlord's address"
-          hint="Their correspondence address, if different."
+          label="Address line 1"
+          value={payload.fields.landlord_address_line1}
+          onValueChange={(value) => setField('landlord_address_line1', value)}
+          placeholder="Start typing the landlord's address or postcode"
+          autoComplete="address-line1"
           onSelect={applyLandlordAddress}
         />
         <Input
-          placeholder="Address line 1"
-          value={payload.fields.landlord_address_line1}
-          onChange={(e) => setField('landlord_address_line1', e.target.value)}
-        />
-        <Input
           placeholder="Address line 2 (optional)"
+          autoComplete="address-line2"
           value={payload.fields.landlord_address_line2}
           onChange={(e) => setField('landlord_address_line2', e.target.value)}
         />
         <Grid>
           <Field label="Town / city">
             <Input
+              autoComplete="address-level2"
               value={payload.fields.landlord_city}
               onChange={(e) => setField('landlord_city', e.target.value)}
             />
           </Field>
           <Field label="Postcode">
             <Input
+              autoComplete="postal-code"
               value={payload.fields.landlord_postcode}
               onChange={(e) => setField('landlord_postcode', e.target.value)}
             />
