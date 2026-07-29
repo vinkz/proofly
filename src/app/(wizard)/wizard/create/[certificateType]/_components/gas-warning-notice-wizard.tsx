@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { SignatureCard } from '@/components/certificates/signature-card';
+import { AddressAutocompleteField } from '@/components/address/address-autocomplete-field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -819,15 +820,23 @@ export function GasWarningNoticeWizard({
                   />
                 </LabeledField>
                 <LabeledField label="Address line 1" className="sm:col-span-2">
-                  <Input
+                  <AddressAutocompleteField
                     value={jobAddress.job_address_line1}
-                    onChange={(e) => {
-                      const value = e.target.value;
+                    onValueChange={(value) => {
                       setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
                       setFields((prev) => ({ ...prev, property_address: value }));
                     }}
+                    onAddressSelect={(address) => {
+                      setJobAddress((prev) => ({
+                        ...prev,
+                        job_address_line2: address.line2 || '',
+                        job_address_city: address.city || '',
+                        job_postcode: address.postcode || '',
+                      }));
+                      setFields((prev) => ({ ...prev, postcode: address.postcode || '' }));
+                    }}
                     placeholder="Job address line 1"
-                    className="rounded-[8px]"
+                    inputClassName="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Address line 2">
@@ -889,18 +898,26 @@ export function GasWarningNoticeWizard({
                   />
                 </LabeledField>
                 <LabeledField label="Address line 1" className="sm:col-span-2">
-                  <Input
+                  <AddressAutocompleteField
                     value={fields.customer_address_line1}
-                    onChange={(e) => {
-                      const value = e.target.value;
+                    onValueChange={(value) => {
                       setFields((prev) => ({
                         ...prev,
                         customer_address_line1: value,
                         customer_address: buildAddressText(value, prev.customer_address_line2, prev.customer_city),
                       }));
                     }}
+                    onAddressSelect={(address) => {
+                      setFields((prev) => ({
+                        ...prev,
+                        customer_address_line2: address.line2 || '',
+                        customer_city: address.city || '',
+                        customer_postcode: address.postcode || '',
+                        customer_address: buildAddressText(address.line1, address.line2, address.city),
+                      }));
+                    }}
                     placeholder="Client / landlord address line 1"
-                    className="rounded-[8px]"
+                    inputClassName="rounded-[8px]"
                   />
                 </LabeledField>
                 <LabeledField label="Address line 2">

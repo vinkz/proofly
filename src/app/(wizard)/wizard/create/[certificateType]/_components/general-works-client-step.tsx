@@ -9,6 +9,7 @@ import { createClient } from '@/server/clients';
 import { assignClientToJob, createJob, saveGeneralWorksInfo } from '@/server/certificates';
 import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { Button } from '@/components/ui/button';
+import { AddressAutocompleteField, composeAddressText } from '@/components/address/address-autocomplete-field';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
@@ -41,9 +42,10 @@ export function GeneralWorksClientStep({ clients, totalSteps }: GeneralWorksClie
     postcode: '',
     work_date: new Date().toISOString().slice(0, 10),
   });
-  const { register, handleSubmit, reset } = useForm<ClientFormValues>({
+  const { register, handleSubmit, reset, setValue, watch } = useForm<ClientFormValues>({
     defaultValues: { name: '', organization: '', email: '', phone: '', address: '' },
   });
+  const clientAddress = watch('address');
 
   const addClientValue = '__add_client__';
 
@@ -246,7 +248,14 @@ export function GeneralWorksClientStep({ clients, totalSteps }: GeneralWorksClie
               </div>
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Address</label>
-                <Input {...register('address')} placeholder="123 River St, Springfield" className="mt-1" disabled={isPending} />
+                <AddressAutocompleteField
+                  value={clientAddress}
+                  onValueChange={(value) => setValue('address', value)}
+                  getSelectionText={(address) => composeAddressText(address.line1, address.line2, address.city, address.postcode)}
+                  placeholder="123 River St, Springfield"
+                  className="mt-1"
+                  disabled={isPending}
+                />
               </div>
               <Button type="submit" className="w-full" disabled={isPending}>
                 {isPending ? 'Creating…' : 'Create client'}
@@ -263,9 +272,11 @@ export function GeneralWorksClientStep({ clients, totalSteps }: GeneralWorksClie
               placeholder="Customer name"
               disabled={!jobId}
             />
-            <Input
+            <AddressAutocompleteField
               value={workInfo.property_address}
-              onChange={(e) => setWorkInfo((prev) => ({ ...prev, property_address: e.target.value }))}
+              onValueChange={(value) => setWorkInfo((prev) => ({ ...prev, property_address: value }))}
+              onAddressSelect={(address) => setWorkInfo((prev) => ({ ...prev, postcode: address.postcode || prev.postcode }))}
+              getSelectionText={(address) => composeAddressText(address.line1, address.line2, address.city)}
               placeholder="Property address"
               className="sm:col-span-2"
               disabled={!jobId}

@@ -1,5 +1,9 @@
+'use client';
+
+import { useState } from 'react';
+
+import { AddressAutocompleteField, composeAddressText } from '@/components/address/address-autocomplete-field';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 
 type ClientFormProps = {
@@ -19,6 +23,12 @@ type ClientFormProps = {
 };
 
 export function ClientForm({ action, initialValues, submitLabel = 'Save' }: ClientFormProps) {
+  // Address fields are controlled so the lookup can fill them; name attributes
+  // keep them visible to the server action's FormData.
+  const [address, setAddress] = useState(initialValues?.address ?? '');
+  const [postcode, setPostcode] = useState(initialValues?.postcode ?? '');
+  const [landlordAddress, setLandlordAddress] = useState(initialValues?.landlord_address ?? '');
+
   return (
     <form action={action} className="space-y-3">
       {initialValues?.id ? <input type="hidden" name="id" value={initialValues.id} /> : null}
@@ -26,23 +36,30 @@ export function ClientForm({ action, initialValues, submitLabel = 'Save' }: Clie
       <Input defaultValue={initialValues?.organization ?? ''} name="organization" placeholder="Organization" />
       <Input type="email" defaultValue={initialValues?.email ?? ''} name="email" placeholder="Email" />
       <Input defaultValue={initialValues?.phone ?? ''} name="phone" placeholder="Phone" />
-      <Input defaultValue={initialValues?.postcode ?? ''} name="postcode" placeholder="Postcode" />
-      <Textarea
-        defaultValue={initialValues?.address ?? ''}
+      <Input value={postcode} onChange={(e) => setPostcode(e.target.value)} name="postcode" placeholder="Postcode" />
+      <AddressAutocompleteField
+        variant="textarea"
         name="address"
+        value={address}
+        onValueChange={setAddress}
+        onAddressSelect={(lookup) => setPostcode(lookup.postcode || '')}
+        getSelectionText={(lookup) => composeAddressText(lookup.line1, lookup.line2, lookup.city)}
         placeholder="Address"
-        className="min-h-[80px]"
+        inputClassName="min-h-[80px]"
       />
       <Input
         defaultValue={initialValues?.landlord_name ?? ''}
         name="landlord_name"
         placeholder="Landlord/Agent name"
       />
-      <Textarea
-        defaultValue={initialValues?.landlord_address ?? ''}
+      <AddressAutocompleteField
+        variant="textarea"
         name="landlord_address"
+        value={landlordAddress}
+        onValueChange={setLandlordAddress}
+        getSelectionText={(lookup) => composeAddressText(lookup.line1, lookup.line2, lookup.city, lookup.postcode)}
         placeholder="Landlord/Agent address"
-        className="min-h-[80px]"
+        inputClassName="min-h-[80px]"
       />
       <div className="flex justify-end">
         <Button type="submit">{submitLabel}</Button>

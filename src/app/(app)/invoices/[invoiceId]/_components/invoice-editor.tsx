@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { AddressAutocompleteField } from '@/components/address/address-autocomplete-field';
 import { useToast } from '@/components/ui/use-toast';
 import { setInvoiceMeta, upsertLineItems, sendInvoiceEmail, type InvoiceLineItemInput, type InvoiceRow } from '@/server/invoices';
 import { toUserMessage } from '@/lib/user-errors';
@@ -497,11 +498,17 @@ export function InvoiceEditor({ invoice, lineItems, client, job, certificateType
               Bill to
             </p>
             <div className="mt-1.5 space-y-1.5">
-              <input
+              <AddressAutocompleteField
+                variant="bare"
                 value={clientAddressLine1}
-                onChange={(e) => setClientAddressLine1(e.target.value)}
+                onValueChange={setClientAddressLine1}
+                onAddressSelect={(address) => {
+                  setClientAddressLine2(address.line2 || '');
+                  setClientCity(address.city || '');
+                  setClientPostcode(address.postcode || '');
+                }}
                 placeholder="Address line 1"
-                className="w-full bg-transparent text-[13px] text-[var(--color-text-secondary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
+                inputClassName="w-full bg-transparent text-[13px] text-[var(--color-text-secondary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
               />
               <input
                 value={clientAddressLine2}

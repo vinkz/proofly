@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { WizardLayout } from '@/components/certificates/wizard-layout';
 import { EvidenceCard } from './evidence-card';
 import { SignatureCard } from '@/components/certificates/signature-card';
+import { AddressAutocompleteField } from '@/components/address/address-autocomplete-field';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -406,15 +407,24 @@ export function GeneralWorksWizard({
                 placeholder="Job address name (optional)"
                 className="rounded-2xl sm:col-span-2"
               />
-              <Input
+              <AddressAutocompleteField
                 value={jobAddress.job_address_line1}
-                onChange={(e) => {
-                  const value = e.target.value;
+                onValueChange={(value) => {
                   setJobAddress((prev) => ({ ...prev, job_address_line1: value }));
                   setInfo((prev) => ({ ...prev, property_address: value }));
                 }}
+                onAddressSelect={(address) => {
+                  setJobAddress((prev) => ({
+                    ...prev,
+                    job_address_line2: address.line2 || '',
+                    job_address_city: address.city || '',
+                    job_postcode: address.postcode || '',
+                  }));
+                  setInfo((prev) => ({ ...prev, postcode: address.postcode || '' }));
+                }}
                 placeholder="Job address line 1"
-                className="rounded-2xl sm:col-span-2"
+                className="sm:col-span-2"
+                inputClassName="rounded-2xl"
               />
               <Input
                 value={jobAddress.job_address_line2}

@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useEffect, useRef, useState, useTransition } from 'react';
 
+import { AddressAutocompleteField } from '@/components/address/address-autocomplete-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { submitStandaloneLandlordJobRequest } from '@/server/job-requests';
@@ -466,10 +467,15 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
               onChange={(e) => setLandlordPhone(e.target.value)}
               placeholder="Phone number"
             />
-            <Input
+            <AddressAutocompleteField
               autoComplete="address-line1"
               value={landlordAddressLine1}
-              onChange={(e) => setLandlordAddressLine1(e.target.value)}
+              onValueChange={setLandlordAddressLine1}
+              onAddressSelect={(address) => {
+                setLandlordAddressLine2(address.line2 || '');
+                setLandlordCity(address.city || '');
+                setLandlordPostcode(address.postcode || '');
+              }}
               placeholder="Your address line 1"
             />
             <Input
