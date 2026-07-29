@@ -17,8 +17,8 @@ import { signUpWithPassword } from '@/server/auth';
 const SignUpSchema = z
   .object({
     email: z.string().email({ message: 'Valid email required' }),
-    password: z.string().min(6, 'Password must be at least 6 characters'),
-    confirm: z.string().min(6, 'Password must be at least 6 characters'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    confirm: z.string().min(8, 'Password must be at least 8 characters'),
   })
   .refine((data) => data.password === data.confirm, { message: 'Passwords do not match', path: ['confirm'] });
 

@@ -7,7 +7,7 @@ import { userHasPassword } from '@/server/auth';
 
 const PasswordChangeSchema = z.object({
   current_password: z.string().optional(),
-  new_password: z.string().min(6, 'New password must be at least 6 characters'),
+  new_password: z.string().min(8, 'New password must be at least 8 characters'),
 });
 
 const ResetRequestSchema = z.object({
@@ -16,7 +16,7 @@ const ResetRequestSchema = z.object({
 
 const ResetApplySchema = z.object({
   code: z.string().min(5),
-  new_password: z.string().min(6, 'New password must be at least 6 characters'),
+  new_password: z.string().min(8, 'New password must be at least 8 characters'),
 });
 
 export async function changePassword(payload: unknown) {

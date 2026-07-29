@@ -12,6 +12,9 @@ const CredentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
+const SignupCredentialsSchema = CredentialsSchema.extend({
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
 
 async function createAuthedSupabaseClient() {
   assertSupabaseEnv();
@@ -121,7 +124,7 @@ export async function signInWithMagicLink(
 export async function signUpWithPassword(
   payload: unknown,
 ): Promise<AuthActionResult<{ needsEmailConfirmation: boolean; existingAccount: boolean }>> {
-  const body = CredentialsSchema.parse(payload);
+  const body = SignupCredentialsSchema.parse(payload);
   const sb = await createAuthedSupabaseClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
   const emailRedirectTo = siteUrl ? `${siteUrl}/auth/callback?next=${encodeURIComponent('/signup/step2')}` : undefined;

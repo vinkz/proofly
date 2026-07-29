@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { middleware } from '../middleware';
+import { middleware } from '../src/middleware';
 
 vi.mock('@supabase/ssr', () => ({
   createServerClient: vi.fn(),

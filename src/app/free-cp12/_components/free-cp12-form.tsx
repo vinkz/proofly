@@ -441,8 +441,8 @@ export function FreeCp12Form() {
    * result page also lists each document with its own button so a blocked one
    * is still one tap away.
    */
-  const saveToDevice = () => {
-    documents.forEach((doc, i) => {
+  const saveToDevice = (documentsToSave: GeneratedDocument[]) => {
+    documentsToSave.forEach((doc, i) => {
       if (i === 0) saveOne(doc);
       else window.setTimeout(() => saveOne(doc), i * 800);
     });
@@ -463,14 +463,22 @@ export function FreeCp12Form() {
         error?: string;
         emailed?: boolean;
         reference?: string;
+        documents?: GeneratedDocument[];
       };
       if (!response.ok) {
         setError(data.error ?? 'Something went wrong. Try again in a moment.');
         return;
       }
+      if (!data.documents?.length) {
+        setError('The server did not return your certificate. Please try again.');
+        return;
+      }
+      docUrls.forEach((url) => URL.revokeObjectURL(url));
+      setDocuments(data.documents);
+      setDocUrls(data.documents.map((doc) => URL.createObjectURL(base64ToBlob(doc.base64))));
       setEmailed(Boolean(data.emailed));
       setReference(data.reference ?? null);
-      saveToDevice();
+      saveToDevice(data.documents);
       setStage('done');
       track(ANALYTICS_EVENTS.freeCp12DownloadCompleted, { emailed: Boolean(data.emailed) });
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -644,7 +652,7 @@ export function FreeCp12Form() {
               {busy ? 'Sending…' : 'Email and download'}
             </Button>
           </div>
-          {error ? <p className="mt-3 text-[13px] text-[var(--color-red)]">{error}</p> : null}
+          {error ? <p role="alert" className="mt-3 text-[13px] text-[var(--color-red)]">{error}</p> : null}
         </form>
       </div>
     );
@@ -657,23 +665,19 @@ export function FreeCp12Form() {
         <Field label="Inspection date">
           <Input
             type="date"
+            max={new Date().toISOString().slice(0, 10)}
             value={payload.fields.inspection_date}
             onChange={(e) => setField('inspection_date', e.target.value)}
           />
         </Field>
         <AddressLookupField
-          label="Find the property address"
-          hint="Or type it in below."
+          label="Address line 1"
+          value={payload.fields.job_address_line1}
+          onValueChange={(value) => setField('job_address_line1', value)}
+          placeholder="Start typing the property address or postcode"
+          autoComplete="address-line1"
           onSelect={applyPropertyAddress}
         />
-        <Field label="Property address">
-          <Input
-            placeholder="Address line 1"
-            autoComplete="address-line1"
-            value={payload.fields.job_address_line1}
-            onChange={(e) => setField('job_address_line1', e.target.value)}
-          />
-        </Field>
         <Input
           placeholder="Address line 2 (optional)"
           autoComplete="address-line2"
@@ -1313,7 +1317,7 @@ export function FreeCp12Form() {
       </Section>
 
       {issues.length ? (
-        <div className="mb-4 rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4">
+        <div role="alert" className="mb-4 rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4">
           <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
             A CP12 needs these before it can be issued:
           </p>
@@ -1325,7 +1329,7 @@ export function FreeCp12Form() {
         </div>
       ) : null}
 
-      {error ? <p className="mb-4 text-[13px] text-[var(--color-red)]">{error}</p> : null}
+      {error ? <p role="alert" className="mb-4 text-[13px] text-[var(--color-red)]">{error}</p> : null}
 
       <div className="sticky bottom-4 flex justify-end">
         <Button variant="primary" onClick={handleGenerate} disabled={busy} className="shadow-lg">

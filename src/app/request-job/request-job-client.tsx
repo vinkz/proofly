@@ -633,13 +633,13 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
       ) : null}
 
       {stepError ? (
-        <p className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] text-[var(--color-red)]">
+        <p role="alert" className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] text-[var(--color-red)]">
           {stepError}
         </p>
       ) : null}
 
       {error ? (
-        <p className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] text-[var(--color-red)]">
+        <p role="alert" className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] text-[var(--color-red)]">
           {error}
         </p>
       ) : null}

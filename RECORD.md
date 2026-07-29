@@ -2,6 +2,12 @@
 
 Reverse-ish chronological log of shipped work. Newer entries carry dated headers; the untitled bullets below the header predate the dated format.
 
+## 2026-07-29 — Free CP12 launch hardening
+- Moved Ideal Postcodes autocomplete into Address line 1 for both property and landlord addresses, removed the redundant find-address controls, and clarified the property-to-landlord copy action.
+- Added keyboard/assistive-technology support to address suggestions and aligned the emailed, downloaded, and on-screen CP12 documents to the same issue reference.
+- Added durable, HMAC-keyed rate limits for public certificate, address, request, renewal, and email-capture actions; made renewal submissions idempotent before job/email side effects.
+- Upgraded the patched Next.js 15 release, added production security headers, closed diagnostic routes in production, strengthened password/date/postcode/Gas Safe validation, and kept the free CP12 out of search indexing pending registered-engineer review.
+
 - Updated copy to use “workflow” instead of “template” across the new job flow and workflows UI, and moved the jobs table to a client component with row-click navigation and inline delete.
 - Improved `pnpm mobile` script to check port availability before starting, preventing tunnel startup when port 3000 is already in use.
 - Rebuilt the login/create-account page with CertNow branding, magic-link auth for sign-in and sign-up, trade-aware messaging, and CTA styling aligned to the `--action` green.

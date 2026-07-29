@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { POST as generate } from '@/app/api/free-cp12/generate/route';
 import type { FreeCp12PayloadInput } from '@/lib/cp12/freeCp12Payload';
 
+vi.mock('@/lib/public-action-security', () => ({
+  consumePublicActionRateLimit: async () => ({ allowed: true, remaining: 20, retryAfterSeconds: 0 }),
+}));
+
 /**
  * Gas Safety (Installation and Use) Regulations 1998, Reg 36(3)(a)–(i) — the
  * prescribed minimum content of a landlord gas safety record, as set out in

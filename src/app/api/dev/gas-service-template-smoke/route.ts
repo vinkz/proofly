@@ -5,6 +5,10 @@ import { BOILER_SERVICE_DEMO_CHECKS, BOILER_SERVICE_DEMO_DETAILS, BOILER_SERVICE
 import { createJob, generateCertificatePdf, saveBoilerServiceChecks, saveBoilerServiceDetails, saveBoilerServiceJobInfo } from '@/server/certificates';
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const supabase = await supabaseServerReadOnly();
   const {
     data: { user },

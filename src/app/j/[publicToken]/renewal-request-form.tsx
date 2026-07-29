@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
-import { submitPublicJobRenewalRequest } from '@/server/public-job';
+import { submitPublicJobRenewalRequest } from '@/server/public-job-actions';
 
 const toDateOnly = (value: string) => {
   const slice = String(value ?? '').slice(0, 10);
@@ -121,7 +121,7 @@ export function RenewalRequestForm({
       >
         {isPending ? 'Sending…' : confirmMode ? 'Confirm date with your engineer →' : 'Send to your engineer →'}
       </button>
-      {error ? <p className="text-[12px] text-[#a32d2d]">{error}</p> : null}
+      {error ? <p role="alert" className="text-[12px] text-[#a32d2d]">{error}</p> : null}
     </form>
   );
 }

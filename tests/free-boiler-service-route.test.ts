@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FreeBoilerServicePayloadInput } from '@/lib/boiler-service/freeBoilerServicePayload';
 
+vi.mock('@/lib/public-action-security', () => ({
+  consumePublicActionRateLimit: async () => ({ allowed: true, remaining: 4, retryAfterSeconds: 0 }),
+}));
+
 /**
  * The free boiler service tool.
  *

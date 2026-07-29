@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from '@/app/api/address-search/route';
 
+vi.mock('@/lib/public-action-security', () => ({
+  consumePublicActionRateLimit: async () => ({ allowed: true, remaining: 20, retryAfterSeconds: 0 }),
+}));
+
 describe('address-search route', () => {
   const originalApiKey = process.env.IDEAL_POSTCODES_API_KEY;
 

@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { POST as generate } from '@/app/api/free-cp12/generate/route';
 import type { FreeCp12PayloadInput } from '@/lib/cp12/freeCp12Payload';
 
+vi.mock('@/lib/public-action-security', () => ({
+  consumePublicActionRateLimit: async () => ({ allowed: true, remaining: 20, retryAfterSeconds: 0 }),
+}));
+
 /**
  * A CP12 that classifies an appliance At Risk or Immediately Dangerous records
  * a GIUSP unsafe situation, which sits on binding duties: GSIUR Reg 26(9)

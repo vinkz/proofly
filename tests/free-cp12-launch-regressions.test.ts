@@ -8,6 +8,10 @@ import {
 import { buildFreeGwnFields, unsafeAppliances } from '@/lib/cp12/freeGwn';
 import { validateGwnForIssue } from '@/lib/gwn/validation';
 
+vi.mock('@/lib/public-action-security', () => ({
+  consumePublicActionRateLimit: async () => ({ allowed: true, remaining: 4, retryAfterSeconds: 0 }),
+}));
+
 /**
  * Defects found in the pre-launch review. Each one was reachable by an ordinary
  * engineer on an ordinary job, so each keeps a test.

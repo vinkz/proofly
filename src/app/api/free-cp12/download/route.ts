@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { FREE_CP12_LIMITS } from '@/lib/cp12/free-tool';
 import { FreeCp12PayloadSchema } from '@/lib/cp12/freeCp12Payload';
+import { consumePublicActionRateLimit } from '@/lib/public-action-security';
 import { clientKeyFromRequest, rateLimit } from '@/lib/rate-limit';
 import { buildFreeCp12Documents, freeSubmissionIssues } from '@/server/free-cp12-documents';
 import {
@@ -26,11 +27,13 @@ const DownloadSchema = z.object({
  *
  * The PDF is re-rendered here from the same form data the preview used rather
  * than being held server-side between the two requests — that is what keeps the
- * tool stateless. The visitor's browser saves the copy it already has.
+ * tool stateless. These exact bytes are returned to the browser as well as sent
+ * by email, so every copy from one issue action has the same reference.
  */
 export async function POST(request: Request) {
+  const clientIdentifier = clientKeyFromRequest(request);
   const ipLimit = rateLimit(
-    `free-cp12:download:${clientKeyFromRequest(request)}`,
+    `free-cp12:download:${clientIdentifier}`,
     FREE_CP12_LIMITS.downloadPerIpPerDay,
     DAY_MS,
   );
@@ -42,6 +45,22 @@ export async function POST(request: Request) {
         retryAfterSeconds: ipLimit.retryAfterSeconds,
       },
       { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) } },
+    );
+  }
+  const durableIpLimit = await consumePublicActionRateLimit({
+    action: 'free_cp12_download_ip',
+    identifier: clientIdentifier,
+    limit: FREE_CP12_LIMITS.downloadPerIpPerDay,
+    windowSeconds: DAY_MS / 1000,
+  });
+  if (!durableIpLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: "You've reached today's limit for this connection. " +
+          'An account removes the cap — and keeps every certificate you issue.',
+        retryAfterSeconds: durableIpLimit.retryAfterSeconds,
+      },
+      { status: 429, headers: { 'Retry-After': String(durableIpLimit.retryAfterSeconds) } },
     );
   }
 
@@ -66,6 +85,21 @@ export async function POST(request: Request) {
   }
 
   const { email, payload } = parsed.data;
+  const durableEmailLimit = await consumePublicActionRateLimit({
+    action: 'free_cp12_download_email',
+    identifier: email,
+    limit: FREE_CP12_LIMITS.downloadPerEmailPerDay,
+    windowSeconds: DAY_MS / 1000,
+  });
+  if (!durableEmailLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: `That email address has already been sent ${FREE_CP12_LIMITS.downloadPerEmailPerDay} certificates today. ` +
+          'An account removes the cap.',
+      },
+      { status: 429, headers: { 'Retry-After': String(durableEmailLimit.retryAfterSeconds) } },
+    );
+  }
 
   const emailCount = await emailDownloadCountToday(email);
   if (emailCapReached(emailCount)) {
@@ -87,6 +121,13 @@ export async function POST(request: Request) {
   }
 
   const documents = await buildFreeCp12Documents(payload, { reference, issuedAt });
+  const responseDocuments = documents.map((document) => ({
+    kind: document.kind,
+    title: document.title,
+    filename: document.filename,
+    reference: document.reference,
+    base64: Buffer.from(document.bytes).toString('base64'),
+  }));
 
   // Capture BEFORE sending. Resend is an external call; if it hangs long enough
   // for the function to be killed we would lose the lead entirely, and the lead
@@ -107,13 +148,18 @@ export async function POST(request: Request) {
         error: 'We could not email the certificate just now, but your download is ready below.',
         emailed: false,
         reference,
+        documents: responseDocuments,
       },
-      { status: 200 },
+      { status: 200, headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' } },
     );
   }
 
-  return NextResponse.json({
-    emailed: delivery.status === 'sent',
-    reference,
-  });
+  return NextResponse.json(
+    {
+      emailed: delivery.status === 'sent',
+      reference,
+      documents: responseDocuments,
+    },
+    { headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' } },
+  );
 }

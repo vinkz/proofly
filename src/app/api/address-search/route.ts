@@ -6,6 +6,7 @@ import {
   type IdealAutocompleteResponse,
   type IdealResolveResponse,
 } from '@/lib/address-lookup';
+import { consumePublicActionRateLimit } from '@/lib/public-action-security';
 import { clientKeyFromRequest, rateLimit } from '@/lib/rate-limit';
 
 // This endpoint is reachable unauthenticated (the public /request booking page
@@ -107,8 +108,9 @@ async function fetchJson(url: URL) {
 }
 
 export async function GET(request: Request) {
+  const clientIdentifier = clientKeyFromRequest(request);
   const limit = rateLimit(
-    `address-search:${clientKeyFromRequest(request)}`,
+    `address-search:${clientIdentifier}`,
     RATE_LIMIT_MAX,
     RATE_LIMIT_WINDOW_MS,
   );
@@ -116,6 +118,18 @@ export async function GET(request: Request) {
     return NextResponse.json(
       { error: 'Too many address lookups. Please slow down and try again shortly.' },
       { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } },
+    );
+  }
+  const durableLimit = await consumePublicActionRateLimit({
+    action: 'address_search_ip',
+    identifier: clientIdentifier,
+    limit: RATE_LIMIT_MAX,
+    windowSeconds: RATE_LIMIT_WINDOW_MS / 1000,
+  });
+  if (!durableLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many address lookups. Please slow down and try again shortly.' },
+      { status: 429, headers: { 'Retry-After': String(durableLimit.retryAfterSeconds) } },
     );
   }
 

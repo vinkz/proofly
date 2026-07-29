@@ -1,4 +1,10 @@
+import { notFound } from 'next/navigation';
+
 export default function EnvCheck() {
+  if (process.env.NODE_ENV === 'production') {
+    notFound();
+  }
+
   const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
   const hasSupabaseKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

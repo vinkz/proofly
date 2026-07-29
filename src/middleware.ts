@@ -19,6 +19,13 @@ function isProtectedPath(pathname: string) {
 }
 
 export async function middleware(request: NextRequest) {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    (request.nextUrl.pathname === '/dev' || request.nextUrl.pathname.startsWith('/dev/'))
+  ) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
   if (!isProtectedPath(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
@@ -81,6 +88,8 @@ export const config = {
     '/dashboard/:path*',
     '/documents',
     '/documents/:path*',
+    '/dev',
+    '/dev/:path*',
     '/invoices',
     '/invoices/:path*',
     '/jobs',

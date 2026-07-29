@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { FREE_CP12_LIMITS } from '@/lib/cp12/free-tool';
 import { FreeCp12PayloadSchema } from '@/lib/cp12/freeCp12Payload';
+import { consumePublicActionRateLimit } from '@/lib/public-action-security';
 import { clientKeyFromRequest, rateLimit } from '@/lib/rate-limit';
 import { buildFreeCp12Documents, freeSubmissionIssues } from '@/server/free-cp12-documents';
 import { freeCp12Reference } from '@/server/free-cp12';
@@ -17,8 +18,9 @@ const HOUR_MS = 60 * 60 * 1000;
  * visitor's browser.
  */
 export async function POST(request: Request) {
+  const clientIdentifier = clientKeyFromRequest(request);
   const limit = rateLimit(
-    `free-cp12:generate:${clientKeyFromRequest(request)}`,
+    `free-cp12:generate:${clientIdentifier}`,
     FREE_CP12_LIMITS.generatePerIpPerHour,
     HOUR_MS,
   );
@@ -30,6 +32,22 @@ export async function POST(request: Request) {
         retryAfterSeconds: limit.retryAfterSeconds,
       },
       { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } },
+    );
+  }
+  const durableLimit = await consumePublicActionRateLimit({
+    action: 'free_cp12_generate_ip',
+    identifier: clientIdentifier,
+    limit: FREE_CP12_LIMITS.generatePerIpPerHour,
+    windowSeconds: HOUR_MS / 1000,
+  });
+  if (!durableLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: "You've generated a lot of certificates from this connection in the last hour. " +
+          'Try again shortly, or create an account for unlimited certificates.',
+        retryAfterSeconds: durableLimit.retryAfterSeconds,
+      },
+      { status: 429, headers: { 'Retry-After': String(durableLimit.retryAfterSeconds) } },
     );
   }
 

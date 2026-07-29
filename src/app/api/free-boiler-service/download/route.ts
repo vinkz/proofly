@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { FREE_BOILER_SERVICE_LIMITS } from '@/lib/boiler-service/free-tool';
 import { FreeBoilerServiceSchema } from '@/lib/boiler-service/freeBoilerServicePayload';
+import { consumePublicActionRateLimit } from '@/lib/public-action-security';
 import { clientKeyFromRequest, rateLimit } from '@/lib/rate-limit';
 import {
   buildFreeBoilerServicePdf,
@@ -26,8 +27,9 @@ const DownloadSchema = z.object({
 
 /** Email the record and capture the address. The only thing that persists. */
 export async function POST(request: Request) {
+  const clientIdentifier = clientKeyFromRequest(request);
   const ipLimit = rateLimit(
-    `free-boiler-service:download:${clientKeyFromRequest(request)}`,
+    `free-boiler-service:download:${clientIdentifier}`,
     FREE_BOILER_SERVICE_LIMITS.downloadPerIpPerDay,
     DAY_MS,
   );
@@ -39,6 +41,22 @@ export async function POST(request: Request) {
         retryAfterSeconds: ipLimit.retryAfterSeconds,
       },
       { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfterSeconds) } },
+    );
+  }
+  const durableIpLimit = await consumePublicActionRateLimit({
+    action: 'free_boiler_download_ip',
+    identifier: clientIdentifier,
+    limit: FREE_BOILER_SERVICE_LIMITS.downloadPerIpPerDay,
+    windowSeconds: DAY_MS / 1000,
+  });
+  if (!durableIpLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: "You've reached today's limit for this connection. " +
+          'An account removes the cap — and keeps every record you issue.',
+        retryAfterSeconds: durableIpLimit.retryAfterSeconds,
+      },
+      { status: 429, headers: { 'Retry-After': String(durableIpLimit.retryAfterSeconds) } },
     );
   }
 
@@ -63,6 +81,21 @@ export async function POST(request: Request) {
   }
 
   const { email, payload } = parsed.data;
+  const durableEmailLimit = await consumePublicActionRateLimit({
+    action: 'free_boiler_download_email',
+    identifier: email,
+    limit: FREE_BOILER_SERVICE_LIMITS.downloadPerEmailPerDay,
+    windowSeconds: DAY_MS / 1000,
+  });
+  if (!durableEmailLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: `That email address has already been sent ${FREE_BOILER_SERVICE_LIMITS.downloadPerEmailPerDay} documents today. ` +
+          'An account removes the cap.',
+      },
+      { status: 429, headers: { 'Retry-After': String(durableEmailLimit.retryAfterSeconds) } },
+    );
+  }
 
   const emailCount = await emailDownloadCountToday(email);
   if (emailCapReached(emailCount)) {

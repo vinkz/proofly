@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FreeCp12PayloadInput } from '@/lib/cp12/freeCp12Payload';
 
+vi.mock('@/lib/public-action-security', () => ({
+  consumePublicActionRateLimit: async () => ({ allowed: true, remaining: 4, retryAfterSeconds: 0 }),
+}));
+
 /**
  * The download step is the only place the free tool writes anything. It must
  * write exactly one row containing exactly the email, timestamp and source —
@@ -93,10 +97,17 @@ describe('free CP12 download route', () => {
 
   it('emails the PDF as an attachment and writes exactly one lead row', async () => {
     const response = await post({ email: 'Engineer@Example.com', payload: payload() });
-    const data = (await response.json()) as { emailed: boolean; reference: string };
+    const data = (await response.json()) as {
+      emailed: boolean;
+      reference: string;
+      documents: Array<{ reference: string; base64: string }>;
+    };
 
     expect(response.status).toBe(200);
     expect(data.emailed).toBe(true);
+    expect(data.documents).toHaveLength(1);
+    expect(data.documents[0].reference).toBe(data.reference);
+    expect(data.documents[0].base64).toMatch(/^[A-Za-z0-9+/]+=*$/);
 
     expect(sentEmails).toHaveLength(1);
     expect(sentEmails[0].to).toBe('Engineer@Example.com');

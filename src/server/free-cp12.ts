@@ -28,8 +28,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * start, which makes it a poor fit for a per-identity cap. Counting the rows we
  * are already writing costs one indexed query and survives redeploys.
  *
- * Fails open: if the count cannot be read, a visitor is not blocked from the
- * certificate they came for. The IP limiter still applies.
+ * Fails open: if this compatibility count cannot be read, the durable IP and
+ * email limiters in the route still apply.
  */
 export async function emailDownloadCountToday(email: string): Promise<number | null> {
   try {

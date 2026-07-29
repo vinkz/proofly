@@ -12,8 +12,8 @@
  * robots.txt. Flipping this one constant is the whole change; nothing else
  * needs to move.
  *
- * ⚠️ STATE, 2026-07-27: set to false — the tool is indexable — by an explicit
- * owner decision taken BEFORE the Gas Safe sign-off it was originally gated on.
+ * ⚠️ STATE, 2026-07-29: restored to true until the Gas Safe sign-off it was
+ * originally gated on is complete.
  * The template and the per-category field-applicability rules in
  * ./applianceConfig.ts still carry NEEDS GAS-SAFE VALIDATION notes; the
  * combustion rule for gas fires and water heaters is the outstanding one. It is
@@ -21,7 +21,7 @@
  * happened. When a registered engineer does sign the template off, clear the
  * notes in applianceConfig.ts and delete this paragraph.
  */
-export const FREE_CP12_NOINDEX = false;
+export const FREE_CP12_NOINDEX = true;
 
 /** Public path of the free tool. Kept here so robots.ts cannot drift from it. */
 export const FREE_CP12_ROUTE = '/free-cp12';

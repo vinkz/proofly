@@ -17,6 +17,10 @@ import {
   paragraph,
   titleCase,
 } from '@/lib/email-templates';
+import {
+  assertPublicActionAllowed,
+  publicActionClientIdentifier,
+} from '@/lib/public-action-security';
 import { supabaseServerReadOnly, supabaseServerServiceRole, getSupabaseUser } from '@/lib/supabaseServer';
 
 const RequestIdSchema = z.string().uuid();
@@ -725,6 +729,26 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
     engineerGasSafeNumber: cleanText(parsedRequest.engineerGasSafeNumber),
     engineerRequestSlug: cleanText(parsedRequest.engineerRequestSlug),
   };
+
+  const clientIdentifier = await publicActionClientIdentifier();
+  await assertPublicActionAllowed({
+    action: 'landlord_job_request_ip',
+    identifier: clientIdentifier,
+    limit: 5,
+    windowSeconds: 60 * 60,
+  });
+  const engineerTarget =
+    request.engineerRequestSlug ||
+    request.engineerEmail ||
+    request.engineerPhone ||
+    request.engineerGasSafeNumber;
+  await assertPublicActionAllowed({
+    action: 'landlord_job_request_engineer',
+    identifier: engineerTarget,
+    limit: 10,
+    windowSeconds: 24 * 60 * 60,
+  });
+
   const admin = await supabaseServerServiceRole();
   const engineerProfile = await findEngineerProfileForRequest(admin, request);
   const requestId = randomUUID();

@@ -1,7 +1,11 @@
-'use server';
+import { randomUUID } from 'node:crypto';
 
 import * as Sentry from '@sentry/nextjs';
 import { z } from 'zod';
+import {
+  assertPublicActionAllowed,
+  publicActionClientIdentifier,
+} from '@/lib/public-action-security';
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
 import { deriveNextDueFromCertificates, normalizePublicDateOnly } from '@/lib/public-compliance';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
@@ -200,8 +204,22 @@ export async function getPublicPropertyByToken(token: string): Promise<PropertyV
   };
 }
 
-export async function submitPropertyRenewalRequest(input: z.infer<typeof RenewalRequestSchema>) {
+export async function submitPropertyRenewalRequestInternal(input: z.infer<typeof RenewalRequestSchema>) {
   const request = RenewalRequestSchema.parse(input);
+  const clientIdentifier = await publicActionClientIdentifier();
+  await assertPublicActionAllowed({
+    action: 'property_renewal_ip',
+    identifier: clientIdentifier,
+    limit: 10,
+    windowSeconds: 60 * 60,
+  });
+  await assertPublicActionAllowed({
+    action: 'property_renewal_token',
+    identifier: request.token,
+    limit: 3,
+    windowSeconds: 24 * 60 * 60,
+  });
+
   const data = await getPublicPropertyByToken(request.token);
   if (!data) throw new Error('Property not found');
 
@@ -224,6 +242,36 @@ export async function submitPropertyRenewalRequest(input: z.infer<typeof Renewal
   // The property row carries no landlord name; the anchoring job's client_name is the landlord.
   const landlordLabel = sourceJob?.client_name?.trim() || data.name || null;
 
+  // A confirmed date means the visit is booked, not just requested — surface it as 'scheduled' and
+  // link the job so it shows in upcoming work; otherwise it stays a 'pending' request in the inbox.
+  const requestStatus = acceptedDate ? 'scheduled' : 'pending';
+  const requestId = randomUUID();
+  const insertRow: Record<string, unknown> = {
+    id: requestId,
+    property_id: data.propertyId,
+    scheduled_job_id: null,
+    source_job_id: sourceJob?.id ?? null,
+    user_id: data.userId,
+    assigned_engineer_id: data.userId,
+    request_type: 'renewal',
+    source: 'property_vault',
+    job_type: request.jobType,
+    landlord_name: landlordLabel,
+    property_address: data.address,
+    tenant_name: request.tenantName || null,
+    tenant_phone: request.tenantPhone || null,
+    access_notes: request.accessNotes || null,
+    preferred_dates: preferredSummary,
+    status: requestStatus,
+  };
+  const { error } = await admin.from('job_requests').insert(insertRow as never);
+  if (error) {
+    if (error.code === '23505') {
+      return { ok: true, engineer: data.engineer, scheduled: Boolean(acceptedDate), duplicate: true };
+    }
+    throw new Error(error.message);
+  }
+
   const renewalJobId = sourceJob
     ? await ensureRenewalJobForSource(admin, {
         sourceJob: {
@@ -241,39 +289,11 @@ export async function submitPropertyRenewalRequest(input: z.infer<typeof Renewal
         jobType: request.jobType,
       })
     : null;
-
-  // A confirmed date means the visit is booked, not just requested — surface it as 'scheduled' and
-  // link the job so it shows in upcoming work; otherwise it stays a 'pending' request in the inbox.
-  const requestStatus = acceptedDate ? 'scheduled' : 'pending';
-  const insertRow: Record<string, unknown> = {
-    property_id: data.propertyId,
-    scheduled_job_id: renewalJobId,
-    source_job_id: sourceJob?.id ?? null,
-    user_id: data.userId,
-    assigned_engineer_id: data.userId,
-    request_type: 'renewal',
-    source: 'property_vault',
-    job_type: request.jobType,
-    landlord_name: landlordLabel,
-    property_address: data.address,
-    tenant_name: request.tenantName || null,
-    tenant_phone: request.tenantPhone || null,
-    access_notes: request.accessNotes || null,
-    preferred_dates: preferredSummary,
-    status: requestStatus,
-  };
-  const { error } = await admin.from('job_requests').insert(insertRow as never);
-  if (error) {
-    // Older databases may not have scheduled_job_id/source_job_id — retry without them rather than
-    // fail the landlord's submission.
-    if (['42703', 'PGRST204'].includes(error.code ?? '')) {
-      delete insertRow.scheduled_job_id;
-      delete insertRow.source_job_id;
-      const { error: retryErr } = await admin.from('job_requests').insert(insertRow as never);
-      if (retryErr) throw new Error(retryErr.message);
-    } else {
-      throw new Error(error.message);
-    }
+  if (renewalJobId) {
+    await admin
+      .from('job_requests')
+      .update({ scheduled_job_id: renewalJobId } as never)
+      .eq('id', requestId);
   }
 
   // A confirmed date books the renewal: record it on the property so the reminder cron stops

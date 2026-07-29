@@ -1,7 +1,11 @@
-'use server';
+import { randomUUID } from 'node:crypto';
 
 import { z } from 'zod';
 
+import {
+  assertPublicActionAllowed,
+  publicActionClientIdentifier,
+} from '@/lib/public-action-security';
 import { supabaseServerReadOnly, supabaseServerServiceRole, getSupabaseUser } from '@/lib/supabaseServer';
 import { CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import { ensureRenewalJobForSource, notifyEngineerOfRenewalResponse } from './renewal-confirm';
@@ -35,6 +39,7 @@ type UntypedQuery = {
   insert: (payload: Record<string, unknown> | Array<Record<string, unknown>>) => Promise<{
     error: { code?: string; message: string } | null;
   }>;
+  update: (payload: Record<string, unknown>) => UntypedQuery;
 };
 type UntypedSupabase = { from: (table: string) => UntypedQuery };
 const fromJobRequests = (sb: unknown) => (sb as UntypedSupabase).from('job_requests');
@@ -264,28 +269,42 @@ export async function getPublicJobByToken(token: string): Promise<PublicJobPageD
   };
 }
 
-export async function capturePublicJobLandlordEmail(input: z.infer<typeof EmailCaptureSchema>) {
+export async function capturePublicJobLandlordEmailInternal(input: z.infer<typeof EmailCaptureSchema>) {
   const { token, email } = EmailCaptureSchema.parse(input);
+  const clientIdentifier = await publicActionClientIdentifier();
+  await assertPublicActionAllowed({
+    action: 'job_email_capture_ip',
+    identifier: clientIdentifier,
+    limit: 10,
+    windowSeconds: 60 * 60,
+  });
+  await assertPublicActionAllowed({
+    action: 'job_email_capture_token',
+    identifier: token,
+    limit: 3,
+    windowSeconds: 24 * 60 * 60,
+  });
+
   const admin = await supabaseServerServiceRole();
   const { data: job, error: jobErr } = await admin
     .from('jobs')
-    .select('id, client_id, public_token')
+    .select('id, public_token')
     .eq('public_token', token)
     .maybeSingle();
   if (jobErr) throw new Error(jobErr.message);
   if (!job) throw new Error('Job not found');
 
-  await admin.from('job_fields').delete().eq('job_id', job.id).eq('field_key', 'landlord_email');
-  const { error: fieldErr } = await admin.from('job_fields').insert({
-    job_id: job.id,
-    field_key: 'landlord_email',
-    value: email,
-  });
+  const { error: fieldErr } = await admin
+    .from('job_fields')
+    .upsert(
+      {
+        job_id: job.id,
+        field_key: 'landlord_email',
+        value: email,
+      },
+      { onConflict: 'job_id,field_key' },
+    );
   if (fieldErr) throw new Error(fieldErr.message);
-
-  if (job.client_id) {
-    await admin.from('clients').update({ email }).eq('id', job.client_id);
-  }
 
   const pageData = await getPublicJobByToken(token);
   return {
@@ -295,8 +314,22 @@ export async function capturePublicJobLandlordEmail(input: z.infer<typeof EmailC
   };
 }
 
-export async function submitPublicJobRenewalRequest(input: z.infer<typeof RenewalRequestSchema>) {
+export async function submitPublicJobRenewalRequestInternal(input: z.infer<typeof RenewalRequestSchema>) {
   const request = RenewalRequestSchema.parse(input);
+  const clientIdentifier = await publicActionClientIdentifier();
+  await assertPublicActionAllowed({
+    action: 'job_renewal_ip',
+    identifier: clientIdentifier,
+    limit: 10,
+    windowSeconds: 60 * 60,
+  });
+  await assertPublicActionAllowed({
+    action: 'job_renewal_token',
+    identifier: request.token,
+    limit: 3,
+    windowSeconds: 24 * 60 * 60,
+  });
+
   const pageData = await getPublicJobByToken(request.token);
   if (!pageData) throw new Error('Job not found');
 
@@ -312,23 +345,15 @@ export async function submitPublicJobRenewalRequest(input: z.infer<typeof Renewa
   const preferredSummary =
     [acceptedDate, request.preferredDates].map((value) => value?.trim()).filter(Boolean).join(' · ') || null;
 
-  // Ensure a real, pre-filled renewal job exists and (when a date was confirmed) schedule it.
-  // Pass the property so the future job is linked to the existing property record (same as /p).
-  const renewalJobId = await ensureRenewalJobForSource(admin, {
-    sourceJob: job,
-    acceptedDate,
-    tenantName: request.tenantName,
-    tenantPhone: request.tenantPhone,
-    accessNotes: request.accessNotes,
-    propertyId: job.property_id ?? null,
-  });
-
   // A confirmed date means the visit is booked, not just requested — surface it as 'scheduled'
   // and link the job so it shows in upcoming work; otherwise it stays a 'pending' request.
   const requestStatus = acceptedDate ? 'scheduled' : 'pending';
+  const requestId = randomUUID();
   const insertRow: Record<string, unknown> = {
+    id: requestId,
+    property_id: job.property_id ?? null,
     source_job_id: pageData.jobId,
-    scheduled_job_id: renewalJobId,
+    scheduled_job_id: null,
     user_id: job.user_id,
     assigned_engineer_id: job.user_id,
     request_type: 'renewal',
@@ -347,14 +372,31 @@ export async function submitPublicJobRenewalRequest(input: z.infer<typeof Renewa
   const { error } = await fromJobRequests(admin).insert(insertRow);
   if (error) {
     if (error.code === '42P01') throw new Error('Renewal requests are not configured yet.');
-    // Older databases may not have scheduled_job_id — retry without it rather than fail the landlord.
-    if (['42703', 'PGRST204'].includes(error.code ?? '')) {
-      delete insertRow.scheduled_job_id;
-      const { error: retryErr } = await fromJobRequests(admin).insert(insertRow);
-      if (retryErr) throw new Error(retryErr.message);
-    } else {
-      throw new Error(error.message);
+    if (error.code === '23505') {
+      return {
+        ok: true,
+        engineer: pageData.engineer,
+        scheduled: Boolean(acceptedDate),
+        duplicate: true,
+      };
     }
+    throw new Error(error.message);
+  }
+
+  // The request reservation above wins the uniqueness race before any job or
+  // notification side effects run.
+  const renewalJobId = await ensureRenewalJobForSource(admin, {
+    sourceJob: job,
+    acceptedDate,
+    tenantName: request.tenantName,
+    tenantPhone: request.tenantPhone,
+    accessNotes: request.accessNotes,
+    propertyId: job.property_id ?? null,
+  });
+  if (renewalJobId) {
+    await fromJobRequests(admin)
+      .update({ scheduled_job_id: renewalJobId })
+      .eq('id', requestId);
   }
 
   // Clear the "renewal requested" marker on the source job now that the landlord has responded.

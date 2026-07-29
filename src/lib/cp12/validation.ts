@@ -22,6 +22,15 @@ export type Cp12TierOneInput = {
 
 const hasText = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
 const isAffirmative = (value: unknown) => value === true || ['true', 'yes', 'pass', 'confirmed'].includes(String(value ?? '').trim().toLowerCase());
+const UK_POSTCODE = /^(GIR\s?0AA|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2})$/i;
+
+function isValidInspectionDate(value: unknown) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime())
+    && parsed.toISOString().slice(0, 10) === value
+    && value <= new Date().toISOString().slice(0, 10);
+}
 
 function landlordAddress(fields: Record<string, unknown>) {
   return [
@@ -57,9 +66,30 @@ export function validateCp12TierOne(input: Cp12TierOneInput): string[] {
   (['inspection_date', 'property_address', 'landlord_name', 'engineer_name', 'gas_safe_number'] as const).forEach((key) => {
     if (!hasText(fields[key])) errors.push(`${CP12_FIELD_CONFIG[key].label} is required`);
   });
+  if (hasText(fields.inspection_date) && !isValidInspectionDate(fields.inspection_date)) {
+    errors.push('Inspection date must be a valid date and cannot be in the future');
+  }
+  if (hasText(fields.gas_safe_number) && !/^\d{6}$/.test(String(fields.gas_safe_number).trim())) {
+    errors.push('Gas Safe registration number must be 6 digits');
+  }
+  if ('job_address_line1' in fields && !hasText(fields.job_address_line1)) {
+    errors.push('Property address line 1 is required');
+  }
+  if ('job_postcode' in fields && (!hasText(fields.job_postcode) || !UK_POSTCODE.test(String(fields.job_postcode).trim()))) {
+    errors.push('Enter a valid property postcode');
+  }
   // Deliberately do not fall back to property_address: a landlord who lives at the
   // property may enter the same text, but it must have been captured as their address.
   if (!landlordAddress(fields)) errors.push(`${CP12_FIELD_CONFIG.landlord_address.label} is required`);
+  if ('landlord_address_line1' in fields && !hasText(fields.landlord_address_line1)) {
+    errors.push('Landlord address line 1 is required');
+  }
+  if (
+    'landlord_postcode' in fields
+    && (!hasText(fields.landlord_postcode) || !UK_POSTCODE.test(String(fields.landlord_postcode).trim()))
+  ) {
+    errors.push('Enter a valid landlord postcode');
+  }
   // Regulation 26(9) is confirmed per appliance/flue (checked below), not as a
   // separate record-level flag — the standalone confirmation was redundant.
 

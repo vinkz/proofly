@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { submitPropertyRenewalRequest } from '@/server/public-property';
+import { submitPropertyRenewalRequest } from '@/server/public-property-actions';
 
 const toDateOnly = (value: string) => {
   const slice = String(value ?? '').slice(0, 10);
@@ -116,7 +116,7 @@ export function PropertyRenewalForm({
         <input type="date" value={preferredDate} onChange={(e) => setPreferredDate(e.target.value)} className={inputClass} />
       </div>
       <input type="text" placeholder="Other notes on timing (optional)" value={preferredDates} onChange={(e) => setPreferredDates(e.target.value)} className={inputClass} />
-      {error ? <p className="text-[12px] text-[var(--color-red)]">{error}</p> : null}
+      {error ? <p role="alert" className="text-[12px] text-[var(--color-red)]">{error}</p> : null}
       <button
         type="submit"
         disabled={isPending}

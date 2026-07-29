@@ -4,6 +4,10 @@ import { POST as generate } from '@/app/api/free-cp12/generate/route';
 import { FREE_CP12_LIMITS } from '@/lib/cp12/free-tool';
 import type { FreeCp12PayloadInput } from '@/lib/cp12/freeCp12Payload';
 
+vi.mock('@/lib/public-action-security', () => ({
+  consumePublicActionRateLimit: async () => ({ allowed: true, remaining: 20, retryAfterSeconds: 0 }),
+}));
+
 /**
  * The free CP12 route must produce a real certificate for an anonymous visitor
  * and must not persist anything. The persistence half is asserted by mocking the

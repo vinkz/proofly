@@ -13,7 +13,7 @@ import { toUserMessage } from '@/lib/user-errors';
 
 const ResetSchema = z.object({
   code: z.string().min(5),
-  new_password: z.string().min(6, 'Password must be at least 6 characters'),
+  new_password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 function ResetPasswordInner() {

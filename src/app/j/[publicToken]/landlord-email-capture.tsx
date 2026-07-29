@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
-import { capturePublicJobLandlordEmail } from '@/server/public-job';
+import { capturePublicJobLandlordEmail } from '@/server/public-job-actions';
 
 export function LandlordEmailCapture({ token }: { token: string }) {
   const [email, setEmail] = useState('');

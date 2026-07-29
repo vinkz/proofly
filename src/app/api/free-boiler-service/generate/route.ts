@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { FREE_BOILER_SERVICE_LIMITS } from '@/lib/boiler-service/free-tool';
 import { FreeBoilerServiceSchema } from '@/lib/boiler-service/freeBoilerServicePayload';
+import { consumePublicActionRateLimit } from '@/lib/public-action-security';
 import { clientKeyFromRequest, rateLimit } from '@/lib/rate-limit';
 import { buildFreeBoilerServicePdf, freeBoilerServiceIssues } from '@/server/free-boiler-service';
 import { freeCp12Reference } from '@/server/free-cp12';
@@ -14,8 +15,9 @@ const HOUR_MS = 60 * 60 * 1000;
  * Nothing is written anywhere: no storage upload, no record row, no draft.
  */
 export async function POST(request: Request) {
+  const clientIdentifier = clientKeyFromRequest(request);
   const limit = rateLimit(
-    `free-boiler-service:generate:${clientKeyFromRequest(request)}`,
+    `free-boiler-service:generate:${clientIdentifier}`,
     FREE_BOILER_SERVICE_LIMITS.generatePerIpPerHour,
     HOUR_MS,
   );
@@ -27,6 +29,22 @@ export async function POST(request: Request) {
         retryAfterSeconds: limit.retryAfterSeconds,
       },
       { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } },
+    );
+  }
+  const durableLimit = await consumePublicActionRateLimit({
+    action: 'free_boiler_generate_ip',
+    identifier: clientIdentifier,
+    limit: FREE_BOILER_SERVICE_LIMITS.generatePerIpPerHour,
+    windowSeconds: HOUR_MS / 1000,
+  });
+  if (!durableLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: "You've generated a lot of records from this connection in the last hour. " +
+          'Try again shortly, or create an account for unlimited records.',
+        retryAfterSeconds: durableLimit.retryAfterSeconds,
+      },
+      { status: 429, headers: { 'Retry-After': String(durableLimit.retryAfterSeconds) } },
     );
   }
 

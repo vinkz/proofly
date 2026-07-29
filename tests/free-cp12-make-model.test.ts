@@ -63,6 +63,7 @@ describe('appliance make and model', () => {
         job_postcode: 'SE1 9SG',
         landlord_name: 'A Landlord',
         landlord_address_line1: '1 Landlord Street',
+        landlord_postcode: 'E1 6AN',
         engineer_name: 'Alex Engineer',
         gas_safe_number: '123456',
         engineer_signature: 'data:image/png;base64,iVBORw0KGgo=',

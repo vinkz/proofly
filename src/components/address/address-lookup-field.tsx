@@ -43,6 +43,7 @@ export function AddressLookupField({
   const [internalQuery, setInternalQuery] = useState('');
   const [suggestions, setSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   /** Once the provider is unavailable, stop asking for the rest of the visit. */
@@ -52,10 +53,14 @@ export function AddressLookupField({
   const skipSearchForRef = useRef<string | null>(null);
   const query = value ?? internalQuery;
   const isManualAddressInput = value !== undefined || onValueChange !== undefined;
+  const manualEntryNote = isManualAddressInput
+    ? 'Continue entering the address manually.'
+    : 'Type the address in the fields below.';
 
   const updateQuery = (nextValue: string) => {
     if (value === undefined) setInternalQuery(nextValue);
     onValueChange?.(nextValue);
+    setActiveIndex(-1);
   };
 
   useEffect(() => {
@@ -88,20 +93,20 @@ export function AddressLookupField({
           signal: controller.signal,
         });
         if (!response.ok) {
-          // 403 disabled, 500 unconfigured, 402 balance, 429 rate limited — all
+          // 401/403 disabled, 500 unconfigured, 402 balance, 429 rate limited — all
           // mean "stop asking and let them type".
-          setDisabled(response.status === 403 || response.status === 500);
+          setDisabled([401, 402, 403, 429, 500].includes(response.status));
           setSuggestions([]);
-          setNote('Address lookup is unavailable — type the address below.');
+          setNote(`Address lookup is unavailable. ${manualEntryNote}`);
           return;
         }
         const data = (await response.json()) as { suggestions?: AddressLookupSuggestion[] };
         setSuggestions(data.suggestions ?? []);
         setOpen((data.suggestions ?? []).length > 0);
-        setNote((data.suggestions ?? []).length === 0 ? 'No matches — type the address below.' : null);
+        setNote((data.suggestions ?? []).length === 0 ? `No matches. ${manualEntryNote}` : null);
       } catch (error) {
         if ((error as Error).name === 'AbortError') return;
-        setNote('Address lookup is unavailable — type the address below.');
+        setNote(`Address lookup is unavailable. ${manualEntryNote}`);
       } finally {
         setBusy(false);
       }
@@ -111,7 +116,7 @@ export function AddressLookupField({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query, disabled]);
+  }, [query, disabled, manualEntryNote]);
 
   const choose = async (suggestion: AddressLookupSuggestion) => {
     setOpen(false);
@@ -119,7 +124,7 @@ export function AddressLookupField({
     try {
       const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`);
       if (!response.ok) {
-        setNote('Could not load that address — type it below.');
+        setNote(`Could not load that address. ${manualEntryNote}`);
         return;
       }
       const data = (await response.json()) as { address?: AddressLookupResult };
@@ -133,9 +138,39 @@ export function AddressLookupField({
         setNote(null);
       }
     } catch {
-      setNote('Could not load that address — type it below.');
+      setNote(`Could not load that address. ${manualEntryNote}`);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestions.length) {
+      if (event.key === 'Escape') setOpen(false);
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((current) => (current + 1) % suggestions.length);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
+      return;
+    }
+    if (event.key === 'Enter' && open && activeIndex >= 0) {
+      event.preventDefault();
+      void choose(suggestions[activeIndex]);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setOpen(false);
+      setActiveIndex(-1);
     }
   };
 
@@ -156,33 +191,48 @@ export function AddressLookupField({
           value={query}
           onChange={(e) => updateQuery(e.target.value)}
           onFocus={() => setOpen(suggestions.length > 0)}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           autoComplete={autoComplete}
+          role="combobox"
+          aria-autocomplete="list"
           aria-expanded={open}
           aria-controls={listId}
+          aria-activedescendant={
+            open && activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined
+          }
         />
       </label>
       {hint && !note ? (
         <span className="mt-1 block text-[12px] text-[var(--color-text-tertiary)]">{hint}</span>
       ) : null}
-      {busy ? (
-        <span className="mt-1 block text-[12px] text-[var(--color-text-tertiary)]">Searching…</span>
-      ) : null}
-      {note ? (
-        <span className="mt-1 block text-[12px] text-[var(--color-text-tertiary)]">{note}</span>
-      ) : null}
+      <span aria-live="polite" aria-atomic="true">
+        {busy ? (
+          <span className="mt-1 block text-[12px] text-[var(--color-text-tertiary)]">Searching…</span>
+        ) : null}
+        {note ? (
+          <span className="mt-1 block text-[12px] text-[var(--color-text-tertiary)]">{note}</span>
+        ) : null}
+      </span>
 
       {open && suggestions.length ? (
         <ul
           id={listId}
+          role="listbox"
           className="absolute z-20 mt-1 max-h-[240px] w-full overflow-auto rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] shadow-lg"
         >
-          {suggestions.map((suggestion) => (
-            <li key={suggestion.id}>
+          {suggestions.map((suggestion, index) => (
+            <li key={suggestion.id} role="none">
               <button
+                id={`${listId}-option-${index}`}
                 type="button"
+                role="option"
+                aria-selected={index === activeIndex}
                 onClick={() => choose(suggestion)}
-                className="block w-full px-3 py-2.5 text-left text-[13px] text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-background-secondary)]"
+                onMouseEnter={() => setActiveIndex(index)}
+                className={`block w-full px-3 py-2.5 text-left text-[13px] text-[var(--color-text-primary)] transition-colors ${
+                  index === activeIndex ? 'bg-[var(--color-background-secondary)]' : 'hover:bg-[var(--color-background-secondary)]'
+                }`}
               >
                 {suggestion.label || suggestion.address}
               </button>
