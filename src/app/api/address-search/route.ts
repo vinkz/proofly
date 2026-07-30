@@ -25,29 +25,23 @@ const MIN_QUERY_LENGTH = 3;
 function getProviderFallback(status: number, resource: 'search' | 'address') {
   switch (status) {
     case 400:
-      return resource === 'search' ? 'Enter at least 3 characters to search addresses' : 'Invalid address lookup request';
+      return resource === 'search'
+        ? 'Enter at least 3 characters to search addresses'
+        : 'We could not load that address. Enter it manually instead.';
     case 401:
     case 403:
-      return 'Address lookup provider rejected the API key';
     case 402:
-      // Payment Required — provider key balance depleted. Keep this generic so
-      // the raw "key balance depleted" never reaches the user.
-      return 'Address lookup is temporarily unavailable';
+      return 'Address lookup is temporarily unavailable. Enter the address manually instead.';
     case 404:
-      return resource === 'search' ? 'No addresses found' : 'Address not found';
+      return resource === 'search'
+        ? 'No addresses found. Try a postcode or enter the address manually.'
+        : 'We could not find that address. Enter it manually instead.';
     case 429:
     case 503:
-      return 'Address lookup rate limit reached';
+      return 'Address lookup is busy. Try again shortly or enter the address manually.';
     default:
-      return `Address lookup failed (${status})`;
+      return 'Address lookup is unavailable. Enter the address manually instead.';
   }
-}
-
-// 402 (Payment Required) carries the provider's raw "key balance depleted"
-// message — never surface that. All other statuses keep their provider detail,
-// which is useful for diagnosing setup/auth issues.
-function shouldAppendProviderDetail(status: number) {
-  return status !== 402;
 }
 
 function getClientStatus(status: number) {
@@ -67,30 +61,13 @@ function getClientStatus(status: number) {
 
 async function buildProviderError(response: Response, resource: 'search' | 'address') {
   const fallback = getProviderFallback(response.status, resource);
-  if (!shouldAppendProviderDetail(response.status)) {
-    return fallback;
-  }
-  const textResponse = response.clone();
-
-  try {
-    const payload = await response.json();
-    const message =
-      typeof payload?.message === 'string'
-        ? payload.message
-        : typeof payload?.Message === 'string'
-          ? payload.Message
-          : typeof payload?.detail === 'string'
-            ? payload.detail
-            : '';
-    return `${fallback}${message && message !== fallback ? `: ${message}` : ''}`;
-  } catch {
-    try {
-      const text = (await textResponse.text()).trim();
-      return `${fallback}${text && text !== fallback ? `: ${text}` : ''}`;
-    } catch {
-      return fallback;
-    }
-  }
+  // Provider bodies can contain key, quota, or implementation details. Keep
+  // those server-side and give the visitor a useful manual-entry recovery path.
+  console.warn('Address lookup provider request failed', {
+    resource,
+    status: response.status,
+  });
+  return fallback;
 }
 
 async function buildProviderFailure(response: Response, resource: 'search' | 'address') {

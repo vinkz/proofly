@@ -2,6 +2,9 @@
 
 Reverse-ish chronological log of shipped work. Newer entries carry dated headers; the untitled bullets below the header predate the dated format.
 
+## 2026-07-30 — Free CP12 indexing enabled
+- Enabled search indexing and sitemap discovery for `/free-cp12` following explicit product-owner approval without registered-engineer sign-off; retained the unresolved Gas Safe validation notes in code so indexing is not mistaken for a compliance review.
+
 ## 2026-07-29 — Free CP12 launch hardening
 - Moved Ideal Postcodes autocomplete into Address line 1 for both property and landlord addresses, removed the redundant find-address controls, and clarified the property-to-landlord copy action.
 - Added keyboard/assistive-technology support to address suggestions and aligned the emailed, downloaded, and on-screen CP12 documents to the same issue reference.

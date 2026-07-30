@@ -9,6 +9,7 @@ import {
   DEFAULT_VOLUME_CORRECTION_FACTOR,
 } from '@/lib/gas-rate-calculator';
 import type { GasRateResult } from '@/lib/gas-rate-calculator';
+import { toUserMessage } from '@/lib/user-errors';
 
 type MeterType = 'metric' | 'imperial';
 type VolumeMode = 'timed' | 'readings';
@@ -65,7 +66,7 @@ export function GasRateClient() {
       if (data.ok) {
         setResult(data.result);
       } else {
-        setError(data.error ?? 'Unable to calculate.');
+        setError(toUserMessage(data.error, 'Unable to calculate. Check the values and try again.'));
       }
     } catch {
       setError('Network error — check your connection and try again.');
@@ -261,7 +262,7 @@ export function GasRateClient() {
       {/* Error */}
       {error ? (
         <div className="rounded-[12px] border-[0.5px] border-[var(--color-red)]/30 bg-[var(--color-red-bg)] px-4 py-3 text-[13px] text-[var(--color-red)]">
-          {error}
+          <span role="alert">{error}</span>
         </div>
       ) : null}
 

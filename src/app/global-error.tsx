@@ -7,6 +7,7 @@ import './globals.css';
 
 import { useEffect } from 'react';
 import * as Sentry from '@sentry/nextjs';
+import Link from 'next/link';
 
 export default function GlobalError({
   error,
@@ -27,7 +28,7 @@ export default function GlobalError({
             <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">CertNow</p>
             <h1 className="mt-3 text-[22px] font-semibold text-[var(--color-text-primary)]">Something went wrong</h1>
             <p className="mt-2 text-[14px] leading-[1.6] text-[var(--color-text-secondary)]">
-              The error has been logged. Try again, or return to the dashboard if the problem continues.
+              We could not load this page. Try again, or return to the home page if the problem continues.
             </p>
             <div className="mt-6 flex flex-col gap-2">
               <button
@@ -37,12 +38,12 @@ export default function GlobalError({
               >
                 Try again
               </button>
-              <a
-                href="/dashboard"
+              <Link
+                href="/"
                 className="flex h-[44px] items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] text-[14px] font-medium text-[var(--color-text-secondary)]"
               >
-                Back to dashboard
-              </a>
+                Back to home
+              </Link>
             </div>
           </div>
         </main>

@@ -12,6 +12,7 @@ import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/user-errors';
 
 type RequestReviewProps = {
   initialRequest: JobRequestPrefill;
@@ -147,10 +148,10 @@ export function RequestReview({ initialRequest, clients, propertiesByClientId }:
       } catch (error) {
         pushToast({
           title: 'Could not schedule the job',
-          description:
-            error instanceof Error
-              ? `${error.message} — use “Edit details” to fill in anything missing.`
-              : 'Use “Edit details” to check the address, then try again.',
+          description: toUserMessage(
+            error,
+            'Use “Edit details” to check the address, then try again.',
+          ),
           variant: 'error',
         });
       }

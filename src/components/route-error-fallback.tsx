@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import * as Sentry from '@sentry/nextjs';
+import Link from 'next/link';
 
 /**
  * On-brand fallback for route-segment error boundaries (error.tsx). Renders
@@ -11,12 +12,16 @@ export function RouteErrorFallback({
   error,
   reset,
   title = 'Something went wrong',
-  description = 'The error has been logged. Try again, or head back to your dashboard if the problem continues.',
+  description = 'We could not load this page. Try again, or head back to your dashboard if the problem continues.',
+  backHref = '/dashboard',
+  backLabel = 'Back to dashboard',
 }: {
   error: Error & { digest?: string };
   reset: () => void;
   title?: string;
   description?: string;
+  backHref?: string;
+  backLabel?: string;
 }) {
   useEffect(() => {
     Sentry.captureException(error);
@@ -36,12 +41,12 @@ export function RouteErrorFallback({
           >
             Try again
           </button>
-          <a
-            href="/dashboard"
+          <Link
+            href={backHref}
             className="flex h-[44px] items-center justify-center rounded-[22px] border-[0.5px] border-[var(--color-border-secondary)] text-[14px] font-medium text-[var(--color-text-secondary)]"
           >
-            Back to dashboard
-          </a>
+            {backLabel}
+          </Link>
         </div>
       </div>
     </div>

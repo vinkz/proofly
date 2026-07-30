@@ -113,7 +113,10 @@ export default async function JobPdfPage({
     } else if (report?.storage_path) {
       pdfUrl = `/api/jobs/${id}/pdf/file?source=report`;
     } else {
-      pdfError = certificateError?.message ?? reportError?.message ?? 'No PDF found for this job';
+      pdfError = toUserMessage(
+        certificateError?.message ?? reportError?.message,
+        'No PDF is available for this job yet.',
+      );
     }
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { supabaseServerAction, supabaseServerServiceRole } from '@/lib/supabaseServer';
+import { toUserMessage } from '@/lib/user-errors';
 import { renderInvoicePdf } from '@/server/pdf/renderInvoicePdf';
 
 type ProfileSummary = {
@@ -31,7 +32,10 @@ export async function POST(
     error: authErr,
   } = await sb.auth.getUser();
   if (authErr || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Your session has expired. Sign in again to generate this invoice.' },
+      { status: 401 },
+    );
   }
 
   // Invoices tables are not in the generated types yet; use an untyped handle.
@@ -45,7 +49,15 @@ export async function POST(
     .eq('user_id', user.id)
     .maybeSingle();
   if (invoiceErr || !invoice) {
-    return NextResponse.json({ error: invoiceErr?.message ?? 'Invoice not found' }, { status: 404 });
+    return NextResponse.json(
+      {
+        error: toUserMessage(
+          invoiceErr?.message ?? 'Invoice not found',
+          'We could not load this invoice. Refresh and try again.',
+        ),
+      },
+      { status: invoiceErr ? 500 : 404 },
+    );
   }
 
   const { data: lineItems, error: itemsErr } = await anySb
@@ -54,7 +66,10 @@ export async function POST(
     .eq('invoice_id', invoiceId)
     .order('position', { ascending: true });
   if (itemsErr) {
-    return NextResponse.json({ error: itemsErr.message }, { status: 500 });
+    return NextResponse.json(
+      { error: toUserMessage(itemsErr.message, 'We could not load the invoice items. Refresh and try again.') },
+      { status: 500 },
+    );
   }
 
   const { data: job } = await sb
@@ -82,7 +97,15 @@ export async function POST(
     const { data, error } = await sb.from('profiles').select(columns).eq('id', user.id).maybeSingle();
     if (error) {
       if (error.code === '42703') continue;
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: toUserMessage(
+            error.message,
+            'We could not load your company details for this invoice. Check Settings and try again.',
+          ),
+        },
+        { status: 500 },
+      );
     }
     profile = (data ?? null) as ProfileSummary | null;
     break;
@@ -113,44 +136,53 @@ export async function POST(
     .filter(Boolean)
     .join(', ');
 
-  const pdfBytes = await renderInvoicePdf({
-    invoice_number: invoice.invoice_number ?? 'Invoice',
-    status: invoice.status ?? 'draft',
-    issue_date: invoice.issue_date,
-    due_date: invoice.due_date,
-    vat_rate: Number(invoice.vat_rate ?? 0),
-    currency: invoice.currency ?? 'GBP',
-    notes: invoice.notes ?? '',
-    profile: {
-      full_name: profile?.full_name ?? null,
-      company_name: profile?.company_name ?? null,
-      company_address: companyAddress || null,
-      company_phone: profile?.company_phone ?? null,
-      default_engineer_name: profile?.default_engineer_name ?? null,
-      default_engineer_id: profile?.default_engineer_id ?? null,
-      gas_safe_number: profile?.gas_safe_number ?? null,
-      bank_name: profile?.bank_name ?? null,
-      bank_account_name: profile?.bank_account_name ?? null,
-      bank_sort_code: profile?.bank_sort_code ?? null,
-      bank_account_number: profile?.bank_account_number ?? null,
-    },
-    client: {
-      name: invoice.client_name_override ?? client?.name ?? job?.client_name ?? '',
-      address: normalizeAddress(invoice.client_address_override ?? client?.address ?? null),
-      email: invoice.client_email_override ?? client?.email ?? null,
-      phone: invoice.client_phone_override ?? client?.phone ?? null,
-    },
-    job: {
-      title: job?.title ?? null,
-      address: normalizeAddress(job?.address ?? null),
-    },
-    lineItems: normalizedItems.map((item) => ({
-      description: item.description ?? '',
-      quantity: Number(item.quantity ?? 0),
-      unit_price: Number(item.unit_price ?? 0),
-      vat_exempt: Boolean(item.vat_exempt),
-    })),
-  });
+  let pdfBytes: Uint8Array;
+  try {
+    pdfBytes = await renderInvoicePdf({
+      invoice_number: invoice.invoice_number ?? 'Invoice',
+      status: invoice.status ?? 'draft',
+      issue_date: invoice.issue_date,
+      due_date: invoice.due_date,
+      vat_rate: Number(invoice.vat_rate ?? 0),
+      currency: invoice.currency ?? 'GBP',
+      notes: invoice.notes ?? '',
+      profile: {
+        full_name: profile?.full_name ?? null,
+        company_name: profile?.company_name ?? null,
+        company_address: companyAddress || null,
+        company_phone: profile?.company_phone ?? null,
+        default_engineer_name: profile?.default_engineer_name ?? null,
+        default_engineer_id: profile?.default_engineer_id ?? null,
+        gas_safe_number: profile?.gas_safe_number ?? null,
+        bank_name: profile?.bank_name ?? null,
+        bank_account_name: profile?.bank_account_name ?? null,
+        bank_sort_code: profile?.bank_sort_code ?? null,
+        bank_account_number: profile?.bank_account_number ?? null,
+      },
+      client: {
+        name: invoice.client_name_override ?? client?.name ?? job?.client_name ?? '',
+        address: normalizeAddress(invoice.client_address_override ?? client?.address ?? null),
+        email: invoice.client_email_override ?? client?.email ?? null,
+        phone: invoice.client_phone_override ?? client?.phone ?? null,
+      },
+      job: {
+        title: job?.title ?? null,
+        address: normalizeAddress(job?.address ?? null),
+      },
+      lineItems: normalizedItems.map((item) => ({
+        description: item.description ?? '',
+        quantity: Number(item.quantity ?? 0),
+        unit_price: Number(item.unit_price ?? 0),
+        vat_exempt: Boolean(item.vat_exempt),
+      })),
+    });
+  } catch (error) {
+    console.error('[invoice-pdf] render failed', error);
+    return NextResponse.json(
+      { error: 'We could not generate this invoice PDF. Check the invoice details and try again.' },
+      { status: 500 },
+    );
+  }
 
   const admin = await supabaseServerServiceRole();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,7 +193,10 @@ export async function POST(
     upsert: true,
   });
   if (uploadErr) {
-    return NextResponse.json({ error: uploadErr.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'We generated the invoice but could not save the PDF. Please try again.' },
+      { status: 500 },
+    );
   }
 
   await anyAdmin.from('invoices').update({ pdf_path: storagePath }).eq('id', invoiceId);
