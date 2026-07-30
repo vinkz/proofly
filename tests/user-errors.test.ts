@@ -20,6 +20,29 @@ describe('toUserMessage', () => {
     }
   });
 
+  it('translates known technical failures into useful recovery messages', () => {
+    expect(
+      toUserMessage(
+        new Error('duplicate key value violates unique constraint "certificates_job_id_key"'),
+        'Please try again.',
+      ),
+    ).toBe(
+      'A certificate has already been generated for this job. Open the job to view or resend it.',
+    );
+    expect(toUserMessage(new Error('Unauthorized'), 'Please try again.')).toBe(
+      'Your session has expired. Sign in again and retry this action.',
+    );
+    expect(
+      toUserMessage(new Error('generateCertificatePdf requires authenticated user'), 'Please try again.'),
+    ).toBe('Your session has expired. Sign in again and retry this action.');
+    expect(toUserMessage(new Error('Job not found'), 'Please try again.')).toBe(
+      'This job is no longer available, or you do not have access to it.',
+    );
+    expect(toUserMessage(new Error('Client not found'), 'Please try again.')).toContain(
+      'landlord or client',
+    );
+  });
+
   it('hides database internals', () => {
     for (const message of [
       'duplicate key value violates unique constraint "certificates_pkey"',
@@ -27,6 +50,9 @@ describe('toUserMessage', () => {
       'new row violates row-level security policy for table "free_tool_leads"',
       'PGRST116: JSON object requested, multiple rows returned',
       'column "foo" of relation "jobs" does not exist',
+      'permission denied for table jobs',
+      'invalid input syntax for type uuid: "bad-id"',
+      'Could not find the invoices table in the schema cache',
     ]) {
       expect(toUserMessage(new Error(message), 'Please try again.')).toBe('Please try again.');
     }
@@ -38,6 +64,8 @@ describe('toUserMessage', () => {
       'TypeError: fetch failed',
       'connect ECONNREFUSED 127.0.0.1:54321',
       'An error occurred in the Server Components render. The specific message is omitted',
+      'Stripe API returned status code 400 with request id req_123',
+      'Failed to fetch',
     ]) {
       expect(toUserMessage(new Error(message), 'Please try again.')).toBe('Please try again.');
     }

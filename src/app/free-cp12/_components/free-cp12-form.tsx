@@ -54,6 +54,7 @@ import {
   cp12FailedChecks,
   type Cp12DefectAppliance,
 } from '@/lib/cp12/defect-summary';
+import { toUserMessage } from '@/lib/user-errors';
 
 const PASS_FAIL = [
   { label: 'Pass', value: 'pass' },
@@ -398,7 +399,12 @@ export function FreeCp12Form() {
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string; issues?: string[] };
         setIssues(data.issues ?? []);
-        setError(data.error ?? 'Something went wrong generating the certificate.');
+        setError(
+          toUserMessage(
+            data.error,
+            'We could not generate the certificate. Check the highlighted answers and try again.',
+          ),
+        );
         return;
       }
       const data = (await response.json()) as { reference: string; documents: GeneratedDocument[] };
@@ -466,7 +472,12 @@ export function FreeCp12Form() {
         documents?: GeneratedDocument[];
       };
       if (!response.ok) {
-        setError(data.error ?? 'Something went wrong. Try again in a moment.');
+        setError(
+          toUserMessage(
+            data.error,
+            'We could not prepare the download. Check your email address and try again.',
+          ),
+        );
         return;
       }
       if (!data.documents?.length) {

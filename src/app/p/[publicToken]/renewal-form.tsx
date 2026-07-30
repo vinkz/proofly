@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { toUserMessage } from '@/lib/user-errors';
 import { submitPropertyRenewalRequest } from '@/server/public-property-actions';
 
 const toDateOnly = (value: string) => {
@@ -79,7 +81,12 @@ export function PropertyRenewalForm({
             setScheduled(Boolean(result?.scheduled));
             setSuccess(true);
           } catch (err) {
-            setError(err instanceof Error ? err.message : 'Could not send request.');
+            setError(
+              toUserMessage(
+                err,
+                'We could not send this renewal request. Check your connection and try again.',
+              ),
+            );
           }
         });
       }}

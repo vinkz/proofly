@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
+import { toUserMessage } from '@/lib/user-errors';
 import { submitPublicJobRenewalRequest } from '@/server/public-job-actions';
 
 const toDateOnly = (value: string) => {
@@ -68,7 +69,12 @@ export function RenewalRequestForm({
                 : `Request sent. Your engineer has the access details and will be in touch.${contact}`,
             );
           } catch (submitError) {
-            setError(submitError instanceof Error ? submitError.message : 'Could not send request.');
+            setError(
+              toUserMessage(
+                submitError,
+                'We could not send this renewal request. Check your connection and try again.',
+              ),
+            );
           }
         });
       }}

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { Input } from '@/components/ui/input';
+import { toUserMessage } from '@/lib/user-errors';
 import { sendEngineerRequestLinkToLandlord } from '@/server/job-requests';
 
 export function RequestLandlordDetailsCard({
@@ -90,7 +91,12 @@ export function RequestLandlordDetailsCard({
                     : 'Email delivery is not configured, but your request link is ready to share.',
                 );
               } catch (sendError) {
-                setError(sendError instanceof Error ? sendError.message : 'Could not send request link.');
+                setError(
+                  toUserMessage(
+                    sendError,
+                    'We could not email the request link. Copy the link or send it by SMS instead.',
+                  ),
+                );
               }
             });
           }}
@@ -110,7 +116,7 @@ export function RequestLandlordDetailsCard({
         <p className="mt-2.5 text-[13px] font-medium text-[var(--color-action)]">{message}</p>
       ) : null}
       {error ? (
-        <p className="mt-2.5 text-[13px] font-medium text-[var(--color-red)]">{error}</p>
+        <p role="alert" className="mt-2.5 text-[13px] font-medium text-[var(--color-red)]">{error}</p>
       ) : null}
     </section>
   );

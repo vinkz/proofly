@@ -5,6 +5,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
+import { toUserMessage } from '@/lib/user-errors';
 import {
   sendDeliveryBundle,
   updateDeliveryRecipientEmails,
@@ -139,7 +140,12 @@ export function SendPanel({
       try {
         const saveResult = await updateDeliveryRecipientEmails(bundle.jobId, { landlordEmail });
         if (!saveResult.ok) {
-          setError(saveResult.error ?? 'Could not save recipient email.');
+          setError(
+            toUserMessage(
+              saveResult.error,
+              'We could not save the landlord email. Check it and try again.',
+            ),
+          );
           return;
         }
         const result = await sendDeliveryBundle(bundle.jobId);
@@ -148,10 +154,20 @@ export function SendPanel({
           setSent(true);
           setSentTo(result.recipientsSent);
         } else {
-          setError(result.error ?? 'Send failed. Please try again.');
+          setError(
+            toUserMessage(
+              result.error,
+              'We could not send the handover. Check the landlord email and try again.',
+            ),
+          );
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Send failed. Please try again.');
+        setError(
+          toUserMessage(
+            err,
+            'We could not send the handover. Check the landlord email and try again.',
+          ),
+        );
       }
     });
   };
@@ -241,7 +257,7 @@ export function SendPanel({
         ) : null}
       </div>
 
-      {error ? <p className="mt-3 text-[12px] text-[var(--color-red)]">{error}</p> : null}
+      {error ? <p role="alert" className="mt-3 text-[12px] text-[var(--color-red)]">{error}</p> : null}
 
       <button
         type="button"

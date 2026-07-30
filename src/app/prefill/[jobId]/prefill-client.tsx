@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react';
 
-import { submitPrefillForm } from '@/server/jobs';
 import { Input } from '@/components/ui/input';
+import { toUserMessage } from '@/lib/user-errors';
+import { submitPrefillForm } from '@/server/jobs';
 
 export function PrefillClient({
   jobId,
@@ -52,7 +53,12 @@ export function PrefillClient({
             setMessage('Details sent. Your engineer has been notified and can prepare the job.');
             event.currentTarget.reset();
           } catch (submitError) {
-            setError(submitError instanceof Error ? submitError.message : 'Could not submit details.');
+            setError(
+              toUserMessage(
+                submitError,
+                'We could not send these details. Check the form and try again.',
+              ),
+            );
           }
         });
       }}
@@ -110,7 +116,7 @@ export function PrefillClient({
         </div>
       ) : null}
       {error ? (
-        <div className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] font-medium text-[var(--color-red)]">
+        <div role="alert" className="rounded-[10px] bg-[var(--color-red-bg)] px-4 py-3 text-[13px] font-medium text-[var(--color-red)]">
           {error}
         </div>
       ) : null}

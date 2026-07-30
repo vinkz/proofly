@@ -28,7 +28,10 @@ export function PdfActions({
         if (result.status === 'NOT_CONFIGURED') {
           pushToast({
             title: 'Email not configured',
-            description: result.message ?? 'Configure an email provider to send PDFs.',
+            description: toUserMessage(
+              result.message,
+              'Email sending is not configured yet. Download the PDF and share it manually.',
+            ),
             variant: 'error',
           });
           return;

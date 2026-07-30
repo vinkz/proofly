@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
+import { toUserMessage } from '@/lib/user-errors';
 import {
   calculateGasRate,
   DEFAULT_CALORIFIC_VALUE_MJ_PER_M3,
@@ -81,7 +82,10 @@ export function FreeGasRateClient() {
         error: null,
       };
     } catch (e) {
-      return { result: null, error: e instanceof Error ? e.message : 'Check the values and try again.' };
+      return {
+        result: null,
+        error: toUserMessage(e, 'Check the values and try again.'),
+      };
     }
   }, [meterType, volumeMode, volume, startReading, endReading, duration, calorificValue, correctionFactor]);
 

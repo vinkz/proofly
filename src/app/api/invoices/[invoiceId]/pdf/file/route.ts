@@ -16,7 +16,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ inv
     error: authErr,
   } = await sb.auth.getUser();
   if (authErr || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Your session has expired. Sign in again to view this invoice.' },
+      { status: 401 },
+    );
   }
 
   const admin = await supabaseServerServiceRole();
@@ -25,7 +28,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ inv
   const storagePath = `${user.id}/${invoiceId}.pdf`;
   const { data, error } = await anyAdmin.storage.from('invoices').download(storagePath);
   if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? 'PDF not found' }, { status: 404 });
+    return NextResponse.json(
+      { error: 'This invoice PDF is not ready yet. Generate it again from the invoice page.' },
+      { status: 404 },
+    );
   }
 
   const bytes = new Uint8Array(await data.arrayBuffer());

@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toUserMessage } from '@/lib/user-errors';
 import { sendEngineerRequestLinkToLandlord } from '@/server/job-requests';
 
 function normalizePhoneForWhatsapp(value: string) {
@@ -67,7 +68,12 @@ export function SendRequestLinkCard({ requestUrl }: { requestUrl: string }) {
                     : 'Email delivery is not configured, but your request link is ready.',
                 );
               } catch (sendError) {
-                setError(sendError instanceof Error ? sendError.message : 'Could not send request link.');
+                setError(
+                  toUserMessage(
+                    sendError,
+                    'We could not email the request link. Copy it or send it by WhatsApp instead.',
+                  ),
+                );
               }
             });
             return;
@@ -82,7 +88,7 @@ export function SendRequestLinkCard({ requestUrl }: { requestUrl: string }) {
         {isPending ? 'Sending...' : actionLabel}
       </Button>
       {message ? <p className="text-center text-[13px] font-medium text-[var(--color-action)]">{message}</p> : null}
-      {error ? <p className="text-center text-[13px] font-medium text-[var(--color-red)]">{error}</p> : null}
+      {error ? <p role="alert" className="text-center text-[13px] font-medium text-[var(--color-red)]">{error}</p> : null}
     </div>
   );
 }

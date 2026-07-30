@@ -32,6 +32,7 @@ import type { AddressLookupResult } from '@/lib/address-lookup';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { getMakes, getModelsForMake } from '@/lib/applianceCatalog/ukBoilers';
 import { CP12_FLUE_TYPES, CP12_LOCATIONS } from '@/types/cp12';
+import { toUserMessage } from '@/lib/user-errors';
 
 const PASS_FAIL = [
   { label: 'Pass', value: 'pass' },
@@ -197,7 +198,12 @@ export function FreeBoilerServiceForm() {
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string; issues?: string[] };
         setIssues(data.issues ?? []);
-        setError(data.error ?? 'Something went wrong generating the record.');
+        setError(
+          toUserMessage(
+            data.error,
+            'We could not generate the service record. Check the highlighted answers and try again.',
+          ),
+        );
         return;
       }
       const blob = await response.blob();
@@ -244,7 +250,12 @@ export function FreeBoilerServiceForm() {
         reference?: string;
       };
       if (!response.ok) {
-        setError(data.error ?? 'Something went wrong. Try again in a moment.');
+        setError(
+          toUserMessage(
+            data.error,
+            'We could not prepare the download. Check your email address and try again.',
+          ),
+        );
         return;
       }
       setEmailed(Boolean(data.emailed));
@@ -359,7 +370,7 @@ export function FreeBoilerServiceForm() {
               {busy ? 'Sending…' : 'Email and download'}
             </Button>
           </div>
-          {error ? <p className="mt-3 text-[13px] text-[var(--color-red)]">{error}</p> : null}
+          {error ? <p role="alert" className="mt-3 text-[13px] text-[var(--color-red)]">{error}</p> : null}
         </form>
       </div>
     );
@@ -665,7 +676,7 @@ export function FreeBoilerServiceForm() {
         </div>
       ) : null}
 
-      {error ? <p className="mb-4 text-[13px] text-[var(--color-red)]">{error}</p> : null}
+      {error ? <p role="alert" className="mb-4 text-[13px] text-[var(--color-red)]">{error}</p> : null}
 
       <div className="sticky bottom-4 flex justify-end">
         <Button variant="primary" onClick={handleGenerate} disabled={busy} className="shadow-lg">

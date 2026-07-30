@@ -30,7 +30,7 @@ describe('address-search route', () => {
     expect(payload.error).toContain('at least 3 characters');
   });
 
-  it('returns the provider unauthorized error with a 401 status', async () => {
+  it('hides provider details and offers manual entry when the provider rejects a request', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ message: 'Unauthorized' }), {
         status: 401,
@@ -42,8 +42,11 @@ describe('address-search route', () => {
     const payload = (await response.json()) as { error: string };
 
     expect(response.status).toBe(401);
-    expect(payload.error).toContain('API key');
-    expect(payload.error).toContain('Unauthorized');
+    expect(payload.error).toBe(
+      'Address lookup is temporarily unavailable. Enter the address manually instead.',
+    );
+    expect(payload.error).not.toContain('API key');
+    expect(payload.error).not.toContain('Unauthorized');
   });
 
   it('returns normalized autocomplete suggestions on success', async () => {

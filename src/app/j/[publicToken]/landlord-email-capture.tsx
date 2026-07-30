@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 
+import { toUserMessage } from '@/lib/user-errors';
 import { capturePublicJobLandlordEmail } from '@/server/public-job-actions';
 
 export function LandlordEmailCapture({ token }: { token: string }) {
@@ -38,7 +39,12 @@ export function LandlordEmailCapture({ token }: { token: string }) {
             setMessage(`Reminder saved. We'll use it for renewal reminders${dueText}.${contact}`);
             setEmail('');
           } catch (submitError) {
-            setError(submitError instanceof Error ? submitError.message : 'Could not save email.');
+            setError(
+              toUserMessage(
+                submitError,
+                'We could not save this email. Check the address and try again.',
+              ),
+            );
           }
         });
       }}
@@ -58,7 +64,7 @@ export function LandlordEmailCapture({ token }: { token: string }) {
       >
         {isPending ? 'Saving…' : 'Save for reminders →'}
       </button>
-      {error ? <p className="text-[12px] text-[#a32d2d]">{error}</p> : null}
+      {error ? <p role="alert" className="text-[12px] text-[#a32d2d]">{error}</p> : null}
     </form>
   );
 }
