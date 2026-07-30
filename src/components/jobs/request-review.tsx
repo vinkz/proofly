@@ -130,7 +130,7 @@ export function RequestReview({ initialRequest, clients, propertiesByClientId }:
           jobAddressPostcode: address.postcode,
           jobAddressTel: sitePhone,
           landlordName: initialRequest.landlordName,
-          landlordCompany: '',
+          landlordCompany: initialRequest.landlordCompany,
           landlordAddressLine1: initialRequest.landlordAddressLine1,
           landlordAddressLine2: initialRequest.landlordAddressLine2,
           landlordCity: initialRequest.landlordCity,

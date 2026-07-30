@@ -496,7 +496,7 @@ export function SoloJobForm({
     setJobAddressPostcode(address.postcode);
     setJobAddressTel(siteContact);
     setLandlordName(initialRequest.landlordName);
-    setLandlordCompany('');
+    setLandlordCompany(initialRequest.landlordCompany);
     setLandlordAddressLine1(initialRequest.landlordAddressLine1);
     setLandlordAddressLine2(initialRequest.landlordAddressLine2);
     setLandlordCity(initialRequest.landlordCity);

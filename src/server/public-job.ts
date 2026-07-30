@@ -63,7 +63,6 @@ export type PublicJobPageData = {
   // the property vault (/p), so /j links here instead of hosting its own booking form.
   propertyToken: string | null;
   landlordEmail: string | null;
-  landlordHasMultipleJobs: boolean;
   landlordName: string | null;
   engineer: {
     name: string | null;
@@ -226,18 +225,6 @@ export async function getPublicJobByToken(token: string): Promise<PublicJobPageD
   const request = requestRow as Record<string, unknown> | null;
 
   const landlordEmail = pickText(fieldMap.landlord_email, client?.email ?? null) || null;
-  let landlordJobCount = 0;
-  if (landlordEmail) {
-    const { data: matchingClients } = await admin.from('clients').select('id').eq('email', landlordEmail);
-    const clientIds = (matchingClients ?? []).map((row) => row.id).filter(Boolean);
-    if (clientIds.length) {
-      const { count } = await admin
-        .from('jobs')
-        .select('id', { count: 'exact', head: true })
-        .in('client_id', clientIds);
-      landlordJobCount = count ?? 0;
-    }
-  }
 
   return {
     token: parsedToken.data,
@@ -257,7 +244,6 @@ export async function getPublicJobByToken(token: string): Promise<PublicJobPageD
     renewalRequestedAt: pickText(fieldMap.renewal_requested_at) || null,
     propertyToken,
     landlordEmail,
-    landlordHasMultipleJobs: landlordJobCount > 1,
     landlordName: pickText(fieldMap.landlord_name, client?.name ?? null, job.client_name) || null,
     engineer: {
       name: pickText(profile?.default_engineer_name, profile?.full_name) || null,
