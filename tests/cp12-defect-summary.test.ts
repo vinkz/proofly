@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeCp12DefectSummary, cp12ApplianceHasFailedCheck, cp12FailedChecks } from '@/lib/cp12/defect-summary';
+import {
+  CP12_DEFECT_CHECK_KEYS,
+  composeCp12DefectSummary,
+  cp12ApplianceHasFailedCheck,
+  cp12FailedChecks,
+} from '@/lib/cp12/defect-summary';
+import { CP12_APPLIANCE_CHECKS } from '@/lib/cp12/applianceChecks';
 
 describe('cp12 defect summary', () => {
   /**
@@ -80,5 +86,30 @@ describe('cp12 defect summary', () => {
   it('produces empty strings when everything passes', () => {
     const summary = composeCp12DefectSummary([{ location: 'Kitchen', ventilation_satisfactory: 'pass' }]);
     expect(summary).toEqual({ defect_description: '', remedial_action: '' });
+  });
+});
+
+describe('the defect summary stays in step with the checks the forms ask', () => {
+  /**
+   * The guard for the gap that caused this. Flue integrity and spillage were
+   * added to both forms and to the certificate, but not to the failure list —
+   * so failing either counted as no failure at all, and the record-level
+   * "Defects identified" stayed empty on a certificate whose appliance had
+   * failed the check that mattered most.
+   *
+   * Any pass/fail check an engineer can answer must be a check we can detect
+   * the failure of. Adding one to CP12_APPLIANCE_CHECKS without adding it here
+   * now fails this test rather than shipping quietly.
+   */
+  it('detects a failure of every pass/fail check the forms render', () => {
+    const asked = CP12_APPLIANCE_CHECKS.filter((c) => c.answers === 'pass_fail').map((c) => c.key);
+    const detected = new Set<string>(CP12_DEFECT_CHECK_KEYS);
+    expect(asked.filter((key) => !detected.has(key))).toEqual([]);
+  });
+
+  it('detects each one individually, not just collectively', () => {
+    for (const check of CP12_APPLIANCE_CHECKS.filter((c) => c.answers === 'pass_fail')) {
+      expect(cp12ApplianceHasFailedCheck({ [check.key]: 'fail' })).toBe(true);
+    }
   });
 });
