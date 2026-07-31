@@ -9,14 +9,26 @@ import { sendEmail, isEmailConfigured, type SendEmailResult } from '@/lib/resend
 import { supabaseServerServiceRole } from '@/lib/supabaseServer';
 
 /**
- * An ephemeral certificate reference for a free CP12.
+ * A certificate reference for a free CP12.
  *
- * Deliberately not stored and not sequential: without an account there is no
- * record to number. Two downloads of the same certificate get two references,
- * which is one of the honest limitations of the free tool.
+ * Eight uppercase characters, matching the length of the per-account job code
+ * so a landlord sees the same shape of reference whichever way the certificate
+ * was produced. No "FREE-" prefix: what the engineer hands over should not
+ * announce which tool made it.
+ *
+ * Random rather than sequential, and that part is not cosmetic. Account codes
+ * are a per-user counter starting at 00000001, so a low-numbered random one
+ * would collide with a real certificate belonging to a real account — two
+ * different gas safety records carrying the same reference. Keeping the free
+ * ones alphanumeric and high-entropy makes that effectively impossible while
+ * still reading as a reference rather than a serial number.
+ *
+ * Still not stored: without an account there is no record to look up, so two
+ * downloads of the same certificate get two references. That remains one of the
+ * honest limitations of the free tool.
  */
 export function freeCp12Reference() {
-  return `FREE-${randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+  return randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -108,11 +120,25 @@ export function reportFreeToolEmailFailure(source: string, detail?: string) {
   });
 }
 
-const NOT_KEPT = [
-  'We did not keep a copy. We store your email address and nothing else, so if you lose these',
-  'files we cannot re-send them. A CertNow account keeps every certificate you issue, lets you',
-  'reissue them, and gives each one a shareable link for the landlord.',
-].join(' ');
+const SIGNUP_URL = 'https://certnow.uk/signup/step1';
+
+/**
+ * The honest pitch, at the moment it is most obviously true.
+ *
+ * Named for what it is: the limitation stated plainly first, then what fixes
+ * it. The engineer has just typed a full property, landlord and appliance
+ * record from scratch, so "you will type all of this again next time" lands
+ * harder here than any feature list.
+ */
+const LIMITATION_LINES = [
+  'Doing this property again next year? You will be typing all of it in again — the property, ' +
+    'the landlord, every appliance.',
+  'We did not keep a copy. Not the certificate, not the details you entered. We store your email ' +
+    'address and nothing else, so if you lose these files we cannot re-send them or reissue them.',
+  'A free CertNow account fixes all of that. Your details and your customers are remembered, so a ' +
+    'repeat visit is a few taps. Every certificate you issue is kept and can be reissued, each one ' +
+    'gets a link you can send the landlord, and you get a reminder before it runs out.',
+];
 
 /** Email the finished documents to the visitor as attachments. */
 export async function sendFreeCp12Email(params: {
@@ -137,7 +163,8 @@ export async function sendFreeCp12Email(params: {
     'This is a complete Landlord Gas Safety Record — no watermark, nothing held back.',
     ...(noticeLine ? ['', noticeLine] : []),
     '',
-    NOT_KEPT,
+    ...LIMITATION_LINES.flatMap((line) => [line, '']),
+    `Create one free at ${SIGNUP_URL} — no card required.`,
   ].join('\n');
 
   const html = [
@@ -145,7 +172,8 @@ export async function sendFreeCp12Email(params: {
     `<p><strong>Reference:</strong> ${params.reference}</p>`,
     '<p>This is a complete Landlord Gas Safety Record — no watermark, nothing held back.</p>',
     ...(noticeLine ? [`<p>${noticeLine}</p>`] : []),
-    `<p>${NOT_KEPT}</p>`,
+    ...LIMITATION_LINES.map((line) => `<p>${line}</p>`),
+    `<p><a href="${SIGNUP_URL}">Create a free account</a> — no card required.</p>`,
   ].join('');
 
   return sendEmail({
