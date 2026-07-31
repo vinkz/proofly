@@ -25,12 +25,29 @@ Sentry.init({
   ignoreErrors: BENIGN_ERROR_PATTERNS,
 });
 
-// PostHog — client-side analytics. Absent key is a clean no-op (local dev /
-// previews without a key are unaffected). Initialised here because Next.js
-// only loads instrumentation-client from src/ in a src/-directory project.
+// PostHog — client-side analytics. Absent key is a clean no-op. Initialised
+// here because Next.js only loads instrumentation-client from src/ in a
+// src/-directory project.
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
-if (POSTHOG_KEY) {
+/**
+ * Development must never report into the production project.
+ *
+ * The key lives in .env.local, so a local dev server had one and captured
+ * happily: 53% of every event ever ingested came from localhost:3000, and
+ * 79 of 234 "people" were this machine across browser sessions. That made
+ * /dashboard look like it had 63 visitors against 13 real accounts, and every
+ * funnel and rage-click count was measuring the person building the thing.
+ *
+ * Keyed on the hostname rather than NODE_ENV: a production build served
+ * locally (`next build && next start`, which is how PDF rendering gets tested)
+ * has NODE_ENV=production and would otherwise still report.
+ */
+const LOCAL_HOSTNAMES = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/;
+const isLocalDevelopment =
+  typeof window !== 'undefined' && LOCAL_HOSTNAMES.test(window.location.hostname);
+
+if (POSTHOG_KEY && !isLocalDevelopment) {
   posthog.init(POSTHOG_KEY, {
     api_host: '/ingest',
     ui_host: 'https://eu.posthog.com',

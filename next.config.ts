@@ -48,6 +48,16 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      // Real traffic, landing on a 404. Four people reached `/reequest` against
+      // thirteen who reached `/request` — roughly a quarter of that flow — so a
+      // link with a typo in it is circulating somewhere we cannot edit.
+      { source: '/reequest', destination: '/request', permanent: true },
+      // Someone typing the free tools from memory and stopping short.
+      { source: '/free', destination: '/free-tools', permanent: true },
+    ];
+  },
   async rewrites() {
     return [
       {
