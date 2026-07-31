@@ -87,3 +87,20 @@ describe('gas service record: flue checks', () => {
     expect(out.fields.spillageTest ?? '').toBe('');
   });
 });
+
+describe('gas type reaches the document', () => {
+  /**
+   * Both records asked for the gas type and neither printed it. On the service
+   * record the field had been in the payload since launch and was never even
+   * rendered in the form. A gas safety document that does not say which fuel it
+   * covers is incomplete — and for an LPG engineer it is the one field that
+   * makes the record theirs.
+   */
+  it('carries the service record’s gas type through to the renderer', () => {
+    expect(render({ gas_type: 'LPG' }).fields.gasType).toBe('LPG');
+  });
+
+  it('leaves it blank rather than assuming natural gas', () => {
+    expect(render().fields.gasType ?? '').toBe('');
+  });
+});

@@ -31,7 +31,7 @@ import { AddressLookupField } from '@/components/address/address-lookup-field';
 import type { AddressLookupResult } from '@/lib/address-lookup';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { getMakes, getModelsForMake } from '@/lib/applianceCatalog/ukBoilers';
-import { CP12_FLUE_TYPES, CP12_LOCATIONS } from '@/types/cp12';
+import { CP12_FLUE_TYPES, CP12_GAS_TYPES, CP12_LOCATIONS } from '@/types/cp12';
 import { resolveCp12FlueKind } from '@/lib/cp12/applianceConfig';
 import { toUserMessage } from '@/lib/user-errors';
 
@@ -45,6 +45,7 @@ const YES_NO = [
 ];
 const LOCATION_OPTIONS = CP12_LOCATIONS.map((l) => ({ label: l.label, value: l.label }));
 const FLUE_TYPE_OPTIONS = CP12_FLUE_TYPES.map((f) => ({ label: f.label, value: f.label }));
+const GAS_TYPE_OPTIONS = CP12_GAS_TYPES.map((g) => ({ label: g.label, value: g.label }));
 
 const BOILER_TYPES = [
   { label: 'Combi', value: 'combi' },
@@ -530,13 +531,22 @@ export function FreeBoilerServiceForm() {
             />
           </FieldLabel>
         </Grid>
-        <SearchableSelect
-          label="Flue type (optional)"
-          value={payload.flue_type}
-          options={FLUE_TYPE_OPTIONS}
-          placeholder="Room sealed"
-          onChange={(value) => set('flue_type', value)}
-        />
+        <Grid>
+          <SearchableSelect
+            label="Gas type"
+            value={payload.gas_type}
+            options={GAS_TYPE_OPTIONS}
+            placeholder="Natural gas"
+            onChange={(value) => set('gas_type', value)}
+          />
+          <SearchableSelect
+            label="Flue type (optional)"
+            value={payload.flue_type}
+            options={FLUE_TYPE_OPTIONS}
+            placeholder="Room sealed"
+            onChange={(value) => set('flue_type', value)}
+          />
+        </Grid>
       </Section>
 
       <Section

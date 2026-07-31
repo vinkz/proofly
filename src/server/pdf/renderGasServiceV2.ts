@@ -239,6 +239,7 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
   kv('GC number', text(appliance?.gcNumber));
   kv('Location', text(appliance?.location) || text(f.applianceLocation));
   kv('Flue type', text(appliance?.flueType));
+  kv('Gas type', text(f.gasType));
 
   // ------------------------------------------ safety examination (Reg 26(9)) — required
   section('Safety examination (Reg 26(9))');

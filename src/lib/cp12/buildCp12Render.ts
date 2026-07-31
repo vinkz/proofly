@@ -199,6 +199,11 @@ function buildCp12Fields(src: Cp12RenderSource): Cp12FieldMap {
     companyPhone: toText(fieldMap.company_phone ?? ''),
     companyEmail: toText(fieldMap.company_email ?? ''),
     gasSafeRegistrationNumber: toText(fieldMap.gas_safe_number ?? ''),
+    // Collected in the free form and in the paid evidence step, and until now
+    // printed by neither — a gas safety record that does not say which fuel it
+    // covers is incomplete, and it is the one field an LPG engineer needs it to
+    // carry.
+    gasType: toText(fieldMap.gas_type ?? ''),
     engineerName: toText(fieldMap.engineer_name ?? ''),
     engineerIdNumber: toText(fieldMap.engineer_id ?? fieldMap.engineer_id_card_number ?? ''),
     engineerSignatureText: toText(fieldMap.engineer_name ?? ''),
