@@ -36,9 +36,9 @@ comment on column public.cp12_appliances.gc_number is
 comment on column public.cp12_appliances.flue_integrity_test is
   'Flue integrity test result. Room-sealed / balanced-flue appliances only.';
 comment on column public.cp12_appliances.flue_integrity_co2_high is
-  'Air-inlet CO2 %% at maximum rate. Optional evidence for the flue integrity test.';
+  'Air-inlet CO2 % at maximum rate. Optional evidence for the flue integrity test.';
 comment on column public.cp12_appliances.flue_integrity_co2_low is
-  'Air-inlet CO2 %% at minimum rate. Optional evidence for the flue integrity test.';
+  'Air-inlet CO2 % at minimum rate. Optional evidence for the flue integrity test.';
 comment on column public.cp12_appliances.spillage_test is
   'Spillage test result. Open-flued appliances only.';
 comment on column public.cp12_appliances.flue_performance_test is
