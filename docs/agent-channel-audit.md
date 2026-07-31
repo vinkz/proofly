@@ -578,6 +578,8 @@ copy and content assembly rather than plumbing.
   `NEEDS GAS-SAFE VALIDATION` notes. A public "what a gas safety record must legally contain" page
   is a stronger claim than the free tool currently makes about itself — decide whether it ships
   before or after that sign-off.
+  *(Superseded 2026-07-31: indexing was enabled, the sign-off is no longer being sought, and those
+  notes are now `GAS-SAFE REVIEW` records of accepted risk. Left as written for the audit record.)*
 
 ### Broken / wasteful things noticed in passing (not fixed, per the brief)
 

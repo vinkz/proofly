@@ -325,3 +325,38 @@
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Mobile: stop the page zooming by itself
+   ---------------------------------------------------------------------------
+   Engineers fill these forms in on a phone, one-handed, often up a ladder. Two
+   browser behaviours were moving the page under them.
+
+   1. iOS Safari force-zooms into any form control whose text is below 16px the
+      moment it receives focus — and does not zoom back out afterwards. Our
+      inputs, textareas and selects are all `text-sm` (14px), so every single
+      field tap zoomed the page in and left it there. This is the cause of the
+      "it keeps zooming and won't sit still" report, and 16px is the whole fix.
+      Scoped to small screens so the desktop type scale is untouched.
+
+   2. Double-tap-to-zoom, which fires on a mis-tap near a button.
+
+   Deliberately NOT done: disabling pinch-zoom via `user-scalable=no` or
+   `maximum-scale=1`. iOS Safari has ignored those since iOS 10 precisely
+   because it traps people who need to magnify text, so it would not have fixed
+   the report anyway — and it would take deliberate zoom away from an engineer
+   reading a data plate reflected in a dark cupboard. Accidental zoom is the
+   bug; intentional zoom is a feature. See WCAG 2.2 SC 1.4.4.
+*/
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Removes the double-tap zoom gesture without affecting pinch-zoom or scroll. */
+html {
+  touch-action: manipulation;
+}

@@ -751,6 +751,69 @@ export function FreeCp12Form() {
           </button>
         </div>
       ) : null}
+      <Section title="You" hint="Required — this identifies who carried out the check.">
+        <Grid>
+          <Field label="Engineer name">
+            <Input
+              value={payload.fields.engineer_name}
+              onChange={(e) => setField('engineer_name', e.target.value)}
+            />
+          </Field>
+          <Field label="Gas Safe registration number">
+            <Input
+              inputMode="numeric"
+              value={payload.fields.gas_safe_number}
+              onChange={(e) => setField('gas_safe_number', e.target.value)}
+            />
+          </Field>
+        </Grid>
+      </Section>
+
+      <Section
+        title="Your business details"
+        collapsible
+        hint="Appears in the certificate header. Omitted from the PDF if left blank."
+      >
+        <Grid>
+          <Field label="Business name">
+            <Input
+              value={payload.fields.company_name}
+              onChange={(e) => setField('company_name', e.target.value)}
+            />
+          </Field>
+          <Field label="ID card number">
+            <Input
+              value={payload.fields.engineer_id_card_number}
+              onChange={(e) => setField('engineer_id_card_number', e.target.value)}
+            />
+          </Field>
+        </Grid>
+        <Grid>
+          <Field label="Business phone">
+            <Input
+              type="tel"
+              inputMode="tel"
+              value={payload.fields.company_phone}
+              onChange={(e) => setField('company_phone', e.target.value)}
+            />
+          </Field>
+          <Field label="Business email">
+            <Input
+              type="email"
+              inputMode="email"
+              value={payload.fields.company_email}
+              onChange={(e) => setField('company_email', e.target.value)}
+            />
+          </Field>
+        </Grid>
+        <Field label="Business address">
+          <Input
+            value={payload.fields.company_address}
+            onChange={(e) => setField('company_address', e.target.value)}
+          />
+        </Field>
+      </Section>
+
       <Section title="Inspection & property">
         <Field label="Inspection date">
           <Input
@@ -866,69 +929,6 @@ export function FreeCp12Form() {
             inputMode="tel"
             value={payload.fields.landlord_tel}
             onChange={(e) => setField('landlord_tel', e.target.value)}
-          />
-        </Field>
-      </Section>
-
-      <Section title="You" hint="Required — this identifies who carried out the check.">
-        <Grid>
-          <Field label="Engineer name">
-            <Input
-              value={payload.fields.engineer_name}
-              onChange={(e) => setField('engineer_name', e.target.value)}
-            />
-          </Field>
-          <Field label="Gas Safe registration number">
-            <Input
-              inputMode="numeric"
-              value={payload.fields.gas_safe_number}
-              onChange={(e) => setField('gas_safe_number', e.target.value)}
-            />
-          </Field>
-        </Grid>
-      </Section>
-
-      <Section
-        title="Your business details"
-        collapsible
-        hint="Appears in the certificate header. Omitted from the PDF if left blank."
-      >
-        <Grid>
-          <Field label="Business name">
-            <Input
-              value={payload.fields.company_name}
-              onChange={(e) => setField('company_name', e.target.value)}
-            />
-          </Field>
-          <Field label="ID card number">
-            <Input
-              value={payload.fields.engineer_id_card_number}
-              onChange={(e) => setField('engineer_id_card_number', e.target.value)}
-            />
-          </Field>
-        </Grid>
-        <Grid>
-          <Field label="Business phone">
-            <Input
-              type="tel"
-              inputMode="tel"
-              value={payload.fields.company_phone}
-              onChange={(e) => setField('company_phone', e.target.value)}
-            />
-          </Field>
-          <Field label="Business email">
-            <Input
-              type="email"
-              inputMode="email"
-              value={payload.fields.company_email}
-              onChange={(e) => setField('company_email', e.target.value)}
-            />
-          </Field>
-        </Grid>
-        <Field label="Business address">
-          <Input
-            value={payload.fields.company_address}
-            onChange={(e) => setField('company_address', e.target.value)}
           />
         </Field>
       </Section>

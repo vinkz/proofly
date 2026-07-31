@@ -10,14 +10,26 @@
 // To tune the rules later, edit the CP12_APPLIANCE_CONFIG map below — no component
 // logic needs to change.
 //
-// ⚠️ NEEDS GAS-SAFE VALIDATION before launch: the field-applicability rules tagged
-// `// NEEDS GAS-SAFE VALIDATION` were set by a developer, not a registered Gas Safe
-// engineer. A registered engineer must confirm them before production use. The
-// flued-only flue rules and the cooker-stability rule are confirmed; the combustion
-// rule for gas fires / water heaters is one still pending sign-off, and the
-// flue-kind rules in FLUE_KIND_FIELDS (which flue test applies to a room-sealed
-// vs an open-flued appliance) are the other — they were added from the product
-// owner's description of the two procedures and have not been signed off either.
+// ⚠️ GAS-SAFE REVIEW: NOT OBTAINED, AND NOT BEING SOUGHT.
+//
+// Every field-applicability rule in this file was set by a developer or from the
+// product owner's description of the procedure. None has been reviewed by a
+// registered Gas Safe engineer, and as of 2026-07-31 the product owner has
+// decided not to seek one. This is a recorded, accepted risk — not an
+// outstanding task, and nothing here is gated on it.
+//
+// The rules tagged `// GAS-SAFE REVIEW` below are the ones where a wrong call
+// changes what a certificate asks or prints:
+//   - the combustion rule for gas fires / water heaters;
+//   - FLUE_KIND_FIELDS, which decides whether an appliance is asked for a flue
+//     integrity test or for a flue flow and spillage test.
+// The flued-only rules and the cooker-stability rule are straightforward enough
+// to be uncontroversial.
+//
+// This note exists so that anyone reading the code, or answering a question
+// about how a certificate was produced, can see exactly what the provenance of
+// these rules is. Keep it accurate rather than deleting it: if a registered
+// engineer does ever review them, say so here instead.
 
 export type Cp12ApplianceCategory = 'boiler' | 'hob_cooker' | 'gas_fire' | 'water_heater' | 'other';
 
@@ -152,7 +164,7 @@ export const CP12_APPLIANCE_CONFIG: Record<Cp12ApplianceCategory, Cp12CategoryCo
       flue_integrity_test: 'shown',
       flue_integrity_readings: 'optional',
       spillage_test: 'shown',
-      // NEEDS GAS-SAFE VALIDATION: combustion hidden by default for fires; engineer opts in.
+      // GAS-SAFE REVIEW: not obtained. Combustion hidden by default for fires; engineer opts in.
       combustion: 'optional',
       cooker_stability: 'hidden',
     },
@@ -169,7 +181,7 @@ export const CP12_APPLIANCE_CONFIG: Record<Cp12ApplianceCategory, Cp12CategoryCo
       flue_integrity_test: 'shown',
       flue_integrity_readings: 'optional',
       spillage_test: 'shown',
-      // NEEDS GAS-SAFE VALIDATION: combustion hidden by default for water heaters; engineer opts in.
+      // GAS-SAFE REVIEW: not obtained. Combustion hidden by default for water heaters; engineer opts in.
       combustion: 'optional',
       cooker_stability: 'hidden',
     },
@@ -246,8 +258,8 @@ export function resolveCp12FlueKind(flueType: string | null | undefined): Cp12Fl
 /**
  * Which flue test applies to each flue kind.
  *
- * ⚠️ NEEDS GAS-SAFE VALIDATION. Set from the product owner's description of the
- * two procedures, not by a registered engineer:
+ * ⚠️ GAS-SAFE REVIEW: not obtained. Set from the product owner's description of
+ * the two procedures, not by a registered engineer:
  *   - room-sealed / balanced → flue integrity test (FGA at the air-inlet
  *     sampling point at max and min rate, proving combustion products are not
  *     leaking internally back into the air supply);
