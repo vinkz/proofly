@@ -12,14 +12,15 @@
  * robots.txt. Flipping this one constant is the whole change; nothing else
  * needs to move.
  *
- * ⚠️ STATE, 2026-07-30: the product owner explicitly approved indexing without
- * a registered Gas Safe engineer review. Setting this to false controls
- * discoverability only and must not be read as evidence of compliance sign-off.
- * The template and the per-category field-applicability rules in
- * ./applianceConfig.ts still carry NEEDS GAS-SAFE VALIDATION notes; the
- * combustion rule for gas fires and water heaters is the outstanding one. It is
- * recorded here so the accepted review risk remains visible. If a registered
- * engineer later signs the template off, clear those notes and this paragraph.
+ * ⚠️ STATE, 2026-07-31: the product owner explicitly approved indexing without
+ * a registered Gas Safe engineer review, and has since decided not to seek one
+ * at all. Setting this to false controls discoverability only and must not be
+ * read as evidence of compliance sign-off.
+ *
+ * The template and the field-applicability rules in ./applianceConfig.ts carry
+ * `GAS-SAFE REVIEW` notes recording the same accepted risk — see that file's
+ * header for what specifically was never reviewed. It is recorded in both
+ * places so the risk stays visible to anyone reading either one.
  */
 export const FREE_CP12_NOINDEX = false;
 
