@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
-import { CP12_APPLIANCE_CONFIG, type Cp12ApplianceCategory } from '@/lib/cp12/applianceConfig';
+import {
+  CP12_APPLIANCE_CONFIG,
+  resolveCp12FlueKind,
+  type Cp12ApplianceCategory,
+} from '@/lib/cp12/applianceConfig';
+import { emptyFreeCp12Appliance } from '@/lib/cp12/freeCp12Payload';
+import { DEFAULT_CP12_FLUE_TYPE } from '@/types/cp12';
 import type { Cp12Appliance } from '@/types/certificates';
 
 /**
@@ -136,6 +142,21 @@ describe('appliance-category applicability reaches the certificate', () => {
       expect(out.spillageTest).toBe('pass');
       expect(out.flueIntegrityTest).toBe('');
       expect(out.flueIntegrityCo2High).toBe('');
+    });
+
+    it('a brand-new appliance offers one flue test, not every flue test', () => {
+      // An unset flue type means "kind unknown", which deliberately shows all
+      // three. That is right for an odd appliance and wrong for a blank form:
+      // it presented the room-sealed test and the open-flued pair together, so
+      // the fields appeared not to respond when a flue type was finally picked.
+      const fresh = emptyFreeCp12Appliance();
+      expect(fresh.flue_type).toBe(DEFAULT_CP12_FLUE_TYPE);
+      expect(resolveCp12FlueKind(fresh.flue_type)).toBe('room_sealed');
+
+      const out = forFlue(fresh.flue_type);
+      expect(out.flueIntegrityTest).toBe('pass');
+      expect(out.fluePerformanceTest).toBe('');
+      expect(out.spillageTest).toBe('');
     });
 
     it('an unrecognised flue type hides nothing, so no completed check is lost', () => {

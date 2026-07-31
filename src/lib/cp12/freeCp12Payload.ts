@@ -11,6 +11,7 @@
  */
 import { z } from 'zod';
 
+import { DEFAULT_CP12_FLUE_TYPE } from '@/types/cp12';
 import type { Cp12Appliance } from '@/types/certificates';
 import type { Cp12RenderSource } from './buildCp12Render';
 import {
@@ -295,7 +296,16 @@ export function freeCp12ValidationInput(payload: FreeCp12Payload) {
 
 /** Empty form state — the starting point, and what "reset" returns to. */
 export function emptyFreeCp12Appliance(): FreeCp12Appliance {
-  return FreeCp12ApplianceSchema.parse({ appliance_type: 'boiler', appliance_subtype: 'combi' });
+  return FreeCp12ApplianceSchema.parse({
+    appliance_type: 'boiler',
+    appliance_subtype: 'combi',
+    // Defaulted, not left blank. Which flue test the form asks for depends on
+    // this value, and an unset one means "flue kind unknown" — which shows the
+    // room-sealed test AND the open-flued pair at once, three mutually
+    // exclusive checks on a form the engineer has not touched yet. Room-sealed
+    // is both the common case and what the picker already suggests.
+    flue_type: DEFAULT_CP12_FLUE_TYPE,
+  });
 }
 
 export function emptyFreeCp12Payload(): FreeCp12Payload {

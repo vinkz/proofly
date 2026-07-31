@@ -29,6 +29,7 @@ import { getLatestApplianceDefaultsForJob } from '@/server/history';
 import { tryUpdateJobRecord } from '@/server/jobRecords';
 import {
   CP12_FLUE_TYPES,
+  DEFAULT_CP12_FLUE_TYPE,
   CP12_DEMO_APPLIANCE,
   CP12_DEMO_INFO,
   CP12_EVIDENCE_CONFIG,
@@ -110,7 +111,9 @@ const emptyAppliance: Cp12Appliance = {
   low_ratio: '',
   co_reading_high: '',
   co_reading_low: '',
-  flue_type: '',
+  // See DEFAULT_CP12_FLUE_TYPE: an unset flue type offers the room-sealed test
+  // and the open-flued pair simultaneously.
+  flue_type: DEFAULT_CP12_FLUE_TYPE,
   flue_location: '',
   ventilation_provision: '',
   ventilation_satisfactory: '',

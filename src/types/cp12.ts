@@ -11,6 +11,15 @@ export const CP12_APPLIANCE_TYPES = [
   { value: 'other', label: 'Other' },
 ] as const;
 
+/**
+ * What a new appliance starts as.
+ *
+ * Flue type decides which flue test the form asks for, so leaving it unset is
+ * not neutral — it means "unknown", which offers every test at once. Must match
+ * one of the CP12_FLUE_TYPES labels below, since the pickers store the label.
+ */
+export const DEFAULT_CP12_FLUE_TYPE = 'Room sealed';
+
 export const CP12_FLUE_TYPES = [
   { value: 'room sealed', label: 'Room sealed' },
   { value: 'open flue', label: 'Open flue' },
