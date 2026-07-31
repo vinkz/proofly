@@ -292,8 +292,9 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
     pushReading('Safety device', app.safetyDevice);
     pushReading('Ventilation', app.ventilationSatisfactory);
     pushReading('Flue termination', app.flueTerminationSatisfactory);
+    pushReading('Flue performance test', app.fluePerformanceTest);
     pushReading('Cooker stability', app.cookerStability);
-    pushReading('Spillage test', app.spillageTest);
+    pushReading('Gas tightness test', app.gasTightnessTest);
     pushReading('Serviced', app.applianceServiced);
 
     const aColW = (CONTENT_W - colGap) / 2;

@@ -16,7 +16,10 @@ export type ApplianceInput = {
   flueTerminationSatisfactory?: string;
   /** Free-standing cooker stability bracket/chain. Hob/cooker categories only. */
   cookerStability?: string;
-  spillageTest?: string;
+  /** Flue flow / performance test result. Flued categories only. */
+  fluePerformanceTest?: string;
+  /** Installation soundness (tightness) test result. */
+  gasTightnessTest?: string;
   applianceSafeToUse?: string;
   remedialActionTaken?: string;
   combustionHigh?: string;

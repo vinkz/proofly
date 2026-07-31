@@ -110,7 +110,10 @@ describe('appliance-category applicability reaches the certificate', () => {
     expect(out.cookerStability).toBe('pass');
     expect(out.ventilationSatisfactory).toBe('pass');
     expect(out.safetyDevice).toBe('pass');
-    expect(out.spillageTest).toBe('pass');
+    expect(out.gasTightnessTest).toBe('pass');
+    // A hob has no flue, so it must not carry a flue performance result. This
+    // used to print as a "Spillage test" row fed from the tightness answer.
+    expect(out.fluePerformanceTest).toBe('');
     expect(out.applianceSafeToUse).toBe('Yes');
     expect(out.reg26Confirmed).toBe(true);
   });

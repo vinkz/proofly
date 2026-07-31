@@ -272,7 +272,15 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
       // and counted toward the defect summary but never reached the
       // certificate, so a hob's one distinguishing check went unprinted.
       cookerStability: whenApplicable('cooker_stability', toText(app.cooker_stability ?? '')),
-      spillageTest: toText(app.gas_tightness_test ?? ''),
+      // Two distinct checks that used to be conflated into one row. The
+      // certificate printed `gas_tightness_test` under the heading "Spillage
+      // test" — an installation soundness result reported as a flueing result —
+      // while `flue_performance_test`, which both forms do ask, never reached
+      // the certificate at all. Each now prints under the question the engineer
+      // actually answered. There is still no spillage-test field anywhere, so
+      // the certificate no longer claims one was done.
+      fluePerformanceTest: whenApplicable('flue_performance_test', toText(app.flue_performance_test ?? '')),
+      gasTightnessTest: whenApplicable('gas_tightness_test', toText(app.gas_tightness_test ?? '')),
       applianceSafeToUse: applianceSafe,
       remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),
       combustionHighCoPpm: whenApplicable('combustion', highCoPpm),
