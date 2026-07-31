@@ -234,7 +234,8 @@ export default function PrivacyPage() {
                 </strong>{' '}
                 the email address you give when you download a document from one of our free tools,
                 with the time and which tool it came from. We do not store the certificate or
-                record itself, or anything you typed into it.
+                record itself, or anything you typed into it — a working copy is kept in your own
+                browser while you fill the form in, and never sent to us.
               </li>
               <li>
                 <strong className="font-medium text-[var(--color-text-primary)]">
@@ -376,10 +377,24 @@ export default function PrivacyPage() {
               deliberately built to keep as little as possible.
             </p>
             <p>
-              Nothing you type into a free tool is stored. The property address, landlord details,
-              appliance details, readings, classifications and your signature exist only for as
-              long as it takes to produce your PDF, and are then discarded. We keep no copy of the
-              document, which also means we cannot re-send one you have lost or reissue it later.
+              Nothing you type into a free tool is stored by us. The property address, landlord
+              details, appliance details, readings, classifications and your signature exist on our
+              servers only for as long as it takes to produce your PDF, and are then discarded. We
+              keep no copy of the document, which also means we cannot re-send one you have lost or
+              reissue it later.
+            </p>
+            <p>
+              So that a refresh or a closed tab does not cost you a certificate you have nearly
+              finished, the free certificate tools keep your answers in your own browser&apos;s local
+              storage while you work. That copy stays on your device, is never transmitted to us, is
+              cleared once you download the document, and expires by itself after seven days. You can
+              remove it at any time by clearing site data in your browser, or by choosing to start a
+              blank form.
+            </p>
+            <p>
+              If you choose to create an account from the free tool, the certificate you were working
+              on is carried across in the same way — through your browser — and is only saved to our
+              systems when you confirm you want to keep it. Until you do, we still hold nothing.
             </p>
             <p>
               When you ask us to email the finished document we store your email address, the time,
