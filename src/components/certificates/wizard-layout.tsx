@@ -12,6 +12,18 @@ type WizardLayoutProps = {
   actions?: ReactNode;
   actionsHideWhenVisibleId?: string;
   children: ReactNode;
+  /**
+   * `step` is the wizard: its own sticky header, progress bar, back button and
+   * action bar, one screen at a time.
+   *
+   * `section` is the same content stacked into a single-page form — a heading
+   * and the children, nothing else. The per-step chrome is exactly what makes
+   * four of these unreadable in a row, and the navigation it provides has no
+   * meaning when everything is already on screen.
+   */
+  variant?: 'step' | 'section';
+  /** Small control beside the step counter — used for the layout toggle. */
+  headerAction?: ReactNode;
 };
 
 export function WizardLayout({
@@ -22,12 +34,15 @@ export function WizardLayout({
   actions,
   actionsHideWhenVisibleId,
   children,
+  variant = 'step',
+  headerAction,
 }: WizardLayoutProps) {
+  const isSection = variant === 'section';
   const percent = Math.round((step / total) * 100);
   const [hideActions, setHideActions] = useState(false);
 
   useEffect(() => {
-    if (!actions || !actionsHideWhenVisibleId || typeof window === 'undefined') {
+    if (isSection || !actions || !actionsHideWhenVisibleId || typeof window === 'undefined') {
       setHideActions(false);
       return;
     }
@@ -47,7 +62,18 @@ export function WizardLayout({
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [actions, actionsHideWhenVisibleId]);
+  }, [actions, actionsHideWhenVisibleId, isSection]);
+
+  if (isSection) {
+    return (
+      <section className="mb-8 scroll-mt-32">
+        <h2 className="mb-4 border-b-[0.5px] border-[var(--color-border-tertiary)] pb-2 text-[18px] font-medium text-[var(--color-text-primary)]">
+          {title}
+        </h2>
+        {children}
+      </section>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--color-background-secondary)]">
@@ -77,7 +103,10 @@ export function WizardLayout({
               </Link>
             )}
           </div>
-          <span className="text-[11px] text-[var(--color-text-tertiary)]">Step {step} of {total}</span>
+          <span className="flex items-center gap-3 text-[11px] text-[var(--color-text-tertiary)]">
+            Step {step} of {total}
+            {headerAction}
+          </span>
           <div className="flex flex-1 justify-end">
             {/* Keep the node mounted and only toggle visibility. Unmounting it
                 changed the sticky header's height, which shifted the observed
