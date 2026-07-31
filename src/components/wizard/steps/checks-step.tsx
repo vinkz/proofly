@@ -278,7 +278,7 @@ export function ChecksStep({
             ) : null}
             {hasKey(values, 'flue_performance_test') ? (
               <PassFailToggle
-                label="Flue performance test"
+                label="Flue flow test"
                 value={normalizePassFail(values.flue_performance_test)}
                 onChange={(val) => onChange({ flue_performance_test: val ?? '' })}
               />

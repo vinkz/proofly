@@ -3,6 +3,42 @@ import { describe, expect, it } from 'vitest';
 import { composeCp12DefectSummary, cp12ApplianceHasFailedCheck, cp12FailedChecks } from '@/lib/cp12/defect-summary';
 
 describe('cp12 defect summary', () => {
+  /**
+   * Flue integrity and spillage were added to the form without being added
+   * here, so a failed one counted as no failure at all: the defect notes never
+   * opened, and the record-level "Defects identified" stayed empty on a
+   * certificate whose appliance had failed the check that matters most.
+   */
+  it('treats a failed spillage test as a defect', () => {
+    const app = { location: 'Living room', spillage_test: 'fail' };
+    expect(cp12ApplianceHasFailedCheck(app)).toBe(true);
+    expect(cp12FailedChecks(app)).toEqual(['Spillage']);
+    expect(composeCp12DefectSummary([app]).defect_description).toBe(
+      'Appliance 1 (Living room): Failed: Spillage',
+    );
+  });
+
+  it('treats a failed flue integrity test as a defect', () => {
+    const app = { location: 'Kitchen', flue_integrity_test: 'fail' };
+    expect(cp12ApplianceHasFailedCheck(app)).toBe(true);
+    expect(cp12FailedChecks(app)).toEqual(['Flue integrity']);
+    expect(composeCp12DefectSummary([app]).defect_description).toBe(
+      'Appliance 1 (Kitchen): Failed: Flue integrity',
+    );
+  });
+
+  it('leaves a passing appliance clean across every flue check', () => {
+    const app = {
+      location: 'Kitchen',
+      flue_condition: 'pass',
+      flue_performance_test: 'pass',
+      spillage_test: 'pass',
+      flue_integrity_test: 'pass',
+    };
+    expect(cp12ApplianceHasFailedCheck(app)).toBe(false);
+    expect(cp12FailedChecks(app)).toEqual([]);
+  });
+
   it('turns a failed check into a defect line even without a typed note', () => {
     const summary = composeCp12DefectSummary([
       { location: 'Kitchen', gas_tightness_test: 'fail' },
