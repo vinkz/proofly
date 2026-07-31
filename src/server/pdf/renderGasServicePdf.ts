@@ -15,8 +15,11 @@ export type ApplianceInput = {
   heatInput?: string;
   safetyDevice?: string;
   ventilationSatisfactory?: string;
-  flueTerminationSatisfactory?: string;
-  spillageTest?: string;
+  // No flue-check fields here. The renderer prints flueing from the field map
+  // ("Flue effectiveness", from appliance_flueing_safe); the service record has
+  // no spillage or flue integrity test to report. Two such fields existed and
+  // were fed the tightness / combustion answers — never printed, but ready to
+  // print something untrue the moment anyone wired them up.
   applianceSafeToUse?: string;
   remedialActionTaken?: string;
 };

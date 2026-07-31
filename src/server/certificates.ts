@@ -2648,8 +2648,6 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
       heatInput: getFieldText('heat_input'),
       safetyDevice: pickText(getFieldText('appliance_controls_checked'), getFieldText('service_controls_checked')),
       ventilationSatisfactory: pickText(getFieldText('appliance_ventilation_safe'), getFieldText('service_ventilation_checked')),
-      flueTerminationSatisfactory: pickText(getFieldText('appliance_flueing_safe'), getFieldText('service_flue_checked')),
-      spillageTest: pickText(getFieldText('emission_combustion_test'), getFieldText('service_visual_inspection')),
       applianceSafeToUse: pickText(getFieldText('appliance_safe'), derivedApplianceSafe),
       // Only the actual remedial-detail text — never the defects_found yes/no flag.
       // Falling back to 'no' here made a clean service render a false "DEFECT

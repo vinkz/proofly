@@ -187,8 +187,6 @@ export function freeBoilerServiceToRenderInput(
         operatingPressure: payload.operating_pressure,
         heatInput: payload.heat_input,
         ventilationSatisfactory: payload.appliance_ventilation_safe,
-        flueTerminationSatisfactory: payload.appliance_flueing_safe,
-        spillageTest: payload.tightness_test,
         applianceSafeToUse: payload.appliance_safe,
         remedialActionTaken: payload.remedial_action,
       },
