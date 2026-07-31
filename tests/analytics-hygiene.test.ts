@@ -63,3 +63,41 @@ describe('paths real visitors reached are not left as 404s', () => {
     expect(redirects.match(/permanent: true/g)?.length).toBe(2);
   });
 });
+
+/**
+ * The CSP has now broken two shipped features by omission — the PDF preview
+ * (object-src) and Google sign-in (script-src) — both of which looked present
+ * and failed silently. These pin the origins each integration needs, so
+ * removing one fails here rather than in production.
+ */
+describe('the CSP allows the third-party integrations the app actually uses', () => {
+  const directive = (name: string) => {
+    const match = nextConfig.match(new RegExp(`"${name.replace('-', '-')} ([^"]*)"`));
+    return match?.[1] ?? '';
+  };
+
+  it('allows Google Identity Services to load, style, frame and call home', () => {
+    // Every one of these is required: the script boots GIS, the stylesheet
+    // renders the button, the frame is the sign-in UI, the connection is the
+    // credential exchange. Miss one and the button is dead or unstyled.
+    expect(directive('script-src')).toContain('https://accounts.google.com/gsi/client');
+    expect(directive('style-src')).toContain('https://accounts.google.com/gsi/style');
+    expect(directive('frame-src')).toContain('https://accounts.google.com/gsi/');
+    expect(directive('connect-src')).toContain('https://accounts.google.com/gsi/');
+  });
+
+  it('still lets our own pages preview our own PDFs', () => {
+    expect(directive('object-src')).toContain('blob:');
+    expect(directive('frame-ancestors')).toContain("'self'");
+    expect(nextConfig).toMatch(/"X-Frame-Options", value: "SAMEORIGIN"/);
+  });
+
+  it('has not widened into a blanket allow', () => {
+    // The fixes above are scoped on purpose. A wildcard here would pass the
+    // assertions above while giving away what the policy exists to protect.
+    for (const name of ['script-src', 'connect-src', 'frame-src', 'object-src']) {
+      expect(directive(name), `${name} must not allow *`).not.toMatch(/(^|\s)\*($|\s)/);
+    }
+    expect(directive('frame-ancestors')).not.toContain("'none'");
+  });
+});

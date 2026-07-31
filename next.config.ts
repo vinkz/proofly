@@ -16,12 +16,19 @@ const contentSecurityPolicy = [
   // frame-src. 'none' silently blocks it. Scoped to our own origin and to blob:
   // URLs this page created — never a remote plugin source.
   "object-src 'self' blob:",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
-  "style-src 'self' 'unsafe-inline'",
+  // accounts.google.com is Google Identity Services, which powers the "Continue
+  // with Google" button on /login and /signup/step1. Without it the GIS script
+  // is blocked, loadGis() rejects, and the button reports "Google sign-in
+  // unavailable" — so the whole Google path has been dead in production while
+  // looking present. Paths are Google's own documented CSP values, which are
+  // narrower than allowing the origin outright.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://accounts.google.com/gsi/client",
+  // GIS also fetches its own stylesheet; without this the button renders unstyled.
+  "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://api.stripe.com https://m.stripe.network",
-  "frame-src 'self' blob: https://js.stripe.com https://hooks.stripe.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://api.stripe.com https://m.stripe.network https://accounts.google.com/gsi/",
+  "frame-src 'self' blob: https://js.stripe.com https://hooks.stripe.com https://accounts.google.com/gsi/",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "upgrade-insecure-requests",
