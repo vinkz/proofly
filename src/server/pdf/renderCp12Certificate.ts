@@ -47,6 +47,8 @@ export type ApplianceInput = {
 };
 
 export type Cp12FieldMap = {
+  /** Natural gas or LPG. */
+  gasType?: string;
   certNumber?: string;
   issueDate?: string;
   nextInspectionDue?: string;

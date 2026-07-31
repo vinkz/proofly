@@ -260,6 +260,10 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
 
   // ------------------------------------------------------------- appliances
   section('Appliances & flues checked');
+  // Which fuel the whole installation runs on, above the appliances it applies
+  // to. Renders only when recorded, so certificates predating this field are
+  // unchanged rather than claiming a gas type nobody entered.
+  kv('Gas type', text(input.fields.gasType));
   input.appliances.forEach((app, i) => {
     ensure(70);
     const status = applianceStatus(app);

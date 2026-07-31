@@ -36,6 +36,8 @@ export type GasServiceFieldMap = {
   companyPostcode?: string;
   companyPhone?: string;
   gasSafeNumber?: string;
+  /** Natural gas or LPG. Collected since launch and never printed until now. */
+  gasType?: string;
   /**
    * Flue checks, reported like every other check on this record — from the
    * field map, not the appliance row.

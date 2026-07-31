@@ -20,6 +20,19 @@ export const CP12_APPLIANCE_TYPES = [
  */
 export const DEFAULT_CP12_FLUE_TYPE = 'Room sealed';
 
+/**
+ * Gas the installation runs on.
+ *
+ * Not cosmetic: an LPG installation is a different job with different
+ * qualifications behind it, and a gas safety record that does not say which
+ * fuel it covers is incomplete. Shared by the CP12 and the service record so
+ * the two cannot offer different vocabularies.
+ */
+export const CP12_GAS_TYPES = [
+  { value: 'natural gas', label: 'Natural gas' },
+  { value: 'lpg', label: 'LPG' },
+] as const;
+
 export const CP12_FLUE_TYPES = [
   { value: 'room sealed', label: 'Room sealed' },
   { value: 'open flue', label: 'Open flue' },

@@ -2618,6 +2618,7 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     applianceVentilationSafe: pickText(getFieldText('appliance_ventilation_safe'), getFieldText('service_ventilation_checked')),
     emissionCombustionTest: pickText(getFieldText('emission_combustion_test'), combustionCaptured ? 'YES' : ''),
     burnerPressureCorrect: pickText(getFieldText('burner_pressure_gas_rate_correct'), pressureCaptured ? 'YES' : ''),
+    gasType: getFieldText('gas_type'),
     tightnessTest: pickText(getFieldText('tightness_test_carried_out'), getFieldText('service_leaks_checked')),
     // Flue checks, by flue type. Read only — nothing is derived from another
     // answer here, which is how the old spillage row came to report a tightness

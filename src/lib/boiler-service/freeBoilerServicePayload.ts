@@ -175,6 +175,7 @@ export function freeBoilerServiceToRenderInput(
     operatingPressure: payload.operating_pressure,
     heatInput: payload.heat_input,
     applianceSafe: payload.appliance_safe,
+    gasType: payload.gas_type,
     applianceFlueingSafe: payload.appliance_flueing_safe,
     flueIntegrityTest: payload.flue_integrity_test,
     flueIntegrityCo2High: payload.flue_integrity_co2_high,

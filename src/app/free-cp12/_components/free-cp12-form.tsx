@@ -55,7 +55,7 @@ import { AddressLookupField } from '@/components/address/address-lookup-field';
 import type { AddressLookupResult } from '@/lib/address-lookup';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { getApplianceCatalog } from '@/lib/applianceCatalog/ukAppliances';
-import { CP12_FLUE_TYPES, CP12_LOCATIONS } from '@/types/cp12';
+import { CP12_FLUE_TYPES, CP12_GAS_TYPES, CP12_LOCATIONS } from '@/types/cp12';
 import { PresetChips } from '@/components/wizard/inputs/preset-chips';
 import {
   ACTION_REQUIRED_PRESETS,
@@ -93,6 +93,7 @@ const MAX_APPLIANCES = 12;
 // constraint, because real properties have rooms these lists have never heard of.
 const LOCATION_OPTIONS = CP12_LOCATIONS.map((l) => ({ label: l.label, value: l.label }));
 const FLUE_TYPE_OPTIONS = CP12_FLUE_TYPES.map((f) => ({ label: f.label, value: f.label }));
+const GAS_TYPE_OPTIONS = CP12_GAS_TYPES.map((g) => ({ label: g.label, value: g.label }));
 
 type Stage = 'form' | 'preview' | 'done';
 
@@ -826,14 +827,23 @@ export function FreeCp12Form() {
       </Section>
 
       <Section title="Inspection & property">
-        <Field label="Inspection date">
-          <Input
-            type="date"
-            max={new Date().toISOString().slice(0, 10)}
-            value={payload.fields.inspection_date}
-            onChange={(e) => setField('inspection_date', e.target.value)}
+        <Grid>
+          <Field label="Inspection date">
+            <Input
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={payload.fields.inspection_date}
+              onChange={(e) => setField('inspection_date', e.target.value)}
+            />
+          </Field>
+          <SearchableSelect
+            label="Gas type"
+            value={payload.fields.gas_type}
+            options={GAS_TYPE_OPTIONS}
+            placeholder="Natural gas"
+            onChange={(value) => setField('gas_type', value)}
           />
-        </Field>
+        </Grid>
         <AddressLookupField
           label="Address line 1"
           value={payload.fields.job_address_line1}

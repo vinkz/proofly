@@ -124,6 +124,8 @@ export type FreeCp12Appliance = z.output<typeof FreeCp12ApplianceSchema>;
 
 export const FreeCp12FieldsSchema = z.object({
   inspection_date: str(20),
+  /** Natural gas or LPG. Record level: one property, one supply. */
+  gas_type: str(40),
 
   // Property
   job_address_line1: str(160),
