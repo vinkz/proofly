@@ -12,6 +12,8 @@ type EnumChipsProps = {
   value: string;
   options: EnumChipOption[];
   onChange: (value: string) => void;
+  /** One line under the label, for checks whose name alone is ambiguous. */
+  hint?: string;
 };
 
 function chipStyle(optionValue: string, isActive: boolean): CSSProperties {
@@ -37,10 +39,13 @@ function chipStyle(optionValue: string, isActive: boolean): CSSProperties {
   return { background: '#0a3d26', color: '#5DCAA5', border: '0.5px solid #1D9E75', fontWeight: 500 };
 }
 
-export function EnumChips({ label, value, options, onChange }: EnumChipsProps) {
+export function EnumChips({ label, value, options, onChange, hint }: EnumChipsProps) {
   return (
     <div className="space-y-[6px]">
       <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">{label}</p>
+      {hint ? (
+        <p className="text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">{hint}</p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {options.map((option) => {
           const isActive = value === option.value;

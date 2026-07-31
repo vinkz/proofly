@@ -16,7 +16,19 @@ export type ApplianceInput = {
   flueTerminationSatisfactory?: string;
   /** Free-standing cooker stability bracket/chain. Hob/cooker categories only. */
   cookerStability?: string;
+  /** Data-plate Gas Council number, where the appliance has one. */
+  gcNumber?: string;
+  /** Flue flow test result. Open-flued appliances only. */
+  fluePerformanceTest?: string;
+  /** Flue integrity test result. Room-sealed / balanced-flue appliances only. */
+  flueIntegrityTest?: string;
+  /** Air-inlet CO2 % at high and low rate — optional evidence for the above. */
+  flueIntegrityCo2High?: string;
+  flueIntegrityCo2Low?: string;
+  /** Spillage test result. Open-flued appliances only. */
   spillageTest?: string;
+  /** Installation soundness (tightness) test result. */
+  gasTightnessTest?: string;
   applianceSafeToUse?: string;
   remedialActionTaken?: string;
   combustionHigh?: string;

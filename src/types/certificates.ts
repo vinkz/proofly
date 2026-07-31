@@ -54,6 +54,17 @@ export type Cp12Appliance = {
   appliance_inspected: string;
   location: string;
   make_model: string;
+  /**
+   * Gas Council number from the appliance data plate, e.g. "47-311-92".
+   *
+   * Free text and never inferred from make/model: not every appliance has one
+   * (modern units carry a CE/UKCA PIN instead), and where one exists it belongs
+   * to a model variant rather than the model, so there is no safe lookup. A
+   * wrong GC number on a safety record is worse than a blank one. Not required
+   * by Reg 36(3) either — this is a convention engineers expect, not a legal
+   * minimum, so nothing validates it.
+   */
+  gc_number: string;
   operating_pressure: string;
   heat_input: string;
   high_co_ppm: string;
@@ -73,7 +84,15 @@ export type Cp12Appliance = {
   gas_tightness_test: string;
   co_reading_ppm: string;
   safety_devices_correct: string;
+  /** Flue flow test — open-flued appliances only. */
   flue_performance_test: string;
+  /** Flue integrity test — room-sealed / balanced-flue appliances only. */
+  flue_integrity_test: string;
+  /** Air-inlet CO2 % at high and low rate. Optional evidence for the above. */
+  flue_integrity_co2_high: string;
+  flue_integrity_co2_low: string;
+  /** Spillage test — open-flued appliances only. */
+  spillage_test: string;
   appliance_serviced: string;
   combustion_notes: string;
   safety_rating: string;

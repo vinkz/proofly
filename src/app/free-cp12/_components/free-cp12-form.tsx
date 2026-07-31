@@ -3,10 +3,17 @@
 /**
  * The free CP12 form.
  *
- * Stateless by design: form state lives in this component and dies with the
- * tab. No autosave, no localStorage, no prefill, no server-side draft. That is
- * the boundary between the free tool and the paid product, so it is built in
- * rather than missing — do not add persistence here.
+ * Nothing about the certificate reaches our servers until the visitor asks for
+ * the PDF, and we keep no copy of it afterwards. That is the boundary between
+ * the free tool and the paid product, and it still holds — do not add a
+ * server-side draft, a prefill endpoint or any upload here.
+ *
+ * The answers ARE kept in the visitor's own browser (see ./freeCp12Draft), and
+ * that is not a hole in the above: localStorage is their device, not ours. It
+ * exists because the original build held everything in React state alone, so a
+ * refresh, a back button or a tap on the signup CTA destroyed a finished
+ * certificate — which is exactly how the first engineer to complete one lost
+ * twenty minutes of work. The draft is cleared the moment the PDF is delivered.
  *
  * Field applicability comes from the shared appliance config, so this form
  * shows exactly the checks the paid wizard shows for a given category.
@@ -26,6 +33,12 @@ import {
   cp12FieldVisible,
   resolveCp12Category,
 } from '@/lib/cp12/applianceConfig';
+import {
+  clearFreeCp12Draft,
+  freeCp12DraftHasContent,
+  readFreeCp12Draft,
+  saveFreeCp12Draft,
+} from '@/lib/cp12/freeCp12Draft';
 import {
   emptyFreeCp12Appliance,
   emptyFreeCp12Payload,
@@ -186,7 +199,30 @@ export function FreeCp12Form() {
   const [email, setEmail] = useState('');
   const [emailed, setEmailed] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
   const startedRef = useRef(false);
+  const hydratedRef = useRef(false);
+
+  // Restore anything left in this browser before the first autosave runs, so a
+  // refresh, a back button or a trip through signup does not cost the visitor
+  // their answers. Runs once: re-running would fight the form on every render.
+  useEffect(() => {
+    const draft = readFreeCp12Draft();
+    if (draft && freeCp12DraftHasContent(draft)) {
+      setPayload(draft);
+      setRestored(true);
+    }
+    hydratedRef.current = true;
+  }, []);
+
+  // Autosave, debounced. Held back until the restore above has run, otherwise
+  // the empty initial state would overwrite the draft we are about to read.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (!freeCp12DraftHasContent(payload)) return;
+    const timer = window.setTimeout(() => saveFreeCp12Draft(payload), 500);
+    return () => window.clearTimeout(timer);
+  }, [payload]);
 
   // Revoke the preview object URLs when they are replaced or the tab closes, so
   // the documents do not linger in memory longer than the visit.
@@ -425,6 +461,21 @@ export function FreeCp12Form() {
     }
   };
 
+  /**
+   * Hand the finished certificate to the signup flow.
+   *
+   * Stored rather than posted: nothing about the certificate reaches us until
+   * the visitor has an account and chooses to keep it, so the anonymous promise
+   * this tool makes still holds. The carry-over slot survives the whole signup
+   * detour — several navigations, and possibly an email confirmation on another
+   * day — which is why it is localStorage and not sessionStorage.
+   */
+  const carryOverToAccount = () => {
+    const stored = saveFreeCp12Draft(payload, 'carryover');
+    track(ANALYTICS_EVENTS.freeCp12CarryOverStarted, { stored });
+    window.location.href = '/signup/step1';
+  };
+
   const saveOne = (doc: GeneratedDocument) => {
     const url = URL.createObjectURL(base64ToBlob(doc.base64));
     const anchor = document.createElement('a');
@@ -490,6 +541,10 @@ export function FreeCp12Form() {
       setEmailed(Boolean(data.emailed));
       setReference(data.reference ?? null);
       saveToDevice(data.documents);
+      // Delivered: the safety net has done its job, and this is the landlord's
+      // address sitting on what may be a shared work phone.
+      clearFreeCp12Draft();
+      setRestored(false);
       setStage('done');
       track(ANALYTICS_EVENTS.freeCp12DownloadCompleted, { emailed: Boolean(data.emailed) });
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -520,17 +575,21 @@ export function FreeCp12Form() {
           </p>
         ) : null}
 
-        {/* The honest pitch. Inline, once, no modal. */}
+        {/* The honest pitch. Inline, once, no modal. The button carries the
+            certificate with it: this used to be a plain link, and tapping it
+            navigated away and destroyed the form, which is how the first
+            engineer to finish one lost his. */}
         <div className="mt-5 rounded-[12px] bg-[var(--color-background-secondary)] p-4">
           <p className="text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
             We did not keep this certificate — you re-type everything next time. A CertNow account
             keeps every certificate you issue, lets you reissue them, and gives each one a shareable
             link for the landlord.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button asChild variant="primary">
-              <a href="/signup/step1">Create an account</a>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button variant="primary" onClick={carryOverToAccount}>
+              Create an account and save this certificate
             </Button>
+            <span className="text-[12px] text-[var(--color-text-tertiary)]">No card required</span>
           </div>
         </div>
 
@@ -637,7 +696,8 @@ export function FreeCp12Form() {
           <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">Download it</h3>
           <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
             Where should we send a copy? Your email address is the only thing we keep — the
-            certificate itself is not stored. 
+            certificate itself is not stored, and the working copy in this browser is cleared once
+            you download. 
             <a
               href="/legal/privacy#free-tools"
               target="_blank"
@@ -672,6 +732,25 @@ export function FreeCp12Form() {
   // ------------------------------------------------------------------ form
   return (
     <div>
+      {restored ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4">
+          <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+            We picked up where you left off. Your answers were saved in this browser — they were
+            never sent to us.
+          </p>
+          <button
+            type="button"
+            className="text-[13px] font-medium text-[var(--color-text-tertiary)] underline"
+            onClick={() => {
+              clearFreeCp12Draft();
+              setPayload(emptyFreeCp12Payload());
+              setRestored(false);
+            }}
+          >
+            Start a blank one
+          </button>
+        </div>
+      ) : null}
       <Section title="Inspection & property">
         <Field label="Inspection date">
           <Input
@@ -915,6 +994,14 @@ export function FreeCp12Form() {
               onChange={(value) => setAppliance(index, { model: value })}
             />
 
+            <Field label="GC number (optional)">
+              <Input
+                placeholder="47-311-92"
+                value={appliance.gc_number}
+                onChange={(e) => setAppliance(index, { gc_number: e.target.value })}
+              />
+            </Field>
+
             {cp12FieldVisible(category, 'flue_type') ? (
               <SearchableSelect
                 label="Flue type"
@@ -965,7 +1052,7 @@ export function FreeCp12Form() {
                   onChange={(value) => setAppliance(index, { ventilation_satisfactory: value })}
                 />
               ) : null}
-              {cp12FieldVisible(category, 'flue_condition') ? (
+              {cp12FieldVisible(category, 'flue_condition', appliance.flue_type) ? (
                 <EnumChips
                   label="Visual condition of flue and termination satisfactory"
                   value={appliance.flue_condition}
@@ -973,12 +1060,51 @@ export function FreeCp12Form() {
                   onChange={(value) => setAppliance(index, { flue_condition: value })}
                 />
               ) : null}
-              {cp12FieldVisible(category, 'flue_performance_test') ? (
+              {cp12FieldVisible(category, 'flue_integrity_test', appliance.flue_type) ? (
                 <EnumChips
-                  label="Flue performance test"
+                  label="Flue integrity test"
+                  hint="Analyser at the air-inlet sampling point, at maximum and minimum rate."
+                  value={appliance.flue_integrity_test}
+                  options={PASS_FAIL}
+                  onChange={(value) => setAppliance(index, { flue_integrity_test: value })}
+                />
+              ) : null}
+              {cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) &&
+              appliance.flue_integrity_test ? (
+                <Grid>
+                  <Field label="Air inlet CO2 at high rate (optional)">
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0.02 %"
+                      value={appliance.flue_integrity_co2_high}
+                      onChange={(e) => setAppliance(index, { flue_integrity_co2_high: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Air inlet CO2 at low rate (optional)">
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0.01 %"
+                      value={appliance.flue_integrity_co2_low}
+                      onChange={(e) => setAppliance(index, { flue_integrity_co2_low: e.target.value })}
+                    />
+                  </Field>
+                </Grid>
+              ) : null}
+              {cp12FieldVisible(category, 'flue_performance_test', appliance.flue_type) ? (
+                <EnumChips
+                  label="Flue flow test"
                   value={appliance.flue_performance_test}
                   options={PASS_FAIL}
                   onChange={(value) => setAppliance(index, { flue_performance_test: value })}
+                />
+              ) : null}
+              {cp12FieldVisible(category, 'spillage_test', appliance.flue_type) ? (
+                <EnumChips
+                  label="Spillage test"
+                  hint="Smoke match at the draught diverter with doors and windows shut."
+                  value={appliance.spillage_test}
+                  options={PASS_FAIL}
+                  onChange={(value) => setAppliance(index, { spillage_test: value })}
                 />
               ) : null}
               {cp12FieldVisible(category, 'cooker_stability') ? (
