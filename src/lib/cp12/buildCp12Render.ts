@@ -250,12 +250,17 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
     // content is a description and location of each appliance AND flue.
     // applianceConfig is the single source of truth for what applies, and the
     // form already hides these fields; this makes the certificate agree.
-    const applies = (field: Parameters<typeof cp12FieldVisible>[1]) => cp12FieldVisible(category, field);
+    // Flue tests depend on how the appliance is flued, not only on its
+    // category, so the stored flue type is part of the applicability question.
+    const flueType = toText(app.flue_type ?? '');
+    const applies = (field: Parameters<typeof cp12FieldVisible>[1]) =>
+      cp12FieldVisible(category, field, flueType);
     const whenApplicable = (field: Parameters<typeof cp12FieldVisible>[1], value: string) =>
       (applies(field) ? value : '');
 
     return {
       description: toText(app.make_model ?? appExtras.appliance_make_model ?? '') || typeLabel,
+      gcNumber: toText(app.gc_number ?? ''),
       landlordAppliance: toText(app.landlords_appliance ?? ''),
       applianceInspected: toText(app.appliance_inspected ?? ''),
       location: toText(app.location ?? ''),
@@ -280,6 +285,10 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
       // actually answered. There is still no spillage-test field anywhere, so
       // the certificate no longer claims one was done.
       fluePerformanceTest: whenApplicable('flue_performance_test', toText(app.flue_performance_test ?? '')),
+      flueIntegrityTest: whenApplicable('flue_integrity_test', toText(app.flue_integrity_test ?? '')),
+      flueIntegrityCo2High: whenApplicable('flue_integrity_readings', toText(app.flue_integrity_co2_high ?? '')),
+      flueIntegrityCo2Low: whenApplicable('flue_integrity_readings', toText(app.flue_integrity_co2_low ?? '')),
+      spillageTest: whenApplicable('spillage_test', toText(app.spillage_test ?? '')),
       gasTightnessTest: whenApplicable('gas_tightness_test', toText(app.gas_tightness_test ?? '')),
       applianceSafeToUse: applianceSafe,
       remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),

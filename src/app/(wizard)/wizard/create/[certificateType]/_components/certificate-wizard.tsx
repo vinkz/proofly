@@ -98,6 +98,7 @@ const emptyAppliance: Cp12Appliance = {
   landlords_appliance: 'Yes',
   appliance_inspected: 'Yes',
   location: '',
+  gc_number: '',
   make_model: '',
   operating_pressure: '',
   heat_input: '',
@@ -119,6 +120,10 @@ const emptyAppliance: Cp12Appliance = {
   co_reading_ppm: '',
   safety_devices_correct: '',
   flue_performance_test: '',
+  flue_integrity_test: '',
+  flue_integrity_co2_high: '',
+  flue_integrity_co2_low: '',
+  spillage_test: '',
   appliance_serviced: '',
   combustion_notes: '',
   safety_rating: '',
@@ -518,6 +523,7 @@ export function CertificateWizard({
     appliance_inspected: appliance.appliance_inspected ?? 'Yes',
     location: appliance.location ?? '',
     make_model: appliance.make_model ?? '',
+    gc_number: appliance.gc_number ?? '',
     operating_pressure: appliance.operating_pressure ?? '',
     heat_input: appliance.heat_input ?? '',
     high_co_ppm: appliance.high_co_ppm ?? '',
@@ -538,6 +544,10 @@ export function CertificateWizard({
     co_reading_ppm: appliance.co_reading_ppm ?? '',
     safety_devices_correct: appliance.safety_devices_correct ?? '',
     flue_performance_test: appliance.flue_performance_test ?? '',
+    flue_integrity_test: appliance.flue_integrity_test ?? '',
+    flue_integrity_co2_high: appliance.flue_integrity_co2_high ?? '',
+    flue_integrity_co2_low: appliance.flue_integrity_co2_low ?? '',
+    spillage_test: appliance.spillage_test ?? '',
     appliance_serviced: appliance.appliance_serviced ?? '',
     combustion_notes: appliance.combustion_notes ?? '',
     safety_rating: appliance.safety_rating ?? '',
@@ -2899,8 +2909,10 @@ export function CertificateWizard({
     return countRequired(
       a.safety_devices_correct,
       a.ventilation_satisfactory,
-      ...(cp12FieldVisible(cat, 'flue_condition') ? [a.flue_condition] : []),
-      ...(cp12FieldVisible(cat, 'flue_performance_test') ? [a.flue_performance_test] : []),
+      ...(cp12FieldVisible(cat, 'flue_condition', a.flue_type) ? [a.flue_condition] : []),
+      ...(cp12FieldVisible(cat, 'flue_performance_test', a.flue_type) ? [a.flue_performance_test] : []),
+      ...(cp12FieldVisible(cat, 'flue_integrity_test', a.flue_type) ? [a.flue_integrity_test] : []),
+      ...(cp12FieldVisible(cat, 'spillage_test', a.flue_type) ? [a.spillage_test] : []),
       ...(cp12FieldVisible(cat, 'cooker_stability') ? [a.cooker_stability] : []),
       a.gas_tightness_test,
       a.safety_rating,
@@ -2985,6 +2997,16 @@ export function CertificateWizard({
             >
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1}</p>
               <div className="mt-4 space-y-3">
+                <label className="space-y-1.5">
+                  <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+                    GC number (optional)
+                  </span>
+                  <Input
+                    value={appliance.gc_number ?? ''}
+                    placeholder="47-311-92"
+                    onChange={(event) => setApplianceField(index, 'gc_number', event.target.value)}
+                  />
+                </label>
                 {cp12FieldVisible(category, 'flue_type') ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SearchableSelect
@@ -3245,18 +3267,53 @@ export function CertificateWizard({
                       value={(appliance.ventilation_satisfactory ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.ventilation_satisfactory ?? '').toLowerCase() === 'fail' ? 'fail' : null}
                       onChange={(val) => setApplianceField(index, 'ventilation_satisfactory', val ?? '')}
                     />
-                    {cp12FieldVisible(category, 'flue_condition') ? (
+                    {cp12FieldVisible(category, 'flue_condition', appliance.flue_type) ? (
                       <PassFailToggle
                         label="Visual condition of flue and termination satisfactory"
                         value={(appliance.flue_condition ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_condition ?? '').toLowerCase() === 'fail' ? 'fail' : null}
                         onChange={(val) => setApplianceField(index, 'flue_condition', val ?? '')}
                       />
                     ) : null}
-                    {cp12FieldVisible(category, 'flue_performance_test') ? (
+                    {cp12FieldVisible(category, 'flue_integrity_test', appliance.flue_type) ? (
                       <PassFailToggle
-                        label="Flue performance test"
+                        label="Flue integrity test"
+                        value={(appliance.flue_integrity_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_integrity_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                        onChange={(val) => setApplianceField(index, 'flue_integrity_test', val ?? '')}
+                      />
+                    ) : null}
+                    {cp12FieldVisible(category, 'flue_performance_test', appliance.flue_type) ? (
+                      <PassFailToggle
+                        label="Flue flow test"
                         value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
                         onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
+                      />
+                    ) : null}
+                    {cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) &&
+                    appliance.flue_integrity_test ? (
+                      <>
+                        <label className="space-y-1.5">
+                          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at high rate (optional)</span>
+                          <Input
+                            value={appliance.flue_integrity_co2_high ?? ''}
+                            placeholder="0.02 %"
+                            onChange={(event) => setApplianceField(index, 'flue_integrity_co2_high', event.target.value)}
+                          />
+                        </label>
+                        <label className="space-y-1.5">
+                          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at low rate (optional)</span>
+                          <Input
+                            value={appliance.flue_integrity_co2_low ?? ''}
+                            placeholder="0.01 %"
+                            onChange={(event) => setApplianceField(index, 'flue_integrity_co2_low', event.target.value)}
+                          />
+                        </label>
+                      </>
+                    ) : null}
+                    {cp12FieldVisible(category, 'spillage_test', appliance.flue_type) ? (
+                      <PassFailToggle
+                        label="Spillage test"
+                        value={(appliance.spillage_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.spillage_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
+                        onChange={(val) => setApplianceField(index, 'spillage_test', val ?? '')}
                       />
                     ) : null}
                     {cp12FieldVisible(category, 'cooker_stability') ? (

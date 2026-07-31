@@ -73,10 +73,19 @@ export const FreeCp12ApplianceSchema = z.object({
   make: str(80),
   model: str(120),
   make_model: str(160),
+  /** Data-plate Gas Council number. Free text — never inferred from make/model. */
+  gc_number: str(20),
 
   flue_type: str(60),
   flue_condition: str(20),
+  /** Flue flow test — open-flued only. */
   flue_performance_test: str(20),
+  /** Flue integrity test — room-sealed / balanced only, plus optional evidence. */
+  flue_integrity_test: str(20),
+  flue_integrity_co2_high: str(20),
+  flue_integrity_co2_low: str(20),
+  /** Spillage test — open-flued only. */
+  spillage_test: str(20),
   cooker_stability: str(20),
 
   operating_pressure: str(40),
@@ -187,6 +196,7 @@ export function toCp12Appliance(input: FreeCp12Appliance): Cp12Appliance {
     location: input.location,
     make_model:
       [input.make, input.model].map((part) => part.trim()).filter(Boolean).join(' ') || input.make_model,
+    gc_number: input.gc_number,
     operating_pressure: input.operating_pressure,
     heat_input: input.heat_input,
     high_co_ppm: input.high_co_ppm,
@@ -209,6 +219,10 @@ export function toCp12Appliance(input: FreeCp12Appliance): Cp12Appliance {
     co_reading_ppm: '',
     safety_devices_correct: input.safety_devices_correct,
     flue_performance_test: input.flue_performance_test,
+    flue_integrity_test: input.flue_integrity_test,
+    flue_integrity_co2_high: input.flue_integrity_co2_high,
+    flue_integrity_co2_low: input.flue_integrity_co2_low,
+    spillage_test: input.spillage_test,
     appliance_serviced: input.appliance_serviced,
     combustion_notes: '',
     safety_rating: '',

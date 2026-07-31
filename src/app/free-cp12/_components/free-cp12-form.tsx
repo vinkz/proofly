@@ -915,6 +915,14 @@ export function FreeCp12Form() {
               onChange={(value) => setAppliance(index, { model: value })}
             />
 
+            <Field label="GC number (optional)">
+              <Input
+                placeholder="47-311-92"
+                value={appliance.gc_number}
+                onChange={(e) => setAppliance(index, { gc_number: e.target.value })}
+              />
+            </Field>
+
             {cp12FieldVisible(category, 'flue_type') ? (
               <SearchableSelect
                 label="Flue type"
@@ -965,7 +973,7 @@ export function FreeCp12Form() {
                   onChange={(value) => setAppliance(index, { ventilation_satisfactory: value })}
                 />
               ) : null}
-              {cp12FieldVisible(category, 'flue_condition') ? (
+              {cp12FieldVisible(category, 'flue_condition', appliance.flue_type) ? (
                 <EnumChips
                   label="Visual condition of flue and termination satisfactory"
                   value={appliance.flue_condition}
@@ -973,12 +981,51 @@ export function FreeCp12Form() {
                   onChange={(value) => setAppliance(index, { flue_condition: value })}
                 />
               ) : null}
-              {cp12FieldVisible(category, 'flue_performance_test') ? (
+              {cp12FieldVisible(category, 'flue_integrity_test', appliance.flue_type) ? (
                 <EnumChips
-                  label="Flue performance test"
+                  label="Flue integrity test"
+                  hint="Analyser at the air-inlet sampling point, at maximum and minimum rate."
+                  value={appliance.flue_integrity_test}
+                  options={PASS_FAIL}
+                  onChange={(value) => setAppliance(index, { flue_integrity_test: value })}
+                />
+              ) : null}
+              {cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) &&
+              appliance.flue_integrity_test ? (
+                <Grid>
+                  <Field label="Air inlet CO2 at high rate (optional)">
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0.02 %"
+                      value={appliance.flue_integrity_co2_high}
+                      onChange={(e) => setAppliance(index, { flue_integrity_co2_high: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Air inlet CO2 at low rate (optional)">
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0.01 %"
+                      value={appliance.flue_integrity_co2_low}
+                      onChange={(e) => setAppliance(index, { flue_integrity_co2_low: e.target.value })}
+                    />
+                  </Field>
+                </Grid>
+              ) : null}
+              {cp12FieldVisible(category, 'flue_performance_test', appliance.flue_type) ? (
+                <EnumChips
+                  label="Flue flow test"
                   value={appliance.flue_performance_test}
                   options={PASS_FAIL}
                   onChange={(value) => setAppliance(index, { flue_performance_test: value })}
+                />
+              ) : null}
+              {cp12FieldVisible(category, 'spillage_test', appliance.flue_type) ? (
+                <EnumChips
+                  label="Spillage test"
+                  hint="Smoke match at the draught diverter with doors and windows shut."
+                  value={appliance.spillage_test}
+                  options={PASS_FAIL}
+                  onChange={(value) => setAppliance(index, { spillage_test: value })}
                 />
               ) : null}
               {cp12FieldVisible(category, 'cooker_stability') ? (
