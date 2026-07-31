@@ -444,6 +444,17 @@ export function FreeBoilerServiceForm() {
             />
           </FieldLabel>
         </Grid>
+        {/* The engineer's own card number, not the business registration. It was
+            in the collapsed business section, where it read as missing. */}
+        <FieldLabel
+          label="Gas Safe ID card number (optional)"
+          hint="Your licence number — the one on your own ID card, not the business registration above."
+        >
+          <Input
+            value={payload.engineer_id_card_number}
+            onChange={(e) => set('engineer_id_card_number', e.target.value)}
+          />
+        </FieldLabel>
       </Section>
 
       <Section
@@ -464,12 +475,6 @@ export function FreeBoilerServiceForm() {
             />
           </FieldLabel>
         </Grid>
-        <FieldLabel label="ID card number">
-          <Input
-            value={payload.engineer_id_card_number}
-            onChange={(e) => set('engineer_id_card_number', e.target.value)}
-          />
-        </FieldLabel>
         <FieldLabel label="Business address">
           <Input value={payload.company_address} onChange={(e) => set('company_address', e.target.value)} />
         </FieldLabel>

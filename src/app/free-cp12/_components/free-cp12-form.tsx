@@ -760,7 +760,10 @@ export function FreeCp12Form() {
               onChange={(e) => setField('engineer_name', e.target.value)}
             />
           </Field>
-          <Field label="Gas Safe registration number">
+          <Field
+            label="Gas Safe registration number"
+            hint="The business's registration with Gas Safe Register."
+          >
             <Input
               inputMode="numeric"
               value={payload.fields.gas_safe_number}
@@ -768,6 +771,19 @@ export function FreeCp12Form() {
             />
           </Field>
         </Grid>
+        {/* The number on the engineer's own card, which is not the business's
+            registration number and is what an engineer means by their licence.
+            It sat in the collapsed "business details" section, where an engineer
+            looking for it reasonably concluded there was nowhere to put it. */}
+        <Field
+          label="Gas Safe ID card number (optional)"
+          hint="Your licence number — the one on your own ID card, not the business registration above."
+        >
+          <Input
+            value={payload.fields.engineer_id_card_number}
+            onChange={(e) => setField('engineer_id_card_number', e.target.value)}
+          />
+        </Field>
       </Section>
 
       <Section
@@ -780,12 +796,6 @@ export function FreeCp12Form() {
             <Input
               value={payload.fields.company_name}
               onChange={(e) => setField('company_name', e.target.value)}
-            />
-          </Field>
-          <Field label="ID card number">
-            <Input
-              value={payload.fields.engineer_id_card_number}
-              onChange={(e) => setField('engineer_id_card_number', e.target.value)}
             />
           </Field>
         </Grid>
