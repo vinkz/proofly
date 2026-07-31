@@ -238,6 +238,7 @@ export async function renderGasWarningNoticeV2Pdf(input: RenderGasWarningV2Input
   kv('Type', text(f.appliance_type));
   kv('Make / model', text(f.make_model));
   kv('Serial number', text(f.serial_number));
+  kv('GC number', text(f.gc_number));
   kv('Location', text(f.appliance_location));
 
   // ------------------------------------------------------------ the unsafe situation

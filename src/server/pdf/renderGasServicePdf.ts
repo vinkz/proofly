@@ -10,6 +10,8 @@ export type ApplianceInput = {
   make?: string;
   model?: string;
   serial?: string;
+  /** Data-plate Gas Council number, where the appliance has one. */
+  gcNumber?: string;
   flueType?: string;
   operatingPressure?: string;
   heatInput?: string;
@@ -34,6 +36,19 @@ export type GasServiceFieldMap = {
   companyPostcode?: string;
   companyPhone?: string;
   gasSafeNumber?: string;
+  /**
+   * Flue checks, reported like every other check on this record — from the
+   * field map, not the appliance row.
+   *
+   * Which pair applies depends on how the appliance is flued: a room-sealed or
+   * balanced flue gets the integrity test (analyser at the air-inlet sampling
+   * point), an open flue gets the flow and spillage tests. Never both.
+   */
+  flueIntegrityTest?: string;
+  flueIntegrityCo2High?: string;
+  flueIntegrityCo2Low?: string;
+  flueFlowTest?: string;
+  spillageTest?: string;
   engineerId?: string;
   jobName?: string;
   jobAddressLine1?: string;
