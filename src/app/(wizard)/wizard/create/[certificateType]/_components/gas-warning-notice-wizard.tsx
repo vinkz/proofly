@@ -64,6 +64,7 @@ type GasWarningFormState = {
   appliance_type: string;
   make_model: string;
   serial_number: string;
+  gc_number: string;
   gas_escape_issue: boolean;
   pipework_issue: boolean;
   ventilation_issue: boolean;
@@ -229,6 +230,7 @@ export function GasWarningNoticeWizard({
     appliance_type: resolvedFields.appliance_type ?? '',
     make_model: resolvedFields.make_model ?? '',
     serial_number: resolvedFields.serial_number ?? '',
+    gc_number: resolvedFields.gc_number ?? '',
     gas_escape_issue: parseBool(resolvedFields.gas_escape_issue),
     pipework_issue: parseBool(resolvedFields.pipework_issue),
     ventilation_issue: parseBool(resolvedFields.ventilation_issue),
@@ -464,6 +466,7 @@ export function GasWarningNoticeWizard({
       appliance_type: 'Combi boiler',
       make_model: 'Worcester Bosch Greenstar 30i',
       serial_number: 'WB30I-84736291',
+      gc_number: '47-311-92',
       gas_escape_issue: false,
       pipework_issue: false,
       ventilation_issue: false,
@@ -514,6 +517,7 @@ export function GasWarningNoticeWizard({
     appliance_type: fields.appliance_type,
     make_model: fields.make_model,
     serial_number: fields.serial_number,
+    gc_number: fields.gc_number,
     gas_escape_issue: fields.gas_escape_issue,
     pipework_issue: fields.pipework_issue,
     ventilation_issue: fields.ventilation_issue,
@@ -1023,6 +1027,12 @@ export function GasWarningNoticeWizard({
                 value={fields.serial_number}
                 onChange={(e) => setFields((prev) => ({ ...prev, serial_number: e.target.value }))}
                 placeholder="Serial number"
+                className="rounded-[8px] sm:col-span-2"
+              />
+              <Input
+                value={fields.gc_number}
+                onChange={(e) => setFields((prev) => ({ ...prev, gc_number: e.target.value }))}
+                placeholder="GC number (optional)"
                 className="rounded-[8px] sm:col-span-2"
               />
               <LabeledField label="Classification" className="sm:col-span-2">

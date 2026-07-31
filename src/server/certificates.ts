@@ -2619,6 +2619,14 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
     emissionCombustionTest: pickText(getFieldText('emission_combustion_test'), combustionCaptured ? 'YES' : ''),
     burnerPressureCorrect: pickText(getFieldText('burner_pressure_gas_rate_correct'), pressureCaptured ? 'YES' : ''),
     tightnessTest: pickText(getFieldText('tightness_test_carried_out'), getFieldText('service_leaks_checked')),
+    // Flue checks, by flue type. Read only — nothing is derived from another
+    // answer here, which is how the old spillage row came to report a tightness
+    // result on a document that never asked for one.
+    flueIntegrityTest: getFieldText('flue_integrity_test'),
+    flueIntegrityCo2High: getFieldText('flue_integrity_co2_high'),
+    flueIntegrityCo2Low: getFieldText('flue_integrity_co2_low'),
+    flueFlowTest: getFieldText('flue_flow_test'),
+    spillageTest: getFieldText('spillage_test'),
     warmAirGrillsWorking: getFieldText('warm_air_grills_working'),
     pipeworkFreeFromLeaks: pickText(getFieldText('pipework_free_from_leaks'), getFieldText('service_leaks_checked')),
     magneticFilterFitted: getFieldText('magnetic_filter_fitted'),
@@ -2643,13 +2651,12 @@ export async function generateGasServicePdf(payload: z.infer<typeof GenerateGasS
       make: boilerMake,
       model: boilerModel,
       serial: getFieldText('serial_number'),
+      gcNumber: getFieldText('gc_number'),
       flueType: getFieldText('flue_type'),
       operatingPressure: getFieldText('operating_pressure_mbar'),
       heatInput: getFieldText('heat_input'),
       safetyDevice: pickText(getFieldText('appliance_controls_checked'), getFieldText('service_controls_checked')),
       ventilationSatisfactory: pickText(getFieldText('appliance_ventilation_safe'), getFieldText('service_ventilation_checked')),
-      flueTerminationSatisfactory: pickText(getFieldText('appliance_flueing_safe'), getFieldText('service_flue_checked')),
-      spillageTest: pickText(getFieldText('emission_combustion_test'), getFieldText('service_visual_inspection')),
       applianceSafeToUse: pickText(getFieldText('appliance_safe'), derivedApplianceSafe),
       // Only the actual remedial-detail text — never the defects_found yes/no flag.
       // Falling back to 'no' here made a clean service render a false "DEFECT

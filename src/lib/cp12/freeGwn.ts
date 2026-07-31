@@ -92,6 +92,7 @@ export function buildFreeGwnFields(
     appliance_location: appliance.location,
     appliance_type: cp12ApplianceTypeLabel(category, subtype),
     make_model: appliance.make_model,
+    gc_number: appliance.gc_number,
 
     classification,
     classification_code: classification === 'IMMEDIATELY_DANGEROUS' ? 'ID' : 'AR',

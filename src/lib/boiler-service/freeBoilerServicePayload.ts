@@ -52,8 +52,25 @@ export const FreeBoilerServiceSchema = z.object({
   boiler_type: str(40),
   boiler_location: str(120),
   serial_number: str(80),
+  /** Data-plate Gas Council number. Free text — never inferred from make/model. */
+  gc_number: str(20),
   gas_type: str(40),
   flue_type: str(60),
+
+  /**
+   * Flue checks, chosen by flue type.
+   *
+   * A service follows the manufacturer's instructions and covers flueing at
+   * least as thoroughly as a CP12, so the same split applies: room-sealed and
+   * balanced flues get the integrity test, open flues get the flow and
+   * spillage tests. See FLUE_KIND_FIELDS in @/lib/cp12/applianceConfig for the
+   * rule, which this record shares rather than restates.
+   */
+  flue_integrity_test: str(20),
+  flue_integrity_co2_high: str(20),
+  flue_integrity_co2_low: str(20),
+  flue_flow_test: str(20),
+  spillage_test: str(20),
 
   // Reg 26(9) safety examination outcomes — the required spine.
   appliance_flueing_safe: str(20),
@@ -159,6 +176,11 @@ export function freeBoilerServiceToRenderInput(
     heatInput: payload.heat_input,
     applianceSafe: payload.appliance_safe,
     applianceFlueingSafe: payload.appliance_flueing_safe,
+    flueIntegrityTest: payload.flue_integrity_test,
+    flueIntegrityCo2High: payload.flue_integrity_co2_high,
+    flueIntegrityCo2Low: payload.flue_integrity_co2_low,
+    flueFlowTest: payload.flue_flow_test,
+    spillageTest: payload.spillage_test,
     applianceVentilationSafe: payload.appliance_ventilation_safe,
     tightnessTest: payload.tightness_test,
 
@@ -183,12 +205,11 @@ export function freeBoilerServiceToRenderInput(
         make: payload.boiler_make,
         model: payload.boiler_model,
         serial: payload.serial_number,
+        gcNumber: payload.gc_number,
         flueType: payload.flue_type,
         operatingPressure: payload.operating_pressure,
         heatInput: payload.heat_input,
         ventilationSatisfactory: payload.appliance_ventilation_safe,
-        flueTerminationSatisfactory: payload.appliance_flueing_safe,
-        spillageTest: payload.tightness_test,
         applianceSafeToUse: payload.appliance_safe,
         remedialActionTaken: payload.remedial_action,
       },
