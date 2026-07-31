@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -14,6 +14,13 @@ import { EvidenceCard } from './evidence-card';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
+import { visibleCp12ApplianceChecks } from '@/lib/cp12/applianceChecks';
+
+/** Answer set for checks that record whether something was done, not tested. */
+const YES_NO_OPTIONS = [
+  { label: 'Yes', value: 'Yes' },
+  { label: 'No', value: 'No' },
+];
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { type CertificateType, type Cp12Appliance, type Cp12SafetyClassification, type PhotoCategory } from '@/types/certificates';
 import {
@@ -3260,77 +3267,55 @@ export function CertificateWizard({
                 <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} safety</p>
                 <div className="mt-3 space-y-[14px]">
                   <div className="grid gap-[14px] sm:grid-cols-2">
-                    <PassFailToggle
-                      label="Safety device(s) correct operation"
-                      value={(appliance.safety_devices_correct ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.safety_devices_correct ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'safety_devices_correct', val ?? '')}
-                    />
-                    <PassFailToggle
-                      label="Ventilation provision satisfactory"
-                      value={(appliance.ventilation_satisfactory ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.ventilation_satisfactory ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'ventilation_satisfactory', val ?? '')}
-                    />
-                    {cp12FieldVisible(category, 'flue_condition', appliance.flue_type) ? (
-                      <PassFailToggle
-                        label="Visual condition of flue and termination satisfactory"
-                        value={(appliance.flue_condition ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_condition ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                        onChange={(val) => setApplianceField(index, 'flue_condition', val ?? '')}
-                      />
-                    ) : null}
-                    {cp12FieldVisible(category, 'flue_integrity_test', appliance.flue_type) ? (
-                      <PassFailToggle
-                        label="Flue integrity test"
-                        value={(appliance.flue_integrity_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_integrity_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                        onChange={(val) => setApplianceField(index, 'flue_integrity_test', val ?? '')}
-                      />
-                    ) : null}
-                    {cp12FieldVisible(category, 'flue_performance_test', appliance.flue_type) ? (
-                      <PassFailToggle
-                        label="Flue flow test"
-                        value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                        onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
-                      />
-                    ) : null}
-                    {cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) &&
-                    appliance.flue_integrity_test ? (
-                      <>
-                        <label className="space-y-1.5">
-                          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at high rate (optional)</span>
-                          <Input
-                            value={appliance.flue_integrity_co2_high ?? ''}
-                            placeholder="0.02 %"
-                            onChange={(event) => setApplianceField(index, 'flue_integrity_co2_high', event.target.value)}
-                          />
-                        </label>
-                        <label className="space-y-1.5">
-                          <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at low rate (optional)</span>
-                          <Input
-                            value={appliance.flue_integrity_co2_low ?? ''}
-                            placeholder="0.01 %"
-                            onChange={(event) => setApplianceField(index, 'flue_integrity_co2_low', event.target.value)}
-                          />
-                        </label>
-                      </>
-                    ) : null}
-                    {cp12FieldVisible(category, 'spillage_test', appliance.flue_type) ? (
-                      <PassFailToggle
-                        label="Spillage test"
-                        value={(appliance.spillage_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.spillage_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                        onChange={(val) => setApplianceField(index, 'spillage_test', val ?? '')}
-                      />
-                    ) : null}
-                    {cp12FieldVisible(category, 'cooker_stability') ? (
-                      <PassFailToggle
-                        label="Cooker stability (bracket/chain)"
-                        value={(appliance.cooker_stability ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.cooker_stability ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                        onChange={(val) => setApplianceField(index, 'cooker_stability', val ?? '')}
-                      />
-                    ) : null}
-                    <PassFailToggle
-                      label="Gas tightness test"
-                      value={(appliance.gas_tightness_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.gas_tightness_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'gas_tightness_test', val ?? '')}
-                    />
+                    {visibleCp12ApplianceChecks(category, appliance.flue_type).map((check) => {
+                      const raw = (appliance[check.key] ?? '').toLowerCase();
+                      return (
+                        <Fragment key={check.key}>
+                          {check.answers === 'yes_no' ? (
+                            <EnumChips
+                              label={check.label}
+                              hint={check.hint}
+                              value={appliance[check.key] ?? ''}
+                              options={YES_NO_OPTIONS}
+                              onChange={(val) => setApplianceField(index, check.key, val)}
+                            />
+                          ) : (
+                            <PassFailToggle
+                              label={check.label}
+                              hint={check.hint}
+                              value={raw === 'pass' ? 'pass' : raw === 'fail' ? 'fail' : null}
+                              onChange={(val) => setApplianceField(index, check.key, val ?? '')}
+                            />
+                          )}
+                          {/* Evidence for the integrity verdict, so it sits
+                              directly under it. Free text conditional on an
+                              answer rather than a check with a verdict, which is
+                              why it is not in the shared list. */}
+                          {check.key === 'flue_integrity_test' &&
+                          appliance.flue_integrity_test &&
+                          cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) ? (
+                            <>
+                              <label className="space-y-1.5">
+                                <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at high rate (optional)</span>
+                                <Input
+                                  value={appliance.flue_integrity_co2_high ?? ''}
+                                  placeholder="0.02 %"
+                                  onChange={(event) => setApplianceField(index, 'flue_integrity_co2_high', event.target.value)}
+                                />
+                              </label>
+                              <label className="space-y-1.5">
+                                <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at low rate (optional)</span>
+                                <Input
+                                  value={appliance.flue_integrity_co2_low ?? ''}
+                                  placeholder="0.01 %"
+                                  onChange={(event) => setApplianceField(index, 'flue_integrity_co2_low', event.target.value)}
+                                />
+                              </label>
+                            </>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
                   </div>
                   <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                     <div className="grid gap-3 sm:grid-cols-2">

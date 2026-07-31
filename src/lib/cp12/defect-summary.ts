@@ -40,6 +40,17 @@ const CHECK_LABELS: ReadonlyArray<readonly [keyof Cp12DefectAppliance, string]> 
   ['gas_tightness_test', 'Gas tightness'],
 ];
 
+/**
+ * The appliance keys a failure is detected on.
+ *
+ * Exported so a test can assert this stays in step with the checks the forms
+ * ask. Flue integrity and spillage were added to the forms and not here, and a
+ * failed one silently reached a certificate with an empty "Defects identified".
+ */
+export const CP12_DEFECT_CHECK_KEYS: ReadonlyArray<keyof Cp12DefectAppliance> = CHECK_LABELS.map(
+  ([key]) => key,
+);
+
 const t = (v: unknown) => String(v ?? '').trim();
 const isFail = (v: unknown) => t(v).toLowerCase() === 'fail';
 

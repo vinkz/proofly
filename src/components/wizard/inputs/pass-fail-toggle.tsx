@@ -6,6 +6,8 @@ type PassFailToggleProps = {
   label: string;
   value: PassFailValue;
   onChange: (value: PassFailValue) => void;
+  /** One line under the label, for checks whose name alone is ambiguous. */
+  hint?: string;
 };
 
 const PASS_SELECTED = {
@@ -29,10 +31,13 @@ const UNSELECTED = {
   fontWeight: 400,
 } as const;
 
-export function PassFailToggle({ label, value, onChange }: PassFailToggleProps) {
+export function PassFailToggle({ label, value, onChange, hint }: PassFailToggleProps) {
   return (
     <div className="space-y-[6px]">
       <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">{label}</p>
+      {hint ? (
+        <p className="text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">{hint}</p>
+      ) : null}
       <div className="flex gap-2">
         <button
           type="button"
