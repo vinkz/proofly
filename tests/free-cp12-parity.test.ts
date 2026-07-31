@@ -14,7 +14,7 @@ import { renderCp12CertificatePdf } from '@/server/pdf/renderCp12Certificate';
  * two flows have started disagreeing about what a CP12 says.
  */
 const ISSUED_AT = new Date('2026-07-27T09:00:00Z');
-const REFERENCE = 'FREE-ABCD1234';
+const REFERENCE = 'ABCD1234';
 
 // --- how the authenticated flow arrives at the renderer ---------------------
 const paidFieldMap: Record<string, unknown> = {
