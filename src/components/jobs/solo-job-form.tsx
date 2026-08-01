@@ -4,7 +4,6 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, 
 import { useRouter } from 'next/navigation';
 
 import { createSoloJob, requestLandlordJobPrefill } from '@/server/jobs';
-import { readSinglePagePreference } from '@/lib/wizard/single-page-preference';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import type { JobRequestPrefill } from '@/server/job-requests';
 import type { ClientListItem } from '@/types/client';
@@ -309,10 +308,6 @@ export function SoloJobForm({
    * startStep=2 afterwards. On one page there is nothing to skip to, so the
    * form asks for them once, in place, and the preamble has no work left to do.
    */
-  const [singlePageCert, setSinglePageCert] = useState(false);
-  useEffect(() => {
-    setSinglePageCert(readSinglePagePreference());
-  }, []);
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('jobs_new', 'create'), []);
   const requestAddress = parseRequestAddress(initialRequest?.propertyAddress, initialRequest?.propertyPostcode);
   const requestPreferredDate = firstDateFromPreferredDates(initialRequest?.preferredDates);
@@ -369,6 +364,16 @@ export function SoloJobForm({
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialRequest || initialPropertyId ? 4 : initialClientId ? 2 : 1);
   const [path, setPath] = useState<'self' | 'landlord' | null>(initialRequest || initialPropertyId ? 'self' : null);
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
+  /**
+   * Doing the certificate now, or booking it for another day.
+   *
+   * Asked on the same screen as how to start, because they are one decision in
+   * the engineer's head — "I'm stood at this property" or "I'm putting it in
+   * the diary" — and splitting them across screens is what made booking a job
+   * and doing a job feel like the same long flow.
+   */
+  const [timing, setTiming] = useState<'now' | 'later'>('now');
+
   const formRef = useRef<HTMLFormElement>(null);
   /**
    * setSubmitMode is async, so submitting in the same handler would read the
@@ -1134,8 +1139,13 @@ export function SoloJobForm({
               jobType === 'safety_check_service'
                 ? combinedFirst ?? 'cp12'
                 : WIZARD_ROUTE_BY_JOB_TYPE[jobType];
+            // Handing over means steps 4 and 5 never ran, so the landlord and
+            // the job address have not been collected — the wizard's first step
+            // is the only place left that asks for them. Skipping it here would
+            // produce a certificate with no landlord on it.
+            const handedOverEarly = timing === 'now' && path === 'self';
             const shouldSkipFirstWizardStep =
-              !singlePageCert &&
+              !handedOverEarly &&
               (Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice');
             const href = shouldSkipFirstWizardStep
               ? `/wizard/create/${wizardRoute}?jobId=${jobId}&startStep=2`
@@ -1202,7 +1212,7 @@ export function SoloJobForm({
                     setJobTypeTouched(true);
                     // One tap. The choice is the whole step, so confirming it
                     // separately is a screen that asks nothing.
-                    if (singlePageCert) setStep(hasInitialSelection ? 4 : 2);
+                    setStep(hasInitialSelection ? 4 : 2);
                   }}
                   className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                     jobTypeTouched && jobType === type
@@ -1430,16 +1440,58 @@ export function SoloJobForm({
         <>
           {!path ? (
             <div className="space-y-2">
-              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">When?</p>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { id: 'now', label: 'Doing it now' },
+                    { id: 'later', label: 'Book for later' },
+                  ] as { id: 'now' | 'later'; label: string }[]
+                ).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => setTiming(option.id)}
+                    className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
+                      timing === option.id
+                        ? 'bg-[#111] text-white'
+                        : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {timing === 'later' ? (
+                <label className="block pt-1">
+                  <span className="mb-1.5 block text-[12px] font-medium text-[var(--color-text-secondary)]">
+                    Date
+                  </span>
+                  <input
+                    type="date"
+                    value={inspectionDate}
+                    onChange={(event) => setInspectionDate(event.target.value)}
+                    className="block h-11 w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-base text-[var(--color-text-primary)]"
+                  />
+                </label>
+              ) : null}
+              <p className="pt-2 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
               <button
                 type="button"
                 disabled={isPending}
                 onClick={() => {
                   setPath('self');
-                  if (singlePageCert) {
+                  if (timing === 'now') {
                     // Straight to the certificate. Whatever was picked so far —
                     // an existing landlord, a property, a landlord request —
-                    // is already in state and rides along as prefill.
+                    // is already in state and rides along as prefill, and the
+                    // certificate asks for the rest in place.
+                    //
+                    // Gated on the timing rather than the layout preference:
+                    // the toggle that set that preference lived inside the
+                    // wizard, on the far side of the steps it was meant to
+                    // skip, so an engineer could never reach it first.
                     setSubmitMode('continue');
                     setHandOverPending(true);
                     return;

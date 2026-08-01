@@ -73,17 +73,44 @@ describe('CP12 single-page mode', () => {
  * page there is nothing to skip to, so the preamble has no work left to do.
  */
 describe('the route into a certificate', () => {
-  it('reads the same preference in both screens, from one place', () => {
+  it('keeps the layout preference in one module, owned by the wizard', () => {
     expect(preference).toContain('certnow.cp12-wizard.single-page.v1');
-    for (const file of [wizard, jobForm]) {
-      expect(file).toContain("from '@/lib/wizard/single-page-preference'");
-      // Neither may keep its own copy of the key and drift.
-      expect(file).not.toContain('certnow.cp12-wizard.single-page');
-    }
+    expect(wizard).toContain("from '@/lib/wizard/single-page-preference'");
+    // No second copy of the key to drift from the first.
+    expect(wizard).not.toContain('certnow.cp12-wizard.single-page');
   });
 
-  it('hands straight over on "fill details myself" instead of two more steps', () => {
-    expect(jobForm).toMatch(/if \(singlePageCert\) \{[\s\S]{0,400}setHandOverPending\(true\)/);
+  it('hands straight over when the engineer is doing it now', () => {
+    // Anchored on the comment, which appears once — there is more than one
+    // setPath('self') in the file and the other is a reset, not the button.
+    const start = jobForm.indexOf('Straight to the certificate');
+    expect(start, 'handover branch not found').toBeGreaterThan(-1);
+    const handler = jobForm.slice(start - 200, start + 800);
+    expect(handler).toContain("if (timing === 'now')");
+    expect(handler).toContain('setHandOverPending(true)');
+  });
+
+  it('asks when and how to start on one screen', () => {
+    // Two halves of one decision — "I am stood at this property" or "I am
+    // putting it in the diary". Splitting them made booking and doing feel
+    // like the same long flow.
+    expect(jobForm).toContain("const [timing, setTiming] = useState<'now' | 'later'>('now')");
+    expect(jobForm).toContain('Doing it now');
+    expect(jobForm).toContain('Book for later');
+  });
+
+  it('does not gate the handover on a preference set on the far side of it', () => {
+    // The layout toggle lives in the wizard, past the steps it was meant to
+    // skip, so gating the handover on it meant it could never fire first.
+    expect(jobForm).not.toContain('singlePageCert');
+  });
+
+  it('still asks for the landlord when the two steps were skipped', () => {
+    // Handing over means steps 4 and 5 never ran, so the wizard's first step is
+    // the only place left that collects the landlord and the job address.
+    // Skipping it too would issue a certificate with no landlord on it.
+    expect(jobForm).toContain("const handedOverEarly = timing === 'now' && path === 'self'");
+    expect(jobForm).toMatch(/shouldSkipFirstWizardStep =[\s\S]{0,40}!handedOverEarly/);
   });
 
   it('waits for the submit mode to commit before submitting', () => {
@@ -92,15 +119,9 @@ describe('the route into a certificate', () => {
     expect(jobForm).toMatch(/if \(!handOverPending \|\| submitMode !== 'continue'\) return;/);
   });
 
-  it('does not skip the wizard first step when everything is on one page', () => {
-    expect(jobForm).toMatch(/shouldSkipFirstWizardStep =[\s\S]{0,20}!singlePageCert/);
-  });
-
-  it('leaves the stepped flow intact when the preference is off', () => {
-    // Every fast path is gated. Nothing changes for an engineer who has not
-    // opted in, which is what makes this safe on the revenue path.
-    const fastPaths = jobForm.match(/singlePageCert/g) ?? [];
-    expect(fastPaths.length).toBeGreaterThanOrEqual(4);
+  it('keeps the stepped route for anything that is not "doing it now"', () => {
+    // Booking for later, asking the landlord, or requesting details all still
+    // walk the original steps — only the stood-at-the-property path shortcuts.
     expect(jobForm).toContain('setStep(4)');
   });
 });
