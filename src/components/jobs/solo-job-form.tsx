@@ -1212,7 +1212,7 @@ export function SoloJobForm({
                     setJobTypeTouched(true);
                     // One tap. The choice is the whole step, so confirming it
                     // separately is a screen that asks nothing.
-                    setStep(hasInitialSelection ? 4 : 2);
+                    setStep(hasInitialSelection ? 4 : 3);
                   }}
                   className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                     jobTypeTouched && jobType === type
@@ -1425,6 +1425,13 @@ export function SoloJobForm({
             type="button"
             onClick={() => {
               setPath('self');
+              if (timing === 'now') {
+                // The saved landlord and property are in state; the certificate
+                // takes it from here rather than asking for them again.
+                setSubmitMode('continue');
+                setHandOverPending(true);
+                return;
+              }
               setStep(4);
             }}
             disabled={isPending || !clientChosen}
@@ -1507,6 +1514,23 @@ export function SoloJobForm({
                 <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
               </button>
 
+              {clients.length ? (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setStep(2)}
+                  className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
+                >
+                  <div>
+                    <p className="text-[14px] font-medium text-[var(--color-text-primary)]">
+                      Use a saved landlord or property
+                    </p>
+                    <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
+                      Their details fill the certificate in for you.
+                    </p>
+                  </div>
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={isPending}

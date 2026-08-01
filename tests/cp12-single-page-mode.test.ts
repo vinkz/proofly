@@ -119,6 +119,21 @@ describe('the route into a certificate', () => {
     expect(jobForm).toMatch(/if \(!handOverPending \|\| submitMode !== 'continue'\) return;/);
   });
 
+  it('goes from job type to the decision, not to a landlord picker', () => {
+    // Choosing a saved landlord is one way to start, not a screen everyone
+    // walks first — and with a long client list it always rendered, so it sat
+    // between the job type and the only choice that actually shortcuts.
+    expect(jobForm).toContain('setStep(hasInitialSelection ? 4 : 3)');
+    expect(jobForm).toContain('Use a saved landlord or property');
+  });
+
+  it('honours "doing it now" after picking a saved landlord too', () => {
+    // Otherwise the shortcut only worked for brand-new landlords, and anyone
+    // reusing a customer was quietly put back on the long route.
+    const picker = jobForm.slice(jobForm.indexOf('Always render Continue'));
+    expect(picker.slice(0, 900)).toContain("if (timing === 'now')");
+  });
+
   it('keeps the stepped route for anything that is not "doing it now"', () => {
     // Booking for later, asking the landlord, or requesting details all still
     // walk the original steps — only the stood-at-the-property path shortcuts.
