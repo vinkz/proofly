@@ -911,6 +911,13 @@ export function SoloJobForm({
     setSelectedPropertyKey('');
     setClientChosen(true);
     setPropertyChosen(true);
+    if (timing === 'now') {
+      // Nothing left to ask here: the certificate collects the landlord and
+      // the property itself, and the engineer is stood at the property.
+      setSubmitMode('continue');
+      setHandOverPending(true);
+      return;
+    }
     setStep(4);
   };
 
@@ -1210,9 +1217,6 @@ export function SoloJobForm({
                   onClick={() => {
                     setJobType(type);
                     setJobTypeTouched(true);
-                    // One tap. The choice is the whole step, so confirming it
-                    // separately is a screen that asks nothing.
-                    setStep(hasInitialSelection ? 4 : 3);
                   }}
                   className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                     jobTypeTouched && jobType === type
@@ -1267,7 +1271,41 @@ export function SoloJobForm({
           </div>
 
           <div className="space-y-2">
-            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">When?</p>
+            <div className="flex gap-2 pb-1">
+              {(
+                [
+                  { id: 'now', label: 'Doing it now' },
+                  { id: 'later', label: 'Book for later' },
+                ] as { id: 'now' | 'later'; label: string }[]
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setTiming(option.id)}
+                  className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
+                    timing === option.id
+                      ? 'bg-[#111] text-white'
+                      : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {timing === 'later' ? (
+              <label className="block pb-1">
+                <span className="mb-1.5 block text-[12px] font-medium text-[var(--color-text-secondary)]">Date</span>
+                <input
+                  type="date"
+                  value={inspectionDate}
+                  onChange={(event) => setInspectionDate(event.target.value)}
+                  className="block h-11 w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-base text-[var(--color-text-primary)]"
+                />
+              </label>
+            ) : null}
+            <p className="pt-1 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
             <button
               type="button"
               disabled={isPending}
