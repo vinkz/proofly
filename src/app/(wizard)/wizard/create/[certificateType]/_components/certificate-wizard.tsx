@@ -630,6 +630,48 @@ export function CertificateWizard({
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
+
+  /**
+   * Single-page mode: every step stacked on one scroll instead of four screens
+   * with a sub-tabbed third.
+   *
+   * A layout preference, not a different form — the same state, the same
+   * autosave, the same offline fallback. Only the chrome changes, which is why
+   * it can be a toggle rather than a second implementation to keep in step.
+   *
+   * Held per device rather than on the profile: it is a preference about this
+   * screen on this phone, and storing it locally means no migration and no
+   * round-trip before the first paint.
+   */
+  const [singlePage, setSinglePage] = useState(false);
+  useEffect(() => {
+    try {
+      setSinglePage(window.localStorage.getItem(SINGLE_PAGE_KEY) === '1');
+    } catch {
+      /* private mode: stay on the wizard */
+    }
+  }, []);
+  const toggleSinglePage = useCallback(() => {
+    setSinglePage((previous) => {
+      const next = !previous;
+      try {
+        window.localStorage.setItem(SINGLE_PAGE_KEY, next ? '1' : '0');
+      } catch {
+        /* preference simply will not persist */
+      }
+      return next;
+    });
+  }, []);
+
+  const layoutToggle = (
+    <button
+      type="button"
+      onClick={toggleSinglePage}
+      className="text-[12px] font-medium text-[var(--color-text-secondary)] underline"
+    >
+      {singlePage ? 'Use step-by-step' : 'Show on one page'}
+    </button>
+  );
   // Appliance-hub navigation: null = show the appliance list (hub); a number = the one
   // appliance currently being filled in (its identity on step 2, its checks on step 3).
   // Signatures (step 4) and property checks (step 3, hub mode) are unaffected.
@@ -2351,6 +2393,8 @@ export function CertificateWizard({
 
   const StepOne = (
     <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      headerAction={layoutToggle}
       step={offsetStep(1)}
       total={totalSteps}
       title={isCp12 && infoSubStep === 1 ? 'Tenant & location' : isCp12 ? 'Landlord / owner' : 'People & location'}
@@ -2833,6 +2877,8 @@ export function CertificateWizard({
 
   const StepTwo = (
     <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      headerAction={layoutToggle}
       step={offsetStep(2)}
       total={totalSteps}
       title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1}` : 'Appliances'}
@@ -2940,6 +2986,8 @@ export function CertificateWizard({
 
   const StepThree = (
     <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      headerAction={layoutToggle}
       step={offsetStep(3)}
       total={totalSteps}
       title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
@@ -2952,10 +3000,11 @@ export function CertificateWizard({
           ? 'Only the Regulation 26(9) confirmation is legally required. Everything else — Readings, Safety and the additional inspection detail — is conventional and prints on the certificate only if you record it.'
           : 'Whole-installation checks are optional — they appear on the certificate only if you record them. Continue to signatures when ready.'}
       </p>
-      {inApplianceDetail ? (
+      {inApplianceDetail && !singlePage ? (
       <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
         {(
           [
+            // Rendered only in wizard mode — see the guard on the wrapper below.
             { id: 'inspection', label: 'Inspection', count: inspectionCount },
             { id: 'readings', label: 'Readings (optional)', count: readingsCount },
             { id: 'safety', label: 'Safety (optional)', count: safetyCount },
@@ -2992,7 +3041,7 @@ export function CertificateWizard({
       </div>
       ) : null}
 
-      {inApplianceDetail && checksTab === 'inspection' && (
+      {inApplianceDetail && (singlePage || checksTab === 'inspection') && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
@@ -3087,7 +3136,7 @@ export function CertificateWizard({
         </div>
       )}
 
-      {inApplianceDetail && checksTab === 'readings' && (
+      {inApplianceDetail && (singlePage || checksTab === 'readings') && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
@@ -3243,7 +3292,7 @@ export function CertificateWizard({
         </div>
       )}
 
-      {inApplianceDetail && checksTab === 'safety' && (
+      {inApplianceDetail && (singlePage || checksTab === 'safety') && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
@@ -3626,6 +3675,8 @@ export function CertificateWizard({
 
   const StepFour = (
     <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      headerAction={layoutToggle}
       step={offsetStep(4)}
       total={totalSteps}
       title="Signatures & PDF"
@@ -3786,11 +3837,39 @@ export function CertificateWizard({
     <LimitReachedModal message={limitReachedMessage} onDismiss={() => setLimitReachedMessage(null)} />
   ) : null;
 
+  if (singlePage) {
+    return (
+      <>
+        <div className="min-h-screen bg-[var(--color-background-secondary)]">
+          <header className="sticky top-14 z-20 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
+              <Link href="/jobs" className="text-[13px] text-[var(--color-text-secondary)]">
+                Back
+              </Link>
+              <p className="text-[15px] font-medium text-[var(--color-text-primary)]">CP12</p>
+              {layoutToggle}
+            </div>
+          </header>
+          <main className="mx-auto max-w-2xl px-4 pb-32 pt-6">
+            {StepOne}
+            {StepTwo}
+            {StepThree}
+            {StepFour}
+          </main>
+        </div>
+        {limitModal}
+      </>
+    );
+  }
+
   if (step === 1) return <>{StepOne}{limitModal}</>;
   if (step === 2) return <>{StepTwo}{limitModal}</>;
   if (step === 3) return <>{StepThree}{limitModal}</>;
   return <>{StepFour}{limitModal}</>;
 }
+
+/** Per-device layout preference. Versioned so the shape can change later. */
+const SINGLE_PAGE_KEY = 'certnow.cp12-wizard.single-page.v1';
 
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
