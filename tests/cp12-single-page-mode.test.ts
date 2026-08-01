@@ -119,11 +119,45 @@ describe('the route into a certificate', () => {
     expect(jobForm).toMatch(/if \(!handOverPending \|\| submitMode !== 'continue'\) return;/);
   });
 
+  it('asks when, and how to start, on the screen that already asks both', () => {
+    // solo-job-form has TWO "How do you want to start?" blocks — one on step 1
+    // beside the job type, one on step 3. Step 1 is the one an engineer
+    // actually reaches from /jobs/new; four rounds of changes went into the
+    // other, which is why none of them appeared. These pin the live one.
+    const stepOne = jobForm.slice(
+      jobForm.indexOf('{step === 1 ?'),
+      jobForm.indexOf('{step === 2 ?'),
+    );
+    expect(stepOne).toContain('Doing it now');
+    expect(stepOne).toContain('Book for later');
+    expect(stepOne).toContain('Fill myself');
+    expect(stepOne).toContain('Existing landlord');
+  });
+
+  it('lets the job type be chosen without navigating away from it', () => {
+    // Advancing on tap sent the engineer to step 3 — a duplicate of the start
+    // options they were already looking at.
+    const stepOne = jobForm.slice(
+      jobForm.indexOf('{step === 1 ?'),
+      jobForm.indexOf('{step === 2 ?'),
+    );
+    expect(stepOne).not.toContain('setStep(hasInitialSelection ? 4 : 3)');
+  });
+
+  it('sends "fill myself, doing it now" straight to the certificate', () => {
+    const handler = jobForm.slice(
+      jobForm.indexOf('const startManualEntry'),
+      jobForm.indexOf('const startExistingLandlordEntry'),
+    );
+    expect(handler).toContain("if (timing === 'now')");
+    expect(handler).toContain('setHandOverPending(true)');
+    expect(handler).toContain('setStep(4)');
+  });
+
   it('goes from job type to the decision, not to a landlord picker', () => {
     // Choosing a saved landlord is one way to start, not a screen everyone
     // walks first — and with a long client list it always rendered, so it sat
     // between the job type and the only choice that actually shortcuts.
-    expect(jobForm).toContain('setStep(hasInitialSelection ? 4 : 3)');
     expect(jobForm).toContain('Use a saved landlord or property');
   });
 
