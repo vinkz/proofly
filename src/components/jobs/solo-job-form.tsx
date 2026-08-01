@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, 
 import { useRouter } from 'next/navigation';
 
 import { createSoloJob, requestLandlordJobPrefill } from '@/server/jobs';
+import { readSinglePagePreference } from '@/lib/wizard/single-page-preference';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import type { JobRequestPrefill } from '@/server/job-requests';
 import type { ClientListItem } from '@/types/client';
@@ -299,6 +300,19 @@ export function SoloJobForm({
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
+  /**
+   * When the engineer has chosen the one-page certificate, "fill details
+   * myself" hands straight over instead of walking two more steps.
+   *
+   * Those steps collect the landlord and the job address — which the wizard's
+   * own first step also collects, which is why it gets skipped with
+   * startStep=2 afterwards. On one page there is nothing to skip to, so the
+   * form asks for them once, in place, and the preamble has no work left to do.
+   */
+  const [singlePageCert, setSinglePageCert] = useState(false);
+  useEffect(() => {
+    setSinglePageCert(readSinglePagePreference());
+  }, []);
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('jobs_new', 'create'), []);
   const requestAddress = parseRequestAddress(initialRequest?.propertyAddress, initialRequest?.propertyPostcode);
   const requestPreferredDate = firstDateFromPreferredDates(initialRequest?.preferredDates);
@@ -355,6 +369,19 @@ export function SoloJobForm({
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialRequest || initialPropertyId ? 4 : initialClientId ? 2 : 1);
   const [path, setPath] = useState<'self' | 'landlord' | null>(initialRequest || initialPropertyId ? 'self' : null);
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
+  const formRef = useRef<HTMLFormElement>(null);
+  /**
+   * setSubmitMode is async, so submitting in the same handler would read the
+   * previous mode and send the engineer back to the job list instead of into
+   * the certificate. The latch waits for the mode to commit first.
+   */
+  const [handOverPending, setHandOverPending] = useState(false);
+  useEffect(() => {
+    if (!handOverPending || submitMode !== 'continue') return;
+    setHandOverPending(false);
+    formRef.current?.requestSubmit();
+  }, [handOverPending, submitMode]);
+
   const [landlordRequestMessage, setLandlordRequestMessage] = useState<string | null>(null);
   const [landlordRequestError, setLandlordRequestError] = useState<string | null>(null);
   const [isJobAddressLookupPending, setIsJobAddressLookupPending] = useState(false);
@@ -1108,7 +1135,8 @@ export function SoloJobForm({
                 ? combinedFirst ?? 'cp12'
                 : WIZARD_ROUTE_BY_JOB_TYPE[jobType];
             const shouldSkipFirstWizardStep =
-              Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice';
+              !singlePageCert &&
+              (Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice');
             const href = shouldSkipFirstWizardStep
               ? `/wizard/create/${wizardRoute}?jobId=${jobId}&startStep=2`
               : `/wizard/create/${wizardRoute}?jobId=${jobId}`;
@@ -1129,7 +1157,7 @@ export function SoloJobForm({
   };
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form ref={formRef} className="space-y-4" onSubmit={handleSubmit}>
       {/* Step header */}
       {step > 1 ? (
         <div className="flex items-center justify-between">
@@ -1172,6 +1200,9 @@ export function SoloJobForm({
                   onClick={() => {
                     setJobType(type);
                     setJobTypeTouched(true);
+                    // One tap. The choice is the whole step, so confirming it
+                    // separately is a screen that asks nothing.
+                    if (singlePageCert) setStep(hasInitialSelection ? 4 : 2);
                   }}
                   className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                     jobTypeTouched && jobType === type
@@ -1405,6 +1436,14 @@ export function SoloJobForm({
                 disabled={isPending}
                 onClick={() => {
                   setPath('self');
+                  if (singlePageCert) {
+                    // Straight to the certificate. Whatever was picked so far —
+                    // an existing landlord, a property, a landlord request —
+                    // is already in state and rides along as prefill.
+                    setSubmitMode('continue');
+                    setHandOverPending(true);
+                    return;
+                  }
                   setStep(4);
                 }}
                 className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"

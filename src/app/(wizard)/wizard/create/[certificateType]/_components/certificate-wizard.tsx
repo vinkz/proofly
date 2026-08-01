@@ -15,6 +15,7 @@ import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/ste
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { visibleCp12ApplianceChecks } from '@/lib/cp12/applianceChecks';
+import { readSinglePagePreference, writeSinglePagePreference } from '@/lib/wizard/single-page-preference';
 
 /** Answer set for checks that record whether something was done, not tested. */
 const YES_NO_OPTIONS = [
@@ -645,20 +646,12 @@ export function CertificateWizard({
    */
   const [singlePage, setSinglePage] = useState(false);
   useEffect(() => {
-    try {
-      setSinglePage(window.localStorage.getItem(SINGLE_PAGE_KEY) === '1');
-    } catch {
-      /* private mode: stay on the wizard */
-    }
+    setSinglePage(readSinglePagePreference());
   }, []);
   const toggleSinglePage = useCallback(() => {
     setSinglePage((previous) => {
       const next = !previous;
-      try {
-        window.localStorage.setItem(SINGLE_PAGE_KEY, next ? '1' : '0');
-      } catch {
-        /* preference simply will not persist */
-      }
+      writeSinglePagePreference(next);
       return next;
     });
   }, []);
@@ -3867,9 +3860,6 @@ export function CertificateWizard({
   if (step === 3) return <>{StepThree}{limitModal}</>;
   return <>{StepFour}{limitModal}</>;
 }
-
-/** Per-device layout preference. Versioned so the shape can change later. */
-const SINGLE_PAGE_KEY = 'certnow.cp12-wizard.single-page.v1';
 
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
 const booleanFromField = (val: unknown) => val === true || val === 'true' || val === 'YES' || val === 'yes';
