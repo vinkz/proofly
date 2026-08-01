@@ -9,6 +9,8 @@ const wizard = readFileSync(
   'utf8',
 );
 const layout = readFileSync(join(ROOT, 'src/components/certificates/wizard-layout.tsx'), 'utf8');
+const jobForm = readFileSync(join(ROOT, 'src/components/jobs/solo-job-form.tsx'), 'utf8');
+const preference = readFileSync(join(ROOT, 'src/lib/wizard/single-page-preference.ts'), 'utf8');
 
 /**
  * Single-page mode is a layout toggle, not a second form.
@@ -56,7 +58,49 @@ describe('CP12 single-page mode', () => {
   });
 
   it('survives a browser that refuses local storage', () => {
-    const pref = wizard.slice(wizard.indexOf('const [singlePage'), wizard.indexOf('const layoutToggle'));
-    expect((pref.match(/catch/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    // Private mode throws on localStorage access. Both read and write swallow
+    // it, and the fallback is the stepped flow that has always shipped.
+    expect((preference.match(/catch/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(preference).toContain('return false');
+  });
+});
+
+/**
+ * The layout toggle was only half the problem. Reaching the certificate meant
+ * five steps in the job form before the wizard even loaded — and two of those
+ * collect the landlord and the job address, which the wizard's own first step
+ * also collects, which is why it was then skipped with startStep=2. On one
+ * page there is nothing to skip to, so the preamble has no work left to do.
+ */
+describe('the route into a certificate', () => {
+  it('reads the same preference in both screens, from one place', () => {
+    expect(preference).toContain('certnow.cp12-wizard.single-page.v1');
+    for (const file of [wizard, jobForm]) {
+      expect(file).toContain("from '@/lib/wizard/single-page-preference'");
+      // Neither may keep its own copy of the key and drift.
+      expect(file).not.toContain('certnow.cp12-wizard.single-page');
+    }
+  });
+
+  it('hands straight over on "fill details myself" instead of two more steps', () => {
+    expect(jobForm).toMatch(/if \(singlePageCert\) \{[\s\S]{0,400}setHandOverPending\(true\)/);
+  });
+
+  it('waits for the submit mode to commit before submitting', () => {
+    // setSubmitMode is async; submitting in the same handler reads the previous
+    // mode and returns the engineer to the job list instead of the certificate.
+    expect(jobForm).toMatch(/if \(!handOverPending \|\| submitMode !== 'continue'\) return;/);
+  });
+
+  it('does not skip the wizard first step when everything is on one page', () => {
+    expect(jobForm).toMatch(/shouldSkipFirstWizardStep =[\s\S]{0,20}!singlePageCert/);
+  });
+
+  it('leaves the stepped flow intact when the preference is off', () => {
+    // Every fast path is gated. Nothing changes for an engineer who has not
+    // opted in, which is what makes this safe on the revenue path.
+    const fastPaths = jobForm.match(/singlePageCert/g) ?? [];
+    expect(fastPaths.length).toBeGreaterThanOrEqual(4);
+    expect(jobForm).toContain('setStep(4)');
   });
 });
