@@ -324,6 +324,24 @@ describe('saved landlords are prefill, not a route', () => {
     expect(wizard).toContain('const savedLandlordPicker = clients.length ? (');
   });
 
+  it('is searchable by the name the engineer types', () => {
+    // SearchableSelect is a native <datalist>: the browser filters on each
+    // option's `value` and hands that raw string back. Keyed on the id, the
+    // customer list was searched by UUID substring — typing a landlord's name
+    // matched nothing. Value and label must be the same string.
+    expect(wizard).toContain('label: savedLandlordLabel(client),');
+    expect(wizard).toContain('value: savedLandlordLabel(client),');
+    expect(wizard).not.toMatch(/value: client\.id,/);
+  });
+
+  it('resolves the pick through the same label it offered', () => {
+    const apply = wizard.slice(
+      wizard.indexOf('const applySavedLandlord'),
+      wizard.indexOf('const savedLandlordPicker'),
+    );
+    expect(apply).toContain('savedLandlordLabel(candidate) === chosenLabel');
+  });
+
   it('writes into the fields the engineer can edit, and locks nothing', () => {
     const apply = wizard.slice(
       wizard.indexOf('const applySavedLandlord'),

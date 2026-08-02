@@ -666,6 +666,10 @@ export function CertificateWizard({
     });
   }, []);
 
+  /** What the engineer sees and types, and therefore what comes back. */
+  const savedLandlordLabel = (client: ClientListItem) =>
+    [client.landlord_name || client.name, client.organization].filter(Boolean).join(' · ');
+
   /**
    * Fill the landlord from a saved customer.
    *
@@ -675,8 +679,14 @@ export function CertificateWizard({
    * copy of the details, which is what lets a landlord's address change later
    * without rewriting certificates already issued.
    */
-  const applySavedLandlord = (clientId: string) => {
-    const client = clients.find((candidate) => candidate.id === clientId);
+  const applySavedLandlord = (chosenLabel: string) => {
+    // SearchableSelect is a native <datalist>: picking an option puts the
+    // option's `value` into the input and hands that raw string back here, and
+    // the browser filters on `value` too. Keyed on the id, the customer list
+    // was being searched by UUID substring — typing a landlord's name matched
+    // nothing. Every other use of this component sets value === label for the
+    // same reason.
+    const client = clients.find((candidate) => savedLandlordLabel(candidate) === chosenLabel);
     if (!client) return;
     const [line1 = '', ...rest] = splitAddressParts(
       String(client.landlord_address ?? client.address ?? ''),
@@ -700,8 +710,8 @@ export function CertificateWizard({
         label="Start from a saved landlord (optional)"
         value=""
         options={clients.map((client) => ({
-          label: [client.landlord_name || client.name, client.organization].filter(Boolean).join(' · '),
-          value: client.id,
+          label: savedLandlordLabel(client),
+          value: savedLandlordLabel(client),
         }))}
         placeholder="Search your customers"
         onChange={applySavedLandlord}
