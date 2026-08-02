@@ -2373,7 +2373,7 @@ export function CertificateWizard({
     );
   }
 
-  const offlineDraftBanner = (
+  const offlineDraftBannerNode = (
     <OfflineDraftBanner
       hasUnsyncedChanges={hasUnsyncedChanges}
       isOnline={isOnline}
@@ -2383,6 +2383,9 @@ export function CertificateWizard({
       syncErrorCount={offlineDraftSyncErrorCount}
     />
   );
+  // Each step renders this. Stacked into one page they became four identical
+  // banners down one scroll, so the sections drop it and the shell shows one.
+  const offlineDraftBanner = singlePage ? null : offlineDraftBannerNode;
 
   const StepOne = (
     <WizardLayout
@@ -2656,6 +2659,7 @@ export function CertificateWizard({
       ) : (
         <p className="text-[13px] text-[var(--color-text-tertiary)]">Non-CP12 certificates currently use the simplified flow.</p>
       )}
+      {singlePage ? null : (
       <div id="cp12-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         {isCp12 && infoSubStep === 1 ? (
           <button
@@ -2679,6 +2683,7 @@ export function CertificateWizard({
           </svg>
         </button>
       </div>
+      )}
     </WizardLayout>
   );
 
@@ -2893,6 +2898,7 @@ export function CertificateWizard({
       }
     >
       {inApplianceDetail ? ApplianceDetailIdentity : ApplianceHub}
+      {singlePage ? null : (
       <div id="cp12-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         <button
           type="button"
@@ -2913,6 +2919,7 @@ export function CertificateWizard({
           </svg>
         </button>
       </div>
+      )}
     </WizardLayout>
   );
 
@@ -3613,6 +3620,7 @@ export function CertificateWizard({
         </div>
       )}
 
+      {singlePage ? null : (
       <div id="cp12-step3-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         <button
           type="button"
@@ -3663,6 +3671,7 @@ export function CertificateWizard({
           </button>
         )}
       </div>
+      )}
     </WizardLayout>
   );
 
@@ -3844,6 +3853,7 @@ export function CertificateWizard({
             </div>
           </header>
           <main className="mx-auto max-w-2xl px-4 pb-32 pt-6">
+            <div className="mb-5">{offlineDraftBannerNode}</div>
             {StepOne}
             {StepTwo}
             {StepThree}
