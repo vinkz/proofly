@@ -262,3 +262,43 @@ describe('single-page mode drops the per-screen chrome', () => {
     expect(wizard.slice(at - 60, at)).not.toContain('{singlePage ? null : (');
   });
 });
+
+/**
+ * A job is a container; the certificate is the document.
+ *
+ * SoloJobSchema required the landlord's name, address, city and postcode
+ * before a job could exist at all — which is precisely why two screens of
+ * preamble stood in front of an engineer who was already at the property.
+ * Clearing those fields to avoid inheriting a previous job's landlord then
+ * made the job uncreatable, and the handover silently did nothing.
+ *
+ * Deferring loses no safety: validateCp12TierOne enforces exactly these fields
+ * before a certificate can be issued, so an incomplete record still cannot
+ * leave the building — it just no longer has to be complete before it exists.
+ */
+describe('a job can be created with its details deferred', () => {
+  const jobsServer = readFileSync(join(ROOT, 'src/server/jobs.ts'), 'utf8');
+
+  it('skips the identity requirements only when asked to', () => {
+    expect(jobsServer).toContain('deferDetails: z.boolean().optional().default(false)');
+    expect(jobsServer).toMatch(/if \(value\.deferDetails\) return;/);
+  });
+
+  it('takes the schema input type so callers need not pass the flag', () => {
+    // z.infer is the parsed output, where a defaulted field is required —
+    // typing the parameter with it forced every existing caller to pass it.
+    expect(jobsServer).toContain('createSoloJob(payload: z.input<typeof SoloJobSchema>)');
+  });
+
+  it('defers only on the straight-to-certificate path', () => {
+    expect(jobForm).toContain("deferDetails: timing === 'now' && path === 'self'");
+  });
+
+  it('still refuses to issue a certificate without a landlord', () => {
+    // The guarantee that makes deferral safe. If this ever stops being true,
+    // deferring becomes a way to issue an incomplete gas safety record.
+    const validation = readFileSync(join(ROOT, 'src/lib/cp12/validation.ts'), 'utf8');
+    expect(validation).toMatch(/landlord_address_line1/);
+    expect(validation).toMatch(/is required/);
+  });
+});

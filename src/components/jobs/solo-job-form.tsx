@@ -1155,6 +1155,9 @@ export function SoloJobForm({
           landlordCity,
           landlordPostcode,
           landlordTel,
+          // Identity is being entered on the certificate, so the job may be
+          // created without it. validateCp12TierOne still blocks issuing.
+          deferDetails: timing === 'now' && path === 'self',
           selectedPropertyId: selectedProperty?.property_id ?? '',
           selectedPropertyJobId: selectedProperty?.source_job_id ?? (selectedProperty?.property_id ? '' : selectedPropertyKey),
           requestId: initialRequest?.id,
