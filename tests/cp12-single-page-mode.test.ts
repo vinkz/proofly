@@ -302,3 +302,49 @@ describe('a job can be created with its details deferred', () => {
     expect(validation).toMatch(/is required/);
   });
 });
+
+/**
+ * Choosing a saved landlord was a route into the wizard — a picker screen that
+ * ran before the form. It is not a different way of making a certificate, only
+ * a faster way of filling one in, so on a single page it belongs on the page.
+ */
+describe('saved landlords are prefill, not a route', () => {
+  const wizardPage = readFileSync(
+    join(ROOT, 'src/app/(wizard)/wizard/create/[certificateType]/page.tsx'),
+    'utf8',
+  );
+
+  it('offers the picker above the stacked sections', () => {
+    const shell = wizard.slice(wizard.indexOf('if (singlePage) {'));
+    expect(shell).toContain('{savedLandlordPicker}');
+    expect(shell.indexOf('{savedLandlordPicker}')).toBeLessThan(shell.indexOf('{StepOne}'));
+  });
+
+  it('hides itself rather than showing an empty dropdown', () => {
+    expect(wizard).toContain('const savedLandlordPicker = clients.length ? (');
+  });
+
+  it('writes into the fields the engineer can edit, and locks nothing', () => {
+    const apply = wizard.slice(
+      wizard.indexOf('const applySavedLandlord'),
+      wizard.indexOf('const savedLandlordPicker'),
+    );
+    // Falls back to the existing value rather than blanking a field the saved
+    // customer happens not to carry.
+    expect(apply).toContain('prev.landlord_name');
+    expect(apply).toContain('prev.landlord_postcode');
+    expect(apply).not.toContain('readOnly');
+    expect(apply).not.toContain('disabled');
+  });
+
+  it('survives a client list that fails to load', () => {
+    expect(wizardPage).toContain('await listClients().catch(() => [])');
+  });
+
+  it('stops pointing at a step name that is not on screen', () => {
+    // "People & location" is a step. On one page the section is right there
+    // and called something else.
+    expect(wizard).toContain("singlePage ? 'Add it under Landlord / owner above'");
+    expect(wizard).toContain("singlePage ? 'Fill it in under Landlord / owner above'");
+  });
+});

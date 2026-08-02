@@ -15,6 +15,7 @@ import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/ste
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { visibleCp12ApplianceChecks } from '@/lib/cp12/applianceChecks';
+import type { ClientListItem } from '@/types/client';
 import { readSinglePagePreference, writeSinglePagePreference } from '@/lib/wizard/single-page-preference';
 
 /** Answer set for checks that record whether something was done, not tested. */
@@ -88,6 +89,14 @@ type WizardProps = {
   initialJobContext?: InitialJobContext | null;
   initialPhotoPreviews?: Record<string, string>;
   initialAppliances?: Cp12Appliance[];
+  /**
+   * Saved landlords, offered as prefill at the top of the single-page layout.
+   *
+   * Choosing one used to be a separate route into the wizard — a picker screen
+   * before the form. It is not a different way of making a certificate, only a
+   * faster way of filling one in, so on one page it belongs on the page.
+   */
+  clients?: ClientListItem[];
   stepOffset?: number;
   startStep?: number;
   hideBillingCustomerStep?: boolean;
@@ -417,6 +426,7 @@ export function CertificateWizard({
   initialJobContext = null,
   initialPhotoPreviews = {},
   initialAppliances = [],
+  clients = [],
   stepOffset = 0,
   startStep = 1,
   prepareOnly = false,
@@ -655,6 +665,52 @@ export function CertificateWizard({
       return next;
     });
   }, []);
+
+  /**
+   * Fill the landlord from a saved customer.
+   *
+   * Deliberately additive: it writes into the same fields the engineer can
+   * type into, so a wrong pick is corrected by editing rather than by starting
+   * again. Nothing is linked or locked — the certificate still owns its own
+   * copy of the details, which is what lets a landlord's address change later
+   * without rewriting certificates already issued.
+   */
+  const applySavedLandlord = (clientId: string) => {
+    const client = clients.find((candidate) => candidate.id === clientId);
+    if (!client) return;
+    const [line1 = '', ...rest] = splitAddressParts(
+      String(client.landlord_address ?? client.address ?? ''),
+    );
+    setInfo((prev) => ({
+      ...prev,
+      landlord_name: client.landlord_name || client.name || prev.landlord_name,
+      landlord_company: client.organization ?? prev.landlord_company,
+      landlord_address_line1: line1 || prev.landlord_address_line1,
+      landlord_city: rest.at(-1) ?? prev.landlord_city,
+      landlord_postcode: client.postcode ?? prev.landlord_postcode,
+      landlord_tel: client.phone ?? prev.landlord_tel,
+      landlord_email: client.email ?? prev.landlord_email,
+    }));
+    setLandlordAddressSearchQuery(line1 || '');
+  };
+
+  const savedLandlordPicker = clients.length ? (
+    <div className="mb-5 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+      <SearchableSelect
+        label="Start from a saved landlord (optional)"
+        value=""
+        options={clients.map((client) => ({
+          label: [client.landlord_name || client.name, client.organization].filter(Boolean).join(' · '),
+          value: client.id,
+        }))}
+        placeholder="Search your customers"
+        onChange={applySavedLandlord}
+      />
+      <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
+        Fills the landlord details below. You can edit anything it fills in.
+      </p>
+    </div>
+  ) : null;
 
   const layoutToggle = (
     <button
@@ -1970,7 +2026,7 @@ export function CertificateWizard({
       id: 'job-address',
       label: 'Property address & postcode',
       ok: addrOk,
-      hint: 'Add in People & location',
+      hint: singlePage ? 'Add it under Landlord / owner above' : 'Add in People & location',
       action: () => {
         setStep(1);
         setInfoSubStep(1);
@@ -1988,7 +2044,7 @@ export function CertificateWizard({
       id: 'landlord',
       label: 'Landlord / owner details complete',
       ok: landlordOk,
-      hint: 'Fill in People & location',
+      hint: singlePage ? 'Fill it in under Landlord / owner above' : 'Fill in People & location',
       action: () => {
         setStep(1);
         setInfoSubStep(0);
@@ -3854,6 +3910,7 @@ export function CertificateWizard({
           </header>
           <main className="mx-auto max-w-2xl px-4 pb-32 pt-6">
             <div className="mb-5">{offlineDraftBannerNode}</div>
+            {savedLandlordPicker}
             {StepOne}
             {StepTwo}
             {StepThree}
