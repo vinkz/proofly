@@ -344,7 +344,36 @@ describe('saved landlords are prefill, not a route', () => {
   it('stops pointing at a step name that is not on screen', () => {
     // "People & location" is a step. On one page the section is right there
     // and called something else.
-    expect(wizard).toContain("singlePage ? 'Add it under Landlord / owner above'");
-    expect(wizard).toContain("singlePage ? 'Fill it in under Landlord / owner above'");
+    expect(wizard).toContain("singlePage ? 'Add it under Landlord & property above'");
+    expect(wizard).toContain("singlePage ? 'Fill it in under Landlord & property above'");
+  });
+});
+
+/**
+ * Step one is itself two pages — landlord on the first, the property address on
+ * the second — behind `infoSubStep`. Stacked, only the first rendered, so a
+ * certificate started on one page had nowhere to enter the address of the
+ * premises it certifies. That is Reg 36(3)(b) content: the record must state
+ * the address of the premises at which the appliance is installed.
+ *
+ * The same shape as the appliance sub-tabs, missed because it is a second,
+ * separate sub-navigation inside a step that already looked flattened.
+ */
+describe('the property address is reachable on one page', () => {
+  it('renders both halves of step one rather than either/or', () => {
+    expect(wizard).toContain('{infoSubStep === 0 || singlePage ? (');
+    expect(wizard).toContain('{infoSubStep === 1 || singlePage ? (');
+  });
+
+  it('still shows one half at a time in the stepped flow', () => {
+    // Both gates fall through to null, so stepping is unchanged.
+    const landlordGate = wizard.indexOf('{infoSubStep === 0 || singlePage ? (');
+    const propertyGate = wizard.indexOf('{infoSubStep === 1 || singlePage ? (');
+    expect(landlordGate).toBeLessThan(propertyGate);
+    expect(wizard.slice(landlordGate, propertyGate)).toContain(') : null}');
+  });
+
+  it('names the section for what it now contains', () => {
+    expect(wizard).toContain("? 'Landlord & property'");
   });
 });

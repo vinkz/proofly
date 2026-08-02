@@ -2026,7 +2026,7 @@ export function CertificateWizard({
       id: 'job-address',
       label: 'Property address & postcode',
       ok: addrOk,
-      hint: singlePage ? 'Add it under Landlord / owner above' : 'Add in People & location',
+      hint: singlePage ? 'Add it under Landlord & property above' : 'Add in People & location',
       action: () => {
         setStep(1);
         setInfoSubStep(1);
@@ -2044,7 +2044,7 @@ export function CertificateWizard({
       id: 'landlord',
       label: 'Landlord / owner details complete',
       ok: landlordOk,
-      hint: singlePage ? 'Fill it in under Landlord / owner above' : 'Fill in People & location',
+      hint: singlePage ? 'Fill it in under Landlord & property above' : 'Fill in People & location',
       action: () => {
         setStep(1);
         setInfoSubStep(0);
@@ -2449,7 +2449,15 @@ export function CertificateWizard({
       headerAction={layoutToggle}
       step={offsetStep(1)}
       total={totalSteps}
-      title={isCp12 && infoSubStep === 1 ? 'Tenant & location' : isCp12 ? 'Landlord / owner' : 'People & location'}
+      title={
+        isCp12 && singlePage
+          ? 'Landlord & property'
+          : isCp12 && infoSubStep === 1
+            ? 'Tenant & location'
+            : isCp12
+              ? 'Landlord / owner'
+              : 'People & location'
+      }
       status={isCp12 ? `${certificateLabel} · ${infoSubStep === 1 ? '2' : '1'} of 2` : certificateLabel}
       onBack={
         isCp12 && infoSubStep === 1
@@ -2479,7 +2487,7 @@ export function CertificateWizard({
       {isCp12 ? (
         <div className="space-y-3">
           {offlineDraftBanner}
-          {infoSubStep === 0 ? (
+          {infoSubStep === 0 || singlePage ? (
           <>
           <p className="text-[13px] text-[var(--color-text-secondary)]">Engineer and company details are pulled from account settings.</p>
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
@@ -2607,7 +2615,12 @@ export function CertificateWizard({
             </div>
           </div>
           </>
-          ) : (
+          ) : null}
+          {/* The property address is Reg 36(3)(b) content and lived on the
+              second half of a two-page step. Stacked, only the first half
+              rendered — so a certificate started on one page had nowhere to
+              enter the address of the premises it certifies. */}
+          {infoSubStep === 1 || singlePage ? (
           <>
 
           <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
@@ -2710,7 +2723,7 @@ export function CertificateWizard({
           </div>
 
             </>
-          )}
+          ) : null}
         </div>
       ) : (
         <p className="text-[13px] text-[var(--color-text-tertiary)]">Non-CP12 certificates currently use the simplified flow.</p>
