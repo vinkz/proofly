@@ -130,8 +130,6 @@ describe('the route into a certificate', () => {
     );
     expect(stepOne).toContain('Doing it now');
     expect(stepOne).toContain('Book for later');
-    expect(stepOne).toContain('Fill myself');
-    expect(stepOne).toContain('Existing landlord');
   });
 
   it('lets the job type be chosen without navigating away from it', () => {
@@ -393,5 +391,62 @@ describe('the property address is reachable on one page', () => {
 
   it('names the section for what it now contains', () => {
     expect(wizard).toContain("? 'Landlord & property'");
+  });
+});
+
+/**
+ * The start options only make sense once you know when the work is happening.
+ *
+ * Stood at the property there is nothing left to choose: asking the landlord to
+ * fill it in is nonsense, and "myself" versus "existing landlord" is a false
+ * choice, because the certificate offers the saved-landlord dropdown and the
+ * fields on the same page. Booking ahead is the opposite — the details are
+ * worth capturing, but on this page rather than two screens before it.
+ */
+describe('the start options follow the timing answer', () => {
+  const stepOne = jobForm.slice(
+    jobForm.indexOf('{step === 1 ?'),
+    jobForm.indexOf('{step === 2 ?'),
+  );
+
+  it('offers one action when the engineer is doing it now', () => {
+    expect(stepOne).toContain("{timing === 'now' ? (");
+    expect(stepOne).toMatch(/Start \{JOB_TYPE_LABELS\[jobType\]\} now/);
+    expect(stepOne).toContain('onClick={startManualEntry}');
+  });
+
+  it('drops "ask landlord" from the doing-it-now path', () => {
+    const now = stepOne.slice(stepOne.indexOf("{timing === 'now' ? ("), stepOne.indexOf(') : ('));
+    expect(now).not.toContain('Ask landlord');
+  });
+
+  it('keeps "ask landlord" for a booking', () => {
+    const later = stepOne.slice(stepOne.indexOf(') : ('));
+    expect(later).toContain('Ask landlord');
+    expect(later).toContain('Enter the details now');
+  });
+
+  it('reveals the details in place rather than navigating to them', () => {
+    expect(jobForm).toContain('setDetailsInline(true)');
+    expect(jobForm).toContain('{step === 4 || (step === 1 && detailsInline) ? (');
+    expect(jobForm).toContain('{step === 5 || (step === 1 && detailsInline) ? (');
+  });
+
+  it('offers saved landlords alongside the fields, not instead of them', () => {
+    // You asked for the dropdown and the fields together on the booking page.
+    expect(jobForm).toContain('{step === 2 || (step === 1 && detailsInline) ? (');
+    // Its Continue has nowhere to go once the details are already below it.
+    expect(jobForm).toContain('{step === 1 && detailsInline ? null : (');
+  });
+
+  it('retires the picker as a screen of its own', () => {
+    expect(jobForm).not.toContain('startExistingLandlordEntry');
+  });
+
+  it('leaves the stepped route reachable', () => {
+    // Both gates still fire on their own step, so nothing that arrives at
+    // step 4 or 5 by another path stops working.
+    expect(jobForm).toMatch(/\{step === 4 \|\|/);
+    expect(jobForm).toMatch(/\{step === 5 \|\|/);
   });
 });
