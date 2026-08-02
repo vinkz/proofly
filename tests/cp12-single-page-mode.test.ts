@@ -174,3 +174,37 @@ describe('the route into a certificate', () => {
     expect(jobForm).toContain('setStep(4)');
   });
 });
+
+/**
+ * Stacking four screens that each assumed they owned the viewport leaves their
+ * chrome behind. Found by loading the page rather than reading the file: four
+ * identical "Saved on this device" banners down one scroll, and three stranded
+ * "Back / Continue" rows that moved nobody anywhere.
+ */
+describe('single-page mode drops the per-screen chrome', () => {
+  it('shows the offline banner once, not once per section', () => {
+    expect(wizard).toContain('const offlineDraftBanner = singlePage ? null : offlineDraftBannerNode;');
+    const shell = wizard.slice(wizard.indexOf('if (singlePage) {'));
+    expect(shell).toContain('{offlineDraftBannerNode}');
+  });
+
+  it('hides the step navigation that has nowhere to navigate to', () => {
+    for (const n of ['1', '2', '3']) {
+      // The id appears twice — once as actionsHideWhenVisibleId, once on the
+      // div. Anchor on the div, which is the thing being gated.
+      const at = wizard.indexOf(`<div id="cp12-step${n}-footer-actions"`);
+      expect(at, `step ${n} footer div not found`).toBeGreaterThan(-1);
+      expect(wizard.slice(at - 60, at), `step ${n} footer not gated`).toContain(
+        '{singlePage ? null : (',
+      );
+    }
+  });
+
+  it('keeps the action that still means something', () => {
+    // "Save & issue CP12" is the end of the page, not navigation between
+    // screens, so it renders in both layouts.
+    const at = wizard.indexOf('<div id="cp12-step4-footer-actions"');
+    expect(at).toBeGreaterThan(-1);
+    expect(wizard.slice(at - 60, at)).not.toContain('{singlePage ? null : (');
+  });
+});
