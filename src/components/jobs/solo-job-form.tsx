@@ -1817,7 +1817,9 @@ export function SoloJobForm({
           {/* By step 4 the landlord/property selection is already done, so the
               Continue button must ALWAYS render — never gate it on selection flags
               (they can race to false and strand the user). Final validation happens
-              at submit. */}
+              at submit. Inline on the booking page it is the exception: step 5 is
+              already on screen below, so continuing to it means nothing. */}
+          {step === 1 && detailsInline ? null : (
           <div className="sticky bottom-0 z-10 -mx-4 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 pb-3 pt-3">
             <button
               type="button"
@@ -1828,6 +1830,7 @@ export function SoloJobForm({
               Continue
             </button>
           </div>
+          )}
         </>
       ) : null}
 
@@ -1988,7 +1991,7 @@ export function SoloJobForm({
           {/* Combined "safety check + service" jobs (including those opened from a
               landlord request for BOTH certs): let the engineer see both are needed and
               choose which to start with. The other is completed straight after. */}
-          {jobType === 'safety_check_service' && !initialRequest ? (
+          {jobType === 'safety_check_service' && !initialRequest && !(step === 1 && detailsInline) ? (
             <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-4">
               <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
                 This job needs a CP12 and a boiler service — complete first?
