@@ -443,6 +443,20 @@ describe('the start options follow the timing answer', () => {
     expect(jobForm).not.toContain('startExistingLandlordEntry');
   });
 
+  it('asks the combined-job question once', () => {
+    // Step 5 carries its own copy of "complete first". Inline it landed a
+    // second time, below the one already answered at the top of step 1.
+    expect(jobForm).toContain(
+      "{jobType === 'safety_check_service' && !initialRequest && !(step === 1 && detailsInline) ? (",
+    );
+  });
+
+  it('drops the Continue that leads to a section already on screen', () => {
+    // Step 4's footer continues to step 5, which is rendered underneath it.
+    const footer = jobForm.slice(jobForm.indexOf('By step 4 the landlord/property selection'));
+    expect(footer.slice(0, 700)).toContain('{step === 1 && detailsInline ? null : (');
+  });
+
   it('leaves the stepped route reachable', () => {
     // Both gates still fire on their own step, so nothing that arrives at
     // step 4 or 5 by another path stops working.
