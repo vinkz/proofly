@@ -904,6 +904,38 @@ export function SoloJobForm({
     });
   };
 
+  /**
+   * Everything a previous, abandoned job left behind in this form.
+   *
+   * The draft is keyed `jobs_new:create` — one shared entry for every new job,
+   * not one per job — so starting a certificate restores whatever landlord was
+   * last typed and abandoned. Walking the landlord step made that visible and
+   * easy to overwrite. Handing straight to the certificate does not, so a
+   * stale landlord would be carried onto a gas safety record unseen.
+   */
+  const clearCarriedOverIdentity = () => {
+    setClientName('');
+    setClientPhone('');
+    setClientEmail('');
+    setPropertyName('');
+    setAddressLine1('');
+    setCity('');
+    setPostcode('');
+    setJobAddressName('');
+    setJobAddressLine1('');
+    setJobAddressLine2('');
+    setJobAddressCity('');
+    setJobAddressPostcode('');
+    setJobAddressTel('');
+    setLandlordName('');
+    setLandlordCompany('');
+    setLandlordAddressLine1('');
+    setLandlordAddressLine2('');
+    setLandlordCity('');
+    setLandlordPostcode('');
+    setLandlordTel('');
+  };
+
   const startManualEntry = () => {
     setPath('self');
     setClientMode('new');
@@ -912,8 +944,10 @@ export function SoloJobForm({
     setClientChosen(true);
     setPropertyChosen(true);
     if (timing === 'now') {
-      // Nothing left to ask here: the certificate collects the landlord and
-      // the property itself, and the engineer is stood at the property.
+      // "Fill myself" means the details are entered on the certificate, so
+      // anything restored from a previous job is wrong by definition.
+      clearCarriedOverIdentity();
+      clearDraft();
       setSubmitMode('continue');
       setHandOverPending(true);
       return;
