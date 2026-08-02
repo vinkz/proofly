@@ -174,3 +174,57 @@ describe('the route into a certificate', () => {
     expect(jobForm).toContain('setStep(4)');
   });
 });
+
+/**
+ * The new-job form's draft is keyed `jobs_new:create` — one shared entry for
+ * every new job rather than one per job. Abandon a half-filled job and the
+ * next one restores that landlord.
+ *
+ * Walking the landlord step made that visible and easy to overwrite. Handing
+ * straight to the certificate does not, so the stale landlord would reach a gas
+ * safety record without anyone seeing it. Found by loading the page: a brand-new
+ * job opened pre-filled with a landlord left behind by an old Playwright run.
+ */
+describe('a new certificate does not inherit an abandoned one', () => {
+  it('clears carried-over identity before handing over', () => {
+    const handler = jobForm.slice(
+      jobForm.indexOf('const startManualEntry'),
+      jobForm.indexOf('const startExistingLandlordEntry'),
+    );
+    expect(handler).toContain('clearCarriedOverIdentity()');
+    expect(handler).toContain('clearDraft()');
+    // Order matters: both must happen before the submit is latched.
+    expect(handler.indexOf('clearCarriedOverIdentity()')).toBeLessThan(
+      handler.indexOf('setHandOverPending(true)'),
+    );
+  });
+
+  it('clears every field that reaches createSoloJob', () => {
+    const reset = jobForm.slice(
+      jobForm.indexOf('const clearCarriedOverIdentity'),
+      jobForm.indexOf('const startManualEntry'),
+    );
+    // Anything sent to createSoloJob and not cleared here is a field that can
+    // carry a previous landlord onto a new certificate.
+    for (const setter of [
+      'setLandlordName',
+      'setLandlordCompany',
+      'setLandlordAddressLine1',
+      'setLandlordAddressLine2',
+      'setLandlordCity',
+      'setLandlordPostcode',
+      'setLandlordTel',
+      'setClientName',
+      'setClientPhone',
+      'setClientEmail',
+      'setPropertyName',
+      'setAddressLine1',
+      'setCity',
+      'setPostcode',
+      'setJobAddressLine1',
+      'setJobAddressPostcode',
+    ]) {
+      expect(reset, `${setter} not cleared`).toContain(`${setter}('')`);
+    }
+  });
+});
