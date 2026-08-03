@@ -457,6 +457,21 @@ describe('the start options follow the timing answer', () => {
     expect(footer.slice(0, 700)).toContain('{step === 1 && detailsInline ? null : (');
   });
 
+  it('ends a booking at the diary, not in the certificate', () => {
+    // "Book for later" says the work is for another day. Continuing into the
+    // certificate — or onto the completion checklist — walked the engineer
+    // back through the details they had just entered to reach work they were
+    // not doing.
+    const submit = jobForm.slice(jobForm.indexOf('const { jobId } = await createSoloJob'));
+    const branch = submit.slice(0, submit.indexOf("} else if (submitMode === 'continue')"));
+    expect(branch).toContain("if (timing === 'later')");
+    expect(branch).toContain("router.push('/jobs')");
+  });
+
+  it('names the action after what it does', () => {
+    expect(jobForm).toContain("? 'Book job'");
+  });
+
   it('leaves the stepped route reachable', () => {
     // Both gates still fire on their own step, so nothing that arrives at
     // step 4 or 5 by another path stops working.
