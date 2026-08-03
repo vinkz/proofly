@@ -479,3 +479,33 @@ describe('the start options follow the timing answer', () => {
     expect(jobForm).toMatch(/\{step === 5 \|\|/);
   });
 });
+
+/**
+ * "Back" should mean the page before this one.
+ *
+ * With no step to retreat to, the wizard fell back to a link to /jobs — so
+ * leaving a certificate always landed on the full job list, whichever screen
+ * the engineer had actually come from. Arriving from /jobs/new and pressing
+ * Back showed them every job they have, which is not where they were.
+ */
+describe('Back returns to where you came from', () => {
+  const layout = readFileSync(join(ROOT, 'src/components/certificates/wizard-layout.tsx'), 'utf8');
+
+  it('uses history rather than a fixed destination', () => {
+    for (const [name, file] of [['layout', layout], ['single-page shell', wizard]] as const) {
+      expect(file, `${name} does not use history`).toContain('window.history.length > 1');
+      expect(file, `${name} does not go back`).toContain('router.back()');
+    }
+  });
+
+  it('still has somewhere to go when opened cold', () => {
+    // A link opened in a fresh tab has no history to return to.
+    expect(layout).toContain("router.push('/jobs')");
+    expect(wizard).toContain("router.push('/jobs')");
+  });
+
+  it('leaves an explicit onBack in charge where a step provides one', () => {
+    // Stepping back through the wizard is a different thing from leaving it.
+    expect(layout).toContain('{onBack ? (');
+  });
+});

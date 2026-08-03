@@ -2172,6 +2172,10 @@ export function CertificateWizard({
     return { items, blockingMissing };
   }, [
     appliances,
+    // The hints name the section to go and fix things in, and that name differs
+    // between the two layouts. Without this the checklist kept pointing at
+    // whichever layout was active when it was first built.
+    singlePage,
     completionDate,
     defects.defect_description,
     defects.remedial_action,
@@ -3924,9 +3928,22 @@ export function CertificateWizard({
         <div className="min-h-screen bg-[var(--color-background-secondary)]">
           <header className="sticky top-14 z-20 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
             <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
-              <Link href="/jobs" className="text-[13px] text-[var(--color-text-secondary)]">
+              {/* The page before this one, not the job list. Arriving here from
+                  /jobs/new and pressing Back landed on every job the engineer
+                  has, which is not where they were. */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined' && window.history.length > 1) {
+                    router.back();
+                    return;
+                  }
+                  router.push('/jobs');
+                }}
+                className="text-[13px] text-[var(--color-text-secondary)]"
+              >
                 Back
-              </Link>
+              </button>
               <p className="text-[15px] font-medium text-[var(--color-text-primary)]">CP12</p>
               {layoutToggle}
             </div>

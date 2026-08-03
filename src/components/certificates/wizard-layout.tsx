@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 type WizardLayoutProps = {
   step: number;
@@ -37,8 +37,26 @@ export function WizardLayout({
   variant = 'step',
   headerAction,
 }: WizardLayoutProps) {
+  const router = useRouter();
   const isSection = variant === 'section';
   const percent = Math.round((step / total) * 100);
+
+  /**
+   * Back means the page before this one.
+   *
+   * With no step to retreat to, this fell back to a link to /jobs — so leaving
+   * a certificate always landed on the full job list, whichever screen the
+   * engineer had actually come from. History is what "back" means everywhere
+   * else in a browser; /jobs is only the answer when there is no history to
+   * return to, which is the case for a link opened cold.
+   */
+  const goBack = useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push('/jobs');
+  }, [router]);
   const [hideActions, setHideActions] = useState(false);
 
   useEffect(() => {
@@ -92,15 +110,16 @@ export function WizardLayout({
                 Back
               </button>
             ) : (
-              <Link
-                href="/jobs"
+              <button
+                type="button"
+                onClick={goBack}
                 className="flex items-center gap-1 text-[13px] text-[var(--color-text-secondary)]"
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M15 18l-6-6 6-6" />
                 </svg>
                 Back
-              </Link>
+              </button>
             )}
           </div>
           <span className="flex items-center gap-3 text-[11px] text-[var(--color-text-tertiary)]">
