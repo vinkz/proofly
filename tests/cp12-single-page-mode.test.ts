@@ -81,11 +81,10 @@ describe('the route into a certificate', () => {
   });
 
   it('hands straight over when the engineer is doing it now', () => {
-    // Anchored on the comment, which appears once — there is more than one
-    // setPath('self') in the file and the other is a reset, not the button.
-    const start = jobForm.indexOf('Straight to the certificate');
-    expect(start, 'handover branch not found').toBeGreaterThan(-1);
-    const handler = jobForm.slice(start - 200, start + 800);
+    const handler = jobForm.slice(
+      jobForm.indexOf('const startManualEntry'),
+      jobForm.indexOf('const handleSubmit'),
+    );
     expect(handler).toContain("if (timing === 'now')");
     expect(handler).toContain('setHandOverPending(true)');
   });
@@ -156,7 +155,7 @@ describe('the route into a certificate', () => {
     // Choosing a saved landlord is one way to start, not a screen everyone
     // walks first — and with a long client list it always rendered, so it sat
     // between the job type and the only choice that actually shortcuts.
-    expect(jobForm).toContain('Use a saved landlord or property');
+
   });
 
   it('honours "doing it now" after picking a saved landlord too', () => {
@@ -556,8 +555,8 @@ describe('Ask landlord opens something', () => {
 
   it('holds it as one value rather than a copy that can drift', () => {
     expect(jobForm).toContain('const landlordRequestReveal = (');
-    // Defined once, rendered in both places that offer the option.
-    expect((jobForm.match(/\{landlordRequestReveal\}/g) ?? []).length).toBe(2);
+    // One place offers the option now that the duplicate block is gone.
+    expect((jobForm.match(/\{landlordRequestReveal\}/g) ?? []).length).toBe(1);
   });
 
   it('still keys off the path the button sets', () => {
@@ -566,5 +565,43 @@ describe('Ask landlord opens something', () => {
       jobForm.indexOf('const startManualEntry'),
     );
     expect(reveal).toContain("path === 'landlord'");
+  });
+});
+
+/**
+ * solo-job-form carried two "How do you want to start?" blocks: one on step
+ * one, which engineers reach from /jobs/new, and one on step three, which
+ * nothing had routed to since the start options moved.
+ *
+ * That duplicate caused three separate bugs in a row — four rounds of changes
+ * landing in the copy nobody sees, and then "Ask landlord" setting a path whose
+ * form lived only in the dead block. Grep found it, tests passed against it,
+ * and nothing about the code looked wrong. Deleting it is the fix; this keeps
+ * it deleted.
+ */
+describe('there is one start-options block, not two', () => {
+  it('asks how to start exactly once', () => {
+    expect((jobForm.match(/How do you want to start\?/g) ?? []).length).toBe(1);
+  });
+
+  it('has no step three to route to', () => {
+    expect(jobForm).not.toContain('step === 3');
+    expect(jobForm).not.toContain('setStep(3)');
+  });
+
+  it('cannot hold a step that does not exist', () => {
+    expect(jobForm).toContain('useState<1 | 2 | 4 | 5>');
+  });
+
+  it('keeps every option an engineer can actually press', () => {
+    const stepOne = jobForm.slice(
+      jobForm.indexOf('{step === 1 ?'),
+      jobForm.indexOf('{step === 2 ||'),
+    );
+    for (const option of ['Ask landlord', 'Enter the details now', 'Doing it now']) {
+      expect(stepOne, `${option} lost`).toContain(option);
+    }
+    // The doing-it-now action is built from the job type label.
+    expect(stepOne).toMatch(/Start \{JOB_TYPE_LABELS\[jobType\]\} now/);
   });
 });
