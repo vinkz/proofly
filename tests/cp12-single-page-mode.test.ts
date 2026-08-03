@@ -318,7 +318,8 @@ describe('saved landlords are prefill, not a route', () => {
   });
 
   it('hides itself rather than showing an empty dropdown', () => {
-    expect(wizard).toContain('const savedLandlordPicker = clients.length ? (');
+    // Two reasons to hide: no customers to offer, or a landlord already known.
+    expect(wizard).toContain('const savedLandlordPicker = clients.length && !arrivedWithLandlord ? (');
   });
 
   it('is searchable by the name the engineer types', () => {
@@ -603,5 +604,43 @@ describe('there is one start-options block, not two', () => {
     }
     // The doing-it-now action is built from the job type label.
     expect(stepOne).toMatch(/Start \{JOB_TYPE_LABELS\[jobType\]\} now/);
+  });
+});
+
+/**
+ * The saved-landlord picker is only useful when the landlord is unknown.
+ *
+ * A job created by booking, or filled from a landlord's own request link,
+ * already carries those details — offering to fill them from a saved customer
+ * is clutter at best, and an invitation to overwrite what the landlord supplied
+ * at worst.
+ */
+describe('the picker appears only when there is something to fill', () => {
+  it('hides when the certificate arrived knowing its landlord', () => {
+    expect(wizard).toContain('const savedLandlordPicker = clients.length && !arrivedWithLandlord ? (');
+  });
+
+  it('decides from the job as loaded, not the live field', () => {
+    // Reading the current value would make the picker vanish mid-typing, the
+    // moment the name became non-empty.
+    expect(wizard).toContain(
+      "const arrivedWithLandlord = Boolean(String(resolvedInitialInfo.landlord_name ?? '').trim())",
+    );
+    const decision = wizard.slice(
+      wizard.indexOf('const arrivedWithLandlord'),
+      wizard.indexOf('const savedLandlordPicker'),
+    );
+    expect(decision).not.toContain('info.landlord_name');
+  });
+
+  it('tells the engineer the dropdown is coming, when they have customers', () => {
+    // The prompt sits on /jobs/new because the dropdown it describes is on the
+    // next screen.
+    expect(jobForm).toContain("? ', where you can fill them from a saved landlord' : ''");
+  });
+
+  it('says nothing about saved landlords to someone with none', () => {
+    const hint = jobForm.slice(jobForm.indexOf('Landlord and property details are entered'));
+    expect(hint.slice(0, 200)).toContain('clients.length ?');
   });
 });
