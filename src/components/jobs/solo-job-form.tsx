@@ -1175,7 +1175,13 @@ export function SoloJobForm({
           title: submitMode === 'continue' ? 'Job created, opening next step' : 'Job created',
           variant: 'success',
         });
-        if (submitMode === 'continue') {
+        if (timing === 'later') {
+          // Booked, not started. Continuing into the certificate — or onto the
+          // completion checklist — walks the engineer through the details they
+          // have just entered, twice, to reach work they said was for another
+          // day. The job is in the diary; that is the whole of it.
+          router.push('/jobs');
+        } else if (submitMode === 'continue') {
           if (initialRequest || (jobType === 'safety_check_service' && !combinedFirst)) {
             // Jobs created from a landlord request (and combined jobs with no
             // "complete first" choice) land on the completion checklist — the engineer
@@ -2045,7 +2051,11 @@ export function SoloJobForm({
               disabled={isPending}
               onClick={() => setSubmitMode('continue')}
             >
-              {isPending && submitMode === 'continue' ? 'Saving…' : 'Save & continue'}
+              {isPending && submitMode === 'continue'
+                ? 'Saving…'
+                : timing === 'later'
+                  ? 'Book job'
+                  : 'Save & continue'}
             </button>
           </div>
         </>
