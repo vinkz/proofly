@@ -509,3 +509,30 @@ describe('Back returns to where you came from', () => {
     expect(layout).toContain('{onBack ? (');
   });
 });
+
+/**
+ * DESIGN_TOKENS.md: "Always reference the variable, never the hex, so dark mode
+ * keeps working." /jobs/new had nine literal `bg-[#111]` selected states, which
+ * stay dark when the theme inverts — so the page had no green and read as
+ * unfinished beside the completion screen it sits next to.
+ */
+describe('/jobs/new is themed like the rest of the app', () => {
+  it('uses no hardcoded colours', () => {
+    expect(jobForm.match(/bg-\[#[0-9a-fA-F]{3,6}\]/g) ?? []).toEqual([]);
+  });
+
+  it('uses the CTA token, which inverts in dark mode', () => {
+    expect(jobForm).toContain('bg-[var(--color-cta)]');
+    expect(jobForm).toContain('text-[var(--color-cta-fg)]');
+  });
+
+  it('marks the chosen option in the green the app uses for an active state', () => {
+    expect(jobForm).toContain('bg-[var(--color-action-bg)] text-[var(--color-action)]');
+  });
+
+  it('labels sections the way the completion page does', () => {
+    // --color-text-eyebrow is reserved for uppercase eyebrow labels.
+    expect(jobForm).toContain('uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]');
+    expect(jobForm).not.toContain('font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]');
+  });
+});

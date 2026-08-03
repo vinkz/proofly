@@ -1254,7 +1254,7 @@ export function SoloJobForm({
       {step === 1 ? (
         <>
           <div>
-            <p className="mb-2 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Job type</p>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Job type</p>
             <div className="flex gap-2">
               {LAUNCH_VISIBLE_JOB_TYPES.map((type) => (
                 <button
@@ -1267,7 +1267,7 @@ export function SoloJobForm({
                   }}
                   className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                     jobTypeTouched && jobType === type
-                      ? 'bg-[#111] text-white'
+                      ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
                       : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                   }`}
                 >
@@ -1282,7 +1282,7 @@ export function SoloJobForm({
             ) : null}
             {jobTypeTouched && jobType === 'safety_check_service' ? (
               <div className="mt-3">
-                <p className="mb-2 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Complete first</p>
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Complete first</p>
                 <div className="flex gap-2">
                   {([
                     ['cp12', 'Landlord safety check'],
@@ -1295,7 +1295,7 @@ export function SoloJobForm({
                       onClick={() => setCombinedFirst(value)}
                       className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                         combinedFirst === value
-                          ? 'bg-[#111] text-white'
+                          ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
                           : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                       }`}
                     >
@@ -1318,7 +1318,7 @@ export function SoloJobForm({
           </div>
 
           <div className="space-y-2">
-            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">When?</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">When?</p>
             <div className="flex gap-2 pb-1">
               {(
                 [
@@ -1333,7 +1333,7 @@ export function SoloJobForm({
                   onClick={() => setTiming(option.id)}
                   className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                     timing === option.id
-                      ? 'bg-[#111] text-white'
+                      ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
                       : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                   }`}
                 >
@@ -1362,7 +1362,7 @@ export function SoloJobForm({
                   type="button"
                   disabled={isPending}
                   onClick={startManualEntry}
-                  className="flex h-[48px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+                  className="flex h-[48px] w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--color-cta)] text-[14px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
                 >
                   Start {JOB_TYPE_LABELS[jobType]} now
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -1375,7 +1375,7 @@ export function SoloJobForm({
               </>
             ) : (
               <>
-                <p className="pt-1 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+                <p className="pt-1 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">How do you want to start?</p>
                 {/* Booking ahead, the details are worth capturing now — but on
                     this page, not on two more screens before it. */}
                 <button
@@ -1412,10 +1412,10 @@ export function SoloJobForm({
       {step === 2 || (step === 1 && detailsInline) ? (
         <>
           <div className="space-y-3">
-            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Who is this for?</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Who is this for?</p>
             <div className="space-y-2.5">
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Landlord
                 </label>
                 <Select
@@ -1433,7 +1433,7 @@ export function SoloJobForm({
                 </Select>
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Property
                 </label>
                 <Select
@@ -1514,7 +1514,7 @@ export function SoloJobForm({
               setStep(4);
             }}
             disabled={isPending || !clientChosen}
-            className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[var(--color-cta)] text-[14px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
           >
             Continue to details
           </button>
@@ -1527,7 +1527,7 @@ export function SoloJobForm({
         <>
           {!path ? (
             <div className="space-y-2">
-              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">When?</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">When?</p>
               <div className="flex gap-2">
                 {(
                   [
@@ -1542,7 +1542,7 @@ export function SoloJobForm({
                     onClick={() => setTiming(option.id)}
                     className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                       timing === option.id
-                        ? 'bg-[#111] text-white'
+                        ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
                         : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                     }`}
                   >
@@ -1563,7 +1563,7 @@ export function SoloJobForm({
                   />
                 </label>
               ) : null}
-              <p className="pt-2 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
+              <p className="pt-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">How do you want to start?</p>
               <button
                 type="button"
                 disabled={isPending}
@@ -1684,10 +1684,10 @@ export function SoloJobForm({
           ) : null}
 
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="mb-3 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">{partyCardTitle}</p>
+            <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">{partyCardTitle}</p>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Name</label>
                 <Input
                   value={partyNameValue}
                   onChange={(event) =>
@@ -1708,7 +1708,7 @@ export function SoloJobForm({
                 ) : null}
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Company</label>
                 <Input
                   value={landlordCompany}
                   onChange={(event) => setLandlordCompany(event.target.value)}
@@ -1718,7 +1718,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Address line 1
                 </label>
                 <div className="relative mt-1.5">
@@ -1765,7 +1765,7 @@ export function SoloJobForm({
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Address line 2
                 </label>
                 <Input
@@ -1777,7 +1777,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">City / town</label>
                 <Input
                   value={landlordCity}
                   onChange={(event) => setLandlordCity(event.target.value)}
@@ -1787,7 +1787,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Postcode</label>
                 <Input
                   value={landlordPostcode}
                   onChange={(event) => setLandlordPostcode(event.target.value)}
@@ -1797,7 +1797,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Tel. No.</label>
                 <Input
                   value={landlordTel}
                   onChange={(event) => setLandlordTel(event.target.value)}
@@ -1807,7 +1807,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Email</label>
                 <Input
                   value={clientEmail}
                   onChange={(event) => setClientEmail(event.target.value)}
@@ -1831,7 +1831,7 @@ export function SoloJobForm({
               type="button"
               onClick={() => setStep(5)}
               disabled={isPending}
-              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[var(--color-cta)] text-[14px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
             >
               Continue
             </button>
@@ -1845,7 +1845,7 @@ export function SoloJobForm({
         <>
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Job address</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Job address</p>
               {landlordAddressLine1 || landlordName ? (
                 <button
                   type="button"
@@ -1859,7 +1859,7 @@ export function SoloJobForm({
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   {scheduleFieldLabel}
                 </label>
                 <Input
@@ -1874,7 +1874,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Flat / unit or property reference
                 </label>
                 <Input
@@ -1898,7 +1898,7 @@ export function SoloJobForm({
                 ) : null}
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Address line 1
                 </label>
                 <div className="relative mt-1.5">
@@ -1947,7 +1947,7 @@ export function SoloJobForm({
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Address line 2
                 </label>
                 <Input
@@ -1959,7 +1959,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">City / town</label>
                 <Input
                   value={jobAddressCity}
                   onChange={(event) => setJobAddressCity(event.target.value)}
@@ -1970,7 +1970,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Postcode</label>
                 <Input
                   value={jobAddressPostcode}
                   onChange={(event) => setJobAddressPostcode(event.target.value)}
@@ -1981,7 +1981,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Site telephone</label>
                 <Input
                   value={jobAddressTel}
                   onChange={(event) => setJobAddressTel(event.target.value)}
@@ -1999,7 +1999,7 @@ export function SoloJobForm({
               choose which to start with. The other is completed straight after. */}
           {jobType === 'safety_check_service' && !initialRequest && !(step === 1 && detailsInline) ? (
             <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-4">
-              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                 This job needs a CP12 and a boiler service — complete first?
               </p>
               <div className="mt-2 flex gap-2">
@@ -2014,7 +2014,7 @@ export function SoloJobForm({
                     onClick={() => setCombinedFirst(value)}
                     className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                       combinedFirst === value
-                        ? 'bg-[#111] text-white'
+                        ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
                         : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                     }`}
                   >
@@ -2047,7 +2047,7 @@ export function SoloJobForm({
             </button>
             <button
               type="submit"
-              className="h-[40px] flex-[2] rounded-[10px] bg-[#111] text-[13px] font-medium text-white disabled:opacity-50"
+              className="h-[40px] flex-[2] rounded-[10px] bg-[var(--color-cta)] text-[13px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
               disabled={isPending}
               onClick={() => setSubmitMode('continue')}
             >
