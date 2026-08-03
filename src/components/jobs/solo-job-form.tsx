@@ -361,7 +361,7 @@ export function SoloJobForm({
   const [landlordCity, setLandlordCity] = useState(initialRequest?.landlordCity ?? '');
   const [landlordPostcode, setLandlordPostcode] = useState(initialRequest?.landlordPostcode ?? '');
   const [landlordTel, setLandlordTel] = useState(initialRequest?.landlordPhone ?? '');
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialRequest || initialPropertyId ? 4 : initialClientId ? 2 : 1);
+  const [step, setStep] = useState<1 | 2 | 4 | 5>(initialRequest || initialPropertyId ? 4 : initialClientId ? 2 : 1);
   const [path, setPath] = useState<'self' | 'landlord' | null>(initialRequest || initialPropertyId ? 'self' : null);
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
   /**
@@ -452,14 +452,6 @@ export function SoloJobForm({
       }
       setPath(null);
       setStep(1);
-      return;
-    }
-    if (step === 3 && path) {
-      setPath(null);
-      return;
-    }
-    if (step === 3) {
-      setStep(2);
       return;
     }
     setStep(1);
@@ -1572,114 +1564,6 @@ export function SoloJobForm({
             Continue to details
           </button>
           )}
-        </>
-      ) : null}
-
-      {/* ===== STEP 3: Start method ===== */}
-      {step === 3 ? (
-        <>
-          {!path ? (
-            <div className="space-y-2">
-              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">When?</p>
-              <div className="flex gap-2">
-                {(
-                  [
-                    { id: 'now', label: 'Doing it now' },
-                    { id: 'later', label: 'Book for later' },
-                  ] as { id: 'now' | 'later'; label: string }[]
-                ).map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => setTiming(option.id)}
-                    className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
-                      timing === option.id
-                        ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
-                        : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              {timing === 'later' ? (
-                <label className="block pt-1">
-                  <span className="mb-1.5 block text-[12px] font-medium text-[var(--color-text-secondary)]">
-                    Date
-                  </span>
-                  <input
-                    type="date"
-                    value={inspectionDate}
-                    onChange={(event) => setInspectionDate(event.target.value)}
-                    className="block h-11 w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-base text-[var(--color-text-primary)]"
-                  />
-                </label>
-              ) : null}
-              <p className="pt-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">How do you want to start?</p>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => {
-                  setPath('self');
-                  if (timing === 'now') {
-                    // Straight to the certificate. Whatever was picked so far —
-                    // an existing landlord, a property, a landlord request —
-                    // is already in state and rides along as prefill, and the
-                    // certificate asks for the rest in place.
-                    //
-                    // Gated on the timing rather than the layout preference:
-                    // the toggle that set that preference lived inside the
-                    // wizard, on the far side of the steps it was meant to
-                    // skip, so an engineer could never reach it first.
-                    setSubmitMode('continue');
-                    setHandOverPending(true);
-                    return;
-                  }
-                  setStep(4);
-                }}
-                className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
-              >
-                <div>
-                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Fill details myself</p>
-                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Enter or review the landlord and property details now.</p>
-                </div>
-                <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
-              </button>
-
-              {clients.length ? (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => setStep(2)}
-                  className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
-                >
-                  <div>
-                    <p className="text-[14px] font-medium text-[var(--color-text-primary)]">
-                      Use a saved landlord or property
-                    </p>
-                    <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">
-                      Their details fill the certificate in for you.
-                    </p>
-                  </div>
-                </button>
-              ) : null}
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => setPath('landlord')}
-                className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
-              >
-                <div>
-                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask landlord</p>
-                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Send a link for the landlord to complete the missing details.</p>
-                </div>
-                <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
-              </button>
-            </div>
-          ) : null}
-
-          {landlordRequestReveal}
         </>
       ) : null}
 
