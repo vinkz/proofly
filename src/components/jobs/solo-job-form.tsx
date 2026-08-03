@@ -946,6 +946,58 @@ export function SoloJobForm({
     setLandlordTel('');
   };
 
+  /**
+   * What "Ask landlord" opens.
+   *
+   * The button moved to step one; this stayed behind in step three, a
+   * screen nothing routes to any more — so pressing it set the path and
+   * revealed the form on a page the engineer never sees. Held as a value
+   * so both places render the same thing rather than a copy that drifts.
+   */
+  const landlordRequestReveal = (
+    <>
+    {path === 'landlord' && selectedClientId ? (
+      <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
+        <div>
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Request details from landlord</p>
+          <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">An email will be sent with a secure form link.</p>
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={clientEmail}
+            onChange={(event) => setClientEmail(event.target.value)}
+            placeholder="Landlord email"
+            type="email"
+            disabled={isPending}
+          />
+          <button
+            type="button"
+            className="shrink-0 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            onClick={handleRequestLandlordPrefill}
+            disabled={isPending || !clientEmail.trim()}
+          >
+            {isPending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+        {landlordRequestMessage ? (
+          <p className="text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
+        ) : null}
+        {landlordRequestError ? (
+          <p className="text-[12px] text-[var(--color-red)]">{landlordRequestError}</p>
+        ) : null}
+      </div>
+    ) : null}
+
+    {path === 'landlord' && !selectedClientId && requestUrl ? (
+      <RequestLandlordDetailsCard
+        requestUrl={requestUrl}
+        initialLandlordName={landlordName || clientName}
+        initialLandlordEmail={clientEmail}
+        initialLandlordPhone={clientPhone || landlordTel}
+      />
+    ) : null}
+    </>
+  );
   const startManualEntry = () => {
     setPath('self');
     setClientMode('new');
@@ -1402,6 +1454,7 @@ export function SoloJobForm({
                   </div>
                   <span aria-hidden className="text-[var(--color-text-tertiary)]">+</span>
                 </button>
+                {landlordRequestReveal}
               </>
             )}
           </div>
@@ -1626,46 +1679,7 @@ export function SoloJobForm({
             </div>
           ) : null}
 
-          {path === 'landlord' && selectedClientId ? (
-            <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
-              <div>
-                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Request details from landlord</p>
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">An email will be sent with a secure form link.</p>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  value={clientEmail}
-                  onChange={(event) => setClientEmail(event.target.value)}
-                  placeholder="Landlord email"
-                  type="email"
-                  disabled={isPending}
-                />
-                <button
-                  type="button"
-                  className="shrink-0 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
-                  onClick={handleRequestLandlordPrefill}
-                  disabled={isPending || !clientEmail.trim()}
-                >
-                  {isPending ? 'Sending…' : 'Send'}
-                </button>
-              </div>
-              {landlordRequestMessage ? (
-                <p className="text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
-              ) : null}
-              {landlordRequestError ? (
-                <p className="text-[12px] text-[var(--color-red)]">{landlordRequestError}</p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {path === 'landlord' && !selectedClientId && requestUrl ? (
-            <RequestLandlordDetailsCard
-              requestUrl={requestUrl}
-              initialLandlordName={landlordName || clientName}
-              initialLandlordEmail={clientEmail}
-              initialLandlordPhone={clientPhone || landlordTel}
-            />
-          ) : null}
+          {landlordRequestReveal}
         </>
       ) : null}
 

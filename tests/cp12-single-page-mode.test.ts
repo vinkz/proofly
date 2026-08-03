@@ -536,3 +536,35 @@ describe('/jobs/new is themed like the rest of the app', () => {
     expect(jobForm).not.toContain('font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]');
   });
 });
+
+/**
+ * "Ask landlord" set the path and revealed nothing.
+ *
+ * The button moved to step one; what it opens stayed behind in step three —
+ * the duplicate block nothing routes to any more. Exactly the bug that started
+ * this whole thread, in the one piece of it that never got moved.
+ */
+describe('Ask landlord opens something', () => {
+  it('renders the reveal on the screen the button is on', () => {
+    const stepOne = jobForm.slice(
+      jobForm.indexOf('{step === 1 ?'),
+      jobForm.indexOf('{step === 2 ||'),
+    );
+    expect(stepOne).toContain('Ask landlord');
+    expect(stepOne).toContain('{landlordRequestReveal}');
+  });
+
+  it('holds it as one value rather than a copy that can drift', () => {
+    expect(jobForm).toContain('const landlordRequestReveal = (');
+    // Defined once, rendered in both places that offer the option.
+    expect((jobForm.match(/\{landlordRequestReveal\}/g) ?? []).length).toBe(2);
+  });
+
+  it('still keys off the path the button sets', () => {
+    const reveal = jobForm.slice(
+      jobForm.indexOf('const landlordRequestReveal = ('),
+      jobForm.indexOf('const startManualEntry'),
+    );
+    expect(reveal).toContain("path === 'landlord'");
+  });
+});
