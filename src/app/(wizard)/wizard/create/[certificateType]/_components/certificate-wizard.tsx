@@ -704,7 +704,19 @@ export function CertificateWizard({
     setLandlordAddressSearchQuery(line1 || '');
   };
 
-  const savedLandlordPicker = clients.length ? (
+  /**
+   * Whether this certificate arrived already knowing its landlord.
+   *
+   * Read from the job as it loaded, not from the live fields: deciding on the
+   * current value would make the picker vanish mid-typing, the moment a name
+   * became non-empty. A job created by booking, or filled from a landlord's
+   * request link, already carries the landlord — offering to fill it from a
+   * saved customer there is clutter at best and an invitation to overwrite what
+   * the landlord themselves supplied at worst.
+   */
+  const arrivedWithLandlord = Boolean(String(resolvedInitialInfo.landlord_name ?? '').trim());
+
+  const savedLandlordPicker = clients.length && !arrivedWithLandlord ? (
     <div className="mb-5 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
       <SearchableSelect
         label="Start from a saved landlord (optional)"

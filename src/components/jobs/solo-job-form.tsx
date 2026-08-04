@@ -1414,7 +1414,11 @@ export function SoloJobForm({
                   </svg>
                 </button>
                 <p className="text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
-                  Landlord and property details are entered on the certificate.
+                  {/* Said here because the dropdown that does it is on the next
+                      screen. Without this the certificate looks like it wants
+                      every field typed out, and a saved landlord goes unused. */}
+                  Landlord and property details are entered on the certificate
+                  {clients.length ? ', where you can fill them from a saved landlord' : ''}.
                 </p>
               </>
             ) : (
