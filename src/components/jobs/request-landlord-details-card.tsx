@@ -26,10 +26,18 @@ export function RequestLandlordDetailsCard({
   // Use NEXT_PUBLIC_SHARE_URL as the base so the displayed link shows certnow.uk not localhost
   const shareBase = process.env.NEXT_PUBLIC_SHARE_URL?.replace(/\/$/, '');
   const displayUrl = shareBase ? requestUrl.replace(/^https?:\/\/[^/]+/, shareBase) : requestUrl;
-  const shareText = `Please fill in the job details for my CertNow request: ${displayUrl}`;
-  const smsHref = landlordPhone.trim()
-    ? `sms:${encodeURIComponent(landlordPhone.trim())}?&body=${encodeURIComponent(shareText)}`
-    : null;
+  const shareText = `Please fill in your details so I can carry out your gas safety job: ${displayUrl}`;
+  /**
+   * The number goes in the sms: path unencoded.
+   *
+   * encodeURIComponent turned "+44 7700 900000" into "%2B44%207700%20900000",
+   * which handsets do not parse as a number — and the query began "?&body=",
+   * which is malformed, so the message body was dropped on top. Spaces,
+   * brackets and dashes are stripped instead; a leading + is kept because it is
+   * part of the number.
+   */
+  const smsNumber = landlordPhone.replace(/[^\d+]/g, '');
+  const smsHref = smsNumber ? `sms:${smsNumber}?body=${encodeURIComponent(shareText)}` : null;
 
   return (
     <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">

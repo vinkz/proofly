@@ -65,25 +65,67 @@ export function PrefillClient({
     >
       <FormSection title="Job address">
         <div className="grid gap-2.5 sm:grid-cols-2">
-          <Input name="jobAddressName" autoComplete="off" placeholder="Property name / reference" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressLine1" required autoComplete="off" placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressLine2" autoComplete="off" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
-          <Input name="jobAddressCity" required autoComplete="off" placeholder="City / town" className="rounded-[10px]" />
-          <Input name="jobPostcode" required autoComplete="off" placeholder="Postcode" className="rounded-[10px]" />
-          <Input name="jobTel" type="tel" inputMode="tel" autoComplete="off" placeholder="Site telephone" className="rounded-[10px]" />
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Property name / reference</span>
+            <Input name="jobAddressName" autoComplete="off"  className="rounded-[10px]" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Address line 1</span>
+            <Input name="jobAddressLine1" required autoComplete="off"  className="rounded-[10px]" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Address line 2</span>
+            <Input name="jobAddressLine2" autoComplete="off"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">City / town</span>
+            <Input name="jobAddressCity" required autoComplete="off"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Postcode</span>
+            <Input name="jobPostcode" required autoComplete="off"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Site telephone</span>
+            <Input name="jobTel" type="tel" inputMode="tel" autoComplete="off"  className="rounded-[10px]" />
+          </label>
         </div>
       </FormSection>
 
       <FormSection title="Landlord / property owner">
         <div className="grid gap-2.5 sm:grid-cols-2">
-          <Input name="landlordName" required autoComplete="name" placeholder="Name" className="rounded-[10px]" />
-          <Input name="landlordCompany" autoComplete="organization" placeholder="Company (optional)" className="rounded-[10px]" />
-          <Input name="landlordEmail" type="email" autoComplete="email" placeholder="Email" className="rounded-[10px]" />
-          <Input name="landlordTel" type="tel" inputMode="tel" autoComplete="tel" placeholder="Phone" className="rounded-[10px]" />
-          <Input name="landlordAddressLine1" required autoComplete="address-line1" placeholder="Address line 1" className="rounded-[10px] sm:col-span-2" />
-          <Input name="landlordAddressLine2" autoComplete="address-line2" placeholder="Address line 2" className="rounded-[10px] sm:col-span-2" />
-          <Input name="landlordCity" required autoComplete="address-level2" placeholder="City / town" className="rounded-[10px]" />
-          <Input name="landlordPostcode" required autoComplete="postal-code" placeholder="Postcode" className="rounded-[10px]" />
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Name</span>
+            <Input name="landlordName" required autoComplete="name"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Company (optional)</span>
+            <Input name="landlordCompany" autoComplete="organization"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Email</span>
+            <Input name="landlordEmail" type="email" autoComplete="email"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Phone</span>
+            <Input name="landlordTel" type="tel" inputMode="tel" autoComplete="tel"  className="rounded-[10px]" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Address line 1</span>
+            <Input name="landlordAddressLine1" required autoComplete="address-line1"  className="rounded-[10px]" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Address line 2</span>
+            <Input name="landlordAddressLine2" autoComplete="address-line2"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">City / town</span>
+            <Input name="landlordCity" required autoComplete="address-level2"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Postcode</span>
+            <Input name="landlordPostcode" required autoComplete="postal-code"  className="rounded-[10px]" />
+          </label>
         </div>
       </FormSection>
 
@@ -91,16 +133,25 @@ export function PrefillClient({
         <div className="grid gap-2.5 sm:grid-cols-2">
           {/* Tenant name intentionally omitted for privacy (removed app-wide); the
               tenant phone is kept as an on-site contact for the engineer. */}
-          <Input name="tenantPhone" type="tel" inputMode="tel" autoComplete="off" placeholder="Tenant phone (optional)" className="rounded-[10px]" />
-          <Input name="preferredDates" type="date" className="rounded-[10px]" />
-          <Input name="accessNotes" placeholder="Access notes" className="rounded-[10px] sm:col-span-2" />
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Tenant phone (optional)</span>
+            <Input name="tenantPhone" type="tel" inputMode="tel" autoComplete="off"  className="rounded-[10px]" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Preferred date</span>
+            <Input name="preferredDates" type="date" className="rounded-[10px]" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-[12px] font-medium text-[var(--color-text-secondary)]">Access notes</span>
+            <Input name="accessNotes"  className="rounded-[10px]" />
+          </label>
         </div>
       </FormSection>
 
       <button
         type="submit"
         disabled={isPending}
-        className="flex h-[44px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+        className="flex h-[44px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-[var(--color-cta)] text-[14px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
       >
         {isPending ? 'Sending…' : 'Send details to engineer'}
         {!isPending && (
