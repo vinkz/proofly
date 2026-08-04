@@ -28,15 +28,16 @@ export default async function PrefillJobPage({
             certnow
           </p>
           <h1 className="mt-3 text-[22px] font-semibold text-[var(--color-text-primary)] leading-tight">
-            Send your job details
+            Fill in your details
           </h1>
           <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
-            Your engineer needs these details to prepare the job before the visit.
+            Your gas engineer has asked for these so they can carry out the work. It takes a
+            couple of minutes, and they will not have to chase you for them on the day.
           </p>
           {job.address || job.clientName || job.title ? (
             <div className="mt-4 rounded-[10px] bg-[var(--color-background-secondary)] px-3 py-3">
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
-                {job.title ?? job.clientName ?? 'Requested job'}
+                {job.title ?? job.clientName ?? 'Your gas safety job'}
               </p>
               {job.address ? (
                 <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">{job.address}</p>
