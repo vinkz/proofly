@@ -94,6 +94,11 @@ formula with an additional `=`.
 The table is intentionally split between human-review fields, discovery fields,
 and automation tracking.
 
+The base also holds `ZZ-ARCHIVE Leads copy` and `ZZ-ARCHIVE Locations copy`.
+These are stale duplicates kept for their data only. No scenario targets them
+and none should — pointing a module at the wrong table is a documented failure
+mode of this system. The canonical tables are `Leads` and `Locations`.
+
 #### Human-review fields
 
 | Field | Type | Rule |
@@ -101,14 +106,14 @@ and automation tracking.
 | `Business_name` | Single-line text | Canonical business name used in the email. |
 | `Town` | Single-line text | Used for the town-based opening. |
 | `Website` | URL | Official business website. |
-| `Source URL` | URL | Page used to find/verify the business email. |
+| `Lead source` | URL | Page used to find/verify the business email. |
 | `Business email` | Email | Public business contact address. |
 | `Company type` | Single select | Legal structure, verified manually. |
 | `Company number` | Single-line text | Companies House number where applicable. |
-| `Company status` | Single select | Usually `Active` or `Inactive`. |
+| `Company status` | Single select | `Active`, `Dissolved`, `Unknown`, `Needs review`. |
 | `Email type` | Single select | Use `Generic business` for the first campaign. |
 | `Gas Safe verified` | Checkbox | Checked only after verification. |
-| `Qualification status` | Single select | `New`, `Researching`, `Qualified`, `Rejected`. |
+| `Qualification status` | Single select | `Discovered`, `Enriching`, `Needs review`, `Qualified`, `Rejected`. |
 | `Approved to send` | Checkbox | Final manual send gate. |
 | `Do not contact` | Checkbox | Permanent suppression gate; automation never clears it. |
 
@@ -181,9 +186,25 @@ unnecessary manual work:
 ```text
 Company name          → use Business_name
 Personalisation       → use Business_name + Town in the email
-Qualification evidence → retain Website / Source URL instead
-Lead score            → use Live send eligible
+Qualification evidence → retain Website / Lead source instead
 ```
+
+`Lead score` was intended for removal but still exists in the base. Its formula
+referenced a deleted field, so it silently evaluated to blank on every record
+rather than erroring. It has been repaired to:
+
+```text
+IF(
+  {Do not contact},
+  0,
+  IF({Qualification status}="Qualified", 1, 0) +
+  IF({Business email}!="", 1, 0) +
+  IF({Website}!="", 1, 0) +
+  IF({Qualification evidence}!="", 1, 0)
+)
+```
+
+Maximum score is 4. It is advisory only — `Live send eligible` remains the gate.
 
 Phone, address, Place ID, created/updated timestamps and similar automation
 metadata can remain in the base but should be hidden from the `Manual review`
@@ -199,7 +220,7 @@ Show:
 Business_name
 Town
 Website
-Source URL
+Lead source
 Business email
 Company type
 Company number
@@ -436,11 +457,22 @@ Production Search Records formula:
 ```text
 AND(
   {Live send eligible}=1,
-  {Outreach status}="Ready",
+  OR({Outreach status}="Ready", {Outreach status}="New"),
   OR({Sequence step}=0, {Sequence step}=BLANK()),
   {Gmail thread ID}=""
 )
 ```
+
+`New` is accepted as well as `Ready` because discovery leaves qualified leads at
+`New` and nothing promotes them to `Ready` automatically. Every other gate still
+applies through `Live send eligible`.
+
+Note the two-argument `OR()` around the status. Writing it as
+`{Outreach status}="Ready", "New"` is not a wider match — it is a syntax error,
+and Airtable rejects the whole formula with a 422.
+
+Leave the View field **blank** when a formula is set. Setting both a view and a
+formula is what produced the invalid-formula failures on this scenario.
 
 Start with:
 
@@ -477,6 +509,12 @@ Outreach status: Sending
 Approved to send: unchecked
 ```
 
+This module is not optional. Without it, a Gmail send that succeeds followed by
+a failed final Airtable update leaves the record still `Approved to send` and
+still matching the search formula, so the next run emails the same business
+again. It fails closed: a send that dies mid-flight leaves the record parked at
+`Sending` with approval consumed, awaiting a human.
+
 The Airtable record ID begins with `rec`. Do not map `Lead_ID`, Google Place ID,
 Gmail Message ID or Gmail Thread ID into Record ID.
 
@@ -484,10 +522,14 @@ Gmail Message ID or Gmail Thread ID into Record ID.
 
 ```text
 To: Airtable → Business email
-From: "Kelvin from CertNow" <kelvin@certnow.uk>
-Subject: A simpler gas cert workflow for {{Business_name}}
+From: "Kel from certnow" <kelvin@certnow.uk>
+Subject: A free CP12 generator for {{Business_name}}
 Body type: Raw HTML
 ```
+
+Keep the subject in the same first-person voice as the body. The earlier live
+subject, `{{Business_name}} is invited to use our free CP12 generator`, mixed
+"our" into a body written as "I" and read like a mail-merge blast.
 
 Insert Airtable values as mapping pills. Do not type `{{Business_name}}`
 literally.
@@ -1177,6 +1219,47 @@ mapped from the wrong module.
 
 The validation failure happens before Gmail sends, so it does not represent a
 partially sent follow-up.
+
+### A lead was emailed but its status reads `New`
+
+Scenario 2 never writes `New`. If a record has a `Gmail thread ID` and a
+`Last contacted` timestamp but an `Outreach status` of `New`, the status was
+changed after the send — by a manual edit or a re-import that overwrote the
+column.
+
+The record is stranded: Scenario 4 matches only `Email 1 sent`, so no follow-up
+will ever fire, however overdue `Next action` is.
+
+Diagnose across the whole table with:
+
+```text
+AND({Gmail thread ID}!="", {Outreach status}="New")
+```
+
+Before correcting the status to `Email 1 sent`, decide what should happen to the
+follow-up. Setting the status makes the record immediately eligible for Scenario
+4, which will send a real email on its next run. To record the true state
+without sending, set the status and clear `Next action` in the same edit.
+
+Also confirm the lead should have been contacted at all. A record emailed while
+`Qualification status` is anything other than `Qualified` means the approval gate
+was bypassed, which is a compliance problem, not just a data problem.
+
+### Known manual cleanup
+
+These cannot be changed through the Airtable API and need the UI:
+
+- The `Outreach status` option `Send failed ` has a **trailing space**. Any
+  formula matching `="Send failed"` will silently never match it. Rename it.
+- A CSV header row was once imported as a record. Deleting the record does not
+  remove the select options it created. Six fields still carry a junk option
+  named after the field itself: `Company type`, `Company status`,
+  `Qualification status`, `Email type`, `Outreach status`, `Reply category`.
+- `Company type` has both `Partnership` and `Non-corporate partnership`. Only
+  the latter is referenced here. Merge them.
+- Scenarios 2 and 4 use two different Gmail connections for the same mailbox
+  (`My Gmail connection` and `certnow inbox`). Re-authorising one leaves the
+  other stale. Consolidate onto one.
 
 ---
 
