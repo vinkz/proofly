@@ -1,10 +1,18 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { toUserMessage } from '@/lib/user-errors';
 import { sendEngineerRequestLinkToLandlord } from '@/server/job-requests';
+
+type Channel = 'email' | 'sms' | 'both';
+
+const CHANNELS: Array<{ value: Channel; label: string }> = [
+  { value: 'email', label: 'Email' },
+  { value: 'sms', label: 'SMS' },
+  { value: 'both', label: 'Both' },
+];
 
 export function RequestLandlordDetailsCard({
   requestUrl,
@@ -20,13 +28,21 @@ export function RequestLandlordDetailsCard({
   const [landlordName, setLandlordName] = useState(initialLandlordName);
   const [landlordEmail, setLandlordEmail] = useState(initialLandlordEmail);
   const [landlordPhone, setLandlordPhone] = useState(initialLandlordPhone);
+  const [channel, setChannel] = useState<Channel>('email');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set once the email half of a "both" send lands, so the SMS step can be offered as the follow-up.
+  const [smsPending, setSmsPending] = useState(false);
   const [isPending, startTransition] = useTransition();
+
   // Use NEXT_PUBLIC_SHARE_URL as the base so the displayed link shows certnow.uk not localhost
   const shareBase = process.env.NEXT_PUBLIC_SHARE_URL?.replace(/\/$/, '');
   const displayUrl = shareBase ? requestUrl.replace(/^https?:\/\/[^/]+/, shareBase) : requestUrl;
   const shareText = `Please fill in your details so I can carry out your gas safety job: ${displayUrl}`;
+
+  const trimmedEmail = landlordEmail.trim();
+  const trimmedPhone = landlordPhone.trim();
+
   /**
    * The number goes in the sms: path unencoded.
    *
@@ -36,8 +52,68 @@ export function RequestLandlordDetailsCard({
    * brackets and dashes are stripped instead; a leading + is kept because it is
    * part of the number.
    */
-  const smsNumber = landlordPhone.replace(/[^\d+]/g, '');
-  const smsHref = smsNumber ? `sms:${smsNumber}?body=${encodeURIComponent(shareText)}` : null;
+  const smsNumber = trimmedPhone.replace(/[^\d+]/g, '');
+  const smsHref = useMemo(
+    () => (smsNumber ? `sms:${smsNumber}?body=${encodeURIComponent(shareText)}` : null),
+    [smsNumber, shareText],
+  );
+
+  const needsEmail = channel === 'email' || channel === 'both';
+  const needsPhone = channel === 'sms' || channel === 'both';
+  // Gate on the dialable number, not the raw input, so "abc" cannot enable a dead sms: link.
+  const canSend = (!needsEmail || Boolean(trimmedEmail)) && (!needsPhone || Boolean(smsNumber));
+
+  const missingLabel = (() => {
+    if (needsEmail && !trimmedEmail && needsPhone && !smsNumber) return 'Add an email address and a phone number.';
+    if (needsEmail && !trimmedEmail) return 'Add an email address to send by email.';
+    if (needsPhone && !smsNumber) return 'Add a phone number to send by SMS.';
+    return null;
+  })();
+
+  const selectChannel = (next: Channel) => {
+    setChannel(next);
+    setMessage(null);
+    setError(null);
+    setSmsPending(false);
+  };
+
+  const sendEmail = (thenOfferSms: boolean) => {
+    setMessage(null);
+    setError(null);
+    setSmsPending(false);
+    startTransition(async () => {
+      try {
+        const result = await sendEngineerRequestLinkToLandlord({ landlordName, landlordEmail: trimmedEmail });
+        const emailLine =
+          result.status === 'sent'
+            ? 'Request link emailed.'
+            : 'Email delivery is not configured, but your request link is ready to share.';
+        if (thenOfferSms) {
+          setSmsPending(true);
+          setMessage(`${emailLine} Now send the text message.`);
+        } else {
+          setMessage(emailLine);
+        }
+      } catch (sendError) {
+        setError(
+          toUserMessage(
+            sendError,
+            'We could not email the request link. Copy the link or send it by SMS instead.',
+          ),
+        );
+      }
+    });
+  };
+
+  const primaryLabel = (() => {
+    if (isPending) return 'Sending…';
+    if (channel === 'sms') return 'Open SMS';
+    if (channel === 'both') return 'Email, then SMS';
+    return 'Send email';
+  })();
+
+  const primaryClass =
+    'flex h-[38px] items-center justify-center rounded-[10px] bg-[#111] px-4 text-[13px] font-medium text-white disabled:opacity-50';
 
   return (
     <section className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
@@ -59,7 +135,29 @@ export function RequestLandlordDetailsCard({
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr,1fr,1fr,auto]">
+      <div className="mt-3 flex items-center gap-2" role="group" aria-label="How to send the request link">
+        {CHANNELS.map((option) => {
+          const active = channel === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={active}
+              disabled={isPending}
+              onClick={() => selectChannel(option.value)}
+              className={`h-8 rounded-full border-[0.5px] px-3.5 text-[13px] font-medium transition-colors disabled:opacity-50 ${
+                active
+                  ? 'border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                  : 'border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] text-[var(--color-text-secondary)]'
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-2.5 grid gap-2 sm:grid-cols-[1fr,1fr,1fr,auto]">
         <Input
           value={landlordName}
           onChange={(event) => setLandlordName(event.target.value)}
@@ -70,7 +168,7 @@ export function RequestLandlordDetailsCard({
         <Input
           value={landlordEmail}
           onChange={(event) => setLandlordEmail(event.target.value)}
-          placeholder="Landlord email"
+          placeholder={needsEmail ? 'Landlord email' : 'Landlord email (optional)'}
           type="email"
           className="h-[38px] rounded-[10px]"
           disabled={isPending}
@@ -78,48 +176,50 @@ export function RequestLandlordDetailsCard({
         <Input
           value={landlordPhone}
           onChange={(event) => setLandlordPhone(event.target.value)}
-          placeholder="Phone for SMS"
+          placeholder={needsPhone ? 'Phone for SMS' : 'Phone (optional)'}
           type="tel"
           className="h-[38px] rounded-[10px]"
           disabled={isPending}
         />
-        <button
-          type="button"
-          className="h-[38px] rounded-[10px] bg-[#111] px-4 text-[13px] font-medium text-white disabled:opacity-50"
-          disabled={isPending || !landlordEmail}
-          onClick={() => {
-            setMessage(null);
-            setError(null);
-            startTransition(async () => {
-              try {
-                const result = await sendEngineerRequestLinkToLandlord({ landlordName, landlordEmail });
-                setMessage(
-                  result.status === 'sent'
-                    ? 'Request link sent.'
-                    : 'Email delivery is not configured, but your request link is ready to share.',
-                );
-              } catch (sendError) {
-                setError(
-                  toUserMessage(
-                    sendError,
-                    'We could not email the request link. Copy the link or send it by SMS instead.',
-                  ),
-                );
-              }
-            });
-          }}
-        >
-          {isPending ? 'Sending…' : 'Send'}
-        </button>
+
+        {channel === 'sms' ? (
+          <a
+            href={canSend && smsHref ? smsHref : undefined}
+            aria-disabled={!canSend}
+            className={`${primaryClass} ${canSend ? '' : 'pointer-events-none opacity-50'}`}
+            onClick={() => {
+              setError(null);
+              setMessage('Opening your messaging app…');
+            }}
+          >
+            {primaryLabel}
+          </a>
+        ) : (
+          <button
+            type="button"
+            className={primaryClass}
+            disabled={isPending || !canSend}
+            onClick={() => sendEmail(channel === 'both')}
+          >
+            {primaryLabel}
+          </button>
+        )}
       </div>
-      {smsHref ? (
+
+      {missingLabel ? (
+        <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">{missingLabel}</p>
+      ) : null}
+
+      {smsPending && smsHref ? (
         <a
           href={smsHref}
-          className="mt-2.5 inline-flex h-9 items-center justify-center rounded-[18px] border-[0.5px] border-[var(--color-border-secondary)] px-4 text-[13px] font-medium text-[var(--color-text-primary)]"
+          className="mt-2.5 inline-flex h-9 items-center justify-center rounded-[18px] border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] px-4 text-[13px] font-medium text-[var(--color-action)]"
+          onClick={() => setSmsPending(false)}
         >
-          Send by SMS
+          Open SMS to {trimmedPhone}
         </a>
       ) : null}
+
       {message ? (
         <p className="mt-2.5 text-[13px] font-medium text-[var(--color-action)]">{message}</p>
       ) : null}
