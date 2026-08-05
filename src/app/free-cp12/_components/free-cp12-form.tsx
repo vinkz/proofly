@@ -3,10 +3,17 @@
 /**
  * The free CP12 form.
  *
- * Stateless by design: form state lives in this component and dies with the
- * tab. No autosave, no localStorage, no prefill, no server-side draft. That is
- * the boundary between the free tool and the paid product, so it is built in
- * rather than missing — do not add persistence here.
+ * Nothing about the certificate reaches our servers until the visitor asks for
+ * the PDF, and we keep no copy of it afterwards. That is the boundary between
+ * the free tool and the paid product, and it still holds — do not add a
+ * server-side draft, a prefill endpoint or any upload here.
+ *
+ * The answers ARE kept in the visitor's own browser (see ./freeCp12Draft), and
+ * that is not a hole in the above: localStorage is their device, not ours. It
+ * exists because the original build held everything in React state alone, so a
+ * refresh, a back button or a tap on the signup CTA destroyed a finished
+ * certificate — which is exactly how the first engineer to complete one lost
+ * twenty minutes of work. The draft is cleared the moment the PDF is delivered.
  *
  * Field applicability comes from the shared appliance config, so this form
  * shows exactly the checks the paid wizard shows for a given category.
@@ -26,6 +33,13 @@ import {
   cp12FieldVisible,
   resolveCp12Category,
 } from '@/lib/cp12/applianceConfig';
+import { visibleCp12ApplianceChecks } from '@/lib/cp12/applianceChecks';
+import {
+  clearFreeCp12Draft,
+  freeCp12DraftHasContent,
+  readFreeCp12Draft,
+  saveFreeCp12Draft,
+} from '@/lib/cp12/freeCp12Draft';
 import {
   emptyFreeCp12Appliance,
   emptyFreeCp12Payload,
@@ -41,7 +55,7 @@ import { AddressLookupField } from '@/components/address/address-lookup-field';
 import type { AddressLookupResult } from '@/lib/address-lookup';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { getApplianceCatalog } from '@/lib/applianceCatalog/ukAppliances';
-import { CP12_FLUE_TYPES, CP12_LOCATIONS } from '@/types/cp12';
+import { CP12_FLUE_TYPES, CP12_GAS_TYPES, CP12_LOCATIONS } from '@/types/cp12';
 import { PresetChips } from '@/components/wizard/inputs/preset-chips';
 import {
   ACTION_REQUIRED_PRESETS,
@@ -79,6 +93,7 @@ const MAX_APPLIANCES = 12;
 // constraint, because real properties have rooms these lists have never heard of.
 const LOCATION_OPTIONS = CP12_LOCATIONS.map((l) => ({ label: l.label, value: l.label }));
 const FLUE_TYPE_OPTIONS = CP12_FLUE_TYPES.map((f) => ({ label: f.label, value: f.label }));
+const GAS_TYPE_OPTIONS = CP12_GAS_TYPES.map((g) => ({ label: g.label, value: g.label }));
 
 type Stage = 'form' | 'preview' | 'done';
 
@@ -186,7 +201,30 @@ export function FreeCp12Form() {
   const [email, setEmail] = useState('');
   const [emailed, setEmailed] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
   const startedRef = useRef(false);
+  const hydratedRef = useRef(false);
+
+  // Restore anything left in this browser before the first autosave runs, so a
+  // refresh, a back button or a trip through signup does not cost the visitor
+  // their answers. Runs once: re-running would fight the form on every render.
+  useEffect(() => {
+    const draft = readFreeCp12Draft();
+    if (draft && freeCp12DraftHasContent(draft)) {
+      setPayload(draft);
+      setRestored(true);
+    }
+    hydratedRef.current = true;
+  }, []);
+
+  // Autosave, debounced. Held back until the restore above has run, otherwise
+  // the empty initial state would overwrite the draft we are about to read.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (!freeCp12DraftHasContent(payload)) return;
+    const timer = window.setTimeout(() => saveFreeCp12Draft(payload), 500);
+    return () => window.clearTimeout(timer);
+  }, [payload]);
 
   // Revoke the preview object URLs when they are replaced or the tab closes, so
   // the documents do not linger in memory longer than the visit.
@@ -425,6 +463,21 @@ export function FreeCp12Form() {
     }
   };
 
+  /**
+   * Hand the finished certificate to the signup flow.
+   *
+   * Stored rather than posted: nothing about the certificate reaches us until
+   * the visitor has an account and chooses to keep it, so the anonymous promise
+   * this tool makes still holds. The carry-over slot survives the whole signup
+   * detour — several navigations, and possibly an email confirmation on another
+   * day — which is why it is localStorage and not sessionStorage.
+   */
+  const carryOverToAccount = () => {
+    const stored = saveFreeCp12Draft(payload, 'carryover');
+    track(ANALYTICS_EVENTS.freeCp12CarryOverStarted, { stored });
+    window.location.href = '/signup/step1';
+  };
+
   const saveOne = (doc: GeneratedDocument) => {
     const url = URL.createObjectURL(base64ToBlob(doc.base64));
     const anchor = document.createElement('a');
@@ -490,6 +543,10 @@ export function FreeCp12Form() {
       setEmailed(Boolean(data.emailed));
       setReference(data.reference ?? null);
       saveToDevice(data.documents);
+      // Delivered: the safety net has done its job, and this is the landlord's
+      // address sitting on what may be a shared work phone.
+      clearFreeCp12Draft();
+      setRestored(false);
       setStage('done');
       track(ANALYTICS_EVENTS.freeCp12DownloadCompleted, { emailed: Boolean(data.emailed) });
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -520,17 +577,21 @@ export function FreeCp12Form() {
           </p>
         ) : null}
 
-        {/* The honest pitch. Inline, once, no modal. */}
+        {/* The honest pitch. Inline, once, no modal. The button carries the
+            certificate with it: this used to be a plain link, and tapping it
+            navigated away and destroyed the form, which is how the first
+            engineer to finish one lost his. */}
         <div className="mt-5 rounded-[12px] bg-[var(--color-background-secondary)] p-4">
           <p className="text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
             We did not keep this certificate — you re-type everything next time. A CertNow account
             keeps every certificate you issue, lets you reissue them, and gives each one a shareable
             link for the landlord.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button asChild variant="primary">
-              <a href="/signup/step1">Create an account</a>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button variant="primary" onClick={carryOverToAccount}>
+              Create an account and save this certificate
             </Button>
+            <span className="text-[12px] text-[var(--color-text-tertiary)]">No card required</span>
           </div>
         </div>
 
@@ -637,7 +698,8 @@ export function FreeCp12Form() {
           <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">Download it</h3>
           <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
             Where should we send a copy? Your email address is the only thing we keep — the
-            certificate itself is not stored. 
+            certificate itself is not stored, and the working copy in this browser is cleared once
+            you download. 
             <a
               href="/legal/privacy#free-tools"
               target="_blank"
@@ -672,15 +734,116 @@ export function FreeCp12Form() {
   // ------------------------------------------------------------------ form
   return (
     <div>
-      <Section title="Inspection & property">
-        <Field label="Inspection date">
+      {restored ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4">
+          <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+            We picked up where you left off. Your answers were saved in this browser — they were
+            never sent to us.
+          </p>
+          <button
+            type="button"
+            className="text-[13px] font-medium text-[var(--color-text-tertiary)] underline"
+            onClick={() => {
+              clearFreeCp12Draft();
+              setPayload(emptyFreeCp12Payload());
+              setRestored(false);
+            }}
+          >
+            Start a blank one
+          </button>
+        </div>
+      ) : null}
+      <Section title="You" hint="Required — this identifies who carried out the check.">
+        <Grid>
+          <Field label="Engineer name">
+            <Input
+              value={payload.fields.engineer_name}
+              onChange={(e) => setField('engineer_name', e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Gas Safe registration number"
+            hint="The business's registration with Gas Safe Register."
+          >
+            <Input
+              inputMode="numeric"
+              value={payload.fields.gas_safe_number}
+              onChange={(e) => setField('gas_safe_number', e.target.value)}
+            />
+          </Field>
+        </Grid>
+        {/* The number on the engineer's own card, which is not the business's
+            registration number and is what an engineer means by their licence.
+            It sat in the collapsed "business details" section, where an engineer
+            looking for it reasonably concluded there was nowhere to put it. */}
+        <Field
+          label="Gas Safe ID card number (optional)"
+          hint="Your licence number — the one on your own ID card, not the business registration above."
+        >
           <Input
-            type="date"
-            max={new Date().toISOString().slice(0, 10)}
-            value={payload.fields.inspection_date}
-            onChange={(e) => setField('inspection_date', e.target.value)}
+            value={payload.fields.engineer_id_card_number}
+            onChange={(e) => setField('engineer_id_card_number', e.target.value)}
           />
         </Field>
+      </Section>
+
+      <Section
+        title="Your business details"
+        collapsible
+        hint="Appears in the certificate header. Omitted from the PDF if left blank."
+      >
+        <Grid>
+          <Field label="Business name">
+            <Input
+              value={payload.fields.company_name}
+              onChange={(e) => setField('company_name', e.target.value)}
+            />
+          </Field>
+        </Grid>
+        <Grid>
+          <Field label="Business phone">
+            <Input
+              type="tel"
+              inputMode="tel"
+              value={payload.fields.company_phone}
+              onChange={(e) => setField('company_phone', e.target.value)}
+            />
+          </Field>
+          <Field label="Business email">
+            <Input
+              type="email"
+              inputMode="email"
+              value={payload.fields.company_email}
+              onChange={(e) => setField('company_email', e.target.value)}
+            />
+          </Field>
+        </Grid>
+        <Field label="Business address">
+          <Input
+            value={payload.fields.company_address}
+            onChange={(e) => setField('company_address', e.target.value)}
+          />
+        </Field>
+      </Section>
+
+      <Section title="Inspection & property">
+        <Grid>
+          <Field label="Inspection date">
+            <Input
+              type="date"
+              max={new Date().toISOString().slice(0, 10)}
+              value={payload.fields.inspection_date}
+              onChange={(e) => setField('inspection_date', e.target.value)}
+            />
+          </Field>
+          <SearchableSelect
+            label="Gas type"
+            value={payload.fields.gas_type}
+            options={GAS_TYPE_OPTIONS}
+            placeholder="Natural gas"
+            onChange={(value) => setField('gas_type', value)}
+          />
+        </Grid>
         <AddressLookupField
           label="Address line 1"
           value={payload.fields.job_address_line1}
@@ -791,69 +954,6 @@ export function FreeCp12Form() {
         </Field>
       </Section>
 
-      <Section title="You" hint="Required — this identifies who carried out the check.">
-        <Grid>
-          <Field label="Engineer name">
-            <Input
-              value={payload.fields.engineer_name}
-              onChange={(e) => setField('engineer_name', e.target.value)}
-            />
-          </Field>
-          <Field label="Gas Safe registration number">
-            <Input
-              inputMode="numeric"
-              value={payload.fields.gas_safe_number}
-              onChange={(e) => setField('gas_safe_number', e.target.value)}
-            />
-          </Field>
-        </Grid>
-      </Section>
-
-      <Section
-        title="Your business details"
-        collapsible
-        hint="Appears in the certificate header. Omitted from the PDF if left blank."
-      >
-        <Grid>
-          <Field label="Business name">
-            <Input
-              value={payload.fields.company_name}
-              onChange={(e) => setField('company_name', e.target.value)}
-            />
-          </Field>
-          <Field label="ID card number">
-            <Input
-              value={payload.fields.engineer_id_card_number}
-              onChange={(e) => setField('engineer_id_card_number', e.target.value)}
-            />
-          </Field>
-        </Grid>
-        <Grid>
-          <Field label="Business phone">
-            <Input
-              type="tel"
-              inputMode="tel"
-              value={payload.fields.company_phone}
-              onChange={(e) => setField('company_phone', e.target.value)}
-            />
-          </Field>
-          <Field label="Business email">
-            <Input
-              type="email"
-              inputMode="email"
-              value={payload.fields.company_email}
-              onChange={(e) => setField('company_email', e.target.value)}
-            />
-          </Field>
-        </Grid>
-        <Field label="Business address">
-          <Input
-            value={payload.fields.company_address}
-            onChange={(e) => setField('company_address', e.target.value)}
-          />
-        </Field>
-      </Section>
-
       {payload.appliances.map((appliance, index) => {
         const category = resolveCp12Category(appliance.appliance_type);
         const combustion = cp12FieldVisibility(category, 'combustion');
@@ -915,6 +1015,14 @@ export function FreeCp12Form() {
               onChange={(value) => setAppliance(index, { model: value })}
             />
 
+            <Field label="GC number (optional)">
+              <Input
+                placeholder="47-311-92"
+                value={appliance.gc_number}
+                onChange={(e) => setAppliance(index, { gc_number: e.target.value })}
+              />
+            </Field>
+
             {cp12FieldVisible(category, 'flue_type') ? (
               <SearchableSelect
                 label="Flue type"
@@ -949,62 +1057,46 @@ export function FreeCp12Form() {
             </Grid>
 
             <div className="grid gap-4">
-              {cp12FieldVisible(category, 'safety_devices_correct') ? (
-                <EnumChips
-                  label="Safety device(s) correct operation"
-                  value={appliance.safety_devices_correct}
-                  options={PASS_FAIL}
-                  onChange={(value) => setAppliance(index, { safety_devices_correct: value })}
-                />
-              ) : null}
-              {cp12FieldVisible(category, 'ventilation_satisfactory') ? (
-                <EnumChips
-                  label="Ventilation provision satisfactory"
-                  value={appliance.ventilation_satisfactory}
-                  options={PASS_FAIL}
-                  onChange={(value) => setAppliance(index, { ventilation_satisfactory: value })}
-                />
-              ) : null}
-              {cp12FieldVisible(category, 'flue_condition') ? (
-                <EnumChips
-                  label="Visual condition of flue and termination satisfactory"
-                  value={appliance.flue_condition}
-                  options={PASS_FAIL}
-                  onChange={(value) => setAppliance(index, { flue_condition: value })}
-                />
-              ) : null}
-              {cp12FieldVisible(category, 'flue_performance_test') ? (
-                <EnumChips
-                  label="Flue performance test"
-                  value={appliance.flue_performance_test}
-                  options={PASS_FAIL}
-                  onChange={(value) => setAppliance(index, { flue_performance_test: value })}
-                />
-              ) : null}
-              {cp12FieldVisible(category, 'cooker_stability') ? (
-                <EnumChips
-                  label="Cooker stability (bracket/chain)"
-                  value={appliance.cooker_stability}
-                  options={PASS_FAIL}
-                  onChange={(value) => setAppliance(index, { cooker_stability: value })}
-                />
-              ) : null}
-              {cp12FieldVisible(category, 'gas_tightness_test') ? (
-                <EnumChips
-                  label="Gas tightness test"
-                  value={appliance.gas_tightness_test}
-                  options={PASS_FAIL}
-                  onChange={(value) => setAppliance(index, { gas_tightness_test: value })}
-                />
-              ) : null}
-              {cp12FieldVisible(category, 'appliance_serviced') ? (
-                <EnumChips
-                  label="Appliance serviced"
-                  value={appliance.appliance_serviced}
-                  options={YES_NO}
-                  onChange={(value) => setAppliance(index, { appliance_serviced: value })}
-                />
-              ) : null}
+              {visibleCp12ApplianceChecks(category, appliance.flue_type).map((check) => (
+                <div key={check.key} className="contents">
+                  <EnumChips
+                    label={check.label}
+                    hint={check.hint}
+                    value={appliance[check.key]}
+                    options={check.answers === 'yes_no' ? YES_NO : PASS_FAIL}
+                    onChange={(value) => setAppliance(index, { [check.key]: value })}
+                  />
+                  {/* Evidence for the integrity verdict, so it belongs directly
+                      under it rather than in the shared list — it is free text
+                      conditional on an answer, not a check with a verdict. */}
+                  {check.key === 'flue_integrity_test' &&
+                  appliance.flue_integrity_test &&
+                  cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) ? (
+                    <Grid>
+                      <Field label="Air inlet CO2 at high rate (optional)">
+                        <Input
+                          inputMode="decimal"
+                          placeholder="0.02 %"
+                          value={appliance.flue_integrity_co2_high}
+                          onChange={(e) =>
+                            setAppliance(index, { flue_integrity_co2_high: e.target.value })
+                          }
+                        />
+                      </Field>
+                      <Field label="Air inlet CO2 at low rate (optional)">
+                        <Input
+                          inputMode="decimal"
+                          placeholder="0.01 %"
+                          value={appliance.flue_integrity_co2_low}
+                          onChange={(e) =>
+                            setAppliance(index, { flue_integrity_co2_low: e.target.value })
+                          }
+                        />
+                      </Field>
+                    </Grid>
+                  ) : null}
+                </div>
+              ))}
             </div>
 
             {combustion === 'optional' && !appliance.combustion_opt_in ? (

@@ -265,6 +265,7 @@ export function RequestJobClient({ scopedEngineer = null }: { scopedEngineer?: S
         const propertyAddress = composeAddress(addressLine1, addressLine2, city, postcode);
         const result = await submitStandaloneLandlordJobRequest({
           landlordName,
+          landlordCompany,
           landlordEmail,
           landlordPhone,
           landlordAddressLine1,

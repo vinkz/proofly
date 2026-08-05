@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
-import { CP12_APPLIANCE_CONFIG, type Cp12ApplianceCategory } from '@/lib/cp12/applianceConfig';
+import {
+  CP12_APPLIANCE_CONFIG,
+  resolveCp12FlueKind,
+  type Cp12ApplianceCategory,
+} from '@/lib/cp12/applianceConfig';
+import { emptyFreeCp12Appliance } from '@/lib/cp12/freeCp12Payload';
+import { DEFAULT_CP12_FLUE_TYPE } from '@/types/cp12';
 import type { Cp12Appliance } from '@/types/certificates';
 
 /**
@@ -25,6 +31,7 @@ const appliance = (over: Partial<Cp12Appliance>): Cp12Appliance => ({
   appliance_inspected: 'Yes',
   location: 'Kitchen',
   make_model: 'Test Appliance',
+  gc_number: '47-311-92',
   operating_pressure: '20 mbar',
   heat_input: '24 kW',
   high_co_ppm: '12',
@@ -44,7 +51,8 @@ const appliance = (over: Partial<Cp12Appliance>): Cp12Appliance => ({
   gas_tightness_test: 'pass',
   co_reading_ppm: '',
   safety_devices_correct: 'pass',
-  flue_performance_test: 'pass',
+  flue_performance_test: 'pass', flue_integrity_test: 'pass',
+  flue_integrity_co2_high: '0.02', flue_integrity_co2_low: '0.01', spillage_test: 'pass',
   appliance_serviced: 'Yes',
   combustion_notes: '',
   safety_rating: '',
@@ -105,12 +113,79 @@ describe('appliance-category applicability reaches the certificate', () => {
     expect(out.flueLocation).toBe('');
   });
 
+  /**
+   * A room-sealed appliance gets a flue integrity test; an open-flued one gets a
+   * flue flow test and a spillage test. They are different procedures and never
+   * both apply, so the certificate must never carry both — and must never carry
+   * the one belonging to the other kind of flue.
+   */
+  describe('the flue test follows the flue type, not the appliance category', () => {
+    const forFlue = (flue_type: string) =>
+      buildCp12RenderInput({
+        fieldMap: { inspection_date: '2026-07-27' },
+        appliances: [appliance({ appliance_type: 'boiler', flue_type })],
+        recordId: 'R',
+        certNumber: 'R',
+        issuedAt: new Date('2026-07-27T00:00:00Z'),
+      }).appliances[0];
+
+    it.each(['Room sealed', 'Balanced flue'])('%s: integrity only', (flue) => {
+      const out = forFlue(flue);
+      expect(out.flueIntegrityTest).toBe('pass');
+      expect(out.fluePerformanceTest).toBe('');
+      expect(out.spillageTest).toBe('');
+    });
+
+    it('Open flue: flow and spillage only', () => {
+      const out = forFlue('Open flue');
+      expect(out.fluePerformanceTest).toBe('pass');
+      expect(out.spillageTest).toBe('pass');
+      expect(out.flueIntegrityTest).toBe('');
+      expect(out.flueIntegrityCo2High).toBe('');
+    });
+
+    it('a brand-new appliance offers one flue test, not every flue test', () => {
+      // An unset flue type means "kind unknown", which deliberately shows all
+      // three. That is right for an odd appliance and wrong for a blank form:
+      // it presented the room-sealed test and the open-flued pair together, so
+      // the fields appeared not to respond when a flue type was finally picked.
+      const fresh = emptyFreeCp12Appliance();
+      expect(fresh.flue_type).toBe(DEFAULT_CP12_FLUE_TYPE);
+      expect(resolveCp12FlueKind(fresh.flue_type)).toBe('room_sealed');
+
+      const out = forFlue(fresh.flue_type);
+      expect(out.flueIntegrityTest).toBe('pass');
+      expect(out.fluePerformanceTest).toBe('');
+      expect(out.spillageTest).toBe('');
+    });
+
+    it('an unrecognised flue type hides nothing, so no completed check is lost', () => {
+      const out = forFlue('Something unusual');
+      expect(out.flueIntegrityTest).toBe('pass');
+      expect(out.fluePerformanceTest).toBe('pass');
+      expect(out.spillageTest).toBe('pass');
+    });
+
+    it('the visual flue condition applies to every flued appliance', () => {
+      for (const flue of ['Room sealed', 'Open flue', 'Balanced flue']) {
+        expect(forFlue(flue).flueTerminationSatisfactory).toBe('pass');
+      }
+    });
+
+    it('air-inlet readings never print without the integrity result they evidence', () => {
+      expect(forFlue('Open flue').flueIntegrityCo2Low).toBe('');
+    });
+  });
+
   it('a hob still records the checks that do apply to it', () => {
     const out = render('hob_cooker');
     expect(out.cookerStability).toBe('pass');
     expect(out.ventilationSatisfactory).toBe('pass');
     expect(out.safetyDevice).toBe('pass');
-    expect(out.spillageTest).toBe('pass');
+    expect(out.gasTightnessTest).toBe('pass');
+    // A hob has no flue, so it must not carry a flue performance result. This
+    // used to print as a "Spillage test" row fed from the tightness answer.
+    expect(out.fluePerformanceTest).toBe('');
     expect(out.applianceSafeToUse).toBe('Yes');
     expect(out.reg26Confirmed).toBe(true);
   });

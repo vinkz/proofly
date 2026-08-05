@@ -17,6 +17,8 @@ export type Cp12DefectAppliance = {
   ventilation_satisfactory?: string | null;
   flue_condition?: string | null;
   flue_performance_test?: string | null;
+  flue_integrity_test?: string | null;
+  spillage_test?: string | null;
   cooker_stability?: string | null;
   gas_tightness_test?: string | null;
 };
@@ -26,10 +28,28 @@ const CHECK_LABELS: ReadonlyArray<readonly [keyof Cp12DefectAppliance, string]> 
   ['safety_devices_correct', 'Safety device'],
   ['ventilation_satisfactory', 'Ventilation'],
   ['flue_condition', 'Visual flue/termination'],
-  ['flue_performance_test', 'Flue performance'],
+  // Only one of these two ever applies to a given appliance — flue flow and
+  // spillage on an open flue, integrity on a room-sealed one — but both belong
+  // here. A failure of either is a defect in its own right under Reg 36(3)(e):
+  // spillage means combustion products entering the room, integrity means them
+  // leaking back into the appliance's own air supply.
+  ['flue_performance_test', 'Flue flow'],
+  ['spillage_test', 'Spillage'],
+  ['flue_integrity_test', 'Flue integrity'],
   ['cooker_stability', 'Cooker stability'],
   ['gas_tightness_test', 'Gas tightness'],
 ];
+
+/**
+ * The appliance keys a failure is detected on.
+ *
+ * Exported so a test can assert this stays in step with the checks the forms
+ * ask. Flue integrity and spillage were added to the forms and not here, and a
+ * failed one silently reached a certificate with an empty "Defects identified".
+ */
+export const CP12_DEFECT_CHECK_KEYS: ReadonlyArray<keyof Cp12DefectAppliance> = CHECK_LABELS.map(
+  ([key]) => key,
+);
 
 const t = (v: unknown) => String(v ?? '').trim();
 const isFail = (v: unknown) => t(v).toLowerCase() === 'fail';

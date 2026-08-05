@@ -10,13 +10,18 @@ export type ApplianceInput = {
   make?: string;
   model?: string;
   serial?: string;
+  /** Data-plate Gas Council number, where the appliance has one. */
+  gcNumber?: string;
   flueType?: string;
   operatingPressure?: string;
   heatInput?: string;
   safetyDevice?: string;
   ventilationSatisfactory?: string;
-  flueTerminationSatisfactory?: string;
-  spillageTest?: string;
+  // No flue-check fields here. The renderer prints flueing from the field map
+  // ("Flue effectiveness", from appliance_flueing_safe); the service record has
+  // no spillage or flue integrity test to report. Two such fields existed and
+  // were fed the tightness / combustion answers — never printed, but ready to
+  // print something untrue the moment anyone wired them up.
   applianceSafeToUse?: string;
   remedialActionTaken?: string;
 };
@@ -31,6 +36,21 @@ export type GasServiceFieldMap = {
   companyPostcode?: string;
   companyPhone?: string;
   gasSafeNumber?: string;
+  /** Natural gas or LPG. Collected since launch and never printed until now. */
+  gasType?: string;
+  /**
+   * Flue checks, reported like every other check on this record — from the
+   * field map, not the appliance row.
+   *
+   * Which pair applies depends on how the appliance is flued: a room-sealed or
+   * balanced flue gets the integrity test (analyser at the air-inlet sampling
+   * point), an open flue gets the flow and spillage tests. Never both.
+   */
+  flueIntegrityTest?: string;
+  flueIntegrityCo2High?: string;
+  flueIntegrityCo2Low?: string;
+  flueFlowTest?: string;
+  spillageTest?: string;
   engineerId?: string;
   jobName?: string;
   jobAddressLine1?: string;

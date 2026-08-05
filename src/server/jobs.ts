@@ -93,8 +93,24 @@ const SoloJobSchema = z
     selectedPropertyId: z.string().uuid().optional().or(z.literal('')),
     selectedPropertyJobId: z.string().uuid().optional().or(z.literal('')),
     requestId: z.string().uuid().optional(),
+    /**
+     * The engineer is going straight to the certificate and will enter the
+     * landlord and property there.
+     *
+     * A job is a container; the certificate is the document. Requiring the
+     * landlord's name and address to create the container is what forced two
+     * screens of preamble before an engineer stood at a property could start
+     * work. Nothing is lost by deferring: validateCp12TierOne enforces exactly
+     * these fields before a certificate can be issued, so an incomplete record
+     * still cannot leave the building — it just no longer has to be complete
+     * before it exists.
+     */
+    deferDetails: z.boolean().optional().default(false),
   })
   .superRefine((value, ctx) => {
+    // Identity is collected on the certificate instead. Everything else —
+    // job type, schedule, a valid email if one was given — still applies.
+    if (value.deferDetails) return;
     const isSafetyCheck = value.jobType === 'safety_check' || value.jobType === 'safety_check_service';
     if (!isSafetyCheck && value.clientMode === 'existing' && !value.clientId) {
       ctx.addIssue({
@@ -1046,7 +1062,7 @@ export async function getPrefillJobSummary(jobId: string, token: string) {
   };
 }
 
-export async function createSoloJob(payload: z.infer<typeof SoloJobSchema>) {
+export async function createSoloJob(payload: z.input<typeof SoloJobSchema>) {
   let input: z.infer<typeof SoloJobSchema>;
   try {
     input = SoloJobSchema.parse(payload);

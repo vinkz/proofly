@@ -236,13 +236,23 @@ export async function renderGasServiceV2Pdf(input: RenderGasServiceInput): Promi
   kv('Type', text(appliance?.type) || text(f.applianceType));
   kv('Make / model', [text(appliance?.make ?? f.applianceMake), text(appliance?.model ?? f.applianceModel)].filter(Boolean).join(' ') || text(appliance?.description));
   kv('Serial number', text(appliance?.serial) || text(f.applianceSerial));
+  kv('GC number', text(appliance?.gcNumber));
   kv('Location', text(appliance?.location) || text(f.applianceLocation));
   kv('Flue type', text(appliance?.flueType));
+  kv('Gas type', text(f.gasType));
 
   // ------------------------------------------ safety examination (Reg 26(9)) — required
   section('Safety examination (Reg 26(9))');
   resultRows(([
     ['Flue effectiveness', text(f.applianceFlueingSafe)],
+    // Only one of these ever carries a value — which one depends on the flue
+    // type, so the row that does not apply is filtered out below rather than
+    // printed empty. Nothing is inferred: each prints only what was asked.
+    ['Flue integrity test', text(f.flueIntegrityTest)],
+    ['Air inlet CO2 (high)', text(f.flueIntegrityCo2High)],
+    ['Air inlet CO2 (low)', text(f.flueIntegrityCo2Low)],
+    ['Flue flow test', text(f.flueFlowTest)],
+    ['Spillage test', text(f.spillageTest)],
     ['Combustion air / ventilation', text(f.applianceVentilationSafe)],
     ['Operating pressure', text(f.operatingPressure)],
     ['Heat input', text(f.heatInput)],

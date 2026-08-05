@@ -12,6 +12,7 @@ vi.mock('@/lib/supabaseServer', () => ({
 }));
 
 import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
+import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
 
 const LONG_DEFECT =
   'Spillage of products of combustion detected at the appliance draught diverter during the smoke ' +
@@ -38,7 +39,8 @@ const appliances: ApplianceInput[] = [
     safetyDevice: 'Pass',
     ventilationSatisfactory: 'Pass',
     flueTerminationSatisfactory: 'Pass',
-    spillageTest: 'N/A',
+    fluePerformanceTest: 'N/A',
+    gasTightnessTest: 'Pass',
     applianceSafeToUse: 'Yes',
     combustionLowCoPpm: '0',
     combustionLowCo2: '8.4',
@@ -89,7 +91,8 @@ const appliances: ApplianceInput[] = [
     safetyDevice: 'Fail',
     ventilationSatisfactory: 'Fail',
     flueTerminationSatisfactory: 'Fail',
-    spillageTest: 'Fail',
+    fluePerformanceTest: 'Fail',
+    gasTightnessTest: 'Pass',
     applianceSafeToUse: 'No - At Risk',
     remedialActionTaken: 'Appliance turned off; Warning notice issued to landlord and tenant.',
     combustionLowCoPpm: '210',
@@ -223,5 +226,35 @@ describe('CP12 renderer audit', () => {
     fs.writeFileSync(outPath, bytes);
     // eslint-disable-next-line no-console
     console.log('WROTE_PDF', outPath, bytes.byteLength, 'bytes');
+  });
+});
+
+describe('gas type on the CP12', () => {
+  /**
+   * Collected in the free form and in the paid evidence step, printed by
+   * neither. The paid flow persists evidence answers to job_fields, so reading
+   * the field map covers both flows at once — this asserts that, rather than
+   * only the free path.
+   */
+  it('reaches the render from the field map, whichever flow filled it in', () => {
+    const out = buildCp12RenderInput({
+      fieldMap: { inspection_date: '2026-07-31', gas_type: 'LPG' },
+      appliances: [],
+      recordId: 'R',
+      certNumber: 'R',
+      issuedAt: new Date('2026-07-31T00:00:00Z'),
+    });
+    expect(out.fields.gasType).toBe('LPG');
+  });
+
+  it('stays blank rather than defaulting to natural gas', () => {
+    const out = buildCp12RenderInput({
+      fieldMap: { inspection_date: '2026-07-31' },
+      appliances: [],
+      recordId: 'R',
+      certNumber: 'R',
+      issuedAt: new Date('2026-07-31T00:00:00Z'),
+    });
+    expect(out.fields.gasType).toBe('');
   });
 });

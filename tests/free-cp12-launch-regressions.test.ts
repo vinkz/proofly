@@ -7,6 +7,7 @@ import {
 } from '@/lib/cp12/freeCp12Payload';
 import { buildFreeGwnFields, unsafeAppliances } from '@/lib/cp12/freeGwn';
 import { validateGwnForIssue } from '@/lib/gwn/validation';
+import { freeCp12Reference } from '@/server/free-cp12';
 
 vi.mock('@/lib/public-action-security', () => ({
   consumePublicActionRateLimit: async () => ({ allowed: true, remaining: 4, retryAfterSeconds: 0 }),
@@ -162,5 +163,31 @@ describe('launch regressions', () => {
 
     const twelve = { fields: {}, appliances: Array.from({ length: 12 }, () => ({ appliance_type: 'boiler' })) };
     expect(FreeCp12PayloadSchema.safeParse(twelve).success).toBe(true);
+  });
+});
+
+describe('free certificate reference', () => {
+  /**
+   * The reference is what an engineer hands a landlord, so it should not
+   * announce which tool produced it — but it must also never collide with an
+   * account's certificate number. Those are a per-user counter starting at
+   * 00000001, so a low random numeric reference would eventually name two
+   * different gas safety records identically.
+   */
+  it('carries no FREE- prefix', () => {
+    expect(freeCp12Reference()).not.toMatch(/free/i);
+  });
+
+  it('matches the length of an account job code', () => {
+    expect(freeCp12Reference()).toHaveLength(8);
+    expect(freeCp12Reference()).toMatch(/^[0-9A-F]{8}$/);
+  });
+
+  it('is random, not sequential, so it cannot land on an account code', () => {
+    const seen = new Set(Array.from({ length: 200 }, () => freeCp12Reference()));
+    expect(seen.size).toBe(200);
+    // An account code is all digits; a collision needs the free one to be too.
+    // Vanishingly unlikely per draw, and never sequential regardless.
+    expect(Array.from(seen).every((ref) => /^0{4}/.test(ref))).toBe(false);
   });
 });

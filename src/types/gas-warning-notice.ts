@@ -21,6 +21,13 @@ export type GasWarningNoticeFields = {
   job_postcode?: string;
   job_tel?: string;
   serial_number?: string;
+  /**
+   * Data-plate Gas Council number. Identity only — a warning notice records an
+   * unsafe situation and the actions taken, not a test schedule, so the flue
+   * tests that live on a CP12 and a service record deliberately do not appear
+   * here.
+   */
+  gc_number?: string;
   appliance_location?: string;
   appliance_type?: string;
   make_model?: string;

@@ -37,7 +37,9 @@ export default function FreeCp12Page() {
           viewedEvent={ANALYTICS_EVENTS.freeCp12SampleViewed}
         />
         <p className="mt-3 max-w-[62ch] text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
-          Nothing you type here is saved. Close the tab and it is gone — so finish in one sitting.
+          Nothing is sent to us until you ask for the PDF, and we keep no copy of the certificate
+          afterwards. Your answers are held in this browser so you cannot lose them, and are cleared
+          once you download.
         </p>
       </header>
       <FreeCp12Form />

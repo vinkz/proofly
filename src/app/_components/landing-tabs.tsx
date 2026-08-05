@@ -544,15 +544,13 @@ function LandlordsContent() {
           Request a visit from your engineer
           <IconArrowRight />
         </Link>
+        {/* There is no lookup route for an existing /p/[token] property link — a
+            token is the only way in, by design. This used to offer to "open it
+            here" and then send you to the request form instead, which read as a
+            broken link. Until a lookup exists, say plainly where the link is. */}
         <p className="mx-auto mt-5 max-w-[330px] text-[13px] leading-[1.65] text-[var(--color-text-secondary)]">
-          Already have a CertNow link from your engineer?{" "}
-          {/* TODO: no landlord-facing lookup route exists for an existing /p/[token]
-              property vault link, so this points at the request flow for now.
-              A property-link lookup could go here once built. */}
-          <Link href="/request" className="text-[var(--color-action)]">
-            Open it here
-          </Link>{" "}
-          to view certificates or book a renewal.
+          Already have a CertNow property link from your engineer? Open the link they emailed you to
+          view certificates or book a renewal — it stays live between visits, so it is worth saving.
         </p>
       </section>
     </>

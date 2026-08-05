@@ -11,6 +11,28 @@ export const CP12_APPLIANCE_TYPES = [
   { value: 'other', label: 'Other' },
 ] as const;
 
+/**
+ * What a new appliance starts as.
+ *
+ * Flue type decides which flue test the form asks for, so leaving it unset is
+ * not neutral — it means "unknown", which offers every test at once. Must match
+ * one of the CP12_FLUE_TYPES labels below, since the pickers store the label.
+ */
+export const DEFAULT_CP12_FLUE_TYPE = 'Room sealed';
+
+/**
+ * Gas the installation runs on.
+ *
+ * Not cosmetic: an LPG installation is a different job with different
+ * qualifications behind it, and a gas safety record that does not say which
+ * fuel it covers is incomplete. Shared by the CP12 and the service record so
+ * the two cannot offer different vocabularies.
+ */
+export const CP12_GAS_TYPES = [
+  { value: 'natural gas', label: 'Natural gas' },
+  { value: 'lpg', label: 'LPG' },
+] as const;
+
 export const CP12_FLUE_TYPES = [
   { value: 'room sealed', label: 'Room sealed' },
   { value: 'open flue', label: 'Open flue' },
@@ -191,6 +213,7 @@ export const CP12_DEMO_APPLIANCE = {
   appliance_inspected: 'Yes',
   location: 'kitchen cupboard',
   make_model: 'Worcester Bosch Greenstar 30i',
+  gc_number: '47-311-92',
   operating_pressure: '20 mbar',
   heat_input: '24 kW',
   high_co_ppm: '8',
@@ -210,7 +233,11 @@ export const CP12_DEMO_APPLIANCE = {
   gas_tightness_test: 'pass',
   co_reading_ppm: '8',
   safety_devices_correct: 'pass',
-  flue_performance_test: 'pass',
+  flue_performance_test: '',
+  flue_integrity_test: 'pass',
+  flue_integrity_co2_high: '0.02',
+  flue_integrity_co2_low: '0.01',
+  spillage_test: '',
   appliance_serviced: 'yes',
   combustion_notes: 'Combustion readings within tolerance; analyser calibrated Feb 2026.',
   safety_rating: 'safe',

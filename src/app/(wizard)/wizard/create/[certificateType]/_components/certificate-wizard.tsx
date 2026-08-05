@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -14,6 +14,15 @@ import { EvidenceCard } from './evidence-card';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
+import { visibleCp12ApplianceChecks } from '@/lib/cp12/applianceChecks';
+import type { ClientListItem } from '@/types/client';
+import { readSinglePagePreference, writeSinglePagePreference } from '@/lib/wizard/single-page-preference';
+
+/** Answer set for checks that record whether something was done, not tested. */
+const YES_NO_OPTIONS = [
+  { label: 'Yes', value: 'Yes' },
+  { label: 'No', value: 'No' },
+];
 import { UnitNumberInput } from '@/components/wizard/inputs/unit-number-input';
 import { type CertificateType, type Cp12Appliance, type Cp12SafetyClassification, type PhotoCategory } from '@/types/certificates';
 import {
@@ -29,6 +38,7 @@ import { getLatestApplianceDefaultsForJob } from '@/server/history';
 import { tryUpdateJobRecord } from '@/server/jobRecords';
 import {
   CP12_FLUE_TYPES,
+  DEFAULT_CP12_FLUE_TYPE,
   CP12_DEMO_APPLIANCE,
   CP12_DEMO_INFO,
   CP12_EVIDENCE_CONFIG,
@@ -79,6 +89,14 @@ type WizardProps = {
   initialJobContext?: InitialJobContext | null;
   initialPhotoPreviews?: Record<string, string>;
   initialAppliances?: Cp12Appliance[];
+  /**
+   * Saved landlords, offered as prefill at the top of the single-page layout.
+   *
+   * Choosing one used to be a separate route into the wizard — a picker screen
+   * before the form. It is not a different way of making a certificate, only a
+   * faster way of filling one in, so on one page it belongs on the page.
+   */
+  clients?: ClientListItem[];
   stepOffset?: number;
   startStep?: number;
   hideBillingCustomerStep?: boolean;
@@ -98,6 +116,7 @@ const emptyAppliance: Cp12Appliance = {
   landlords_appliance: 'Yes',
   appliance_inspected: 'Yes',
   location: '',
+  gc_number: '',
   make_model: '',
   operating_pressure: '',
   heat_input: '',
@@ -109,7 +128,9 @@ const emptyAppliance: Cp12Appliance = {
   low_ratio: '',
   co_reading_high: '',
   co_reading_low: '',
-  flue_type: '',
+  // See DEFAULT_CP12_FLUE_TYPE: an unset flue type offers the room-sealed test
+  // and the open-flued pair simultaneously.
+  flue_type: DEFAULT_CP12_FLUE_TYPE,
   flue_location: '',
   ventilation_provision: '',
   ventilation_satisfactory: '',
@@ -119,6 +140,10 @@ const emptyAppliance: Cp12Appliance = {
   co_reading_ppm: '',
   safety_devices_correct: '',
   flue_performance_test: '',
+  flue_integrity_test: '',
+  flue_integrity_co2_high: '',
+  flue_integrity_co2_low: '',
+  spillage_test: '',
   appliance_serviced: '',
   combustion_notes: '',
   safety_rating: '',
@@ -401,6 +426,7 @@ export function CertificateWizard({
   initialJobContext = null,
   initialPhotoPreviews = {},
   initialAppliances = [],
+  clients = [],
   stepOffset = 0,
   startStep = 1,
   prepareOnly = false,
@@ -518,6 +544,7 @@ export function CertificateWizard({
     appliance_inspected: appliance.appliance_inspected ?? 'Yes',
     location: appliance.location ?? '',
     make_model: appliance.make_model ?? '',
+    gc_number: appliance.gc_number ?? '',
     operating_pressure: appliance.operating_pressure ?? '',
     heat_input: appliance.heat_input ?? '',
     high_co_ppm: appliance.high_co_ppm ?? '',
@@ -538,6 +565,10 @@ export function CertificateWizard({
     co_reading_ppm: appliance.co_reading_ppm ?? '',
     safety_devices_correct: appliance.safety_devices_correct ?? '',
     flue_performance_test: appliance.flue_performance_test ?? '',
+    flue_integrity_test: appliance.flue_integrity_test ?? '',
+    flue_integrity_co2_high: appliance.flue_integrity_co2_high ?? '',
+    flue_integrity_co2_low: appliance.flue_integrity_co2_low ?? '',
+    spillage_test: appliance.spillage_test ?? '',
     appliance_serviced: appliance.appliance_serviced ?? '',
     combustion_notes: appliance.combustion_notes ?? '',
     safety_rating: appliance.safety_rating ?? '',
@@ -610,6 +641,108 @@ export function CertificateWizard({
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
+
+  /**
+   * Single-page mode: every step stacked on one scroll instead of four screens
+   * with a sub-tabbed third.
+   *
+   * A layout preference, not a different form — the same state, the same
+   * autosave, the same offline fallback. Only the chrome changes, which is why
+   * it can be a toggle rather than a second implementation to keep in step.
+   *
+   * Held per device rather than on the profile: it is a preference about this
+   * screen on this phone, and storing it locally means no migration and no
+   * round-trip before the first paint.
+   */
+  const [singlePage, setSinglePage] = useState(false);
+  useEffect(() => {
+    setSinglePage(readSinglePagePreference());
+  }, []);
+  const toggleSinglePage = useCallback(() => {
+    setSinglePage((previous) => {
+      const next = !previous;
+      writeSinglePagePreference(next);
+      return next;
+    });
+  }, []);
+
+  /** What the engineer sees and types, and therefore what comes back. */
+  const savedLandlordLabel = (client: ClientListItem) =>
+    [client.landlord_name || client.name, client.organization].filter(Boolean).join(' · ');
+
+  /**
+   * Fill the landlord from a saved customer.
+   *
+   * Deliberately additive: it writes into the same fields the engineer can
+   * type into, so a wrong pick is corrected by editing rather than by starting
+   * again. Nothing is linked or locked — the certificate still owns its own
+   * copy of the details, which is what lets a landlord's address change later
+   * without rewriting certificates already issued.
+   */
+  const applySavedLandlord = (chosenLabel: string) => {
+    // SearchableSelect is a native <datalist>: picking an option puts the
+    // option's `value` into the input and hands that raw string back here, and
+    // the browser filters on `value` too. Keyed on the id, the customer list
+    // was being searched by UUID substring — typing a landlord's name matched
+    // nothing. Every other use of this component sets value === label for the
+    // same reason.
+    const client = clients.find((candidate) => savedLandlordLabel(candidate) === chosenLabel);
+    if (!client) return;
+    const [line1 = '', ...rest] = splitAddressParts(
+      String(client.landlord_address ?? client.address ?? ''),
+    );
+    setInfo((prev) => ({
+      ...prev,
+      landlord_name: client.landlord_name || client.name || prev.landlord_name,
+      landlord_company: client.organization ?? prev.landlord_company,
+      landlord_address_line1: line1 || prev.landlord_address_line1,
+      landlord_city: rest.at(-1) ?? prev.landlord_city,
+      landlord_postcode: client.postcode ?? prev.landlord_postcode,
+      landlord_tel: client.phone ?? prev.landlord_tel,
+      landlord_email: client.email ?? prev.landlord_email,
+    }));
+    setLandlordAddressSearchQuery(line1 || '');
+  };
+
+  /**
+   * Whether this certificate arrived already knowing its landlord.
+   *
+   * Read from the job as it loaded, not from the live fields: deciding on the
+   * current value would make the picker vanish mid-typing, the moment a name
+   * became non-empty. A job created by booking, or filled from a landlord's
+   * request link, already carries the landlord — offering to fill it from a
+   * saved customer there is clutter at best and an invitation to overwrite what
+   * the landlord themselves supplied at worst.
+   */
+  const arrivedWithLandlord = Boolean(String(resolvedInitialInfo.landlord_name ?? '').trim());
+
+  const savedLandlordPicker = clients.length && !arrivedWithLandlord ? (
+    <div className="mb-5 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+      <SearchableSelect
+        label="Start from a saved landlord (optional)"
+        value=""
+        options={clients.map((client) => ({
+          label: savedLandlordLabel(client),
+          value: savedLandlordLabel(client),
+        }))}
+        placeholder="Search your customers"
+        onChange={applySavedLandlord}
+      />
+      <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
+        Fills the landlord details below. You can edit anything it fills in.
+      </p>
+    </div>
+  ) : null;
+
+  const layoutToggle = (
+    <button
+      type="button"
+      onClick={toggleSinglePage}
+      className="text-[12px] font-medium text-[var(--color-text-secondary)] underline"
+    >
+      {singlePage ? 'Use step-by-step' : 'Show on one page'}
+    </button>
+  );
   // Appliance-hub navigation: null = show the appliance list (hub); a number = the one
   // appliance currently being filled in (its identity on step 2, its checks on step 3).
   // Signatures (step 4) and property checks (step 3, hub mode) are unaffected.
@@ -1915,7 +2048,7 @@ export function CertificateWizard({
       id: 'job-address',
       label: 'Property address & postcode',
       ok: addrOk,
-      hint: 'Add in People & location',
+      hint: singlePage ? 'Add it under Landlord & property above' : 'Add in People & location',
       action: () => {
         setStep(1);
         setInfoSubStep(1);
@@ -1933,7 +2066,7 @@ export function CertificateWizard({
       id: 'landlord',
       label: 'Landlord / owner details complete',
       ok: landlordOk,
-      hint: 'Fill in People & location',
+      hint: singlePage ? 'Fill it in under Landlord & property above' : 'Fill in People & location',
       action: () => {
         setStep(1);
         setInfoSubStep(0);
@@ -2051,6 +2184,10 @@ export function CertificateWizard({
     return { items, blockingMissing };
   }, [
     appliances,
+    // The hints name the section to go and fix things in, and that name differs
+    // between the two layouts. Without this the checklist kept pointing at
+    // whichever layout was active when it was first built.
+    singlePage,
     completionDate,
     defects.defect_description,
     defects.remedial_action,
@@ -2318,7 +2455,7 @@ export function CertificateWizard({
     );
   }
 
-  const offlineDraftBanner = (
+  const offlineDraftBannerNode = (
     <OfflineDraftBanner
       hasUnsyncedChanges={hasUnsyncedChanges}
       isOnline={isOnline}
@@ -2328,12 +2465,25 @@ export function CertificateWizard({
       syncErrorCount={offlineDraftSyncErrorCount}
     />
   );
+  // Each step renders this. Stacked into one page they became four identical
+  // banners down one scroll, so the sections drop it and the shell shows one.
+  const offlineDraftBanner = singlePage ? null : offlineDraftBannerNode;
 
   const StepOne = (
     <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      headerAction={layoutToggle}
       step={offsetStep(1)}
       total={totalSteps}
-      title={isCp12 && infoSubStep === 1 ? 'Tenant & location' : isCp12 ? 'Landlord / owner' : 'People & location'}
+      title={
+        isCp12 && singlePage
+          ? 'Landlord & property'
+          : isCp12 && infoSubStep === 1
+            ? 'Tenant & location'
+            : isCp12
+              ? 'Landlord / owner'
+              : 'People & location'
+      }
       status={isCp12 ? `${certificateLabel} · ${infoSubStep === 1 ? '2' : '1'} of 2` : certificateLabel}
       onBack={
         isCp12 && infoSubStep === 1
@@ -2363,7 +2513,7 @@ export function CertificateWizard({
       {isCp12 ? (
         <div className="space-y-3">
           {offlineDraftBanner}
-          {infoSubStep === 0 ? (
+          {infoSubStep === 0 || singlePage ? (
           <>
           <p className="text-[13px] text-[var(--color-text-secondary)]">Engineer and company details are pulled from account settings.</p>
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
@@ -2491,7 +2641,12 @@ export function CertificateWizard({
             </div>
           </div>
           </>
-          ) : (
+          ) : null}
+          {/* The property address is Reg 36(3)(b) content and lived on the
+              second half of a two-page step. Stacked, only the first half
+              rendered — so a certificate started on one page had nowhere to
+              enter the address of the premises it certifies. */}
+          {infoSubStep === 1 || singlePage ? (
           <>
 
           <div className="grid gap-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
@@ -2594,11 +2749,12 @@ export function CertificateWizard({
           </div>
 
             </>
-          )}
+          ) : null}
         </div>
       ) : (
         <p className="text-[13px] text-[var(--color-text-tertiary)]">Non-CP12 certificates currently use the simplified flow.</p>
       )}
+      {singlePage ? null : (
       <div id="cp12-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         {isCp12 && infoSubStep === 1 ? (
           <button
@@ -2622,6 +2778,7 @@ export function CertificateWizard({
           </svg>
         </button>
       </div>
+      )}
     </WizardLayout>
   );
 
@@ -2813,6 +2970,8 @@ export function CertificateWizard({
 
   const StepTwo = (
     <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      headerAction={layoutToggle}
       step={offsetStep(2)}
       total={totalSteps}
       title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1}` : 'Appliances'}
@@ -2834,6 +2993,7 @@ export function CertificateWizard({
       }
     >
       {inApplianceDetail ? ApplianceDetailIdentity : ApplianceHub}
+      {singlePage ? null : (
       <div id="cp12-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         <button
           type="button"
@@ -2854,6 +3014,7 @@ export function CertificateWizard({
           </svg>
         </button>
       </div>
+      )}
     </WizardLayout>
   );
 
@@ -2899,8 +3060,10 @@ export function CertificateWizard({
     return countRequired(
       a.safety_devices_correct,
       a.ventilation_satisfactory,
-      ...(cp12FieldVisible(cat, 'flue_condition') ? [a.flue_condition] : []),
-      ...(cp12FieldVisible(cat, 'flue_performance_test') ? [a.flue_performance_test] : []),
+      ...(cp12FieldVisible(cat, 'flue_condition', a.flue_type) ? [a.flue_condition] : []),
+      ...(cp12FieldVisible(cat, 'flue_performance_test', a.flue_type) ? [a.flue_performance_test] : []),
+      ...(cp12FieldVisible(cat, 'flue_integrity_test', a.flue_type) ? [a.flue_integrity_test] : []),
+      ...(cp12FieldVisible(cat, 'spillage_test', a.flue_type) ? [a.spillage_test] : []),
       ...(cp12FieldVisible(cat, 'cooker_stability') ? [a.cooker_stability] : []),
       a.gas_tightness_test,
       a.safety_rating,
@@ -2918,6 +3081,8 @@ export function CertificateWizard({
 
   const StepThree = (
     <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      headerAction={layoutToggle}
       step={offsetStep(3)}
       total={totalSteps}
       title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
@@ -2930,10 +3095,11 @@ export function CertificateWizard({
           ? 'Only the Regulation 26(9) confirmation is legally required. Everything else — Readings, Safety and the additional inspection detail — is conventional and prints on the certificate only if you record it.'
           : 'Whole-installation checks are optional — they appear on the certificate only if you record them. Continue to signatures when ready.'}
       </p>
-      {inApplianceDetail ? (
+      {inApplianceDetail && !singlePage ? (
       <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
         {(
           [
+            // Rendered only in wizard mode — see the guard on the wrapper below.
             { id: 'inspection', label: 'Inspection', count: inspectionCount },
             { id: 'readings', label: 'Readings (optional)', count: readingsCount },
             { id: 'safety', label: 'Safety (optional)', count: safetyCount },
@@ -2970,7 +3136,7 @@ export function CertificateWizard({
       </div>
       ) : null}
 
-      {inApplianceDetail && checksTab === 'inspection' && (
+      {inApplianceDetail && (singlePage || checksTab === 'inspection') && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
@@ -2985,6 +3151,16 @@ export function CertificateWizard({
             >
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1}</p>
               <div className="mt-4 space-y-3">
+                <label className="space-y-1.5">
+                  <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+                    GC number (optional)
+                  </span>
+                  <Input
+                    value={appliance.gc_number ?? ''}
+                    placeholder="47-311-92"
+                    onChange={(event) => setApplianceField(index, 'gc_number', event.target.value)}
+                  />
+                </label>
                 {cp12FieldVisible(category, 'flue_type') ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SearchableSelect
@@ -3055,7 +3231,7 @@ export function CertificateWizard({
         </div>
       )}
 
-      {inApplianceDetail && checksTab === 'readings' && (
+      {inApplianceDetail && (singlePage || checksTab === 'readings') && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
@@ -3211,7 +3387,7 @@ export function CertificateWizard({
         </div>
       )}
 
-      {inApplianceDetail && checksTab === 'safety' && (
+      {inApplianceDetail && (singlePage || checksTab === 'safety') && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
@@ -3235,42 +3411,55 @@ export function CertificateWizard({
                 <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} safety</p>
                 <div className="mt-3 space-y-[14px]">
                   <div className="grid gap-[14px] sm:grid-cols-2">
-                    <PassFailToggle
-                      label="Safety device(s) correct operation"
-                      value={(appliance.safety_devices_correct ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.safety_devices_correct ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'safety_devices_correct', val ?? '')}
-                    />
-                    <PassFailToggle
-                      label="Ventilation provision satisfactory"
-                      value={(appliance.ventilation_satisfactory ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.ventilation_satisfactory ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'ventilation_satisfactory', val ?? '')}
-                    />
-                    {cp12FieldVisible(category, 'flue_condition') ? (
-                      <PassFailToggle
-                        label="Visual condition of flue and termination satisfactory"
-                        value={(appliance.flue_condition ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_condition ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                        onChange={(val) => setApplianceField(index, 'flue_condition', val ?? '')}
-                      />
-                    ) : null}
-                    {cp12FieldVisible(category, 'flue_performance_test') ? (
-                      <PassFailToggle
-                        label="Flue performance test"
-                        value={(appliance.flue_performance_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.flue_performance_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                        onChange={(val) => setApplianceField(index, 'flue_performance_test', val ?? '')}
-                      />
-                    ) : null}
-                    {cp12FieldVisible(category, 'cooker_stability') ? (
-                      <PassFailToggle
-                        label="Cooker stability (bracket/chain)"
-                        value={(appliance.cooker_stability ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.cooker_stability ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                        onChange={(val) => setApplianceField(index, 'cooker_stability', val ?? '')}
-                      />
-                    ) : null}
-                    <PassFailToggle
-                      label="Gas tightness test"
-                      value={(appliance.gas_tightness_test ?? '').toLowerCase() === 'pass' ? 'pass' : (appliance.gas_tightness_test ?? '').toLowerCase() === 'fail' ? 'fail' : null}
-                      onChange={(val) => setApplianceField(index, 'gas_tightness_test', val ?? '')}
-                    />
+                    {visibleCp12ApplianceChecks(category, appliance.flue_type).map((check) => {
+                      const raw = (appliance[check.key] ?? '').toLowerCase();
+                      return (
+                        <Fragment key={check.key}>
+                          {check.answers === 'yes_no' ? (
+                            <EnumChips
+                              label={check.label}
+                              hint={check.hint}
+                              value={appliance[check.key] ?? ''}
+                              options={YES_NO_OPTIONS}
+                              onChange={(val) => setApplianceField(index, check.key, val)}
+                            />
+                          ) : (
+                            <PassFailToggle
+                              label={check.label}
+                              hint={check.hint}
+                              value={raw === 'pass' ? 'pass' : raw === 'fail' ? 'fail' : null}
+                              onChange={(val) => setApplianceField(index, check.key, val ?? '')}
+                            />
+                          )}
+                          {/* Evidence for the integrity verdict, so it sits
+                              directly under it. Free text conditional on an
+                              answer rather than a check with a verdict, which is
+                              why it is not in the shared list. */}
+                          {check.key === 'flue_integrity_test' &&
+                          appliance.flue_integrity_test &&
+                          cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) ? (
+                            <>
+                              <label className="space-y-1.5">
+                                <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at high rate (optional)</span>
+                                <Input
+                                  value={appliance.flue_integrity_co2_high ?? ''}
+                                  placeholder="0.02 %"
+                                  onChange={(event) => setApplianceField(index, 'flue_integrity_co2_high', event.target.value)}
+                                />
+                              </label>
+                              <label className="space-y-1.5">
+                                <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at low rate (optional)</span>
+                                <Input
+                                  value={appliance.flue_integrity_co2_low ?? ''}
+                                  placeholder="0.01 %"
+                                  onChange={(event) => setApplianceField(index, 'flue_integrity_co2_low', event.target.value)}
+                                />
+                              </label>
+                            </>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
                   </div>
                   <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -3526,6 +3715,7 @@ export function CertificateWizard({
         </div>
       )}
 
+      {singlePage ? null : (
       <div id="cp12-step3-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         <button
           type="button"
@@ -3576,11 +3766,14 @@ export function CertificateWizard({
           </button>
         )}
       </div>
+      )}
     </WizardLayout>
   );
 
   const StepFour = (
     <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      headerAction={layoutToggle}
       step={offsetStep(4)}
       total={totalSteps}
       title="Signatures & PDF"
@@ -3740,6 +3933,46 @@ export function CertificateWizard({
   const limitModal = limitReachedMessage ? (
     <LimitReachedModal message={limitReachedMessage} onDismiss={() => setLimitReachedMessage(null)} />
   ) : null;
+
+  if (singlePage) {
+    return (
+      <>
+        <div className="min-h-screen bg-[var(--color-background-secondary)]">
+          <header className="sticky top-14 z-20 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+            <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
+              {/* The page before this one, not the job list. Arriving here from
+                  /jobs/new and pressing Back landed on every job the engineer
+                  has, which is not where they were. */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined' && window.history.length > 1) {
+                    router.back();
+                    return;
+                  }
+                  router.push('/jobs');
+                }}
+                className="text-[13px] text-[var(--color-text-secondary)]"
+              >
+                Back
+              </button>
+              <p className="text-[15px] font-medium text-[var(--color-text-primary)]">CP12</p>
+              {layoutToggle}
+            </div>
+          </header>
+          <main className="mx-auto max-w-2xl px-4 pb-32 pt-6">
+            <div className="mb-5">{offlineDraftBannerNode}</div>
+            {savedLandlordPicker}
+            {StepOne}
+            {StepTwo}
+            {StepThree}
+            {StepFour}
+          </main>
+        </div>
+        {limitModal}
+      </>
+    );
+  }
 
   if (step === 1) return <>{StepOne}{limitModal}</>;
   if (step === 2) return <>{StepTwo}{limitModal}</>;

@@ -38,28 +38,35 @@ export function RequestLandlordDetailsCard({
   // Use NEXT_PUBLIC_SHARE_URL as the base so the displayed link shows certnow.uk not localhost
   const shareBase = process.env.NEXT_PUBLIC_SHARE_URL?.replace(/\/$/, '');
   const displayUrl = shareBase ? requestUrl.replace(/^https?:\/\/[^/]+/, shareBase) : requestUrl;
-  const shareText = `Please fill in the job details for my CertNow request: ${displayUrl}`;
+  const shareText = `Please fill in your details so I can carry out your gas safety job: ${displayUrl}`;
 
   const trimmedEmail = landlordEmail.trim();
   const trimmedPhone = landlordPhone.trim();
 
-  // `?&body=` is the cross-platform form that both iOS and Android accept — do not "tidy" it to `?body=`.
+  /**
+   * The number goes in the sms: path unencoded.
+   *
+   * encodeURIComponent turned "+44 7700 900000" into "%2B44%207700%20900000",
+   * which handsets do not parse as a number — and the query began "?&body=",
+   * which is malformed, so the message body was dropped on top. Spaces,
+   * brackets and dashes are stripped instead; a leading + is kept because it is
+   * part of the number.
+   */
+  const smsNumber = trimmedPhone.replace(/[^\d+]/g, '');
   const smsHref = useMemo(
-    () =>
-      trimmedPhone
-        ? `sms:${trimmedPhone.replace(/\s+/g, '')}?&body=${encodeURIComponent(shareText)}`
-        : null,
-    [trimmedPhone, shareText],
+    () => (smsNumber ? `sms:${smsNumber}?body=${encodeURIComponent(shareText)}` : null),
+    [smsNumber, shareText],
   );
 
   const needsEmail = channel === 'email' || channel === 'both';
   const needsPhone = channel === 'sms' || channel === 'both';
-  const canSend = (!needsEmail || Boolean(trimmedEmail)) && (!needsPhone || Boolean(trimmedPhone));
+  // Gate on the dialable number, not the raw input, so "abc" cannot enable a dead sms: link.
+  const canSend = (!needsEmail || Boolean(trimmedEmail)) && (!needsPhone || Boolean(smsNumber));
 
   const missingLabel = (() => {
-    if (needsEmail && !trimmedEmail && needsPhone && !trimmedPhone) return 'Add an email address and a phone number.';
+    if (needsEmail && !trimmedEmail && needsPhone && !smsNumber) return 'Add an email address and a phone number.';
     if (needsEmail && !trimmedEmail) return 'Add an email address to send by email.';
-    if (needsPhone && !trimmedPhone) return 'Add a phone number to send by SMS.';
+    if (needsPhone && !smsNumber) return 'Add a phone number to send by SMS.';
     return null;
   })();
 

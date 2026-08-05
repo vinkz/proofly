@@ -299,6 +299,15 @@ export function SoloJobForm({
   const router = useRouter();
   const { pushToast } = useToast();
   const [isPending, startTransition] = useTransition();
+  /**
+   * When the engineer has chosen the one-page certificate, "fill details
+   * myself" hands straight over instead of walking two more steps.
+   *
+   * Those steps collect the landlord and the job address — which the wizard's
+   * own first step also collects, which is why it gets skipped with
+   * startStep=2 afterwards. On one page there is nothing to skip to, so the
+   * form asks for them once, in place, and the preamble has no work left to do.
+   */
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('jobs_new', 'create'), []);
   const requestAddress = parseRequestAddress(initialRequest?.propertyAddress, initialRequest?.propertyPostcode);
   const requestPreferredDate = firstDateFromPreferredDates(initialRequest?.preferredDates);
@@ -352,9 +361,42 @@ export function SoloJobForm({
   const [landlordCity, setLandlordCity] = useState(initialRequest?.landlordCity ?? '');
   const [landlordPostcode, setLandlordPostcode] = useState(initialRequest?.landlordPostcode ?? '');
   const [landlordTel, setLandlordTel] = useState(initialRequest?.landlordPhone ?? '');
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(initialRequest || initialPropertyId ? 4 : initialClientId ? 2 : 1);
+  const [step, setStep] = useState<1 | 2 | 4 | 5>(initialRequest || initialPropertyId ? 4 : initialClientId ? 2 : 1);
   const [path, setPath] = useState<'self' | 'landlord' | null>(initialRequest || initialPropertyId ? 'self' : null);
   const [submitMode, setSubmitMode] = useState<'return' | 'continue'>('return');
+  /**
+   * Doing the certificate now, or booking it for another day.
+   *
+   * Asked on the same screen as how to start, because they are one decision in
+   * the engineer's head — "I'm stood at this property" or "I'm putting it in
+   * the diary" — and splitting them across screens is what made booking a job
+   * and doing a job feel like the same long flow.
+   */
+  const [timing, setTiming] = useState<'now' | 'later'>('now');
+
+  /**
+   * Booking ahead, with the landlord and property revealed on this page.
+   *
+   * The stepped route sent the engineer to two more screens to collect details
+   * the job needs before it can exist. Booking is one decision — when, and for
+   * whom — so it reads better as one page that grows than as three that follow
+   * each other.
+   */
+  const [detailsInline, setDetailsInline] = useState(false);
+
+  const formRef = useRef<HTMLFormElement>(null);
+  /**
+   * setSubmitMode is async, so submitting in the same handler would read the
+   * previous mode and send the engineer back to the job list instead of into
+   * the certificate. The latch waits for the mode to commit first.
+   */
+  const [handOverPending, setHandOverPending] = useState(false);
+  useEffect(() => {
+    if (!handOverPending || submitMode !== 'continue') return;
+    setHandOverPending(false);
+    formRef.current?.requestSubmit();
+  }, [handOverPending, submitMode]);
+
   const [landlordRequestMessage, setLandlordRequestMessage] = useState<string | null>(null);
   const [landlordRequestError, setLandlordRequestError] = useState<string | null>(null);
   const [isJobAddressLookupPending, setIsJobAddressLookupPending] = useState(false);
@@ -410,14 +452,6 @@ export function SoloJobForm({
       }
       setPath(null);
       setStep(1);
-      return;
-    }
-    if (step === 3 && path) {
-      setPath(null);
-      return;
-    }
-    if (step === 3) {
-      setStep(2);
       return;
     }
     setStep(1);
@@ -496,7 +530,7 @@ export function SoloJobForm({
     setJobAddressPostcode(address.postcode);
     setJobAddressTel(siteContact);
     setLandlordName(initialRequest.landlordName);
-    setLandlordCompany('');
+    setLandlordCompany(initialRequest.landlordCompany);
     setLandlordAddressLine1(initialRequest.landlordAddressLine1);
     setLandlordAddressLine2(initialRequest.landlordAddressLine2);
     setLandlordCity(initialRequest.landlordCity);
@@ -872,6 +906,90 @@ export function SoloJobForm({
     });
   };
 
+  /**
+   * Everything a previous, abandoned job left behind in this form.
+   *
+   * The draft is keyed `jobs_new:create` — one shared entry for every new job,
+   * not one per job — so starting a certificate restores whatever landlord was
+   * last typed and abandoned. Walking the landlord step made that visible and
+   * easy to overwrite. Handing straight to the certificate does not, so a
+   * stale landlord would be carried onto a gas safety record unseen.
+   */
+  const clearCarriedOverIdentity = () => {
+    setClientName('');
+    setClientPhone('');
+    setClientEmail('');
+    setPropertyName('');
+    setAddressLine1('');
+    setCity('');
+    setPostcode('');
+    setJobAddressName('');
+    setJobAddressLine1('');
+    setJobAddressLine2('');
+    setJobAddressCity('');
+    setJobAddressPostcode('');
+    setJobAddressTel('');
+    setLandlordName('');
+    setLandlordCompany('');
+    setLandlordAddressLine1('');
+    setLandlordAddressLine2('');
+    setLandlordCity('');
+    setLandlordPostcode('');
+    setLandlordTel('');
+  };
+
+  /**
+   * What "Ask landlord" opens.
+   *
+   * The button moved to step one; this stayed behind in step three, a
+   * screen nothing routes to any more — so pressing it set the path and
+   * revealed the form on a page the engineer never sees. Held as a value
+   * so both places render the same thing rather than a copy that drifts.
+   */
+  const landlordRequestReveal = (
+    <>
+    {path === 'landlord' && selectedClientId ? (
+      <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
+        <div>
+          <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Request details from landlord</p>
+          <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">An email will be sent with a secure form link.</p>
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={clientEmail}
+            onChange={(event) => setClientEmail(event.target.value)}
+            placeholder="Landlord email"
+            type="email"
+            disabled={isPending}
+          />
+          <button
+            type="button"
+            className="shrink-0 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            onClick={handleRequestLandlordPrefill}
+            disabled={isPending || !clientEmail.trim()}
+          >
+            {isPending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+        {landlordRequestMessage ? (
+          <p className="text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
+        ) : null}
+        {landlordRequestError ? (
+          <p className="text-[12px] text-[var(--color-red)]">{landlordRequestError}</p>
+        ) : null}
+      </div>
+    ) : null}
+
+    {path === 'landlord' && !selectedClientId && requestUrl ? (
+      <RequestLandlordDetailsCard
+        requestUrl={requestUrl}
+        initialLandlordName={landlordName || clientName}
+        initialLandlordEmail={clientEmail}
+        initialLandlordPhone={clientPhone || landlordTel}
+      />
+    ) : null}
+    </>
+  );
   const startManualEntry = () => {
     setPath('self');
     setClientMode('new');
@@ -879,13 +997,16 @@ export function SoloJobForm({
     setSelectedPropertyKey('');
     setClientChosen(true);
     setPropertyChosen(true);
+    if (timing === 'now') {
+      // "Fill myself" means the details are entered on the certificate, so
+      // anything restored from a previous job is wrong by definition.
+      clearCarriedOverIdentity();
+      clearDraft();
+      setSubmitMode('continue');
+      setHandOverPending(true);
+      return;
+    }
     setStep(4);
-  };
-
-  const startExistingLandlordEntry = () => {
-    setPath('self');
-    setClientMode('existing');
-    setStep(2);
   };
 
   const handleLandlordNameInput = (value: string) => {
@@ -1082,6 +1203,9 @@ export function SoloJobForm({
           landlordCity,
           landlordPostcode,
           landlordTel,
+          // Identity is being entered on the certificate, so the job may be
+          // created without it. validateCp12TierOne still blocks issuing.
+          deferDetails: timing === 'now' && path === 'self',
           selectedPropertyId: selectedProperty?.property_id ?? '',
           selectedPropertyJobId: selectedProperty?.source_job_id ?? (selectedProperty?.property_id ? '' : selectedPropertyKey),
           requestId: initialRequest?.id,
@@ -1095,7 +1219,13 @@ export function SoloJobForm({
           title: submitMode === 'continue' ? 'Job created, opening next step' : 'Job created',
           variant: 'success',
         });
-        if (submitMode === 'continue') {
+        if (timing === 'later') {
+          // Booked, not started. Continuing into the certificate — or onto the
+          // completion checklist — walks the engineer through the details they
+          // have just entered, twice, to reach work they said was for another
+          // day. The job is in the diary; that is the whole of it.
+          router.push('/jobs');
+        } else if (submitMode === 'continue') {
           if (initialRequest || (jobType === 'safety_check_service' && !combinedFirst)) {
             // Jobs created from a landlord request (and combined jobs with no
             // "complete first" choice) land on the completion checklist — the engineer
@@ -1107,8 +1237,14 @@ export function SoloJobForm({
               jobType === 'safety_check_service'
                 ? combinedFirst ?? 'cp12'
                 : WIZARD_ROUTE_BY_JOB_TYPE[jobType];
+            // Handing over means steps 4 and 5 never ran, so the landlord and
+            // the job address have not been collected — the wizard's first step
+            // is the only place left that asks for them. Skipping it here would
+            // produce a certificate with no landlord on it.
+            const handedOverEarly = timing === 'now' && path === 'self';
             const shouldSkipFirstWizardStep =
-              Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice';
+              !handedOverEarly &&
+              (Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice');
             const href = shouldSkipFirstWizardStep
               ? `/wizard/create/${wizardRoute}?jobId=${jobId}&startStep=2`
               : `/wizard/create/${wizardRoute}?jobId=${jobId}`;
@@ -1129,7 +1265,7 @@ export function SoloJobForm({
   };
 
   return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
+    <form ref={formRef} className="space-y-4" onSubmit={handleSubmit}>
       {/* Step header */}
       {step > 1 ? (
         <div className="flex items-center justify-between">
@@ -1162,7 +1298,7 @@ export function SoloJobForm({
       {step === 1 ? (
         <>
           <div>
-            <p className="mb-2 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Job type</p>
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Job type</p>
             <div className="flex gap-2">
               {LAUNCH_VISIBLE_JOB_TYPES.map((type) => (
                 <button
@@ -1175,7 +1311,7 @@ export function SoloJobForm({
                   }}
                   className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                     jobTypeTouched && jobType === type
-                      ? 'bg-[#111] text-white'
+                      ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
                       : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                   }`}
                 >
@@ -1190,7 +1326,7 @@ export function SoloJobForm({
             ) : null}
             {jobTypeTouched && jobType === 'safety_check_service' ? (
               <div className="mt-3">
-                <p className="mb-2 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Complete first</p>
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Complete first</p>
                 <div className="flex gap-2">
                   {([
                     ['cp12', 'Landlord safety check'],
@@ -1203,7 +1339,7 @@ export function SoloJobForm({
                       onClick={() => setCombinedFirst(value)}
                       className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                         combinedFirst === value
-                          ? 'bg-[#111] text-white'
+                          ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
                           : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                       }`}
                     >
@@ -1226,79 +1362,109 @@ export function SoloJobForm({
           </div>
 
           <div className="space-y-2">
-            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={startManualEntry}
-              className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--color-background-secondary)] text-lg">📋</span>
-                <div>
-                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Fill myself</p>
-                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Open the landlord and property form now.</p>
-                </div>
-              </div>
-              <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => setPath(path === 'landlord' ? null : 'landlord')}
-              className={`flex w-full items-center justify-between rounded-[12px] border-[0.5px] px-4 py-3.5 text-left transition-colors ${
-                path === 'landlord'
-                  ? 'border-[var(--color-action)] bg-[var(--color-action-bg)]'
-                  : 'border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] hover:border-[var(--color-action)]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--color-background-secondary)] text-lg">📤</span>
-                <div>
-                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask landlord</p>
-                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Send your request link by email or SMS.</p>
-                </div>
-              </div>
-              <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">{path === 'landlord' ? '-' : '+'}</span>
-            </button>
-
-            {path === 'landlord' && requestUrl ? (
-              <RequestLandlordDetailsCard
-                requestUrl={requestUrl}
-                initialLandlordName={landlordName || clientName}
-                initialLandlordEmail={clientEmail}
-                initialLandlordPhone={clientPhone || landlordTel}
-              />
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">When?</p>
+            <div className="flex gap-2 pb-1">
+              {(
+                [
+                  { id: 'now', label: 'Doing it now' },
+                  { id: 'later', label: 'Book for later' },
+                ] as { id: 'now' | 'later'; label: string }[]
+              ).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setTiming(option.id)}
+                  className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
+                    timing === option.id
+                      ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                      : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {timing === 'later' ? (
+              <label className="block pb-1">
+                <span className="mb-1.5 block text-[12px] font-medium text-[var(--color-text-secondary)]">Date</span>
+                <input
+                  type="date"
+                  value={inspectionDate}
+                  onChange={(event) => setInspectionDate(event.target.value)}
+                  className="block h-11 w-full rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-3 text-base text-[var(--color-text-primary)]"
+                />
+              </label>
             ) : null}
-
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={startExistingLandlordEntry}
+            {timing === 'now' ? (
+              <>
+                {/* Stood at the property, there is nothing left to choose. Asking
+                    the landlord to fill it in makes no sense, and "myself" versus
+                    "existing landlord" is a false choice — the certificate offers
+                    the saved-landlord dropdown and the fields on the same page. */}
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={startManualEntry}
+                  className="flex h-[48px] w-full items-center justify-center gap-2 rounded-[12px] bg-[var(--color-cta)] text-[14px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
+                >
+                  Start {JOB_TYPE_LABELS[jobType]} now
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </button>
+                <p className="text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
+                  {/* Said here because the dropdown that does it is on the next
+                      screen. Without this the certificate looks like it wants
+                      every field typed out, and a saved landlord goes unused. */}
+                  Landlord and property details are entered on the certificate
+                  {clients.length ? ', where you can fill them from a saved landlord' : ''}.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="pt-1 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">How do you want to start?</p>
+                {/* Booking ahead, the details are worth capturing now — but on
+                    this page, not on two more screens before it. */}
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => { setPath('self'); setDetailsInline(true); }}
               className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[var(--color-background-secondary)] text-lg">📂</span>
-                <div>
-                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Existing landlord</p>
-                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Choose a saved landlord and property from dropdowns.</p>
-                </div>
-              </div>
-              <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
-            </button>
+                >
+                  <div>
+                    <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Enter the details now</p>
+                    <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Landlord and property, on this page.</p>
+                  </div>
+                  <span aria-hidden className="text-[var(--color-text-tertiary)]">{detailsInline ? '−' : '+'}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setPath(path === 'landlord' ? null : 'landlord')}
+              className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
+                >
+                  <div>
+                    <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask landlord</p>
+                    <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Send your request link by email or SMS.</p>
+                  </div>
+                  <span aria-hidden className="text-[var(--color-text-tertiary)]">+</span>
+                </button>
+                {landlordRequestReveal}
+              </>
+            )}
           </div>
         </>
       ) : null}
 
       {/* ===== STEP 2: Who is this for? ===== */}
-      {step === 2 ? (
+      {step === 2 || (step === 1 && detailsInline) ? (
         <>
           <div className="space-y-3">
-            <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Who is this for?</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Who is this for?</p>
             <div className="space-y-2.5">
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Landlord
                 </label>
                 <Select
@@ -1316,7 +1482,7 @@ export function SoloJobForm({
                 </Select>
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Property
                 </label>
                 <Select
@@ -1379,103 +1545,34 @@ export function SoloJobForm({
 
           {/* Always render Continue — disable until a landlord is chosen, but never
               hide it. Property can be entered manually on the address step, so it must
-              not gate this button (a false propertyChosen used to strand the form). */}
+              not gate this button (a false propertyChosen used to strand the form).
+              Inline on the booking page it has nowhere to go: the details it
+              continues to are already on screen underneath. */}
+          {step === 1 && detailsInline ? null : (
           <button
             type="button"
             onClick={() => {
               setPath('self');
+              if (timing === 'now') {
+                // The saved landlord and property are in state; the certificate
+                // takes it from here rather than asking for them again.
+                setSubmitMode('continue');
+                setHandOverPending(true);
+                return;
+              }
               setStep(4);
             }}
             disabled={isPending || !clientChosen}
-            className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+            className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[var(--color-cta)] text-[14px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
           >
             Continue to details
           </button>
-        </>
-      ) : null}
-
-      {/* ===== STEP 3: Start method ===== */}
-      {step === 3 ? (
-        <>
-          {!path ? (
-            <div className="space-y-2">
-              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">How do you want to start?</p>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => {
-                  setPath('self');
-                  setStep(4);
-                }}
-                className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
-              >
-                <div>
-                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Fill details myself</p>
-                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Enter or review the landlord and property details now.</p>
-                </div>
-                <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => setPath('landlord')}
-                className="flex w-full items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 py-3.5 text-left transition-colors hover:border-[var(--color-action)]"
-              >
-                <div>
-                  <p className="text-[14px] font-medium text-[var(--color-text-primary)]">Ask landlord</p>
-                  <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">Send a link for the landlord to complete the missing details.</p>
-                </div>
-                <span className="ml-3 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden="true">→</span>
-              </button>
-            </div>
-          ) : null}
-
-          {path === 'landlord' && selectedClientId ? (
-            <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-4">
-              <div>
-                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Request details from landlord</p>
-                <p className="mt-0.5 text-[12px] text-[var(--color-text-secondary)]">An email will be sent with a secure form link.</p>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  value={clientEmail}
-                  onChange={(event) => setClientEmail(event.target.value)}
-                  placeholder="Landlord email"
-                  type="email"
-                  disabled={isPending}
-                />
-                <button
-                  type="button"
-                  className="shrink-0 rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-primary)] px-4 text-[13px] text-[var(--color-text-secondary)] disabled:opacity-50"
-                  onClick={handleRequestLandlordPrefill}
-                  disabled={isPending || !clientEmail.trim()}
-                >
-                  {isPending ? 'Sending…' : 'Send'}
-                </button>
-              </div>
-              {landlordRequestMessage ? (
-                <p className="text-[12px] font-medium text-[var(--color-action)]">{landlordRequestMessage}</p>
-              ) : null}
-              {landlordRequestError ? (
-                <p className="text-[12px] text-[var(--color-red)]">{landlordRequestError}</p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {path === 'landlord' && !selectedClientId && requestUrl ? (
-            <RequestLandlordDetailsCard
-              requestUrl={requestUrl}
-              initialLandlordName={landlordName || clientName}
-              initialLandlordEmail={clientEmail}
-              initialLandlordPhone={clientPhone || landlordTel}
-            />
-          ) : null}
+          )}
         </>
       ) : null}
 
       {/* ===== STEP 4: Landlord / client details ===== */}
-      {step === 4 ? (
+      {step === 4 || (step === 1 && detailsInline) ? (
         <>
           {initialRequest ? (
             <div className="rounded-[12px] border-[0.5px] border-[var(--color-action)]/30 bg-[var(--color-action-bg)] px-4 py-3">
@@ -1489,10 +1586,10 @@ export function SoloJobForm({
           ) : null}
 
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-            <p className="mb-3 text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">{partyCardTitle}</p>
+            <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">{partyCardTitle}</p>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Name</label>
                 <Input
                   value={partyNameValue}
                   onChange={(event) =>
@@ -1513,7 +1610,7 @@ export function SoloJobForm({
                 ) : null}
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Company</label>
                 <Input
                   value={landlordCompany}
                   onChange={(event) => setLandlordCompany(event.target.value)}
@@ -1523,7 +1620,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Address line 1
                 </label>
                 <div className="relative mt-1.5">
@@ -1570,7 +1667,7 @@ export function SoloJobForm({
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Address line 2
                 </label>
                 <Input
@@ -1582,7 +1679,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">City / town</label>
                 <Input
                   value={landlordCity}
                   onChange={(event) => setLandlordCity(event.target.value)}
@@ -1592,7 +1689,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Postcode</label>
                 <Input
                   value={landlordPostcode}
                   onChange={(event) => setLandlordPostcode(event.target.value)}
@@ -1602,7 +1699,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Tel. No.</label>
                 <Input
                   value={landlordTel}
                   onChange={(event) => setLandlordTel(event.target.value)}
@@ -1612,7 +1709,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Email</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Email</label>
                 <Input
                   value={clientEmail}
                   onChange={(event) => setClientEmail(event.target.value)}
@@ -1628,26 +1725,29 @@ export function SoloJobForm({
           {/* By step 4 the landlord/property selection is already done, so the
               Continue button must ALWAYS render — never gate it on selection flags
               (they can race to false and strand the user). Final validation happens
-              at submit. */}
+              at submit. Inline on the booking page it is the exception: step 5 is
+              already on screen below, so continuing to it means nothing. */}
+          {step === 1 && detailsInline ? null : (
           <div className="sticky bottom-0 z-10 -mx-4 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 pb-3 pt-3">
             <button
               type="button"
               onClick={() => setStep(5)}
               disabled={isPending}
-              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
+              className="inline-flex h-[44px] w-full items-center justify-center rounded-[12px] bg-[var(--color-cta)] text-[14px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
             >
               Continue
             </button>
           </div>
+          )}
         </>
       ) : null}
 
       {/* ===== STEP 5: Job address ===== */}
-      {step === 5 ? (
+      {step === 5 || (step === 1 && detailsInline) ? (
         <>
           <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Job address</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Job address</p>
               {landlordAddressLine1 || landlordName ? (
                 <button
                   type="button"
@@ -1661,7 +1761,7 @@ export function SoloJobForm({
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   {scheduleFieldLabel}
                 </label>
                 <Input
@@ -1676,7 +1776,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Flat / unit or property reference
                 </label>
                 <Input
@@ -1700,7 +1800,7 @@ export function SoloJobForm({
                 ) : null}
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Address line 1
                 </label>
                 <div className="relative mt-1.5">
@@ -1749,7 +1849,7 @@ export function SoloJobForm({
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                   Address line 2
                 </label>
                 <Input
@@ -1761,7 +1861,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">City / town</label>
                 <Input
                   value={jobAddressCity}
                   onChange={(event) => setJobAddressCity(event.target.value)}
@@ -1772,7 +1872,7 @@ export function SoloJobForm({
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Postcode</label>
                 <Input
                   value={jobAddressPostcode}
                   onChange={(event) => setJobAddressPostcode(event.target.value)}
@@ -1783,7 +1883,7 @@ export function SoloJobForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">Site telephone</label>
+                <label className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">Site telephone</label>
                 <Input
                   value={jobAddressTel}
                   onChange={(event) => setJobAddressTel(event.target.value)}
@@ -1799,9 +1899,9 @@ export function SoloJobForm({
           {/* Combined "safety check + service" jobs (including those opened from a
               landlord request for BOTH certs): let the engineer see both are needed and
               choose which to start with. The other is completed straight after. */}
-          {jobType === 'safety_check_service' && !initialRequest ? (
+          {jobType === 'safety_check_service' && !initialRequest && !(step === 1 && detailsInline) ? (
             <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-4">
-              <p className="text-[11px] font-medium tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-eyebrow)]">
                 This job needs a CP12 and a boiler service — complete first?
               </p>
               <div className="mt-2 flex gap-2">
@@ -1816,7 +1916,7 @@ export function SoloJobForm({
                     onClick={() => setCombinedFirst(value)}
                     className={`flex h-[38px] flex-1 items-center justify-center rounded-[8px] text-[13px] font-medium transition ${
                       combinedFirst === value
-                        ? 'bg-[#111] text-white'
+                        ? 'border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] text-[var(--color-action)]'
                         : 'border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[var(--color-text-secondary)]'
                     }`}
                   >
@@ -1849,11 +1949,15 @@ export function SoloJobForm({
             </button>
             <button
               type="submit"
-              className="h-[40px] flex-[2] rounded-[10px] bg-[#111] text-[13px] font-medium text-white disabled:opacity-50"
+              className="h-[40px] flex-[2] rounded-[10px] bg-[var(--color-cta)] text-[13px] font-medium text-[var(--color-cta-fg)] disabled:opacity-50"
               disabled={isPending}
               onClick={() => setSubmitMode('continue')}
             >
-              {isPending && submitMode === 'continue' ? 'Saving…' : 'Save & continue'}
+              {isPending && submitMode === 'continue'
+                ? 'Saving…'
+                : timing === 'later'
+                  ? 'Book job'
+                  : 'Save & continue'}
             </button>
           </div>
         </>

@@ -46,6 +46,11 @@ function RequestRow({ request }: { request: DashboardJobRequest }) {
               {label}
             </Badge>
           </div>
+          {/* An agency name tells the engineer they are dealing with a managing
+              agent rather than the owner, which changes who they chase. */}
+          {request.landlordCompany ? (
+            <p className="mt-0.5 text-xs text-slate-600">{request.landlordCompany}</p>
+          ) : null}
           <p className="mt-1 text-sm text-slate-700">
             {formatDisplayAddress(request.propertyAddress) || 'Property address missing'}
           </p>

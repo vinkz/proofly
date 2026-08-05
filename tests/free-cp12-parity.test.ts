@@ -14,7 +14,7 @@ import { renderCp12CertificatePdf } from '@/server/pdf/renderCp12Certificate';
  * two flows have started disagreeing about what a CP12 says.
  */
 const ISSUED_AT = new Date('2026-07-27T09:00:00Z');
-const REFERENCE = 'FREE-ABCD1234';
+const REFERENCE = 'ABCD1234';
 
 // --- how the authenticated flow arrives at the renderer ---------------------
 const paidFieldMap: Record<string, unknown> = {
@@ -53,6 +53,7 @@ const paidAppliance: Cp12Appliance = {
   appliance_inspected: 'Yes',
   location: 'Kitchen',
   make_model: 'Vaillant EcoTec',
+  gc_number: '47-311-92',
   operating_pressure: '20 mbar',
   heat_input: '24 kW',
   high_co_ppm: '12',
@@ -73,6 +74,10 @@ const paidAppliance: Cp12Appliance = {
   co_reading_ppm: '',
   safety_devices_correct: 'pass',
   flue_performance_test: 'pass',
+  flue_integrity_test: 'pass',
+  flue_integrity_co2_high: '0.02',
+  flue_integrity_co2_low: '0.01',
+  spillage_test: 'pass',
   appliance_serviced: 'Yes',
   combustion_notes: '',
   safety_rating: '',
@@ -122,6 +127,7 @@ const freePayload = FreeCp12PayloadSchema.parse({
       appliance_subtype: 'combi',
       location: 'Kitchen',
       make_model: 'Vaillant EcoTec',
+      gc_number: '47-311-92',
       operating_pressure: '20 mbar',
       heat_input: '24 kW',
       high_co_ppm: '12',
@@ -136,6 +142,9 @@ const freePayload = FreeCp12PayloadSchema.parse({
       gas_tightness_test: 'pass',
       safety_devices_correct: 'pass',
       flue_performance_test: 'pass',
+      flue_integrity_test: 'pass',
+      flue_integrity_co2_high: '0.02',
+      flue_integrity_co2_low: '0.01',
       appliance_serviced: 'Yes',
       safety_classification: 'safe',
       reg_26_9_confirmed: true,

@@ -31,6 +31,11 @@ const LandlordRequestLinkEmailSchema = z.object({
 });
 const StandaloneJobRequestSchema = z.object({
   landlordName: z.string().min(2).max(120),
+  // The letting agency (or landlord's own company) the request comes from. It
+  // reaches the certificate as the `landlord_company` job field via
+  // createSoloJob, so it must survive the request row — an agent's agency name
+  // is the detail that makes the record theirs under Reg 36(3)(c).
+  landlordCompany: z.string().max(160).optional().default(''),
   landlordEmail: z.string().email(),
   landlordPhone: z.string().min(3).max(80),
   landlordAddressLine1: z.string().max(240).optional().default(''),
@@ -318,6 +323,7 @@ export type DashboardJobRequest = {
   jobType: string;
   propertyAddress: string | null;
   landlordName: string | null;
+  landlordCompany: string | null;
   landlordEmail: string | null;
   landlordPhone: string | null;
   landlordAddressLine1: string | null;
@@ -343,6 +349,7 @@ export type JobRequestPrefill = {
   requestType: 'new_job' | 'renewal';
   jobType: string;
   landlordName: string;
+  landlordCompany: string;
   landlordEmail: string;
   landlordPhone: string;
   landlordAddressLine1: string;
@@ -373,6 +380,7 @@ function normalizeRequest(row: Record<string, unknown>): DashboardJobRequest {
     jobType: jobTypeFromCertTypes ?? String(row.job_type ?? 'cp12'),
     propertyAddress: typeof row.property_address === 'string' ? row.property_address : null,
     landlordName: typeof row.landlord_name === 'string' ? row.landlord_name : null,
+    landlordCompany: typeof row.landlord_company === 'string' ? row.landlord_company : null,
     landlordEmail: typeof row.landlord_email === 'string' ? row.landlord_email : null,
     landlordPhone: typeof row.landlord_phone === 'string' ? row.landlord_phone : null,
     landlordAddressLine1: typeof row.landlord_address_line1 === 'string' ? row.landlord_address_line1 : null,
@@ -620,6 +628,7 @@ export async function sendJobRequestNotification(requestId: string) {
       `Property: ${propertyAddress}`,
       `Work needed: ${formatJobType(request.jobType)}`,
       `Landlord: ${landlordName}`,
+      ...(request.landlordCompany ? [`Company: ${request.landlordCompany}`] : []),
       `Landlord phone: ${request.landlordPhone ?? 'Not provided'}`,
       `Landlord email: ${request.landlordEmail ?? 'Not provided'}`,
       `Tenant: ${request.tenantName || 'Not provided'}`,
@@ -636,6 +645,7 @@ export async function sendJobRequestNotification(requestId: string) {
           { label: 'Property', value: propertyAddress },
           { label: 'Work needed', value: formatJobType(request.jobType) },
           { label: 'Landlord', value: landlordName },
+          ...(request.landlordCompany ? [{ label: 'Company', value: request.landlordCompany }] : []),
           { label: 'Landlord phone', value: request.landlordPhone || 'Not provided' },
           { label: 'Landlord email', value: request.landlordEmail || 'Not provided' },
           { label: 'Tenant', value: request.tenantName || 'Not provided' },
@@ -691,6 +701,7 @@ export async function getJobRequestPrefill(requestId: string): Promise<JobReques
     requestType: request.requestType,
     jobType: request.jobType,
     landlordName: request.landlordName ?? '',
+    landlordCompany: request.landlordCompany ?? '',
     landlordEmail: request.landlordEmail ?? '',
     landlordPhone: request.landlordPhone ?? '',
     landlordAddressLine1: request.landlordAddressLine1 ?? '',
@@ -710,6 +721,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
   const parsedRequest = StandaloneJobRequestSchema.parse(input);
   const request = {
     landlordName: cleanText(parsedRequest.landlordName),
+    landlordCompany: cleanText(parsedRequest.landlordCompany),
     landlordEmail: cleanText(parsedRequest.landlordEmail),
     landlordPhone: cleanText(parsedRequest.landlordPhone),
     landlordAddressLine1: cleanText(parsedRequest.landlordAddressLine1),
@@ -794,7 +806,10 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
     throw new Error(error.message);
   }
 
+  // Columns added after the table shipped, written separately so a request is
+  // never lost to a migration that has not reached this environment yet.
   if (
+    request.landlordCompany ||
     request.landlordAddressLine1 ||
     request.landlordAddressLine2 ||
     request.landlordCity ||
@@ -802,6 +817,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
   ) {
     const { error: landlordAddressErr } = await fromJobRequests(admin)
       .update({
+        landlord_company: request.landlordCompany || null,
         landlord_address_line1: request.landlordAddressLine1 || null,
         landlord_address_line2: request.landlordAddressLine2 || null,
         landlord_city: request.landlordCity || null,
@@ -814,6 +830,12 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
   }
 
   const landlordDisplayName = titleCase(request.landlordName);
+  // Shown to the engineer so they know they are dealing with an agency rather
+  // than the owner. Omitted entirely when blank rather than printed as "Not
+  // provided" — most requests are from private landlords with no company.
+  const landlordCompanyRows = request.landlordCompany
+    ? [{ label: 'Company', value: request.landlordCompany }]
+    : [];
   const engineerPublicName = titleCase(engineerProfile?.engineerName || request.engineerName || 'Your engineer');
   const propertyAddress = request.propertyAddress || 'Not provided';
   const landlordConfirmationSubject = 'Your gas safety request has been submitted';
@@ -875,6 +897,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
             `Property: ${propertyAddress}`,
             `Work needed: ${formatJobType(request.jobType)}`,
             `Landlord: ${landlordDisplayName}`,
+            ...(request.landlordCompany ? [`Company: ${request.landlordCompany}`] : []),
             `Landlord phone: ${request.landlordPhone}`,
             `Landlord email: ${request.landlordEmail}`,
             `Tenant: ${request.tenantName || 'Not provided'}`,
@@ -891,6 +914,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
                 { label: 'Property', value: propertyAddress },
                 { label: 'Work needed', value: formatJobType(request.jobType) },
                 { label: 'Landlord', value: landlordDisplayName },
+                ...landlordCompanyRows,
                 { label: 'Landlord phone', value: request.landlordPhone || 'Not provided' },
                 { label: 'Landlord email', value: request.landlordEmail || 'Not provided' },
                 { label: 'Tenant', value: request.tenantName || 'Not provided' },
@@ -928,6 +952,7 @@ export async function createPendingJobRequest(input: z.input<typeof StandaloneJo
                 { label: 'Property', value: propertyAddress },
                 { label: 'Work needed', value: formatJobType(request.jobType) },
                 { label: 'Landlord', value: landlordDisplayName },
+                ...landlordCompanyRows,
                 { label: 'Landlord phone', value: request.landlordPhone || 'Not provided' },
                 { label: 'Preferred dates', value: request.preferredDates || 'Flexible' },
               ]),

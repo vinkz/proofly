@@ -405,9 +405,14 @@ export default async function CertificateWizardPage({
     );
   }
 
+  // Offered as prefill at the top of the single-page layout, so choosing a
+  // saved landlord no longer needs a screen of its own before the form.
+  const wizardClients = await listClients().catch(() => []);
+
   return (
     <CertificateWizard
       key={`${jobId}:${initialJobContext?.customer?.id ?? 'none'}`}
+      clients={wizardClients}
       jobId={jobId}
       certificateType={certificateType as CertificateType}
       certificateLabel={CERTIFICATE_LABELS[certificateType as CertificateType]}

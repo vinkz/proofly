@@ -31,7 +31,8 @@ import { AddressLookupField } from '@/components/address/address-lookup-field';
 import type { AddressLookupResult } from '@/lib/address-lookup';
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { getMakes, getModelsForMake } from '@/lib/applianceCatalog/ukBoilers';
-import { CP12_FLUE_TYPES, CP12_LOCATIONS } from '@/types/cp12';
+import { CP12_FLUE_TYPES, CP12_GAS_TYPES, CP12_LOCATIONS } from '@/types/cp12';
+import { resolveCp12FlueKind } from '@/lib/cp12/applianceConfig';
 import { toUserMessage } from '@/lib/user-errors';
 
 const PASS_FAIL = [
@@ -44,6 +45,7 @@ const YES_NO = [
 ];
 const LOCATION_OPTIONS = CP12_LOCATIONS.map((l) => ({ label: l.label, value: l.label }));
 const FLUE_TYPE_OPTIONS = CP12_FLUE_TYPES.map((f) => ({ label: f.label, value: f.label }));
+const GAS_TYPE_OPTIONS = CP12_GAS_TYPES.map((g) => ({ label: g.label, value: g.label }));
 
 const BOILER_TYPES = [
   { label: 'Combi', value: 'combi' },
@@ -157,6 +159,10 @@ export function FreeBoilerServiceForm() {
     },
     [markStarted],
   );
+
+  // Shared with the CP12 rather than restated: the flue test an appliance needs
+  // is a property of how it is flued, not of which document is recording it.
+  const flueKind = resolveCp12FlueKind(payload.flue_type);
 
   const localIssues = useMemo(() => {
     try {
@@ -439,6 +445,17 @@ export function FreeBoilerServiceForm() {
             />
           </FieldLabel>
         </Grid>
+        {/* The engineer's own card number, not the business registration. It was
+            in the collapsed business section, where it read as missing. */}
+        <FieldLabel
+          label="Gas Safe ID card number (optional)"
+          hint="Your licence number — the one on your own ID card, not the business registration above."
+        >
+          <Input
+            value={payload.engineer_id_card_number}
+            onChange={(e) => set('engineer_id_card_number', e.target.value)}
+          />
+        </FieldLabel>
       </Section>
 
       <Section
@@ -459,12 +476,6 @@ export function FreeBoilerServiceForm() {
             />
           </FieldLabel>
         </Grid>
-        <FieldLabel label="ID card number">
-          <Input
-            value={payload.engineer_id_card_number}
-            onChange={(e) => set('engineer_id_card_number', e.target.value)}
-          />
-        </FieldLabel>
         <FieldLabel label="Business address">
           <Input value={payload.company_address} onChange={(e) => set('company_address', e.target.value)} />
         </FieldLabel>
@@ -512,14 +523,30 @@ export function FreeBoilerServiceForm() {
           <FieldLabel label="Serial number (optional)">
             <Input value={payload.serial_number} onChange={(e) => set('serial_number', e.target.value)} />
           </FieldLabel>
+          <FieldLabel label="GC number (optional)">
+            <Input
+              placeholder="47-311-92"
+              value={payload.gc_number}
+              onChange={(e) => set('gc_number', e.target.value)}
+            />
+          </FieldLabel>
         </Grid>
-        <SearchableSelect
-          label="Flue type (optional)"
-          value={payload.flue_type}
-          options={FLUE_TYPE_OPTIONS}
-          placeholder="Room sealed"
-          onChange={(value) => set('flue_type', value)}
-        />
+        <Grid>
+          <SearchableSelect
+            label="Gas type"
+            value={payload.gas_type}
+            options={GAS_TYPE_OPTIONS}
+            placeholder="Natural gas"
+            onChange={(value) => set('gas_type', value)}
+          />
+          <SearchableSelect
+            label="Flue type (optional)"
+            value={payload.flue_type}
+            options={FLUE_TYPE_OPTIONS}
+            placeholder="Room sealed"
+            onChange={(value) => set('flue_type', value)}
+          />
+        </Grid>
       </Section>
 
       <Section
@@ -532,6 +559,57 @@ export function FreeBoilerServiceForm() {
           options={PASS_FAIL}
           onChange={(value) => set('appliance_flueing_safe', value)}
         />
+        {/* Which flue test applies is decided by the flue type, exactly as on a
+            CP12 — a room-sealed appliance gets the integrity test, an open-flued
+            one gets flow and spillage. The rule is shared, not restated here. */}
+        {flueKind === 'room_sealed' || flueKind === 'unknown' ? (
+          <>
+            <EnumChips
+              label="Flue integrity test"
+              hint="Analyser at the air-inlet sampling point, at maximum and minimum rate."
+              value={payload.flue_integrity_test}
+              options={PASS_FAIL}
+              onChange={(value) => set('flue_integrity_test', value)}
+            />
+            {payload.flue_integrity_test ? (
+              <Grid>
+                <FieldLabel label="Air inlet CO2 at high rate (optional)">
+                  <Input
+                    inputMode="decimal"
+                    placeholder="0.02 %"
+                    value={payload.flue_integrity_co2_high}
+                    onChange={(e) => set('flue_integrity_co2_high', e.target.value)}
+                  />
+                </FieldLabel>
+                <FieldLabel label="Air inlet CO2 at low rate (optional)">
+                  <Input
+                    inputMode="decimal"
+                    placeholder="0.01 %"
+                    value={payload.flue_integrity_co2_low}
+                    onChange={(e) => set('flue_integrity_co2_low', e.target.value)}
+                  />
+                </FieldLabel>
+              </Grid>
+            ) : null}
+          </>
+        ) : null}
+        {flueKind === 'open_flue' || flueKind === 'unknown' ? (
+          <>
+            <EnumChips
+              label="Flue flow test"
+              value={payload.flue_flow_test}
+              options={PASS_FAIL}
+              onChange={(value) => set('flue_flow_test', value)}
+            />
+            <EnumChips
+              label="Spillage test"
+              hint="Smoke match at the draught diverter with doors and windows shut."
+              value={payload.spillage_test}
+              options={PASS_FAIL}
+              onChange={(value) => set('spillage_test', value)}
+            />
+          </>
+        ) : null}
         <EnumChips
           label="Ventilation safe"
           value={payload.appliance_ventilation_safe}

@@ -199,6 +199,11 @@ function buildCp12Fields(src: Cp12RenderSource): Cp12FieldMap {
     companyPhone: toText(fieldMap.company_phone ?? ''),
     companyEmail: toText(fieldMap.company_email ?? ''),
     gasSafeRegistrationNumber: toText(fieldMap.gas_safe_number ?? ''),
+    // Collected in the free form and in the paid evidence step, and until now
+    // printed by neither — a gas safety record that does not say which fuel it
+    // covers is incomplete, and it is the one field an LPG engineer needs it to
+    // carry.
+    gasType: toText(fieldMap.gas_type ?? ''),
     engineerName: toText(fieldMap.engineer_name ?? ''),
     engineerIdNumber: toText(fieldMap.engineer_id ?? fieldMap.engineer_id_card_number ?? ''),
     engineerSignatureText: toText(fieldMap.engineer_name ?? ''),
@@ -250,12 +255,17 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
     // content is a description and location of each appliance AND flue.
     // applianceConfig is the single source of truth for what applies, and the
     // form already hides these fields; this makes the certificate agree.
-    const applies = (field: Parameters<typeof cp12FieldVisible>[1]) => cp12FieldVisible(category, field);
+    // Flue tests depend on how the appliance is flued, not only on its
+    // category, so the stored flue type is part of the applicability question.
+    const flueType = toText(app.flue_type ?? '');
+    const applies = (field: Parameters<typeof cp12FieldVisible>[1]) =>
+      cp12FieldVisible(category, field, flueType);
     const whenApplicable = (field: Parameters<typeof cp12FieldVisible>[1], value: string) =>
       (applies(field) ? value : '');
 
     return {
       description: toText(app.make_model ?? appExtras.appliance_make_model ?? '') || typeLabel,
+      gcNumber: toText(app.gc_number ?? ''),
       landlordAppliance: toText(app.landlords_appliance ?? ''),
       applianceInspected: toText(app.appliance_inspected ?? ''),
       location: toText(app.location ?? ''),
@@ -272,7 +282,19 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
       // and counted toward the defect summary but never reached the
       // certificate, so a hob's one distinguishing check went unprinted.
       cookerStability: whenApplicable('cooker_stability', toText(app.cooker_stability ?? '')),
-      spillageTest: toText(app.gas_tightness_test ?? ''),
+      // Two distinct checks that used to be conflated into one row. The
+      // certificate printed `gas_tightness_test` under the heading "Spillage
+      // test" — an installation soundness result reported as a flueing result —
+      // while `flue_performance_test`, which both forms do ask, never reached
+      // the certificate at all. Each now prints under the question the engineer
+      // actually answered. There is still no spillage-test field anywhere, so
+      // the certificate no longer claims one was done.
+      fluePerformanceTest: whenApplicable('flue_performance_test', toText(app.flue_performance_test ?? '')),
+      flueIntegrityTest: whenApplicable('flue_integrity_test', toText(app.flue_integrity_test ?? '')),
+      flueIntegrityCo2High: whenApplicable('flue_integrity_readings', toText(app.flue_integrity_co2_high ?? '')),
+      flueIntegrityCo2Low: whenApplicable('flue_integrity_readings', toText(app.flue_integrity_co2_low ?? '')),
+      spillageTest: whenApplicable('spillage_test', toText(app.spillage_test ?? '')),
+      gasTightnessTest: whenApplicable('gas_tightness_test', toText(app.gas_tightness_test ?? '')),
       applianceSafeToUse: applianceSafe,
       remedialActionTaken: buildCp12ApplianceUnsafePdfSummary(app),
       combustionHighCoPpm: whenApplicable('combustion', highCoPpm),

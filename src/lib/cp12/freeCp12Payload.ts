@@ -11,6 +11,7 @@
  */
 import { z } from 'zod';
 
+import { DEFAULT_CP12_FLUE_TYPE } from '@/types/cp12';
 import type { Cp12Appliance } from '@/types/certificates';
 import type { Cp12RenderSource } from './buildCp12Render';
 import {
@@ -73,10 +74,19 @@ export const FreeCp12ApplianceSchema = z.object({
   make: str(80),
   model: str(120),
   make_model: str(160),
+  /** Data-plate Gas Council number. Free text — never inferred from make/model. */
+  gc_number: str(20),
 
   flue_type: str(60),
   flue_condition: str(20),
+  /** Flue flow test — open-flued only. */
   flue_performance_test: str(20),
+  /** Flue integrity test — room-sealed / balanced only, plus optional evidence. */
+  flue_integrity_test: str(20),
+  flue_integrity_co2_high: str(20),
+  flue_integrity_co2_low: str(20),
+  /** Spillage test — open-flued only. */
+  spillage_test: str(20),
   cooker_stability: str(20),
 
   operating_pressure: str(40),
@@ -114,6 +124,8 @@ export type FreeCp12Appliance = z.output<typeof FreeCp12ApplianceSchema>;
 
 export const FreeCp12FieldsSchema = z.object({
   inspection_date: str(20),
+  /** Natural gas or LPG. Record level: one property, one supply. */
+  gas_type: str(40),
 
   // Property
   job_address_line1: str(160),
@@ -187,6 +199,7 @@ export function toCp12Appliance(input: FreeCp12Appliance): Cp12Appliance {
     location: input.location,
     make_model:
       [input.make, input.model].map((part) => part.trim()).filter(Boolean).join(' ') || input.make_model,
+    gc_number: input.gc_number,
     operating_pressure: input.operating_pressure,
     heat_input: input.heat_input,
     high_co_ppm: input.high_co_ppm,
@@ -209,6 +222,10 @@ export function toCp12Appliance(input: FreeCp12Appliance): Cp12Appliance {
     co_reading_ppm: '',
     safety_devices_correct: input.safety_devices_correct,
     flue_performance_test: input.flue_performance_test,
+    flue_integrity_test: input.flue_integrity_test,
+    flue_integrity_co2_high: input.flue_integrity_co2_high,
+    flue_integrity_co2_low: input.flue_integrity_co2_low,
+    spillage_test: input.spillage_test,
     appliance_serviced: input.appliance_serviced,
     combustion_notes: '',
     safety_rating: '',
@@ -281,7 +298,16 @@ export function freeCp12ValidationInput(payload: FreeCp12Payload) {
 
 /** Empty form state — the starting point, and what "reset" returns to. */
 export function emptyFreeCp12Appliance(): FreeCp12Appliance {
-  return FreeCp12ApplianceSchema.parse({ appliance_type: 'boiler', appliance_subtype: 'combi' });
+  return FreeCp12ApplianceSchema.parse({
+    appliance_type: 'boiler',
+    appliance_subtype: 'combi',
+    // Defaulted, not left blank. Which flue test the form asks for depends on
+    // this value, and an unset one means "flue kind unknown" — which shows the
+    // room-sealed test AND the open-flued pair at once, three mutually
+    // exclusive checks on a form the engineer has not touched yet. Room-sealed
+    // is both the common case and what the picker already suggests.
+    flue_type: DEFAULT_CP12_FLUE_TYPE,
+  });
 }
 
 export function emptyFreeCp12Payload(): FreeCp12Payload {

@@ -260,6 +260,10 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
 
   // ------------------------------------------------------------- appliances
   section('Appliances & flues checked');
+  // Which fuel the whole installation runs on, above the appliances it applies
+  // to. Renders only when recorded, so certificates predating this field are
+  // unchanged rather than claiming a gas type nobody entered.
+  kv('Gas type', text(input.fields.gasType));
   input.appliances.forEach((app, i) => {
     ensure(70);
     const status = applianceStatus(app);
@@ -277,6 +281,7 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
     // required for every appliance/flue listed (audit/cp12-field-analysis.md).
     const identityAttrs: Array<[string, string]> = [];
     const pushIdentity = (label: string, v?: string) => { const t = text(v); if (t) identityAttrs.push([label, t]); };
+    pushIdentity('GC number', app.gcNumber);
     pushIdentity('Location', app.location);
     pushIdentity('Type', app.type);
     pushIdentity('Safe to use', app.applianceSafeToUse);
@@ -292,8 +297,13 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
     pushReading('Safety device', app.safetyDevice);
     pushReading('Ventilation', app.ventilationSatisfactory);
     pushReading('Flue termination', app.flueTerminationSatisfactory);
-    pushReading('Cooker stability', app.cookerStability);
+    pushReading('Flue flow test', app.fluePerformanceTest);
     pushReading('Spillage test', app.spillageTest);
+    pushReading('Flue integrity test', app.flueIntegrityTest);
+    pushReading('Air inlet CO2 (high)', app.flueIntegrityCo2High);
+    pushReading('Air inlet CO2 (low)', app.flueIntegrityCo2Low);
+    pushReading('Cooker stability', app.cookerStability);
+    pushReading('Gas tightness test', app.gasTightnessTest);
     pushReading('Serviced', app.applianceServiced);
 
     const aColW = (CONTENT_W - colGap) / 2;

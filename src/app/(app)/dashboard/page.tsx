@@ -22,6 +22,7 @@ import { getNextRenewalToSend } from '@/server/renewals';
 import { JOB_TYPE_LABELS, type JobType } from '@/types/job-records';
 import { formatDisplayAddress, toTitleCase } from '@/lib/address';
 import { GetStartedCard } from './_components/get-started-card';
+import { FreeCp12CarryOver } from './_components/free-cp12-carry-over';
 
 type BasicJob = {
   id: string;
@@ -195,6 +196,9 @@ export default async function DashboardPage({
           </Link>
         </div>
       </header>
+
+      {/* Renders only when a free-tool certificate is waiting in this browser. */}
+      <FreeCp12CarryOver />
 
       {/* Inbound Requests */}
       <section className="space-y-2">

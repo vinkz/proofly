@@ -42,6 +42,10 @@ export const ANALYTICS_EVENTS = {
   freeCp12FormStarted: 'free_cp12_form_started',
   /** Fires when the free CP12 PDF renders successfully and is previewed. */
   freeCp12Generated: 'free_cp12_generated',
+  /** Chose to create an account and keep the certificate they just made. */
+  freeCp12CarryOverStarted: 'free_cp12_carry_over_started',
+  /** The carried-over certificate was written to their new account. */
+  freeCp12CarryOverImported: 'free_cp12_carry_over_imported',
   /** Fires when an email is submitted at the download step. Never carries the address. */
   freeCp12EmailSubmitted: 'free_cp12_email_submitted',
   /** Fires when the PDF has been emailed and saved to the visitor's device. */
