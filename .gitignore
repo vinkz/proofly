@@ -47,8 +47,14 @@ yarn-error.log*
 /.cache/ms-playwright
 next-env.d.ts
 
-# claude code worktrees
-.claude/worktrees/
+# claude code local state — the whole directory, not just worktrees (it runs to gigabytes)
+.claude/
+
+# local-only package.json snapshot
+package.json.local-backup
+
+# outreach lead exports — real business contact data, keep out of git
+docs/certnow-outreach-test-leads.csv
 
 # saved auth/session state from QA runs — never commit (contains credentials)
 audit/.auth/
