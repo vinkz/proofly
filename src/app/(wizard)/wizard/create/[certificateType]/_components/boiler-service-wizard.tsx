@@ -927,19 +927,33 @@ export function BoilerServiceWizard({
     }
   };
 
-  const copyJobAddressToCustomerAddress = () => {
+  /**
+   * Client details are captured before the job address now, so the shortcut runs
+   * client -> job address: the common case is a landlord who lives at the
+   * property being serviced.
+   */
+  const copyCustomerAddressToJobAddress = () => {
+    setJobAddress((prev) => ({
+      ...prev,
+      job_address_line1: jobInfo.customer_address_line1,
+      job_address_line2: jobInfo.customer_address_line2,
+      job_address_city: jobInfo.customer_city,
+      job_postcode: jobInfo.customer_postcode,
+    }));
     setJobInfo((prev) => ({
       ...prev,
-      customer_address_line1: jobAddress.job_address_line1,
-      customer_address_line2: jobAddress.job_address_line2,
-      customer_city: jobAddress.job_address_city,
-      customer_postcode: jobAddress.job_postcode,
+      property_address: composeAddress(
+        jobInfo.customer_address_line1,
+        jobInfo.customer_address_line2,
+        jobInfo.customer_city,
+      ),
+      postcode: jobInfo.customer_postcode,
     }));
-    setCustomerAddressSearchQuery(jobAddress.job_address_line1);
-    setCustomerAddressSearchError(null);
-    setSelectedCustomerAddressMatchId(null);
-    setCustomerAddressSuggestions([]);
-    pushToast({ title: 'Job address copied to landlord details', variant: 'success' });
+    setAddressSearchQuery(jobInfo.customer_address_line1);
+    setAddressSearchError(null);
+    setSelectedAddressMatchId(null);
+    setAddressSuggestions([]);
+    pushToast({ title: 'Landlord address copied to job address', variant: 'success' });
   };
 
   const handleJobInfoNext = () => {
@@ -1475,7 +1489,7 @@ export function BoilerServiceWizard({
         <WizardLayout
           step={offsetStep(1)}
           total={totalSteps}
-          title="Job Address & Client"
+          title="Client & Job Address"
           status="Visit details"
           // "Back" from the first step returns to the job's completion checklist — the
           // hub where a combined CP12 + service job lists both certificates, so the
@@ -1506,7 +1520,134 @@ export function BoilerServiceWizard({
               </div>
             ) : null}
             <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job Address</p>
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Client / Landlord</p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
+                  <Input
+                    value={jobInfo.customer_name}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
+                    placeholder="Client name"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
+                  <Input
+                    value={jobInfo.customer_company}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_company: e.target.value }))}
+                    placeholder="Optional"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="relative md:col-span-2">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                    Address lookup / line 1
+                  </label>
+                  <Input
+                    value={customerAddressSearchQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCustomerAddressSearchQuery(value);
+                      setCustomerAddressSearchError(null);
+                      setSelectedCustomerAddressMatchId(null);
+                      setJobInfo((prev) => ({ ...prev, customer_address_line1: value }));
+                    }}
+                    placeholder="Start typing address or postcode"
+                    className="mt-1"
+                  />
+                  {isCustomerAddressLookupPending && !customerAddressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]">
+                      Searching addresses…
+                    </div>
+                  ) : null}
+                  {customerAddressSuggestions.length ? (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
+                      <div className="max-h-72 overflow-y-auto">
+                        {customerAddressSuggestions.map((suggestion) => {
+                          const isSelected = selectedCustomerAddressMatchId === suggestion.id;
+                          return (
+                            <button
+                              key={suggestion.id}
+                              type="button"
+                              onClick={() => void handleCustomerAddressMatchSelect(suggestion)}
+                              className={`w-full border-b-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2 text-left transition last:border-0 ${
+                                isSelected
+                                  ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
+                                  : 'hover:bg-[var(--color-action-bg)] text-[var(--color-text-primary)]'
+                              }`}
+                            >
+                              <div className="text-[13px] font-medium">{suggestion.label}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                  {customerAddressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">{formatAddressError(customerAddressSearchError)}</p> : null}
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                    Address line 2
+                  </label>
+                  <Input
+                    value={jobInfo.customer_address_line2}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_address_line2: e.target.value }))}
+                    placeholder="Optional"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
+                  <Input
+                    value={jobInfo.customer_city}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_city: e.target.value }))}
+                    placeholder="London"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
+                  <Input
+                    autoComplete="off"
+                    value={jobInfo.customer_postcode}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_postcode: e.target.value }))}
+                    placeholder="SW1A 1AA"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
+                  <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="off"
+                    value={jobInfo.customer_phone}
+                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_phone: e.target.value }))}
+                    placeholder="Optional"
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Job Address</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-[6px] text-xs"
+                  onClick={copyCustomerAddressToJobAddress}
+                  disabled={
+                    !jobInfo.customer_address_line1 &&
+                    !jobInfo.customer_address_line2 &&
+                    !jobInfo.customer_city &&
+                    !jobInfo.customer_postcode
+                  }
+                >
+                  Copy landlord address details
+                </Button>
+              </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
@@ -1643,133 +1784,6 @@ export function BoilerServiceWizard({
                 </div>
               </div>
             </div>
-            <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Client / Landlord</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-[6px] text-xs"
-                    onClick={copyJobAddressToCustomerAddress}
-                    disabled={
-                      !jobAddress.job_address_line1 &&
-                      !jobAddress.job_address_line2 &&
-                      !jobAddress.job_address_city &&
-                      !jobAddress.job_postcode
-                    }
-                  >
-                    Copy job address details
-                  </Button>
-                </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Name</label>
-                  <Input
-                    value={jobInfo.customer_name}
-                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_name: e.target.value }))}
-                    placeholder="Client name"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Company</label>
-                  <Input
-                    value={jobInfo.customer_company}
-                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_company: e.target.value }))}
-                    placeholder="Optional"
-                    className="mt-1"
-                  />
-                </div>
-                <div className="relative md:col-span-2">
-                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                    Address lookup / line 1
-                  </label>
-                  <Input
-                    value={customerAddressSearchQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setCustomerAddressSearchQuery(value);
-                      setCustomerAddressSearchError(null);
-                      setSelectedCustomerAddressMatchId(null);
-                      setJobInfo((prev) => ({ ...prev, customer_address_line1: value }));
-                    }}
-                    placeholder="Start typing address or postcode"
-                    className="mt-1"
-                  />
-                  {isCustomerAddressLookupPending && !customerAddressSuggestions.length ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-2 text-[13px] text-[var(--color-text-primary)]">
-                      Searching addresses…
-                    </div>
-                  ) : null}
-                  {customerAddressSuggestions.length ? (
-                    <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
-                      <div className="max-h-72 overflow-y-auto">
-                        {customerAddressSuggestions.map((suggestion) => {
-                          const isSelected = selectedCustomerAddressMatchId === suggestion.id;
-                          return (
-                            <button
-                              key={suggestion.id}
-                              type="button"
-                              onClick={() => void handleCustomerAddressMatchSelect(suggestion)}
-                              className={`w-full border-b-[0.5px] border-[var(--color-border-tertiary)] px-3 py-2 text-left transition last:border-0 ${
-                                isSelected
-                                  ? 'bg-[var(--color-action-bg)] text-[var(--color-action)]'
-                                  : 'hover:bg-[var(--color-action-bg)] text-[var(--color-text-primary)]'
-                              }`}
-                            >
-                              <div className="text-[13px] font-medium">{suggestion.label}</div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-                  {customerAddressSearchError ? <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">{formatAddressError(customerAddressSearchError)}</p> : null}
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                    Address line 2
-                  </label>
-                  <Input
-                    value={jobInfo.customer_address_line2}
-                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_address_line2: e.target.value }))}
-                    placeholder="Optional"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">City / town</label>
-                  <Input
-                    value={jobInfo.customer_city}
-                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_city: e.target.value }))}
-                    placeholder="London"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Postcode</label>
-                  <Input
-                    autoComplete="off"
-                    value={jobInfo.customer_postcode}
-                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_postcode: e.target.value }))}
-                    placeholder="SW1A 1AA"
-                    className="mt-1"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">Tel. No.</label>
-                  <Input
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="off"
-                    value={jobInfo.customer_phone}
-                    onChange={(e) => setJobInfo((prev) => ({ ...prev, customer_phone: e.target.value }))}
-                    placeholder="Optional"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-            </div>
           </div>
           <div id="boiler-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
             <button
@@ -1824,6 +1838,10 @@ export function BoilerServiceWizard({
               typeOptions={[...BOILER_SERVICE_TYPES]}
               allowMultiple={false}
               showExtendedFields={false}
+              // The payload has carried gas_type since launch but the form never
+              // rendered it, so there was no way to answer it. A service record
+              // has to say which fuel it covers.
+              showGasType
               showYear={false}
               applyExtendedDefaults={false}
               inlineEditor

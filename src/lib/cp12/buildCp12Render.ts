@@ -199,11 +199,6 @@ function buildCp12Fields(src: Cp12RenderSource): Cp12FieldMap {
     companyPhone: toText(fieldMap.company_phone ?? ''),
     companyEmail: toText(fieldMap.company_email ?? ''),
     gasSafeRegistrationNumber: toText(fieldMap.gas_safe_number ?? ''),
-    // Collected in the free form and in the paid evidence step, and until now
-    // printed by neither — a gas safety record that does not say which fuel it
-    // covers is incomplete, and it is the one field an LPG engineer needs it to
-    // carry.
-    gasType: toText(fieldMap.gas_type ?? ''),
     engineerName: toText(fieldMap.engineer_name ?? ''),
     engineerIdNumber: toText(fieldMap.engineer_id ?? fieldMap.engineer_id_card_number ?? ''),
     engineerSignatureText: toText(fieldMap.engineer_name ?? ''),
@@ -233,7 +228,16 @@ function buildCp12Fields(src: Cp12RenderSource): Cp12FieldMap {
   };
 }
 
-function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
+function buildApplianceInputs(
+  appliances: Cp12Appliance[],
+  /**
+   * The record-level gas type this field used to be stored as. Certificates
+   * issued before the field moved onto the appliance have it only here, so it
+   * stands in for any appliance that carries none of its own — those records
+   * keep printing the fuel their engineer entered.
+   */
+  legacyRecordGasType: string,
+): ApplianceInput[] {
   return appliances.map((app) => {
     const appExtras = app as Cp12Appliance & { appliance_make_model?: string };
     const highCoPpm = toText(app.high_co_ppm ?? app.co_reading_high ?? '');
@@ -266,6 +270,7 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
     return {
       description: toText(app.make_model ?? appExtras.appliance_make_model ?? '') || typeLabel,
       gcNumber: toText(app.gc_number ?? ''),
+      gasType: toText(app.gas_type ?? '') || legacyRecordGasType,
       landlordAppliance: toText(app.landlords_appliance ?? ''),
       applianceInspected: toText(app.appliance_inspected ?? ''),
       location: toText(app.location ?? ''),
@@ -316,7 +321,7 @@ function buildApplianceInputs(appliances: Cp12Appliance[]): ApplianceInput[] {
 export function buildCp12RenderInput(src: Cp12RenderSource): RenderCp12CertificateInput {
   return {
     fields: buildCp12Fields(src),
-    appliances: buildApplianceInputs(src.appliances),
+    appliances: buildApplianceInputs(src.appliances, toText(src.fieldMap.gas_type ?? '')),
     recordId: src.recordId,
     issuedAt: src.issuedAt,
     companyLogoBytes: src.companyLogoBytes,

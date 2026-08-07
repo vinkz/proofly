@@ -18,6 +18,8 @@ export type ApplianceInput = {
   cookerStability?: string;
   /** Data-plate Gas Council number, where the appliance has one. */
   gcNumber?: string;
+  /** Natural gas or LPG, for this appliance. */
+  gasType?: string;
   /** Flue flow test result. Open-flued appliances only. */
   fluePerformanceTest?: string;
   /** Flue integrity test result. Room-sealed / balanced-flue appliances only. */
@@ -47,8 +49,6 @@ export type ApplianceInput = {
 };
 
 export type Cp12FieldMap = {
-  /** Natural gas or LPG. */
-  gasType?: string;
   certNumber?: string;
   issueDate?: string;
   nextInspectionDue?: string;

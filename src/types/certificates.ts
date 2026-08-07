@@ -55,6 +55,15 @@ export type Cp12Appliance = {
   location: string;
   make_model: string;
   /**
+   * Natural gas or LPG, per appliance.
+   *
+   * Held here rather than once per record because one property can run a mains
+   * gas boiler alongside an LPG appliance on a bottle — a record-level value
+   * would have to claim one fuel for both, and the fuel is the field that
+   * decides which part of an engineer's registration the work falls under.
+   */
+  gas_type: string;
+  /**
    * Gas Council number from the appliance data plate, e.g. "47-311-92".
    *
    * Free text and never inferred from make/model: not every appliance has one

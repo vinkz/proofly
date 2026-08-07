@@ -76,6 +76,14 @@ export const FreeCp12ApplianceSchema = z.object({
   make_model: str(160),
   /** Data-plate Gas Council number. Free text — never inferred from make/model. */
   gc_number: str(20),
+  /**
+   * Natural gas or LPG, for this appliance.
+   *
+   * Per appliance rather than per record: a property can run a mains gas boiler
+   * and an LPG appliance side by side, and one value for the record would have
+   * to misdescribe one of them.
+   */
+  gas_type: str(40),
 
   flue_type: str(60),
   flue_condition: str(20),
@@ -124,8 +132,6 @@ export type FreeCp12Appliance = z.output<typeof FreeCp12ApplianceSchema>;
 
 export const FreeCp12FieldsSchema = z.object({
   inspection_date: str(20),
-  /** Natural gas or LPG. Record level: one property, one supply. */
-  gas_type: str(40),
 
   // Property
   job_address_line1: str(160),
@@ -200,6 +206,7 @@ export function toCp12Appliance(input: FreeCp12Appliance): Cp12Appliance {
     make_model:
       [input.make, input.model].map((part) => part.trim()).filter(Boolean).join(' ') || input.make_model,
     gc_number: input.gc_number,
+    gas_type: input.gas_type,
     operating_pressure: input.operating_pressure,
     heat_input: input.heat_input,
     high_co_ppm: input.high_co_ppm,
