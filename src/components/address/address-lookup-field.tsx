@@ -51,24 +51,57 @@ export function AddressLookupField({
   const listId = useId();
   const boxRef = useRef<HTMLDivElement | null>(null);
   const skipSearchForRef = useRef<string | null>(null);
+  /**
+   * Set whenever the user closes the list themselves — clicking away, Escape,
+   * tabbing out, or picking a suggestion. A search is debounced and then has to
+   * cross the network, so it routinely resolves *after* one of those, and
+   * without this the list reopens on its own a moment after being dismissed.
+   * Cleared on the next keystroke, which is the user asking for it again.
+   */
+  const dismissedRef = useRef(false);
   const query = value ?? internalQuery;
   const isManualAddressInput = value !== undefined || onValueChange !== undefined;
   const manualEntryNote = isManualAddressInput
     ? 'Continue entering the address manually.'
     : 'Type the address in the fields below.';
 
+  const dismiss = () => {
+    dismissedRef.current = true;
+    setOpen(false);
+    setActiveIndex(-1);
+  };
+
   const updateQuery = (nextValue: string) => {
+    // Typing is a request to see matches again.
+    dismissedRef.current = false;
     if (value === undefined) setInternalQuery(nextValue);
     onValueChange?.(nextValue);
     setActiveIndex(-1);
   };
 
   useEffect(() => {
-    const onDocClick = (event: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(event.target as Node)) setOpen(false);
+    // pointerdown, not mousedown: this is a mobile-first form, and a tap does
+    // not reliably produce a mouse event before the list has been scrolled or
+    // the next field focused.
+    const onDocPointerDown = (event: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(event.target as Node)) dismiss();
     };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener('pointerdown', onDocPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown);
+  }, []);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    // Tabbing out left the list open on top of the field the user had moved to.
+    // Ignore focus moving *within* the widget.
+    const onFocusOut = (event: FocusEvent) => {
+      const next = event.relatedTarget as Node | null;
+      if (next && box.contains(next)) return;
+      dismiss();
+    };
+    box.addEventListener('focusout', onFocusOut);
+    return () => box.removeEventListener('focusout', onFocusOut);
   }, []);
 
   useEffect(() => {
@@ -101,9 +134,12 @@ export function AddressLookupField({
           return;
         }
         const data = (await response.json()) as { suggestions?: AddressLookupSuggestion[] };
-        setSuggestions(data.suggestions ?? []);
-        setOpen((data.suggestions ?? []).length > 0);
-        setNote((data.suggestions ?? []).length === 0 ? `No matches. ${manualEntryNote}` : null);
+        const list = data.suggestions ?? [];
+        setSuggestions(list);
+        // Never reopen a list the user has already closed — this response is
+        // older than their dismissal.
+        setOpen(!dismissedRef.current && list.length > 0);
+        setNote(list.length === 0 ? `No matches. ${manualEntryNote}` : null);
       } catch (error) {
         if ((error as Error).name === 'AbortError') return;
         setNote(`Address lookup is unavailable. ${manualEntryNote}`);
@@ -119,7 +155,7 @@ export function AddressLookupField({
   }, [query, disabled, manualEntryNote]);
 
   const choose = async (suggestion: AddressLookupSuggestion) => {
-    setOpen(false);
+    dismiss();
     setBusy(true);
     try {
       const response = await fetch(`/api/address-search?id=${encodeURIComponent(suggestion.id)}`);
@@ -134,6 +170,9 @@ export function AddressLookupField({
         skipSearchForRef.current = resolvedLine1.trim();
         setSuggestions([]);
         updateQuery(resolvedLine1);
+        // updateQuery treats input as "show me matches"; here the value came
+        // from a pick, so keep it dismissed.
+        dismissedRef.current = true;
         onSelect(data.address);
         setNote(null);
       }
@@ -146,18 +185,20 @@ export function AddressLookupField({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (!suggestions.length) {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') dismiss();
       return;
     }
 
     if (event.key === 'ArrowDown') {
       event.preventDefault();
+      dismissedRef.current = false;
       setOpen(true);
       setActiveIndex((current) => (current + 1) % suggestions.length);
       return;
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
+      dismissedRef.current = false;
       setOpen(true);
       setActiveIndex((current) => (current <= 0 ? suggestions.length - 1 : current - 1));
       return;
@@ -169,8 +210,7 @@ export function AddressLookupField({
     }
     if (event.key === 'Escape') {
       event.preventDefault();
-      setOpen(false);
-      setActiveIndex(-1);
+      dismiss();
     }
   };
 
@@ -190,7 +230,7 @@ export function AddressLookupField({
         <Input
           value={query}
           onChange={(e) => updateQuery(e.target.value)}
-          onFocus={() => setOpen(suggestions.length > 0)}
+          onFocus={() => setOpen(!dismissedRef.current && suggestions.length > 0)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           autoComplete={autoComplete}
@@ -228,6 +268,10 @@ export function AddressLookupField({
                 type="button"
                 role="option"
                 aria-selected={index === activeIndex}
+                // Keep focus in the input. Safari does not focus a button on
+                // click, so without this the focusout handler fires first and
+                // closes the list before onClick can pick the address.
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => choose(suggestion)}
                 onMouseEnter={() => setActiveIndex(index)}
                 className={`block w-full px-3 py-2.5 text-left text-[13px] text-[var(--color-text-primary)] transition-colors ${
