@@ -29,7 +29,11 @@ import {
   type FreeCp12Payload,
 } from './freeCp12Payload';
 
-const VERSION = 'v1';
+// v2: gas_type moved off the record and onto each appliance. A v1 draft parses
+// cleanly against the new schema — Zod strips the unknown record-level key and
+// defaults the new appliance one — so it would restore looking complete while
+// having quietly dropped the fuel. Discarding it is the honest outcome.
+const VERSION = 'v2';
 const DRAFT_KEY = `certnow.free-cp12.draft.${VERSION}`;
 const CARRYOVER_KEY = `certnow.free-cp12.carryover.${VERSION}`;
 
