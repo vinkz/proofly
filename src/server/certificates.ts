@@ -463,6 +463,12 @@ async function applyCp12SourceDefaultsForGasWarningNotice(params: {
   applyDefault('engineer_company', pickText(sourceFieldMap.company_name, sourceFieldMap.engineer_company));
   applyDefault('gas_safe_number', sourceFieldMap.gas_safe_number);
   applyDefault('engineer_id_card_number', pickText(sourceFieldMap.engineer_id_card_number, sourceFieldMap.engineer_id));
+  // The signature travels with the other engineer identity fields. A CP12
+  // cannot itself be issued unsigned, so the parent always has one — and
+  // without this a notice co-issued from a CP12 would fail its own signature
+  // check with no form open for anyone to sign.
+  applyDefault('engineer_signature', pickText(sourceFieldMap.engineer_signature, sourceFieldMap.engineer_signature_url));
+  applyDefault('engineer_signature_path', sourceFieldMap.engineer_signature_path);
 
   if (!sourceAppliance) return;
 
@@ -3094,11 +3100,25 @@ async function issueAttachedGasWarningNotices(params: {
         );
       }
 
-      await generateCertificatePdf({
+      const issueResult = await generateCertificatePdf({
         jobId: gwnJobId,
         certificateType: 'gas_warning_notice',
         previewOnly: false,
       });
+      // A refusal now comes back as a value (already issued, allowance spent),
+      // so it has to be read here — before, it arrived as a throw and landed in
+      // the catch below as issued: false. Reporting it as issued would tell the
+      // caller a notice was produced when none was.
+      if (issueResult && typeof issueResult === 'object' && 'error' in issueResult) {
+        results.push({
+          jobId: gwnJobId,
+          applianceKey,
+          classification,
+          issued: false,
+          error: issueResult.message,
+        });
+        continue;
+      }
       results.push({ jobId: gwnJobId, applianceKey, classification, issued: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to issue the warning notice';
@@ -3170,8 +3190,18 @@ export async function generateCertificatePdf(payload: z.infer<typeof GeneratePdf
       certificateType: input.certificateType,
       columns: 'id, job_id, cert_type, pdf_path, pdf_url, issued_at, status, created_at',
     });
+    // Refusing to re-issue is correct — a notice already handed to a customer
+    // must not be silently replaced — but it is a predictable outcome, not a
+    // fault, so it is returned rather than thrown. Thrown from a Server Action
+    // this reached production as an opaque digest, the wizard's catch fell
+    // through to its "check required fields" fallback, and the engineer went
+    // hunting for a missing field that was never missing.
     if (!previewOnly && isIssuedCertificateRecord(issuedCertificate)) {
-      throw new Error('Gas Warning Notice has already been issued for this job.');
+      return {
+        error: 'already_issued' as const,
+        message: 'This Gas Warning Notice has already been issued for this job.',
+        certificateId: issuedCertificate?.id ?? null,
+      };
     }
 
     const { data: fields, error: fieldsErr } = await sb

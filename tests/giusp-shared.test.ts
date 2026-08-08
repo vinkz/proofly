@@ -88,6 +88,7 @@ describe('shared GIUSP answers', () => {
       gas_safe_number: '123456',
       issued_at: '2026-07-28T00:00:00Z',
       record_id: 'R',
+      engineer_signature: 'https://example.test/signatures/engineer.png',
       ...giuspAnswersToGwnFields(
         answers({
           customer_present: 'Yes',

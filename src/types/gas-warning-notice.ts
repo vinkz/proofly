@@ -62,7 +62,10 @@ export type GasWarningNoticeFields = {
   engineer_company?: string;
   gas_safe_number?: string;
   engineer_id_card_number?: string;
+  // Three keys, one signature — see gwnEngineerSigned in @/lib/gwn/validation.
   engineer_signature_url?: string;
+  engineer_signature?: string;
+  engineer_signature_path?: string;
   issued_at?: string;
   record_id?: string;
 };

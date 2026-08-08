@@ -16,6 +16,7 @@ const base: GasWarningNoticeFields = {
   record_id: 'GWN-1',
   customer_present: true,
   customer_informed: true,
+  engineer_signature: 'https://example.test/signatures/engineer.png',
 };
 
 describe('validateGwnForIssue', () => {
@@ -67,5 +68,20 @@ describe('validateGwnForIssue', () => {
   it('requires notice-left confirmation when the customer is not present', () => {
     const errors = validateGwnForIssue({ ...base, classification: 'AT_RISK', customer_present: false, customer_informed: false });
     expect(errors.some((e) => e.toLowerCase().includes('notice left'))).toBe(true);
+  });
+
+  it('blocks an otherwise complete notice that the engineer has not signed', () => {
+    const { engineer_signature: _omitted, ...unsigned } = base;
+    const errors = validateGwnForIssue({ ...unsigned, classification: 'AT_RISK' });
+    expect(errors).toContain('Engineer signature is required');
+  });
+
+  it('accepts the signature under any of the three keys the flows write', () => {
+    const { engineer_signature: _omitted, ...unsigned } = base;
+    for (const key of ['engineer_signature', 'engineer_signature_path', 'engineer_signature_url']) {
+      expect(
+        validateGwnForIssue({ ...unsigned, classification: 'AT_RISK', [key]: 'sig-value' }),
+      ).toEqual([]);
+    }
   });
 });
