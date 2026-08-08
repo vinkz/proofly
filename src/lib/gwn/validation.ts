@@ -23,6 +23,21 @@ export function gwnHandoverConfirmed(fields: GasWarningNoticeFields): boolean {
     : isTruthy(fields.notice_left_on_premises ?? fields.customer_informed);
 }
 
+/**
+ * True when the engineer has signed the notice.
+ *
+ * Three keys because three paths write it: the wizard's signature upload stores
+ * `engineer_signature` and `engineer_signature_path`, while the free CP12 flow
+ * carries a data URL through as `engineer_signature_url`. Same rule as the CP12
+ * validator, which accepts the same trio.
+ */
+export function gwnEngineerSigned(fields: GasWarningNoticeFields): boolean {
+  const record = fields as Record<string, unknown>;
+  return ['engineer_signature_path', 'engineer_signature', 'engineer_signature_url'].some((key) =>
+    hasValue(record[key]),
+  );
+}
+
 /** True when the ID RIDDOR report has been recorded (flag or reference). */
 export function gwnRiddorRecorded(fields: GasWarningNoticeFields): boolean {
   return isTruthy(fields.riddor_11_1_reported) || isTruthy(fields.riddor_11_2_reported) || hasValue(fields.emergency_reference);
@@ -47,6 +62,14 @@ export function validateGwnForIssue(fields: GasWarningNoticeFields): string[] {
       errors.push(`${key.replace(/_/g, ' ')} is required`);
     }
   });
+
+  // The notice identifies the engineer who made the determination, so it is not
+  // complete unsigned. Kept out of GAS_WARNING_REQUIRED_FOR_ISSUE because that
+  // list checks one key per entry and would read "engineer signature url is
+  // required"; the signature can arrive under any of three keys.
+  if (!gwnEngineerSigned(fields)) {
+    errors.push('Engineer signature is required');
+  }
 
   // Immediately Dangerous — GIUSP + RIDDOR duties.
   if (String(fields.classification ?? '').trim() === 'IMMEDIATELY_DANGEROUS') {

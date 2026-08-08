@@ -308,6 +308,7 @@ export function GasWarningNoticeWizard({
       handoverConfirmed,
       3,
     );
+    add('engineer-signature', 'Engineer signature', hasValue(engineerSignature), 3);
 
     if (fields.classification === 'IMMEDIATELY_DANGEROUS') {
       add('danger-label', 'Danger: Do Not Use label fitted', fields.danger_do_not_use_label_fitted, 2);
@@ -348,6 +349,7 @@ export function GasWarningNoticeWizard({
     fields.riddor_11_2_reported,
     fields.unsafe_situation_description,
     jobAddress.job_address_line1,
+    engineerSignature,
   ]);
   const firstGasWarningMissing = gasWarningMissingItems[0];
 
@@ -700,8 +702,13 @@ export function GasWarningNoticeWizard({
       try {
         if (gasWarningMissingItems.length > 0) {
           pushToast({
-            title: 'Complete required item first',
-            description: gasWarningMissingItems[0]?.label ?? 'Please check the required fields and try again.',
+            title:
+              gasWarningMissingItems.length === 1
+                ? '1 required field is missing'
+                : `${gasWarningMissingItems.length} required fields are missing`,
+            // Name every one of them. "Please check the required fields" sends
+            // an engineer scrolling three steps looking for what it means.
+            description: gasWarningMissingItems.map((item) => item.label).join(', '),
             variant: 'error',
           });
           return;
@@ -715,6 +722,24 @@ export function GasWarningNoticeWizard({
         });
         if ('error' in result && result.error === 'limit_reached') {
           setLimitReachedMessage(result.message ?? 'You have reached your monthly certificate limit.');
+          return;
+        }
+        if ('error' in result && result.error === 'already_issued') {
+          pushToast({
+            title: 'Already issued',
+            description: (
+              <span>
+                {result.message ?? 'This Gas Warning Notice has already been issued for this job.'}{' '}
+                <Link
+                  href={`/jobs/${jobId}/pdf?certificateType=${certificateType}`}
+                  className="text-[var(--action)] underline"
+                >
+                  Open the issued notice
+                </Link>
+              </span>
+            ),
+            variant: 'error',
+          });
           return;
         }
         if (!('jobId' in result)) return;
@@ -768,6 +793,10 @@ export function GasWarningNoticeWizard({
   const showOtherIssueDetails = fields.other_issue;
   const showCustomerAcknowledgement = fields.customer_present;
   const showNoticeLeftOnPremises = !fields.customer_present;
+  // Isolation, the Danger label and the RIDDOR report only become blocking once
+  // the notice is Immediately Dangerous — so those sections stay collapsible
+  // until they are, then open themselves.
+  const isImmediatelyDangerous = fields.classification === 'IMMEDIATELY_DANGEROUS';
 
   return (
     <>
@@ -1003,7 +1032,7 @@ export function GasWarningNoticeWizard({
               </Button>
             </div>
           ) : null}
-          <CollapsibleSection title="Appliance & classification" subtitle="Capture appliance and risk">
+          <CollapsibleSection title="Appliance & classification" subtitle="Capture appliance and risk" required>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
                 value={fields.appliance_location}
@@ -1125,7 +1154,11 @@ export function GasWarningNoticeWizard({
               />
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Safety actions" subtitle="Isolation, tagging, and emergency actions">
+          <CollapsibleSection
+            title="Safety actions"
+            subtitle="Isolation, tagging, and emergency actions"
+            required={isImmediatelyDangerous}
+          >
             <div className="space-y-2 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
               {[
                 ['gas_supply_isolated', 'Gas supply isolated'],
@@ -1149,7 +1182,11 @@ export function GasWarningNoticeWizard({
               ))}
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="RIDDOR reporting" subtitle="Record whether the incident was reported to HSE">
+          <CollapsibleSection
+            title="RIDDOR reporting"
+            subtitle="Record whether the incident was reported to HSE"
+            required={isImmediatelyDangerous}
+          >
             <div className="space-y-2 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
               {[
                 ['riddor_11_1_reported', 'Reported to HSE under RIDDOR 11(1) (Gas Incident)'],
@@ -1272,7 +1309,7 @@ export function GasWarningNoticeWizard({
               ))}
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Attendance & handover" subtitle="Record whether the customer was present" defaultOpen>
+          <CollapsibleSection title="Attendance & handover" subtitle="Record whether the customer was present" required>
             <div className="space-y-3 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
               <label className="flex items-center gap-3 text-[13px] text-[var(--color-text-secondary)]">
                 <input
@@ -1334,7 +1371,7 @@ export function GasWarningNoticeWizard({
               ) : null}
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Notice details" subtitle="Engineer details come from account settings">
+          <CollapsibleSection title="Notice details" subtitle="Engineer details come from account settings" required>
             <div className="grid gap-3 sm:grid-cols-2">
               <LabeledField label="Issue date">
                 <Input
@@ -1346,7 +1383,7 @@ export function GasWarningNoticeWizard({
               </LabeledField>
             </div>
           </CollapsibleSection>
-          <CollapsibleSection title="Signatures" subtitle="Engineer required · customer optional">
+          <CollapsibleSection title="Signatures" subtitle="Engineer required · customer optional" required>
             <div className="space-y-3">
               <SignatureCard label="Engineer" existingUrl={engineerSignature} onUpload={signatureUpload('engineer')} />
               {!showCustomerAcknowledgement ? (
@@ -1371,8 +1408,10 @@ export function GasWarningNoticeWizard({
               <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
                 {gasWarningMissingItems.length} required item{gasWarningMissingItems.length === 1 ? '' : 's'} missing
               </p>
+              {/* Every one, not the first four — a truncated list is the reason
+                  someone fixes three things and still can't issue. */}
               <div className="mt-3 space-y-2">
-                {gasWarningMissingItems.slice(0, 4).map((item) => (
+                {gasWarningMissingItems.map((item) => (
                   <div key={item.id} className="flex items-center justify-between gap-3 rounded-[10px] bg-[var(--color-background-primary)] px-3 py-2 text-[13px]">
                     <span className="font-medium text-[var(--color-text-primary)]">{item.label}</span>
                     {item.href ? (
