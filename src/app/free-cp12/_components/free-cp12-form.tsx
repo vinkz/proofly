@@ -348,31 +348,33 @@ export function FreeCp12Form() {
     [markStarted],
   );
 
-  const hasPropertyAddress = Boolean(
-    payload.fields.job_address_line1.trim() || payload.fields.job_postcode.trim(),
+  const hasLandlordAddress = Boolean(
+    payload.fields.landlord_address_line1.trim() || payload.fields.landlord_postcode.trim(),
   );
-  const landlordAddressMatchesProperty =
-    hasPropertyAddress &&
-    payload.fields.landlord_address_line1.trim() === payload.fields.job_address_line1.trim() &&
-    payload.fields.landlord_address_line2.trim() === payload.fields.job_address_line2.trim() &&
-    payload.fields.landlord_city.trim() === payload.fields.job_address_city.trim() &&
-    payload.fields.landlord_postcode.trim() === payload.fields.job_postcode.trim();
+  const propertyAddressMatchesLandlord =
+    hasLandlordAddress &&
+    payload.fields.job_address_line1.trim() === payload.fields.landlord_address_line1.trim() &&
+    payload.fields.job_address_line2.trim() === payload.fields.landlord_address_line2.trim() &&
+    payload.fields.job_address_city.trim() === payload.fields.landlord_city.trim() &&
+    payload.fields.job_postcode.trim() === payload.fields.landlord_postcode.trim();
 
   /**
-   * A landlord living at the property still needs their address captured as
-   * theirs — the issue gate deliberately refuses to infer it. This copies it
+   * A landlord living at the property still needs both addresses captured — the
+   * issue gate deliberately refuses to infer one from the other. This copies
    * explicitly, which is the engineer asserting it, not us guessing.
+   *
+   * Runs landlord -> property, following the order the sections are filled in.
    */
-  const copyPropertyToLandlord = useCallback(() => {
+  const copyLandlordToProperty = useCallback(() => {
     markStarted();
     setPayload((prev) => ({
       ...prev,
       fields: {
         ...prev.fields,
-        landlord_address_line1: prev.fields.job_address_line1,
-        landlord_address_line2: prev.fields.job_address_line2,
-        landlord_city: prev.fields.job_address_city,
-        landlord_postcode: prev.fields.job_postcode,
+        job_address_line1: prev.fields.landlord_address_line1,
+        job_address_line2: prev.fields.landlord_address_line2,
+        job_address_city: prev.fields.landlord_city,
+        job_postcode: prev.fields.landlord_postcode,
       },
     }));
   }, [markStarted]);
@@ -826,56 +828,6 @@ export function FreeCp12Form() {
         </Field>
       </Section>
 
-      <Section title="Inspection & property">
-        <Grid>
-          <Field label="Inspection date">
-            <Input
-              type="date"
-              max={new Date().toISOString().slice(0, 10)}
-              value={payload.fields.inspection_date}
-              onChange={(e) => setField('inspection_date', e.target.value)}
-            />
-          </Field>
-          <SearchableSelect
-            label="Gas type"
-            value={payload.fields.gas_type}
-            options={GAS_TYPE_OPTIONS}
-            placeholder="Natural gas"
-            onChange={(value) => setField('gas_type', value)}
-          />
-        </Grid>
-        <AddressLookupField
-          label="Address line 1"
-          value={payload.fields.job_address_line1}
-          onValueChange={(value) => setField('job_address_line1', value)}
-          placeholder="Start typing the property address or postcode"
-          autoComplete="address-line1"
-          onSelect={applyPropertyAddress}
-        />
-        <Input
-          placeholder="Address line 2 (optional)"
-          autoComplete="address-line2"
-          value={payload.fields.job_address_line2}
-          onChange={(e) => setField('job_address_line2', e.target.value)}
-        />
-        <Grid>
-          <Field label="Town / city">
-            <Input
-              autoComplete="address-level2"
-              value={payload.fields.job_address_city}
-              onChange={(e) => setField('job_address_city', e.target.value)}
-            />
-          </Field>
-          <Field label="Postcode">
-            <Input
-              autoComplete="postal-code"
-              value={payload.fields.job_postcode}
-              onChange={(e) => setField('job_postcode', e.target.value)}
-            />
-          </Field>
-        </Grid>
-      </Section>
-
       <Section
         title="Landlord or agent"
         hint="Their correspondence address, which may differ from the property."
@@ -894,26 +846,9 @@ export function FreeCp12Form() {
             />
           </Field>
         </Grid>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">
-            Correspondence address
-          </span>
-          <button
-            type="button"
-            onClick={copyPropertyToLandlord}
-            disabled={!hasPropertyAddress}
-            className="rounded-[8px] bg-[var(--color-action-bg)] px-3 py-2 text-[13px] font-semibold text-[var(--color-action)] transition-colors hover:brightness-95 focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-action-ring)] disabled:cursor-not-allowed disabled:bg-[var(--color-background-tertiary)] disabled:text-[var(--color-text-tertiary)]"
-          >
-            {landlordAddressMatchesProperty
-              ? 'Using property address'
-              : 'Use same as property address'}
-          </button>
-        </div>
-        {!hasPropertyAddress ? (
-          <span className="-mt-2 text-[12px] text-[var(--color-text-tertiary)]">
-            Add the property address first to use it here.
-          </span>
-        ) : null}
+        <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">
+          Correspondence address
+        </span>
         <AddressLookupField
           label="Address line 1"
           value={payload.fields.landlord_address_line1}
@@ -952,6 +887,67 @@ export function FreeCp12Form() {
             onChange={(e) => setField('landlord_tel', e.target.value)}
           />
         </Field>
+      </Section>
+
+      <Section title="Inspection & property">
+        <Field label="Inspection date">
+          <Input
+            type="date"
+            max={new Date().toISOString().slice(0, 10)}
+            value={payload.fields.inspection_date}
+            onChange={(e) => setField('inspection_date', e.target.value)}
+          />
+        </Field>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">
+            Property address
+          </span>
+          <button
+            type="button"
+            onClick={copyLandlordToProperty}
+            disabled={!hasLandlordAddress}
+            className="rounded-[8px] bg-[var(--color-action-bg)] px-3 py-2 text-[13px] font-semibold text-[var(--color-action)] transition-colors hover:brightness-95 focus:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--color-action-ring)] disabled:cursor-not-allowed disabled:bg-[var(--color-background-tertiary)] disabled:text-[var(--color-text-tertiary)]"
+          >
+            {propertyAddressMatchesLandlord
+              ? "Using landlord's address"
+              : "Use same as landlord's address"}
+          </button>
+        </div>
+        {!hasLandlordAddress ? (
+          <span className="-mt-2 text-[12px] text-[var(--color-text-tertiary)]">
+            Add the landlord&apos;s address above to use it here.
+          </span>
+        ) : null}
+        <AddressLookupField
+          label="Address line 1"
+          value={payload.fields.job_address_line1}
+          onValueChange={(value) => setField('job_address_line1', value)}
+          placeholder="Start typing the property address or postcode"
+          autoComplete="address-line1"
+          onSelect={applyPropertyAddress}
+        />
+        <Input
+          placeholder="Address line 2 (optional)"
+          autoComplete="address-line2"
+          value={payload.fields.job_address_line2}
+          onChange={(e) => setField('job_address_line2', e.target.value)}
+        />
+        <Grid>
+          <Field label="Town / city">
+            <Input
+              autoComplete="address-level2"
+              value={payload.fields.job_address_city}
+              onChange={(e) => setField('job_address_city', e.target.value)}
+            />
+          </Field>
+          <Field label="Postcode">
+            <Input
+              autoComplete="postal-code"
+              value={payload.fields.job_postcode}
+              onChange={(e) => setField('job_postcode', e.target.value)}
+            />
+          </Field>
+        </Grid>
       </Section>
 
       {payload.appliances.map((appliance, index) => {
@@ -1015,13 +1011,25 @@ export function FreeCp12Form() {
               onChange={(value) => setAppliance(index, { model: value })}
             />
 
-            <Field label="GC number (optional)">
-              <Input
-                placeholder="47-311-92"
-                value={appliance.gc_number}
-                onChange={(e) => setAppliance(index, { gc_number: e.target.value })}
+            <Grid>
+              <Field label="GC number (optional)">
+                <Input
+                  placeholder="47-311-92"
+                  value={appliance.gc_number}
+                  onChange={(e) => setAppliance(index, { gc_number: e.target.value })}
+                />
+              </Field>
+              {/* Asked per appliance, not once for the record: a property can run
+                  a mains gas boiler alongside an LPG appliance, and the fuel is
+                  what decides which part of a registration the work falls under. */}
+              <SearchableSelect
+                label="Gas type"
+                value={appliance.gas_type}
+                options={GAS_TYPE_OPTIONS}
+                placeholder="Natural gas"
+                onChange={(value) => setAppliance(index, { gas_type: value })}
               />
-            </Field>
+            </Grid>
 
             {cp12FieldVisible(category, 'flue_type') ? (
               <SearchableSelect

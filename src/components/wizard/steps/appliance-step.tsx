@@ -49,6 +49,12 @@ type ApplianceStepProps = {
   onPrefillClick?: () => void;
   requiredKeys?: Array<keyof ApplianceStepValues>;
   showExtendedFields?: boolean;
+  /**
+   * Show the gas type picker on its own, without the rest of the optional
+   * manufacturer block. A gas record has to say which fuel it covers, so this is
+   * not "optional detail" the way mount type and year of manufacture are.
+   */
+  showGasType?: boolean;
   showYear?: boolean;
   yearStart?: number;
   applyExtendedDefaults?: boolean;
@@ -107,6 +113,7 @@ export function ApplianceStep({
   onPrefillClick,
   requiredKeys = ['type', 'location'],
   showExtendedFields = false,
+  showGasType = false,
   showYear = true,
   yearStart = YEAR_MIN,
   applyExtendedDefaults = true,
@@ -385,6 +392,20 @@ export function ApplianceStep({
                     placeholder="Select or type"
                     onChange={(val) => updateApplianceField(index, 'location', val)}
                   />
+                  {showGasType && !showExtendedFields ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold tracking-wide text-muted-foreground/70">Gas type</p>
+                      <Select
+                        value={appliance?.gasType ?? ''}
+                        onChange={(e) => updateApplianceField(index, 'gasType', e.target.value)}
+                      >
+                        <option value="">Select</option>
+                        <option value="natural_gas">Natural Gas (G20)</option>
+                        <option value="lpg">LPG (G31)</option>
+                        <option value="unknown">Unknown</option>
+                      </Select>
+                    </div>
+                  ) : null}
                   {showExtendedFields ? (
                     <div className="sm:col-span-2 space-y-2">
                       <div className="flex items-center justify-between rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-2">

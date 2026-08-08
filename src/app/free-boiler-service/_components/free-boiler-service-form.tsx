@@ -384,54 +384,6 @@ export function FreeBoilerServiceForm() {
 
   return (
     <div>
-      <Section title="Visit & property">
-        <FieldLabel label="Service date">
-          <Input type="date" value={payload.service_date} onChange={(e) => set('service_date', e.target.value)} />
-        </FieldLabel>
-        <AddressLookupField
-          label="Find the property address"
-          hint="Or type it in below."
-          onSelect={applyPropertyAddress}
-        />
-        <FieldLabel label="Property address">
-          <Input
-            placeholder="Address line 1"
-            autoComplete="address-line1"
-            value={payload.job_address_line1}
-            onChange={(e) => set('job_address_line1', e.target.value)}
-          />
-        </FieldLabel>
-        <Input
-          placeholder="Address line 2 (optional)"
-          value={payload.job_address_line2}
-          onChange={(e) => set('job_address_line2', e.target.value)}
-        />
-        <Grid>
-          <FieldLabel label="Town / city">
-            <Input value={payload.job_address_city} onChange={(e) => set('job_address_city', e.target.value)} />
-          </FieldLabel>
-          <FieldLabel label="Postcode">
-            <Input value={payload.job_postcode} onChange={(e) => set('job_postcode', e.target.value)} />
-          </FieldLabel>
-        </Grid>
-      </Section>
-
-      <Section title="Customer" collapsible hint="A service record is not a landlord document.">
-        <Grid>
-          <FieldLabel label="Name">
-            <Input value={payload.customer_name} onChange={(e) => set('customer_name', e.target.value)} />
-          </FieldLabel>
-          <FieldLabel label="Telephone">
-            <Input
-              type="tel"
-              inputMode="tel"
-              value={payload.customer_phone}
-              onChange={(e) => set('customer_phone', e.target.value)}
-            />
-          </FieldLabel>
-        </Grid>
-      </Section>
-
       <Section title="You" hint="Required — this identifies who carried out the work.">
         <Grid>
           <FieldLabel label="Engineer name">
@@ -479,6 +431,54 @@ export function FreeBoilerServiceForm() {
         <FieldLabel label="Business address">
           <Input value={payload.company_address} onChange={(e) => set('company_address', e.target.value)} />
         </FieldLabel>
+      </Section>
+
+      <Section title="Customer" collapsible hint="A service record is not a landlord document.">
+        <Grid>
+          <FieldLabel label="Name">
+            <Input value={payload.customer_name} onChange={(e) => set('customer_name', e.target.value)} />
+          </FieldLabel>
+          <FieldLabel label="Telephone">
+            <Input
+              type="tel"
+              inputMode="tel"
+              value={payload.customer_phone}
+              onChange={(e) => set('customer_phone', e.target.value)}
+            />
+          </FieldLabel>
+        </Grid>
+      </Section>
+
+      <Section title="Visit & property">
+        <FieldLabel label="Service date">
+          <Input type="date" value={payload.service_date} onChange={(e) => set('service_date', e.target.value)} />
+        </FieldLabel>
+        <AddressLookupField
+          label="Find the property address"
+          hint="Or type it in below."
+          onSelect={applyPropertyAddress}
+        />
+        <FieldLabel label="Property address">
+          <Input
+            placeholder="Address line 1"
+            autoComplete="address-line1"
+            value={payload.job_address_line1}
+            onChange={(e) => set('job_address_line1', e.target.value)}
+          />
+        </FieldLabel>
+        <Input
+          placeholder="Address line 2 (optional)"
+          value={payload.job_address_line2}
+          onChange={(e) => set('job_address_line2', e.target.value)}
+        />
+        <Grid>
+          <FieldLabel label="Town / city">
+            <Input value={payload.job_address_city} onChange={(e) => set('job_address_city', e.target.value)} />
+          </FieldLabel>
+          <FieldLabel label="Postcode">
+            <Input value={payload.job_postcode} onChange={(e) => set('job_postcode', e.target.value)} />
+          </FieldLabel>
+        </Grid>
       </Section>
 
       <Section title="Appliance">

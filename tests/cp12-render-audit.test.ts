@@ -13,6 +13,7 @@ vi.mock('@/lib/supabaseServer', () => ({
 
 import { renderCp12CertificatePdf, type ApplianceInput, type Cp12FieldMap } from '@/server/pdf/renderCp12Certificate';
 import { buildCp12RenderInput } from '@/lib/cp12/buildCp12Render';
+import type { Cp12Appliance } from '@/types/certificates';
 
 const LONG_DEFECT =
   'Spillage of products of combustion detected at the appliance draught diverter during the smoke ' +
@@ -230,31 +231,54 @@ describe('CP12 renderer audit', () => {
 });
 
 describe('gas type on the CP12', () => {
-  /**
-   * Collected in the free form and in the paid evidence step, printed by
-   * neither. The paid flow persists evidence answers to job_fields, so reading
-   * the field map covers both flows at once — this asserts that, rather than
-   * only the free path.
-   */
-  it('reaches the render from the field map, whichever flow filled it in', () => {
-    const out = buildCp12RenderInput({
-      fieldMap: { inspection_date: '2026-07-31', gas_type: 'LPG' },
-      appliances: [],
+  const applianceRow = (over: Partial<Cp12Appliance> = {}): Cp12Appliance =>
+    ({
+      appliance_type: 'boiler',
+      location: 'Kitchen',
+      make_model: 'Vaillant ecoTEC',
+      gas_type: '',
+      ...over,
+    }) as Cp12Appliance;
+
+  const render = (fieldMap: Record<string, unknown>, appliances: Cp12Appliance[]) =>
+    buildCp12RenderInput({
+      fieldMap: { inspection_date: '2026-07-31', ...fieldMap },
+      appliances,
       recordId: 'R',
       certNumber: 'R',
       issuedAt: new Date('2026-07-31T00:00:00Z'),
     });
-    expect(out.fields.gasType).toBe('LPG');
+
+  /**
+   * The fuel rides on the appliance, not the record. A property can run a mains
+   * gas boiler alongside an LPG appliance, and one value for the whole record
+   * would have to misdescribe one of them.
+   */
+  it('carries a different fuel for each appliance', () => {
+    const out = render({}, [
+      applianceRow({ gas_type: 'Natural gas' }),
+      applianceRow({ gas_type: 'LPG', location: 'Garage' }),
+    ]);
+    expect(out.appliances.map((a) => a.gasType)).toEqual(['Natural gas', 'LPG']);
+  });
+
+  /**
+   * Certificates issued while the field lived on the record have it only in the
+   * field map. They must keep printing the fuel their engineer entered rather
+   * than silently losing it.
+   */
+  it('falls back to the record-level value for appliances that predate the move', () => {
+    const out = render({ gas_type: 'LPG' }, [applianceRow()]);
+    expect(out.appliances[0].gasType).toBe('LPG');
+  });
+
+  it('prefers the appliance value over a stale record-level one', () => {
+    const out = render({ gas_type: 'LPG' }, [applianceRow({ gas_type: 'Natural gas' })]);
+    expect(out.appliances[0].gasType).toBe('Natural gas');
   });
 
   it('stays blank rather than defaulting to natural gas', () => {
-    const out = buildCp12RenderInput({
-      fieldMap: { inspection_date: '2026-07-31' },
-      appliances: [],
-      recordId: 'R',
-      certNumber: 'R',
-      issuedAt: new Date('2026-07-31T00:00:00Z'),
-    });
-    expect(out.fields.gasType).toBe('');
+    const out = render({}, [applianceRow()]);
+    expect(out.appliances[0].gasType).toBe('');
   });
 });

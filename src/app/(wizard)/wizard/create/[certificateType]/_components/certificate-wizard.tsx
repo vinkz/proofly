@@ -38,6 +38,7 @@ import { getLatestApplianceDefaultsForJob } from '@/server/history';
 import { tryUpdateJobRecord } from '@/server/jobRecords';
 import {
   CP12_FLUE_TYPES,
+  CP12_GAS_TYPES,
   DEFAULT_CP12_FLUE_TYPE,
   CP12_DEMO_APPLIANCE,
   CP12_DEMO_INFO,
@@ -117,6 +118,7 @@ const emptyAppliance: Cp12Appliance = {
   appliance_inspected: 'Yes',
   location: '',
   gc_number: '',
+  gas_type: '',
   make_model: '',
   operating_pressure: '',
   heat_input: '',
@@ -545,6 +547,7 @@ export function CertificateWizard({
     location: appliance.location ?? '',
     make_model: appliance.make_model ?? '',
     gc_number: appliance.gc_number ?? '',
+    gas_type: appliance.gas_type ?? '',
     operating_pressure: appliance.operating_pressure ?? '',
     heat_input: appliance.heat_input ?? '',
     high_co_ppm: appliance.high_co_ppm ?? '',
@@ -3151,16 +3154,28 @@ export function CertificateWizard({
             >
               <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1}</p>
               <div className="mt-4 space-y-3">
-                <label className="space-y-1.5">
-                  <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
-                    GC number (optional)
-                  </span>
-                  <Input
-                    value={appliance.gc_number ?? ''}
-                    placeholder="47-311-92"
-                    onChange={(event) => setApplianceField(index, 'gc_number', event.target.value)}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+                      GC number (optional)
+                    </span>
+                    <Input
+                      value={appliance.gc_number ?? ''}
+                      placeholder="47-311-92"
+                      onChange={(event) => setApplianceField(index, 'gc_number', event.target.value)}
+                    />
+                  </label>
+                  {/* Asked per appliance, not once for the record: a property can
+                      run a mains gas boiler alongside an LPG appliance, and the
+                      fuel decides which part of a registration the work is under. */}
+                  <SearchableSelect
+                    label="Gas type"
+                    value={appliance.gas_type ?? ''}
+                    options={[...CP12_GAS_TYPES]}
+                    placeholder="Natural gas"
+                    onChange={(value) => setApplianceField(index, 'gas_type', value)}
                   />
-                </label>
+                </div>
                 {cp12FieldVisible(category, 'flue_type') ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SearchableSelect

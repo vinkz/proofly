@@ -54,6 +54,7 @@ const paidAppliance: Cp12Appliance = {
   location: 'Kitchen',
   make_model: 'Vaillant EcoTec',
   gc_number: '47-311-92',
+  gas_type: '',
   operating_pressure: '20 mbar',
   heat_input: '24 kW',
   high_co_ppm: '12',

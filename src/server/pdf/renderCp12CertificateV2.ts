@@ -260,10 +260,6 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
 
   // ------------------------------------------------------------- appliances
   section('Appliances & flues checked');
-  // Which fuel the whole installation runs on, above the appliances it applies
-  // to. Renders only when recorded, so certificates predating this field are
-  // unchanged rather than claiming a gas type nobody entered.
-  kv('Gas type', text(input.fields.gasType));
   input.appliances.forEach((app, i) => {
     ensure(70);
     const status = applianceStatus(app);
@@ -284,6 +280,10 @@ export async function renderCp12CertificateV2Pdf(input: RenderCp12V2Input): Prom
     pushIdentity('GC number', app.gcNumber);
     pushIdentity('Location', app.location);
     pushIdentity('Type', app.type);
+    // Which fuel this appliance runs on. Prints only when recorded, so
+    // certificates predating the field are unchanged rather than claiming a gas
+    // type nobody entered.
+    pushIdentity('Gas type', app.gasType);
     pushIdentity('Safe to use', app.applianceSafeToUse);
 
     // Readings & checks — conventional detail (audit: "readings, CO alarms, next

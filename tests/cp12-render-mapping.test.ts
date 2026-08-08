@@ -21,6 +21,7 @@ const appliance = (over: Partial<Cp12Appliance>): Cp12Appliance => ({
   appliance_type: 'boiler', appliance_subtype: 'combi', cooker_stability: '',
   landlords_appliance: 'Yes', appliance_inspected: 'Yes', location: 'Kitchen',
   make_model: 'Vaillant EcoTec', gc_number: '47-311-92', operating_pressure: '20 mbar', heat_input: '24 kW',
+  gas_type: '',
   high_co_ppm: '12', high_co2: '9.1', high_ratio: '0.0013', low_co_ppm: '4',
   low_co2: '4.2', low_ratio: '0.0009', co_reading_high: '', co_reading_low: '',
   flue_type: 'Room sealed', flue_location: 'External wall', ventilation_provision: 'N/A',
