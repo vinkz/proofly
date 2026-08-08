@@ -17,7 +17,6 @@ import type { Cp12RenderSource } from './buildCp12Render';
 import {
   GIUSP_ANSWER_KEYS,
   type GiuspAnswerKey,
-  type GiuspAnswers,
 } from './giusp';
 
 const str = (max = 200) => z.string().max(max).optional().default('');

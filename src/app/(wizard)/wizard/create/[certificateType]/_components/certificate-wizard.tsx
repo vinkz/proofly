@@ -56,7 +56,6 @@ import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 import { UnsafeSituationFields } from '@/components/cp12/unsafe-situation';
 import {
-  GIUSP_ANSWER_KEYS,
   giuspFieldKey,
   readGiuspAnswers,
   type GiuspAnswerKey,

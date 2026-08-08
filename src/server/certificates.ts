@@ -7,9 +7,7 @@ import { Buffer } from 'node:buffer';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
-import { cookies } from 'next/headers';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { createServerClient } from '@supabase/ssr';
 import type { Database } from '@/lib/database.types';
 import { supabaseServerReadOnly, supabaseServerServiceRole } from '@/lib/supabaseServer';
 import type { CertificateType, PhotoCategory, Cp12Appliance } from '@/types/certificates';
@@ -2077,11 +2075,6 @@ function resolveGasWarningCustomerPresent(fields: GasWarningNoticeFields | Recor
     return false;
   }
   return true;
-}
-
-function resolveGasWarningCustomerHandover(fields: GasWarningNoticeFields | Record<string, unknown>) {
-  const customerPresent = resolveGasWarningCustomerPresent(fields);
-  return customerPresent ? booleanFromField(fields.customer_informed) : booleanFromField(fields.notice_left_on_premises ?? fields.customer_informed);
 }
 
 function validateGeneralWorksForIssue(fieldMap: Record<string, unknown>) {

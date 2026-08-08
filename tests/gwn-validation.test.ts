@@ -71,13 +71,13 @@ describe('validateGwnForIssue', () => {
   });
 
   it('blocks an otherwise complete notice that the engineer has not signed', () => {
-    const { engineer_signature: _omitted, ...unsigned } = base;
+    const unsigned = { ...base, engineer_signature: '' };
     const errors = validateGwnForIssue({ ...unsigned, classification: 'AT_RISK' });
     expect(errors).toContain('Engineer signature is required');
   });
 
   it('accepts the signature under any of the three keys the flows write', () => {
-    const { engineer_signature: _omitted, ...unsigned } = base;
+    const unsigned = { ...base, engineer_signature: '' };
     for (const key of ['engineer_signature', 'engineer_signature_path', 'engineer_signature_url']) {
       expect(
         validateGwnForIssue({ ...unsigned, classification: 'AT_RISK', [key]: 'sig-value' }),
