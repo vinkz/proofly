@@ -36,10 +36,23 @@ describe('CP12 single-page mode', () => {
 
   it('flattens the appliance sub-tabs instead of nesting navigation', () => {
     for (const tab of ['inspection', 'readings', 'safety']) {
-      expect(wizard).toContain(`singlePage || checksTab === '${tab}'`);
+      expect(wizard).toContain(`singlePage || (inApplianceDetail && checksTab === '${tab}')`);
     }
     // The tab bar itself has nothing to switch between once all three render.
     expect(wizard).toContain('inApplianceDetail && !singlePage ?');
+  });
+
+  it('shows every appliance, not only one drilled into', () => {
+    // The gate used to require inApplianceDetail, which is false until an
+    // appliance is opened — so on one page the checks rendered for nothing at
+    // all. The loop inside always handled "show all"; only the outer gate
+    // stopped it running. The free tool puts every appliance on the page and
+    // this is what makes the paid one agree.
+    expect(wizard).not.toMatch(/\{inApplianceDetail && \(singlePage \|\| checksTab/);
+    expect(
+      (wizard.match(/if \(activeApplianceIndex != null && index !== activeApplianceIndex\) return null;/g) ?? [])
+        .length,
+    ).toBe(3);
   });
 
   it('is the only layout — there is no stepped flow to switch back to', () => {

@@ -3124,7 +3124,7 @@ export function CertificateWizard({
       </div>
       ) : null}
 
-      {inApplianceDetail && (singlePage || checksTab === 'inspection') && (
+      {(singlePage || (inApplianceDetail && checksTab === 'inspection')) && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
@@ -3231,7 +3231,7 @@ export function CertificateWizard({
         </div>
       )}
 
-      {inApplianceDetail && (singlePage || checksTab === 'readings') && (
+      {(singlePage || (inApplianceDetail && checksTab === 'readings')) && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
@@ -3387,7 +3387,7 @@ export function CertificateWizard({
         </div>
       )}
 
-      {inApplianceDetail && (singlePage || checksTab === 'safety') && (
+      {(singlePage || (inApplianceDetail && checksTab === 'safety')) && (
         <div className="space-y-4">
           {appliances.map((appliance, index) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
