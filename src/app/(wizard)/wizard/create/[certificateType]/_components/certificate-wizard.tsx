@@ -2806,6 +2806,479 @@ export function CertificateWizard({
     ar: { label: 'At risk', bg: '#fbeecd', color: '#8a5a10' },
     id: { label: 'ID', bg: '#fbe3e3', color: '#9b2020' },
   };
+  /** One appliance's inspection block. Rendered beside its identity, per appliance. */
+  const renderApplianceInspection = (appliance: Cp12Appliance, index: number) => {
+            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
+            const category = resolveCp12Category(appliance.appliance_type);
+            return (
+            <div
+              key={`inspection-${index}`}
+              ref={(el) => {
+                applianceRefs.current[index] = el;
+              }}
+              className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
+            >
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1}</p>
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+                      GC number (optional)
+                    </span>
+                    <Input
+                      value={appliance.gc_number ?? ''}
+                      placeholder="47-311-92"
+                      onChange={(event) => setApplianceField(index, 'gc_number', event.target.value)}
+                    />
+                  </label>
+                  {/* Asked per appliance, not once for the record: a property can
+                      run a mains gas boiler alongside an LPG appliance, and the
+                      fuel decides which part of a registration the work is under. */}
+                  <SearchableSelect
+                    label="Gas type"
+                    value={appliance.gas_type ?? ''}
+                    options={[...CP12_GAS_TYPES]}
+                    placeholder="Natural gas"
+                    onChange={(value) => setApplianceField(index, 'gas_type', value)}
+                  />
+                </div>
+                {cp12FieldVisible(category, 'flue_type') ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SearchableSelect
+                      label={`Appliance ${index + 1} flue type`}
+                      value={appliance.flue_type ?? ''}
+                      options={[...CP12_FLUE_TYPES]}
+                      placeholder="Select or type"
+                      onChange={(val) => setApplianceField(index, 'flue_type', val)}
+                    />
+                    <label className="space-y-1.5">
+                      <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Flue location (if different)</span>
+                      <Input
+                        value={appliance.flue_location ?? ''}
+                        placeholder={appliance.location || 'Defaults to appliance location'}
+                        onChange={(event) => setApplianceField(index, 'flue_location', event.target.value)}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                <label className="flex items-start gap-2 rounded-[10px] border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] p-3 text-[13px] text-[var(--color-text-primary)]">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-[var(--color-action)]"
+                    checked={appliance.reg_26_9_confirmed ?? false}
+                    onChange={(event) => setApplianceBooleanField(index, 'reg_26_9_confirmed', event.target.checked)}
+                  />
+                  <span>
+                    Regulation 26(9) checks completed for this appliance or flue
+                    <span className="ml-1 font-medium text-[var(--color-action)]">· Required</span>
+                  </span>
+                </label>
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                    Additional detail
+                    <span className="ml-1 normal-case tracking-normal text-[var(--color-text-tertiary)]">· Conventional (optional)</span>
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                      <EnumChips
+                        label="Landlord's appliance"
+                        value={normalizeYesNoValue(appliance.landlords_appliance)}
+                        options={CP12_YES_NO_OPTIONS}
+                        onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
+                      />
+                    </div>
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                      <EnumChips
+                        label="Appliance inspected"
+                        value={normalizeYesNoValue(appliance.appliance_inspected)}
+                        options={CP12_YES_NO_OPTIONS}
+                        onChange={(val) => setApplianceField(index, 'appliance_inspected', yesNoLabel(val as YesNoValue))}
+                      />
+                    </div>
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                      <EnumChips
+                        label="Appliance serviced"
+                        value={normalizeYesNoValue(appliance.appliance_serviced)}
+                        options={CP12_YES_NO_OPTIONS}
+                        onChange={(val) => setApplianceField(index, 'appliance_serviced', yesNoLabel(val as YesNoValue))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            );
+  };
+
+  /** One appliance's readings block. Rendered beside its identity, per appliance. */
+  const renderApplianceReadings = (appliance: Cp12Appliance, index: number) => {
+            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
+            const category = resolveCp12Category(appliance.appliance_type);
+            const combustionVis = cp12FieldVisibility(category, 'combustion');
+            const hasCombustionValues =
+              !!appliance.high_co_ppm || !!appliance.high_co2 || !!appliance.high_ratio ||
+              !!appliance.low_co_ppm || !!appliance.low_co2 || !!appliance.low_ratio;
+            const showCombustion =
+              combustionVis === 'shown' ||
+              (combustionVis === 'optional' && (combustionOptIn[index] || hasCombustionValues));
+            return (
+            <div
+              key={`readings-${index}`}
+              ref={(el) => {
+                applianceRefs.current[index] = el;
+              }}
+              className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
+            >
+              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} readings</p>
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <UnitNumberInput
+                      label="Operating pressure"
+                      unit="mbar"
+                      value={appliance.operating_pressure ?? ''}
+                      onChange={(val) => setApplianceField(index, 'operating_pressure', val)}
+                      labelAction={renderReadingsVoiceButton(index, 'pressure', 'Speak pressure')}
+                    />
+                  </div>
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <UnitNumberInput
+                      label="Heat input"
+                      unit="kW"
+                      value={appliance.heat_input ?? ''}
+                      onChange={(val) => setApplianceField(index, 'heat_input', val)}
+                    />
+                  </div>
+                </div>
+
+                {showCombustion ? (
+                <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                  <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">Combustion readings</p>
+                  <p className="mb-3 mt-1 text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">Speak readings in order with small pauses between each value.</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">High combustion reading</p>
+                        {renderReadingsVoiceButton(index, 'high', 'Speak high')}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <UnitNumberInput
+                          label="CO ppm"
+                          unit="ppm"
+                          value={appliance.high_co_ppm ?? ''}
+                          onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
+                        />
+                        <UnitNumberInput
+                          label="CO₂ %"
+                          unit="%"
+                          value={appliance.high_co2 ?? ''}
+                          onChange={(val) => setApplianceField(index, 'high_co2', val)}
+                        />
+                        <UnitNumberInput
+                          label="Ratio"
+                          unit="ratio"
+                          value={appliance.high_ratio ?? ''}
+                          onChange={(val) => setApplianceField(index, 'high_ratio', val)}
+                        />
+                      </div>
+                    </div>
+                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">Low combustion reading</p>
+                        {renderReadingsVoiceButton(index, 'low', 'Speak low')}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <UnitNumberInput
+                          label="CO ppm"
+                          unit="ppm"
+                          value={appliance.low_co_ppm ?? ''}
+                          onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
+                        />
+                        <UnitNumberInput
+                          label="CO₂ %"
+                          unit="%"
+                          value={appliance.low_co2 ?? ''}
+                          onChange={(val) => setApplianceField(index, 'low_co2', val)}
+                        />
+                        <UnitNumberInput
+                          label="Ratio"
+                          unit="ratio"
+                          value={appliance.low_ratio ?? ''}
+                          onChange={(val) => setApplianceField(index, 'low_ratio', val)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">Combustion notes (optional)</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                          onClick={() =>
+                            pushToast({
+                              title: 'Photo',
+                              description: 'Attach FGA screenshots via Photos on the next step.',
+                              variant: 'default',
+                            })
+                          }
+                        >
+                          📷 Photo
+                        </button>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                          onClick={() =>
+                            pushToast({
+                              title: 'Text',
+                              description: 'Add any notes below.',
+                              variant: 'default',
+                            })
+                          }
+                        >
+                          ⌨️ Text
+                        </button>
+                      </div>
+                    </div>
+                    <Textarea
+                      value={appliance.combustion_notes ?? ''}
+                      onChange={(e) => setApplianceField(index, 'combustion_notes', e.target.value)}
+                      placeholder="Any combustion notes or analyser references"
+                      className="min-h-[90px]"
+                    />
+                  </div>
+                </div>
+                ) : combustionVis === 'optional' ? (
+                  <button
+                    type="button"
+                    onClick={() => setCombustionOptIn((prev) => ({ ...prev, [index]: true }))}
+                    className="w-full rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
+                  >
+                    + Add combustion readings (optional for this appliance)
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            );
+  };
+
+  /** One appliance's safety block. Rendered beside its identity, per appliance. */
+  const renderApplianceSafety = (appliance: Cp12Appliance, index: number) => {
+            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
+            const category = resolveCp12Category(appliance.appliance_type);
+            const classification = getApplianceSafetyClassification(appliance);
+            const safeToUse = getApplianceSafeToUse(appliance);
+            const showUnsafeFields = classification === 'ar' || classification === 'id';
+            // Reveal the defect / remedial capture whenever the appliance is
+            // unsafe OR any individual check fails, so a defect is recorded in
+            // context (Reg 36(3)(e)/(f)).
+            const failedChecks = cp12FailedChecks(appliance);
+            const showDefectCapture = showUnsafeFields || failedChecks.length > 0;
+            return (
+              <div
+                key={`safety-${index}`}
+                ref={(el) => {
+                  applianceRefs.current[index] = el;
+                }}
+                className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
+              >
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} safety</p>
+                <div className="mt-3 space-y-[14px]">
+                  <div className="grid gap-[14px] sm:grid-cols-2">
+                    {visibleCp12ApplianceChecks(category, appliance.flue_type).map((check) => {
+                      const raw = (appliance[check.key] ?? '').toLowerCase();
+                      return (
+                        <Fragment key={check.key}>
+                          {check.answers === 'yes_no' ? (
+                            <EnumChips
+                              label={check.label}
+                              hint={check.hint}
+                              value={appliance[check.key] ?? ''}
+                              options={YES_NO_OPTIONS}
+                              onChange={(val) => setApplianceField(index, check.key, val)}
+                            />
+                          ) : (
+                            <PassFailToggle
+                              label={check.label}
+                              hint={check.hint}
+                              value={raw === 'pass' ? 'pass' : raw === 'fail' ? 'fail' : null}
+                              onChange={(val) => setApplianceField(index, check.key, val ?? '')}
+                            />
+                          )}
+                          {/* Evidence for the integrity verdict, so it sits
+                              directly under it. Free text conditional on an
+                              answer rather than a check with a verdict, which is
+                              why it is not in the shared list. */}
+                          {check.key === 'flue_integrity_test' &&
+                          appliance.flue_integrity_test &&
+                          cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) ? (
+                            <>
+                              <label className="space-y-1.5">
+                                <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at high rate (optional)</span>
+                                <Input
+                                  value={appliance.flue_integrity_co2_high ?? ''}
+                                  placeholder="0.02 %"
+                                  onChange={(event) => setApplianceField(index, 'flue_integrity_co2_high', event.target.value)}
+                                />
+                              </label>
+                              <label className="space-y-1.5">
+                                <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at low rate (optional)</span>
+                                <Input
+                                  value={appliance.flue_integrity_co2_low ?? ''}
+                                  placeholder="0.01 %"
+                                  onChange={(event) => setApplianceField(index, 'flue_integrity_co2_low', event.target.value)}
+                                />
+                              </label>
+                            </>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <EnumChips
+                          label="Appliance safe to use"
+                          value={safeToUse}
+                          options={CP12_YES_NO_OPTIONS}
+                          onChange={(val) => setApplianceSafeToUse(index, (val as YesNoValue) ?? '')}
+                        />
+                      </div>
+                      <div>
+                        <EnumChips
+                          label="Condition classification"
+                          value={classification}
+                          options={getCp12ClassificationOptions(safeToUse)}
+                          onChange={(val) => setApplianceSafetyClassification(index, val as Cp12SafetyClassification)}
+                        />
+                      </div>
+                    </div>
+                    {showDefectCapture ? (
+                      <div className="mt-4 space-y-3">
+                        {failedChecks.length > 0 ? (
+                          <p className="text-[12px] font-medium text-[var(--color-status-danger,#9b2020)]">
+                            Failed: {failedChecks.join(', ')} — record the defect and remedial action below.
+                          </p>
+                        ) : null}
+                        <div className="space-y-1.5">
+                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Defect / unsafe situation</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {CP12_DEFECT_PRESETS.map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setApplianceField(index, 'defect_notes', appendPresetSnippet(appliance.defect_notes, preset))}
+                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                          <Textarea
+                            value={appliance.defect_notes ?? ''}
+                            onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
+                            placeholder="Defect notes — tap a chip above or type your own"
+                            className="min-h-[80px]"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Actions taken</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {CP12_ACTION_TAKEN_PRESETS.map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setApplianceField(index, 'actions_taken', appendPresetSnippet(appliance.actions_taken, preset))}
+                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                          <Textarea
+                            value={appliance.actions_taken ?? ''}
+                            onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
+                            placeholder="Actions taken — tap a chip above or type your own"
+                            className="min-h-[80px]"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Actions required</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {CP12_ACTION_REQUIRED_PRESETS.map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setApplianceField(index, 'actions_required', appendPresetSnippet(appliance.actions_required, preset))}
+                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                          <Textarea
+                            value={appliance.actions_required ?? ''}
+                            onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
+                            placeholder="Actions required — tap a chip above or type your own"
+                            className="min-h-[80px]"
+                          />
+                        </div>
+                        <p className="text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">
+                          On-site actions taken (GIUSP). These carry straight onto the Gas Warning
+                          Notice for this appliance, which is issued alongside the certificate and
+                          does not use up one of your monthly certificates.
+                        </p>
+                        <div className="grid gap-2 text-[13px] text-[var(--color-text-primary)] sm:grid-cols-3">
+                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
+                              checked={appliance.warning_notice_issued ?? false}
+                              onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
+                            />
+                            <span>Warning notice given to customer on site</span>
+                          </label>
+                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
+                              checked={appliance.appliance_disconnected ?? false}
+                              onChange={(e) => setApplianceBooleanField(index, 'appliance_disconnected', e.target.checked)}
+                            />
+                            <span>Appliance disconnected</span>
+                          </label>
+                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
+                              checked={appliance.danger_do_not_use_attached ?? false}
+                              onChange={(e) => setApplianceBooleanField(index, 'danger_do_not_use_attached', e.target.checked)}
+                            />
+                            <span>Danger Do Not Use attached</span>
+                          </label>
+                        </div>
+
+                        {classification === 'ar' || classification === 'id' ? (
+                          <UnsafeSituationFields
+                            classification={classification === 'id' ? 'IMMEDIATELY_DANGEROUS' : 'AT_RISK'}
+                            answers={giuspAnswersFor(index)}
+                            onChange={(key, value) => setGiuspAnswer(index, key, value)}
+                          />
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
+                        Use Safe or NCS when the appliance remains safe to use. Switch Appliance safe to use to No for AR or ID.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+  };
+
   const ApplianceHub = (
     <>
       <div className="space-y-2">
@@ -3149,479 +3622,6 @@ export function CertificateWizard({
   const safetyCount = sumCounts(...countScope.map(safetyCountFor));
   const checkDotState = ({ filled, total }: { filled: number; total: number }) =>
     total > 0 && filled >= total ? 'all' : filled > 0 ? 'some' : 'none';
-
-  /** One appliance's inspection block. Rendered beside its identity, per appliance. */
-  const renderApplianceInspection = (appliance: Cp12Appliance, index: number) => {
-            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
-            const category = resolveCp12Category(appliance.appliance_type);
-            return (
-            <div
-              key={`checks-${index}`}
-              ref={(el) => {
-                applianceRefs.current[index] = el;
-              }}
-              className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
-            >
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1}</p>
-              <div className="mt-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="space-y-1.5">
-                    <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
-                      GC number (optional)
-                    </span>
-                    <Input
-                      value={appliance.gc_number ?? ''}
-                      placeholder="47-311-92"
-                      onChange={(event) => setApplianceField(index, 'gc_number', event.target.value)}
-                    />
-                  </label>
-                  {/* Asked per appliance, not once for the record: a property can
-                      run a mains gas boiler alongside an LPG appliance, and the
-                      fuel decides which part of a registration the work is under. */}
-                  <SearchableSelect
-                    label="Gas type"
-                    value={appliance.gas_type ?? ''}
-                    options={[...CP12_GAS_TYPES]}
-                    placeholder="Natural gas"
-                    onChange={(value) => setApplianceField(index, 'gas_type', value)}
-                  />
-                </div>
-                {cp12FieldVisible(category, 'flue_type') ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <SearchableSelect
-                      label={`Appliance ${index + 1} flue type`}
-                      value={appliance.flue_type ?? ''}
-                      options={[...CP12_FLUE_TYPES]}
-                      placeholder="Select or type"
-                      onChange={(val) => setApplianceField(index, 'flue_type', val)}
-                    />
-                    <label className="space-y-1.5">
-                      <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Flue location (if different)</span>
-                      <Input
-                        value={appliance.flue_location ?? ''}
-                        placeholder={appliance.location || 'Defaults to appliance location'}
-                        onChange={(event) => setApplianceField(index, 'flue_location', event.target.value)}
-                      />
-                    </label>
-                  </div>
-                ) : null}
-                <label className="flex items-start gap-2 rounded-[10px] border-[0.5px] border-[var(--color-action)] bg-[var(--color-action-bg)] p-3 text-[13px] text-[var(--color-text-primary)]">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 accent-[var(--color-action)]"
-                    checked={appliance.reg_26_9_confirmed ?? false}
-                    onChange={(event) => setApplianceBooleanField(index, 'reg_26_9_confirmed', event.target.checked)}
-                  />
-                  <span>
-                    Regulation 26(9) checks completed for this appliance or flue
-                    <span className="ml-1 font-medium text-[var(--color-action)]">· Required</span>
-                  </span>
-                </label>
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
-                    Additional detail
-                    <span className="ml-1 normal-case tracking-normal text-[var(--color-text-tertiary)]">· Conventional (optional)</span>
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                      <EnumChips
-                        label="Landlord's appliance"
-                        value={normalizeYesNoValue(appliance.landlords_appliance)}
-                        options={CP12_YES_NO_OPTIONS}
-                        onChange={(val) => setApplianceField(index, 'landlords_appliance', yesNoLabel(val as YesNoValue))}
-                      />
-                    </div>
-                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                      <EnumChips
-                        label="Appliance inspected"
-                        value={normalizeYesNoValue(appliance.appliance_inspected)}
-                        options={CP12_YES_NO_OPTIONS}
-                        onChange={(val) => setApplianceField(index, 'appliance_inspected', yesNoLabel(val as YesNoValue))}
-                      />
-                    </div>
-                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                      <EnumChips
-                        label="Appliance serviced"
-                        value={normalizeYesNoValue(appliance.appliance_serviced)}
-                        options={CP12_YES_NO_OPTIONS}
-                        onChange={(val) => setApplianceField(index, 'appliance_serviced', yesNoLabel(val as YesNoValue))}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            );
-  };
-
-  /** One appliance's readings block. Rendered beside its identity, per appliance. */
-  const renderApplianceReadings = (appliance: Cp12Appliance, index: number) => {
-            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
-            const category = resolveCp12Category(appliance.appliance_type);
-            const combustionVis = cp12FieldVisibility(category, 'combustion');
-            const hasCombustionValues =
-              !!appliance.high_co_ppm || !!appliance.high_co2 || !!appliance.high_ratio ||
-              !!appliance.low_co_ppm || !!appliance.low_co2 || !!appliance.low_ratio;
-            const showCombustion =
-              combustionVis === 'shown' ||
-              (combustionVis === 'optional' && (combustionOptIn[index] || hasCombustionValues));
-            return (
-            <div
-              key={`checks-${index}`}
-              ref={(el) => {
-                applianceRefs.current[index] = el;
-              }}
-              className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
-            >
-              <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} readings</p>
-              <div className="mt-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                    <UnitNumberInput
-                      label="Operating pressure"
-                      unit="mbar"
-                      value={appliance.operating_pressure ?? ''}
-                      onChange={(val) => setApplianceField(index, 'operating_pressure', val)}
-                      labelAction={renderReadingsVoiceButton(index, 'pressure', 'Speak pressure')}
-                    />
-                  </div>
-                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                    <UnitNumberInput
-                      label="Heat input"
-                      unit="kW"
-                      value={appliance.heat_input ?? ''}
-                      onChange={(val) => setApplianceField(index, 'heat_input', val)}
-                    />
-                  </div>
-                </div>
-
-                {showCombustion ? (
-                <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                  <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">Combustion readings</p>
-                  <p className="mb-3 mt-1 text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">Speak readings in order with small pauses between each value.</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">High combustion reading</p>
-                        {renderReadingsVoiceButton(index, 'high', 'Speak high')}
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <UnitNumberInput
-                          label="CO ppm"
-                          unit="ppm"
-                          value={appliance.high_co_ppm ?? ''}
-                          onChange={(val) => setApplianceField(index, 'high_co_ppm', val)}
-                        />
-                        <UnitNumberInput
-                          label="CO₂ %"
-                          unit="%"
-                          value={appliance.high_co2 ?? ''}
-                          onChange={(val) => setApplianceField(index, 'high_co2', val)}
-                        />
-                        <UnitNumberInput
-                          label="Ratio"
-                          unit="ratio"
-                          value={appliance.high_ratio ?? ''}
-                          onChange={(val) => setApplianceField(index, 'high_ratio', val)}
-                        />
-                      </div>
-                    </div>
-                    <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <p className="text-[11px] tracking-[0.5px] text-[var(--color-text-secondary)]">Low combustion reading</p>
-                        {renderReadingsVoiceButton(index, 'low', 'Speak low')}
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <UnitNumberInput
-                          label="CO ppm"
-                          unit="ppm"
-                          value={appliance.low_co_ppm ?? ''}
-                          onChange={(val) => setApplianceField(index, 'low_co_ppm', val)}
-                        />
-                        <UnitNumberInput
-                          label="CO₂ %"
-                          unit="%"
-                          value={appliance.low_co2 ?? ''}
-                          onChange={(val) => setApplianceField(index, 'low_co2', val)}
-                        />
-                        <UnitNumberInput
-                          label="Ratio"
-                          unit="ratio"
-                          value={appliance.low_ratio ?? ''}
-                          onChange={(val) => setApplianceField(index, 'low_ratio', val)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[13px] font-medium text-[var(--color-text-secondary)]">Combustion notes (optional)</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
-                          onClick={() =>
-                            pushToast({
-                              title: 'Photo',
-                              description: 'Attach FGA screenshots via Photos on the next step.',
-                              variant: 'default',
-                            })
-                          }
-                        >
-                          📷 Photo
-                        </button>
-                        <button
-                          type="button"
-                          className="flex items-center gap-1 rounded-[6px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-3 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
-                          onClick={() =>
-                            pushToast({
-                              title: 'Text',
-                              description: 'Add any notes below.',
-                              variant: 'default',
-                            })
-                          }
-                        >
-                          ⌨️ Text
-                        </button>
-                      </div>
-                    </div>
-                    <Textarea
-                      value={appliance.combustion_notes ?? ''}
-                      onChange={(e) => setApplianceField(index, 'combustion_notes', e.target.value)}
-                      placeholder="Any combustion notes or analyser references"
-                      className="min-h-[90px]"
-                    />
-                  </div>
-                </div>
-                ) : combustionVis === 'optional' ? (
-                  <button
-                    type="button"
-                    onClick={() => setCombustionOptIn((prev) => ({ ...prev, [index]: true }))}
-                    className="w-full rounded-[12px] border-[0.5px] border-dashed border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-3 py-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)]"
-                  >
-                    + Add combustion readings (optional for this appliance)
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            );
-  };
-
-  /** One appliance's safety block. Rendered beside its identity, per appliance. */
-  const renderApplianceSafety = (appliance: Cp12Appliance, index: number) => {
-            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
-            const category = resolveCp12Category(appliance.appliance_type);
-            const classification = getApplianceSafetyClassification(appliance);
-            const safeToUse = getApplianceSafeToUse(appliance);
-            const showUnsafeFields = classification === 'ar' || classification === 'id';
-            // Reveal the defect / remedial capture whenever the appliance is
-            // unsafe OR any individual check fails, so a defect is recorded in
-            // context (Reg 36(3)(e)/(f)).
-            const failedChecks = cp12FailedChecks(appliance);
-            const showDefectCapture = showUnsafeFields || failedChecks.length > 0;
-            return (
-              <div
-                key={`checks-${index}`}
-                ref={(el) => {
-                  applianceRefs.current[index] = el;
-                }}
-                className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4"
-              >
-                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Appliance #{index + 1} safety</p>
-                <div className="mt-3 space-y-[14px]">
-                  <div className="grid gap-[14px] sm:grid-cols-2">
-                    {visibleCp12ApplianceChecks(category, appliance.flue_type).map((check) => {
-                      const raw = (appliance[check.key] ?? '').toLowerCase();
-                      return (
-                        <Fragment key={check.key}>
-                          {check.answers === 'yes_no' ? (
-                            <EnumChips
-                              label={check.label}
-                              hint={check.hint}
-                              value={appliance[check.key] ?? ''}
-                              options={YES_NO_OPTIONS}
-                              onChange={(val) => setApplianceField(index, check.key, val)}
-                            />
-                          ) : (
-                            <PassFailToggle
-                              label={check.label}
-                              hint={check.hint}
-                              value={raw === 'pass' ? 'pass' : raw === 'fail' ? 'fail' : null}
-                              onChange={(val) => setApplianceField(index, check.key, val ?? '')}
-                            />
-                          )}
-                          {/* Evidence for the integrity verdict, so it sits
-                              directly under it. Free text conditional on an
-                              answer rather than a check with a verdict, which is
-                              why it is not in the shared list. */}
-                          {check.key === 'flue_integrity_test' &&
-                          appliance.flue_integrity_test &&
-                          cp12FieldVisible(category, 'flue_integrity_readings', appliance.flue_type) ? (
-                            <>
-                              <label className="space-y-1.5">
-                                <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at high rate (optional)</span>
-                                <Input
-                                  value={appliance.flue_integrity_co2_high ?? ''}
-                                  placeholder="0.02 %"
-                                  onChange={(event) => setApplianceField(index, 'flue_integrity_co2_high', event.target.value)}
-                                />
-                              </label>
-                              <label className="space-y-1.5">
-                                <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Air inlet CO2 at low rate (optional)</span>
-                                <Input
-                                  value={appliance.flue_integrity_co2_low ?? ''}
-                                  placeholder="0.01 %"
-                                  onChange={(event) => setApplianceField(index, 'flue_integrity_co2_low', event.target.value)}
-                                />
-                              </label>
-                            </>
-                          ) : null}
-                        </Fragment>
-                      );
-                    })}
-                  </div>
-                  <div className="rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <EnumChips
-                          label="Appliance safe to use"
-                          value={safeToUse}
-                          options={CP12_YES_NO_OPTIONS}
-                          onChange={(val) => setApplianceSafeToUse(index, (val as YesNoValue) ?? '')}
-                        />
-                      </div>
-                      <div>
-                        <EnumChips
-                          label="Condition classification"
-                          value={classification}
-                          options={getCp12ClassificationOptions(safeToUse)}
-                          onChange={(val) => setApplianceSafetyClassification(index, val as Cp12SafetyClassification)}
-                        />
-                      </div>
-                    </div>
-                    {showDefectCapture ? (
-                      <div className="mt-4 space-y-3">
-                        {failedChecks.length > 0 ? (
-                          <p className="text-[12px] font-medium text-[var(--color-status-danger,#9b2020)]">
-                            Failed: {failedChecks.join(', ')} — record the defect and remedial action below.
-                          </p>
-                        ) : null}
-                        <div className="space-y-1.5">
-                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Defect / unsafe situation</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {CP12_DEFECT_PRESETS.map((preset) => (
-                              <button
-                                key={preset}
-                                type="button"
-                                onClick={() => setApplianceField(index, 'defect_notes', appendPresetSnippet(appliance.defect_notes, preset))}
-                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
-                              >
-                                + {preset}
-                              </button>
-                            ))}
-                          </div>
-                          <Textarea
-                            value={appliance.defect_notes ?? ''}
-                            onChange={(e) => setApplianceField(index, 'defect_notes', e.target.value)}
-                            placeholder="Defect notes — tap a chip above or type your own"
-                            className="min-h-[80px]"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Actions taken</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {CP12_ACTION_TAKEN_PRESETS.map((preset) => (
-                              <button
-                                key={preset}
-                                type="button"
-                                onClick={() => setApplianceField(index, 'actions_taken', appendPresetSnippet(appliance.actions_taken, preset))}
-                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
-                              >
-                                + {preset}
-                              </button>
-                            ))}
-                          </div>
-                          <Textarea
-                            value={appliance.actions_taken ?? ''}
-                            onChange={(e) => setApplianceField(index, 'actions_taken', e.target.value)}
-                            placeholder="Actions taken — tap a chip above or type your own"
-                            className="min-h-[80px]"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">Actions required</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {CP12_ACTION_REQUIRED_PRESETS.map((preset) => (
-                              <button
-                                key={preset}
-                                type="button"
-                                onClick={() => setApplianceField(index, 'actions_required', appendPresetSnippet(appliance.actions_required, preset))}
-                                className="rounded-full border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] transition hover:border-[var(--color-action)] hover:text-[var(--color-text-primary)]"
-                              >
-                                + {preset}
-                              </button>
-                            ))}
-                          </div>
-                          <Textarea
-                            value={appliance.actions_required ?? ''}
-                            onChange={(e) => setApplianceField(index, 'actions_required', e.target.value)}
-                            placeholder="Actions required — tap a chip above or type your own"
-                            className="min-h-[80px]"
-                          />
-                        </div>
-                        <p className="text-[11px] leading-[1.5] text-[var(--color-text-tertiary)]">
-                          On-site actions taken (GIUSP). These carry straight onto the Gas Warning
-                          Notice for this appliance, which is issued alongside the certificate and
-                          does not use up one of your monthly certificates.
-                        </p>
-                        <div className="grid gap-2 text-[13px] text-[var(--color-text-primary)] sm:grid-cols-3">
-                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
-                            <input
-                              type="checkbox"
-                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
-                              checked={appliance.warning_notice_issued ?? false}
-                              onChange={(e) => setApplianceBooleanField(index, 'warning_notice_issued', e.target.checked)}
-                            />
-                            <span>Warning notice given to customer on site</span>
-                          </label>
-                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
-                            <input
-                              type="checkbox"
-                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
-                              checked={appliance.appliance_disconnected ?? false}
-                              onChange={(e) => setApplianceBooleanField(index, 'appliance_disconnected', e.target.checked)}
-                            />
-                            <span>Appliance disconnected</span>
-                          </label>
-                          <label className="flex items-start gap-2 rounded-[8px] border-[0.5px] border-[var(--color-border-tertiary)] p-3">
-                            <input
-                              type="checkbox"
-                              className="mt-1 h-4 w-4 accent-[var(--color-action)]"
-                              checked={appliance.danger_do_not_use_attached ?? false}
-                              onChange={(e) => setApplianceBooleanField(index, 'danger_do_not_use_attached', e.target.checked)}
-                            />
-                            <span>Danger Do Not Use attached</span>
-                          </label>
-                        </div>
-
-                        {classification === 'ar' || classification === 'id' ? (
-                          <UnsafeSituationFields
-                            classification={classification === 'id' ? 'IMMEDIATELY_DANGEROUS' : 'AT_RISK'}
-                            answers={giuspAnswersFor(index)}
-                            onChange={(key, value) => setGiuspAnswer(index, key, value)}
-                          />
-                        ) : null}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-[12px] text-[var(--color-text-tertiary)]">
-                        Use Safe or NCS when the appliance remains safe to use. Switch Appliance safe to use to No for AR or ID.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-  };
 
   const StepThree = (
     <WizardLayout
