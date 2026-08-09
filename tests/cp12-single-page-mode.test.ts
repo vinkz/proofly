@@ -74,10 +74,12 @@ describe('CP12 single-page mode', () => {
     // stopped it running. The free tool puts every appliance on the page and
     // this is what makes the paid one agree.
     expect(wizard).not.toMatch(/\{inApplianceDetail && \(singlePage \|\| checksTab/);
-    expect(
-      (wizard.match(/if \(activeApplianceIndex != null && index !== activeApplianceIndex\) return null;/g) ?? [])
-        .length,
-    ).toBe(3);
+    // Nothing may filter the appliance blocks on activeApplianceIndex any more.
+    // The loop scopes them one at a time, so a filter there only blanks the
+    // other appliances the moment something sets that index — which the
+    // completion checklist does every time an appliance item is tapped.
+    expect(wizard).not.toContain('index !== activeApplianceIndex');
+    expect(wizard).toContain("applianceRefs.current[index]?.scrollIntoView(");
   });
 
   it('is the only layout — there is no stepped flow to switch back to', () => {

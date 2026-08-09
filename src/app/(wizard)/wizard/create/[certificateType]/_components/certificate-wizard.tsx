@@ -1853,6 +1853,12 @@ export function CertificateWizard({
 
   // Appliance-hub navigation helpers.
   const openAppliance = (index: number) => {
+    if (singlePage) {
+      // Every appliance is on the page. Setting activeApplianceIndex here would
+      // filter the others out from under the engineer, so scroll to it instead.
+      applianceRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     setActiveApplianceIndex(index);
     setChecksTab('inspection');
     setStep(2);
@@ -3026,6 +3032,13 @@ export function CertificateWizard({
           {appliances.map((appliance, index) => (
             <div
               key={`cp12-appliance-${index}`}
+              // The three check blocks each claim this ref, so the last of them
+              // used to win and "go to appliance 2" landed on its safety block.
+              // React runs parent ref callbacks after children, so claiming it
+              // here puts the card itself at the top of the scroll.
+              ref={(el) => {
+                applianceRefs.current[index] = el;
+              }}
               className="space-y-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3"
             >
               <ApplianceStep
@@ -3152,7 +3165,6 @@ export function CertificateWizard({
 
   /** One appliance's inspection block. Rendered beside its identity, per appliance. */
   const renderApplianceInspection = (appliance: Cp12Appliance, index: number) => {
-            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             return (
             <div
@@ -3256,7 +3268,6 @@ export function CertificateWizard({
 
   /** One appliance's readings block. Rendered beside its identity, per appliance. */
   const renderApplianceReadings = (appliance: Cp12Appliance, index: number) => {
-            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             const combustionVis = cp12FieldVisibility(category, 'combustion');
             const hasCombustionValues =
@@ -3409,7 +3420,6 @@ export function CertificateWizard({
 
   /** One appliance's safety block. Rendered beside its identity, per appliance. */
   const renderApplianceSafety = (appliance: Cp12Appliance, index: number) => {
-            if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             const classification = getApplianceSafetyClassification(appliance);
             const safeToUse = getApplianceSafeToUse(appliance);
