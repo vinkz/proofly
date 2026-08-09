@@ -35,11 +35,28 @@ describe('CP12 single-page mode', () => {
   });
 
   it('flattens the appliance sub-tabs instead of nesting navigation', () => {
-    for (const tab of ['inspection', 'readings', 'safety']) {
-      expect(wizard).toContain(`singlePage || (inApplianceDetail && checksTab === '${tab}')`);
+    // The three sub-tabs are render functions now, called together for each
+    // appliance, so there is no tab state left to switch on.
+    for (const fn of ['renderApplianceInspection', 'renderApplianceReadings', 'renderApplianceSafety']) {
+      expect(wizard).toContain(`const ${fn} = (appliance: Cp12Appliance, index: number) =>`);
+      expect(wizard).toContain(`{${fn}(appliance, index)}`);
     }
+    expect(wizard).not.toMatch(/checksTab === '(inspection|readings|safety)'\)\) && \(/);
     // The tab bar itself has nothing to switch between once all three render.
     expect(wizard).toContain('inApplianceDetail && !singlePage ?');
+  });
+
+  it('keeps each appliance whole — identity and checks in one card', () => {
+    // Every identity first and then every set of checks meant recording one
+    // appliance happened in two places far apart on the page. The free tool
+    // puts them together and this is what holds the paid one to it.
+    const card = wizard.slice(
+      wizard.indexOf('{appliances.map((appliance, index) => ('),
+      wizard.indexOf('Remove appliance {index + 1}'),
+    );
+    expect(card).toContain('onlyIndex={index}');
+    expect(card.indexOf('renderApplianceInspection')).toBeGreaterThan(card.indexOf('<ApplianceStep'));
+    expect(card).toContain('renderApplianceSafety(appliance, index)');
   });
 
   it('adding an appliance does not collapse the ones already filled in', () => {

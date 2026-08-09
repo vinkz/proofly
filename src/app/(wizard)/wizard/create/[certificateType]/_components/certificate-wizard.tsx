@@ -1886,6 +1886,19 @@ export function CertificateWizard({
     setActiveApplianceIndex(null);
     setStep(2);
   };
+  const removeApplianceAt = (index: number) => {
+    setAppliances((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+    setCombustionOptIn((prev) => {
+      const next: Record<number, boolean> = {};
+      Object.entries(prev).forEach(([key, val]) => {
+        const i = Number(key);
+        if (i < index) next[i] = val;
+        else if (i > index) next[i - 1] = val;
+      });
+      return next;
+    });
+  };
+
   const addAndOpenAppliance = () => {
     if (appliances.length >= MAX_APPLIANCES) {
       pushToast({
@@ -3006,7 +3019,45 @@ export function CertificateWizard({
               + Add appliance
             </Button>
           </div>
-          {ApplianceDetailIdentity}
+          {/* One card per appliance holding its identity and its checks, which
+              is how the free tool reads. They used to be every identity first
+              and then every set of checks, so recording one appliance meant
+              working in two places far apart on the page. */}
+          {appliances.map((appliance, index) => (
+            <div
+              key={`cp12-appliance-${index}`}
+              className="space-y-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3"
+            >
+              <ApplianceStep
+                appliances={applianceProfiles}
+                onAppliancesChange={handleApplianceProfilesChange}
+                typeOptions={CP12_APPLIANCE_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))}
+                subtypeOptions={CP12_BOILER_SUBTYPES.map((sub) => ({ label: sub.label, value: sub.value }))}
+                subtypeLabel="Boiler type"
+                showSubtypeWhen={(type) => resolveCp12Category(type) === 'boiler'}
+                resolveCatalog={(type) => getApplianceCatalog(resolveCp12Category(type))}
+                allowMultiple
+                showExtendedFields={false}
+                showYear={false}
+                applyExtendedDefaults={false}
+                inlineEditor
+                showTopAddButton={false}
+                onlyIndex={index}
+              />
+              {renderApplianceInspection(appliance, index)}
+              {renderApplianceReadings(appliance, index)}
+              {renderApplianceSafety(appliance, index)}
+              {appliances.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => removeApplianceAt(index)}
+                  className="text-[12px] font-medium text-[#a32d2d] underline-offset-2 hover:underline"
+                >
+                  Remove appliance {index + 1}
+                </button>
+              ) : null}
+            </div>
+          ))}
         </div>
       ) : inApplianceDetail ? (
         ApplianceDetailIdentity
@@ -3099,65 +3150,8 @@ export function CertificateWizard({
   const checkDotState = ({ filled, total }: { filled: number; total: number }) =>
     total > 0 && filled >= total ? 'all' : filled > 0 ? 'some' : 'none';
 
-  const StepThree = (
-    <WizardLayout
-      variant={singlePage ? 'section' : 'step'}
-      step={offsetStep(3)}
-      total={totalSteps}
-      title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
-      status={inApplianceDetail ? 'On-site checks' : 'Whole-installation checks'}
-      onBack={handleChecksBack}
-    >
-      {offlineDraftBanner}
-      <p className="mb-3 text-[12px] leading-[1.5] text-[var(--color-text-tertiary)]">
-        {inApplianceDetail
-          ? 'Only the Regulation 26(9) confirmation is legally required. Everything else — Readings, Safety and the additional inspection detail — is conventional and prints on the certificate only if you record it.'
-          : 'Whole-installation checks are optional — they appear on the certificate only if you record them. Continue to signatures when ready.'}
-      </p>
-      {inApplianceDetail && !singlePage ? (
-      <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
-        {(
-          [
-            // Rendered only in wizard mode — see the guard on the wrapper below.
-            { id: 'inspection', label: 'Inspection', count: inspectionCount },
-            { id: 'readings', label: 'Readings (optional)', count: readingsCount },
-            { id: 'safety', label: 'Safety (optional)', count: safetyCount },
-          ] as {
-            id: 'inspection' | 'readings' | 'safety' | 'house';
-            label: string;
-            count: { filled: number; total: number };
-          }[]
-        ).map((tab) => {
-          const dotState = checkDotState(tab.count);
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setChecksTab(tab.id)}
-              aria-label={`${tab.label}, ${tab.count.filled} of ${tab.count.total} complete`}
-              className={`subtab-btn flex flex-1 flex-col items-center justify-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
-            >
-              <span>{tab.label}</span>
-              <span
-                aria-hidden="true"
-                className="h-[8px] w-[8px] rounded-full"
-                style={
-                  dotState === 'all'
-                    ? { background: '#1a7a52' }
-                    : dotState === 'some'
-                      ? { background: '#EF9F27' }
-                      : { border: '1.5px solid var(--color-border-primary)', background: 'transparent' }
-                }
-              />
-            </button>
-          );
-        })}
-      </div>
-      ) : null}
-
-      {(singlePage || (inApplianceDetail && checksTab === 'inspection')) && (
-        <div className="space-y-4">
-          {appliances.map((appliance, index) => {
+  /** One appliance's inspection block. Rendered beside its identity, per appliance. */
+  const renderApplianceInspection = (appliance: Cp12Appliance, index: number) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             return (
@@ -3258,13 +3252,10 @@ export function CertificateWizard({
               </div>
             </div>
             );
-          })}
-        </div>
-      )}
+  };
 
-      {(singlePage || (inApplianceDetail && checksTab === 'readings')) && (
-        <div className="space-y-4">
-          {appliances.map((appliance, index) => {
+  /** One appliance's readings block. Rendered beside its identity, per appliance. */
+  const renderApplianceReadings = (appliance: Cp12Appliance, index: number) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             const combustionVis = cp12FieldVisibility(category, 'combustion');
@@ -3414,13 +3405,10 @@ export function CertificateWizard({
               </div>
             </div>
             );
-          })}
-        </div>
-      )}
+  };
 
-      {(singlePage || (inApplianceDetail && checksTab === 'safety')) && (
-        <div className="space-y-4">
-          {appliances.map((appliance, index) => {
+  /** One appliance's safety block. Rendered beside its identity, per appliance. */
+  const renderApplianceSafety = (appliance: Cp12Appliance, index: number) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             const classification = getApplianceSafetyClassification(appliance);
@@ -3633,9 +3621,66 @@ export function CertificateWizard({
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+  };
+
+  const StepThree = (
+    <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      step={offsetStep(3)}
+      total={totalSteps}
+      title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
+      status={inApplianceDetail ? 'On-site checks' : 'Whole-installation checks'}
+      onBack={handleChecksBack}
+    >
+      {offlineDraftBanner}
+      <p className="mb-3 text-[12px] leading-[1.5] text-[var(--color-text-tertiary)]">
+        {inApplianceDetail
+          ? 'Only the Regulation 26(9) confirmation is legally required. Everything else — Readings, Safety and the additional inspection detail — is conventional and prints on the certificate only if you record it.'
+          : 'Whole-installation checks are optional — they appear on the certificate only if you record them. Continue to signatures when ready.'}
+      </p>
+      {inApplianceDetail && !singlePage ? (
+      <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
+        {(
+          [
+            // Rendered only in wizard mode — see the guard on the wrapper below.
+            { id: 'inspection', label: 'Inspection', count: inspectionCount },
+            { id: 'readings', label: 'Readings (optional)', count: readingsCount },
+            { id: 'safety', label: 'Safety (optional)', count: safetyCount },
+          ] as {
+            id: 'inspection' | 'readings' | 'safety' | 'house';
+            label: string;
+            count: { filled: number; total: number };
+          }[]
+        ).map((tab) => {
+          const dotState = checkDotState(tab.count);
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setChecksTab(tab.id)}
+              aria-label={`${tab.label}, ${tab.count.filled} of ${tab.count.total} complete`}
+              className={`subtab-btn flex flex-1 flex-col items-center justify-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
+            >
+              <span>{tab.label}</span>
+              <span
+                aria-hidden="true"
+                className="h-[8px] w-[8px] rounded-full"
+                style={
+                  dotState === 'all'
+                    ? { background: '#1a7a52' }
+                    : dotState === 'some'
+                      ? { background: '#EF9F27' }
+                      : { border: '1.5px solid var(--color-border-primary)', background: 'transparent' }
+                }
+              />
+            </button>
+          );
+        })}
+      </div>
+      ) : null}
+
+
+
 
       {!inApplianceDetail && (
         <div className="space-y-4">
