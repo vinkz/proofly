@@ -10,7 +10,6 @@ const wizard = readFileSync(
 );
 const layout = readFileSync(join(ROOT, 'src/components/certificates/wizard-layout.tsx'), 'utf8');
 const jobForm = readFileSync(join(ROOT, 'src/components/jobs/solo-job-form.tsx'), 'utf8');
-const preference = readFileSync(join(ROOT, 'src/lib/wizard/single-page-preference.ts'), 'utf8');
 
 /**
  * Single-page mode is a layout toggle, not a second form.
@@ -43,10 +42,15 @@ describe('CP12 single-page mode', () => {
     expect(wizard).toContain('inApplianceDetail && !singlePage ?');
   });
 
-  it('is reachable and reversible from both layouts', () => {
-    expect(wizard).toContain('headerAction={layoutToggle}');
-    expect(wizard).toMatch(/Use step-by-step/);
-    expect(wizard).toMatch(/Show on one page/);
+  it('is the only layout — there is no stepped flow to switch back to', () => {
+    // The two layouts were kept side by side while which to keep was an open
+    // question. It is answered, so the toggle and the stepped exits are gone.
+    // A CP12 that can still be reached one screen at a time is the bug this
+    // guards against: two blocks doing the same job is what caused three
+    // bugs in a row the last time this file carried a duplicate.
+    expect(wizard).not.toContain('layoutToggle');
+    expect(wizard).not.toMatch(/Use step-by-step|Show on one page/);
+    expect(wizard).not.toMatch(/if \(step === 1\) return/);
   });
 
   it('keeps one source of state — no forked save path', () => {
@@ -57,12 +61,6 @@ describe('CP12 single-page mode', () => {
     expect(wizard).not.toMatch(/singlePage[\s\S]{0,80}saveCp12/);
   });
 
-  it('survives a browser that refuses local storage', () => {
-    // Private mode throws on localStorage access. Both read and write swallow
-    // it, and the fallback is the stepped flow that has always shipped.
-    expect((preference.match(/catch/g) ?? []).length).toBeGreaterThanOrEqual(2);
-    expect(preference).toContain('return false');
-  });
 });
 
 /**
@@ -73,10 +71,11 @@ describe('CP12 single-page mode', () => {
  * page there is nothing to skip to, so the preamble has no work left to do.
  */
 describe('the route into a certificate', () => {
-  it('keeps the layout preference in one module, owned by the wizard', () => {
-    expect(preference).toContain('certnow.cp12-wizard.single-page.v1');
-    expect(wizard).toContain("from '@/lib/wizard/single-page-preference'");
-    // No second copy of the key to drift from the first.
+  it('stores no layout preference, because there is no layout to choose', () => {
+    // The preference existed to remember which of two layouts to show. With one
+    // layout it is a stored answer to a question nobody is asked, and a private-
+    // mode browser that refuses storage has nothing to fall back to.
+    expect(wizard).not.toContain('single-page-preference');
     expect(wizard).not.toContain('certnow.cp12-wizard.single-page');
   });
 

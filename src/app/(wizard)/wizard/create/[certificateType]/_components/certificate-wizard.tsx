@@ -16,7 +16,6 @@ import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { visibleCp12ApplianceChecks } from '@/lib/cp12/applianceChecks';
 import type { ClientListItem } from '@/types/client';
-import { readSinglePagePreference, writeSinglePagePreference } from '@/lib/wizard/single-page-preference';
 
 /** Answer set for checks that record whether something was done, not tested. */
 const YES_NO_OPTIONS = [
@@ -656,17 +655,16 @@ export function CertificateWizard({
    * screen on this phone, and storing it locally means no migration and no
    * round-trip before the first paint.
    */
-  const [singlePage, setSinglePage] = useState(false);
-  useEffect(() => {
-    setSinglePage(readSinglePagePreference());
-  }, []);
-  const toggleSinglePage = useCallback(() => {
-    setSinglePage((previous) => {
-      const next = !previous;
-      writeSinglePagePreference(next);
-      return next;
-    });
-  }, []);
+  /**
+   * One page is the only layout now.
+   *
+   * The stepped flow and this one were kept side by side while it was an open
+   * question which to keep; it is answered. Held as a constant rather than
+   * deleted inline so the stepped branches below narrow to dead code the
+   * compiler can see, and come out in one reviewable pass rather than by
+   * hand-editing four thousand lines of nested JSX.
+   */
+  const singlePage = true;
 
   /** What the engineer sees and types, and therefore what comes back. */
   const savedLandlordLabel = (client: ClientListItem) =>
@@ -736,15 +734,6 @@ export function CertificateWizard({
     </div>
   ) : null;
 
-  const layoutToggle = (
-    <button
-      type="button"
-      onClick={toggleSinglePage}
-      className="text-[12px] font-medium text-[var(--color-text-secondary)] underline"
-    >
-      {singlePage ? 'Use step-by-step' : 'Show on one page'}
-    </button>
-  );
   // Appliance-hub navigation: null = show the appliance list (hub); a number = the one
   // appliance currently being filled in (its identity on step 2, its checks on step 3).
   // Signatures (step 4) and property checks (step 3, hub mode) are unaffected.
@@ -2474,7 +2463,6 @@ export function CertificateWizard({
   const StepOne = (
     <WizardLayout
       variant={singlePage ? 'section' : 'step'}
-      headerAction={layoutToggle}
       step={offsetStep(1)}
       total={totalSteps}
       title={
@@ -2973,7 +2961,6 @@ export function CertificateWizard({
   const StepTwo = (
     <WizardLayout
       variant={singlePage ? 'section' : 'step'}
-      headerAction={layoutToggle}
       step={offsetStep(2)}
       total={totalSteps}
       title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1}` : 'Appliances'}
@@ -3084,7 +3071,6 @@ export function CertificateWizard({
   const StepThree = (
     <WizardLayout
       variant={singlePage ? 'section' : 'step'}
-      headerAction={layoutToggle}
       step={offsetStep(3)}
       total={totalSteps}
       title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
@@ -3787,7 +3773,6 @@ export function CertificateWizard({
   const StepFour = (
     <WizardLayout
       variant={singlePage ? 'section' : 'step'}
-      headerAction={layoutToggle}
       step={offsetStep(4)}
       total={totalSteps}
       title="Signatures & PDF"
@@ -3971,7 +3956,6 @@ export function CertificateWizard({
                 Back
               </button>
               <p className="text-[15px] font-medium text-[var(--color-text-primary)]">CP12</p>
-              {layoutToggle}
             </div>
           </header>
           <main className="mx-auto max-w-2xl px-4 pb-32 pt-6">
@@ -3988,10 +3972,6 @@ export function CertificateWizard({
     );
   }
 
-  if (step === 1) return <>{StepOne}{limitModal}</>;
-  if (step === 2) return <>{StepTwo}{limitModal}</>;
-  if (step === 3) return <>{StepThree}{limitModal}</>;
-  return <>{StepFour}{limitModal}</>;
 }
 
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;
