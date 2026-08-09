@@ -42,6 +42,14 @@ describe('CP12 single-page mode', () => {
     expect(wizard).toContain('inApplianceDetail && !singlePage ?');
   });
 
+  it('adding an appliance does not collapse the ones already filled in', () => {
+    // Every appliance block filters on activeApplianceIndex. Adding used to set
+    // it to the new, empty appliance, so the list collapsed to that one and the
+    // work already entered vanished from the page — indistinguishable, to the
+    // engineer, from having been wiped.
+    expect(wizard).toContain('if (!singlePage) openAppliance(newIndex);');
+  });
+
   it('shows every appliance, not only one drilled into', () => {
     // The gate used to require inApplianceDetail, which is false until an
     // appliance is opened — so on one page the checks rendered for nothing at

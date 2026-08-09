@@ -1897,7 +1897,12 @@ export function CertificateWizard({
     }
     const newIndex = appliances.length;
     setAppliances((prev) => [...prev, { ...emptyAppliance }]);
-    openAppliance(newIndex);
+    // Opening the new one sets activeApplianceIndex, which every appliance
+    // block filters on — on one page that collapses the whole list down to the
+    // empty appliance just added, and reads exactly as though the appliances
+    // already filled in had been wiped. There is nothing to open to when they
+    // are all on the page already.
+    if (!singlePage) openAppliance(newIndex);
   };
 
   const handleEvidenceFieldsUpdate = (updates: Record<string, string>) => {
@@ -2981,7 +2986,33 @@ export function CertificateWizard({
         </button>
       }
     >
-      {inApplianceDetail ? ApplianceDetailIdentity : ApplianceHub}
+      {/* One page shows every appliance's identity, the way the free tool does.
+          The hub was a list of links into a screen per appliance; with the
+          appliances themselves on the page it is a second copy of the same list
+          that navigates nowhere. Only the control that adds one survives. */}
+      {singlePage ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+              Appliances ({appliances.length})
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-[8px] px-3 text-xs"
+              onClick={addAndOpenAppliance}
+              disabled={appliances.length >= MAX_APPLIANCES}
+            >
+              + Add appliance
+            </Button>
+          </div>
+          {ApplianceDetailIdentity}
+        </div>
+      ) : inApplianceDetail ? (
+        ApplianceDetailIdentity
+      ) : (
+        ApplianceHub
+      )}
       {singlePage ? null : (
       <div id="cp12-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         <button
