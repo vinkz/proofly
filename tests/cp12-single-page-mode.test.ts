@@ -10,7 +10,6 @@ const wizard = readFileSync(
 );
 const layout = readFileSync(join(ROOT, 'src/components/certificates/wizard-layout.tsx'), 'utf8');
 const jobForm = readFileSync(join(ROOT, 'src/components/jobs/solo-job-form.tsx'), 'utf8');
-const preference = readFileSync(join(ROOT, 'src/lib/wizard/single-page-preference.ts'), 'utf8');
 
 /**
  * Single-page mode is a layout toggle, not a second form.
@@ -36,17 +35,60 @@ describe('CP12 single-page mode', () => {
   });
 
   it('flattens the appliance sub-tabs instead of nesting navigation', () => {
-    for (const tab of ['inspection', 'readings', 'safety']) {
-      expect(wizard).toContain(`singlePage || checksTab === '${tab}'`);
+    // The three sub-tabs are render functions now, called together for each
+    // appliance, so there is no tab state left to switch on.
+    for (const fn of ['renderApplianceInspection', 'renderApplianceReadings', 'renderApplianceSafety']) {
+      expect(wizard).toContain(`const ${fn} = (appliance: Cp12Appliance, index: number) =>`);
+      expect(wizard).toContain(`{${fn}(appliance, index)}`);
     }
+    expect(wizard).not.toMatch(/checksTab === '(inspection|readings|safety)'\)\) && \(/);
     // The tab bar itself has nothing to switch between once all three render.
     expect(wizard).toContain('inApplianceDetail && !singlePage ?');
   });
 
-  it('is reachable and reversible from both layouts', () => {
-    expect(wizard).toContain('headerAction={layoutToggle}');
-    expect(wizard).toMatch(/Use step-by-step/);
-    expect(wizard).toMatch(/Show on one page/);
+  it('keeps each appliance whole — identity and checks in one card', () => {
+    // Every identity first and then every set of checks meant recording one
+    // appliance happened in two places far apart on the page. The free tool
+    // puts them together and this is what holds the paid one to it.
+    const card = wizard.slice(
+      wizard.indexOf('{appliances.map((appliance, index) => ('),
+      wizard.indexOf('Remove appliance {index + 1}'),
+    );
+    expect(card).toContain('onlyIndex={index}');
+    expect(card.indexOf('renderApplianceInspection')).toBeGreaterThan(card.indexOf('<ApplianceStep'));
+    expect(card).toContain('renderApplianceSafety(appliance, index)');
+  });
+
+  it('adding an appliance does not collapse the ones already filled in', () => {
+    // Every appliance block filters on activeApplianceIndex. Adding used to set
+    // it to the new, empty appliance, so the list collapsed to that one and the
+    // work already entered vanished from the page — indistinguishable, to the
+    // engineer, from having been wiped.
+    expect(wizard).toContain('if (!singlePage) openAppliance(newIndex);');
+  });
+
+  it('shows every appliance, not only one drilled into', () => {
+    // The gate used to require inApplianceDetail, which is false until an
+    // appliance is opened — so on one page the checks rendered for nothing at
+    // all. The loop inside always handled "show all"; only the outer gate
+    // stopped it running. The free tool puts every appliance on the page and
+    // this is what makes the paid one agree.
+    expect(wizard).not.toMatch(/\{inApplianceDetail && \(singlePage \|\| checksTab/);
+    expect(
+      (wizard.match(/if \(activeApplianceIndex != null && index !== activeApplianceIndex\) return null;/g) ?? [])
+        .length,
+    ).toBe(3);
+  });
+
+  it('is the only layout — there is no stepped flow to switch back to', () => {
+    // The two layouts were kept side by side while which to keep was an open
+    // question. It is answered, so the toggle and the stepped exits are gone.
+    // A CP12 that can still be reached one screen at a time is the bug this
+    // guards against: two blocks doing the same job is what caused three
+    // bugs in a row the last time this file carried a duplicate.
+    expect(wizard).not.toContain('layoutToggle');
+    expect(wizard).not.toMatch(/Use step-by-step|Show on one page/);
+    expect(wizard).not.toMatch(/if \(step === 1\) return/);
   });
 
   it('keeps one source of state — no forked save path', () => {
@@ -57,12 +99,6 @@ describe('CP12 single-page mode', () => {
     expect(wizard).not.toMatch(/singlePage[\s\S]{0,80}saveCp12/);
   });
 
-  it('survives a browser that refuses local storage', () => {
-    // Private mode throws on localStorage access. Both read and write swallow
-    // it, and the fallback is the stepped flow that has always shipped.
-    expect((preference.match(/catch/g) ?? []).length).toBeGreaterThanOrEqual(2);
-    expect(preference).toContain('return false');
-  });
 });
 
 /**
@@ -73,10 +109,11 @@ describe('CP12 single-page mode', () => {
  * page there is nothing to skip to, so the preamble has no work left to do.
  */
 describe('the route into a certificate', () => {
-  it('keeps the layout preference in one module, owned by the wizard', () => {
-    expect(preference).toContain('certnow.cp12-wizard.single-page.v1');
-    expect(wizard).toContain("from '@/lib/wizard/single-page-preference'");
-    // No second copy of the key to drift from the first.
+  it('stores no layout preference, because there is no layout to choose', () => {
+    // The preference existed to remember which of two layouts to show. With one
+    // layout it is a stored answer to a question nobody is asked, and a private-
+    // mode browser that refuses storage has nothing to fall back to.
+    expect(wizard).not.toContain('single-page-preference');
     expect(wizard).not.toContain('certnow.cp12-wizard.single-page');
   });
 

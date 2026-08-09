@@ -442,6 +442,13 @@ export function BoilerServiceWizard({
   const demoEnabled = DEMO_AUTOFILL_VISIBLE;
   const totalSteps = 4 + stepOffset;
   const offsetStep = (step: number) => step + stepOffset;
+  /**
+   * One page is the only layout, matching the CP12 and the free service record.
+   * Held as a constant so the stepped branches narrow to dead code the compiler
+   * can see, rather than being unpicked by hand across the whole file.
+   */
+  const singlePage = true;
+
   const draftStorageKey = useMemo(() => buildWizardDraftStorageKey('gas_service', jobId), [jobId]);
   useWizardStepHistory({
     enabled: true,
@@ -956,107 +963,8 @@ export function BoilerServiceWizard({
     pushToast({ title: 'Landlord address copied to job address', variant: 'success' });
   };
 
-  const handleJobInfoNext = () => {
-    startTransition(async () => {
-      try {
-        const payload = buildBoilerServiceDraftPersistencePayload();
-        if (!isOnline) {
-          setJobInfo(payload.info);
-          setStep(2);
-          pushToast({
-            title: 'Saved on this device',
-            description: 'You are offline. This service will sync when your connection returns.',
-            variant: 'default',
-          });
-          return;
-        }
 
-        await saveBoilerServiceJobInfo({ jobId, data: payload.info });
-        await saveJobFields({ jobId, fields: payload.jobFields });
-        setJobInfo(payload.info);
-        setStep(2);
-        markSynced(
-          { ...boilerServiceDraft, step: 2, jobInfo: payload.info },
-          { ...boilerServiceDraftSyncState, jobInfo: payload.info },
-        );
-        pushToast({ title: 'Saved job and client details', variant: 'success' });
-      } catch (error) {
-        pushToast({
-          title: 'Could not save job details',
-          description: toUserMessage(error, 'Please try again.'),
-          variant: 'error',
-        });
-      }
-    });
-  };
 
-  const handleDetailsNext = () => {
-    startTransition(async () => {
-      try {
-        if (!isOnline) {
-          setStep(3);
-          pushToast({
-            title: 'Saved on this device',
-            description: 'You are offline. Appliance details will sync when your connection returns.',
-            variant: 'default',
-          });
-          return;
-        }
-        await saveBoilerServiceDetails({ jobId, data: details });
-        setStep(3);
-        markSynced(
-          { ...boilerServiceDraft, step: 3, details },
-          { ...boilerServiceDraftSyncState, details },
-        );
-        pushToast({ title: 'Saved appliance details', variant: 'success' });
-      } catch (error) {
-        pushToast({
-          title: 'Could not save details',
-          description: toUserMessage(error, 'Please try again.'),
-          variant: 'error',
-        });
-      }
-    });
-  };
-
-  const handleChecksNext = () => {
-    const commentableItems = [...SAFETY_CHECK_ITEMS, ...ADVICE_CHECK_ITEMS];
-    const compiled = commentableItems
-      .filter((item) => checks[item.key] === 'no' && checkComments[item.key]?.trim())
-      .map((item) => `${item.label}: ${checkComments[item.key].trim()}`)
-      .join('\n');
-    const nextChecks = compiled && !checks.recommendations.trim()
-      ? { ...checks, recommendations: compiled }
-      : checks;
-    if (nextChecks !== checks) setChecks(nextChecks);
-
-    startTransition(async () => {
-      try {
-        if (!isOnline) {
-          setStep(4);
-          pushToast({
-            title: 'Saved on this device',
-            description: 'You are offline. Checks will sync when your connection returns.',
-            variant: 'default',
-          });
-          return;
-        }
-        await saveBoilerServiceChecks({ jobId, data: nextChecks });
-        setStep(4);
-        markSynced(
-          { ...boilerServiceDraft, step: 4, checks: nextChecks },
-          { ...boilerServiceDraftSyncState, checks: nextChecks },
-        );
-        pushToast({ title: 'Saved checks', variant: 'success' });
-      } catch (error) {
-        pushToast({
-          title: 'Could not save checks',
-          description: toUserMessage(error, 'Please try again.'),
-          variant: 'error',
-        });
-      }
-    });
-  };
 
   const persistBeforePdf = async () => {
     const serviceDate = completionDate || jobAddress.job_visit_date || jobInfo.service_date;
@@ -1485,8 +1393,9 @@ export function BoilerServiceWizard({
 
   return (
     <>
-      {step === 1 ? (
+      {(singlePage || step === 1) ? (
         <WizardLayout
+          variant="section"
           step={offsetStep(1)}
           total={totalSteps}
           title="Client & Job Address"
@@ -1495,20 +1404,6 @@ export function BoilerServiceWizard({
           // hub where a combined CP12 + service job lists both certificates, so the
           // engineer can switch which one to work on rather than only closing out.
           onBack={() => router.push(`/jobs/${jobId}/complete`)}
-          actionsHideWhenVisibleId="boiler-step1-footer-actions"
-          actions={
-            <button
-              type="button"
-              onClick={handleJobInfoNext}
-              disabled={isPending}
-              className="flex items-center gap-[5px] rounded-[8px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
-            >
-              Next
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          }
         >
           <div className="space-y-4">
             {offlineDraftBanner}
@@ -1785,43 +1680,17 @@ export function BoilerServiceWizard({
               </div>
             </div>
           </div>
-          <div id="boiler-step1-footer-actions" className="sticky bottom-0 z-10 mt-6 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-            <button
-              type="button"
-              onClick={handleJobInfoNext}
-              disabled={isPending}
-              className="flex h-[44px] w-full items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
-            >
-              Next → Appliance details
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
         </WizardLayout>
       ) : null}
 
-      {step === 2 ? (
+      {(singlePage || step === 2) ? (
         <WizardLayout
+          variant="section"
           step={offsetStep(2)}
           total={totalSteps}
           title="Appliance details"
           status="Appliance profile"
           onBack={goBackOneStep}
-          actionsHideWhenVisibleId="boiler-step2-footer-actions"
-          actions={
-            <button
-              type="button"
-              onClick={handleDetailsNext}
-              disabled={isPending}
-              className="flex items-center gap-[5px] rounded-[8px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
-            >
-              Next
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          }
         >
           <div className="space-y-4">
             {offlineDraftBanner}
@@ -1847,51 +1716,17 @@ export function BoilerServiceWizard({
               inlineEditor
             />
           </div>
-          <div id="boiler-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-            <button
-              type="button"
-              onClick={goBackOneStep}
-              disabled={isPending}
-              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={handleDetailsNext}
-              disabled={isPending}
-              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
-            >
-              Next → Checks
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
         </WizardLayout>
       ) : null}
 
-      {step === 3 ? (
+      {(singlePage || step === 3) ? (
         <WizardLayout
+          variant="section"
           step={offsetStep(3)}
           total={totalSteps}
           title="Checks & Readings"
           status="On-site checks"
           onBack={goBackOneStep}
-          actionsHideWhenVisibleId="boiler-step3-footer-actions"
-          actions={
-            <button
-              type="button"
-              onClick={handleChecksNext}
-              disabled={isPending}
-              className="flex items-center gap-[5px] rounded-[8px] bg-[#111] px-[16px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
-            >
-              Next
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          }
         >
           <div className="space-y-4">
           {offlineDraftBanner}
@@ -2064,47 +1899,17 @@ export function BoilerServiceWizard({
           </CollapsibleSection>
 
           </div>
-          <div id="boiler-step3-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-            <button
-              type="button"
-              onClick={goBackOneStep}
-              disabled={isPending}
-              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={handleChecksNext}
-              disabled={isPending}
-              className="flex h-[44px] flex-[2] items-center justify-center gap-[6px] rounded-[10px] bg-[#111] text-[14px] font-medium text-white disabled:opacity-50"
-            >
-              Next → Summary
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
         </WizardLayout>
       ) : null}
 
-      {step === 4 ? (
+      {(singlePage || step === 4) ? (
         <WizardLayout
+          variant="section"
           step={offsetStep(4)}
           total={totalSteps}
           title="Summary, Next Service & Signatures"
           status="Finish"
           onBack={goBackOneStep}
-          actionsHideWhenVisibleId="boiler-step4-footer-actions"
-          actions={
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="flex h-[30px] items-center rounded-[8px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent px-[14px] text-[13px] text-[var(--color-text-secondary)]"
-            >
-              Edit
-            </button>
-          }
         >
           <div className="space-y-4">
             {offlineDraftBanner}
@@ -2275,6 +2080,32 @@ export function BoilerServiceWizard({
               className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
             >
               Back
+            </button>
+            {/* The stepped flow saved to the server on each Next. With the steps
+                stacked there is no Next, and the record would otherwise reach
+                the server only when it is issued — so an engineer who filled it
+                in and walked away kept nothing beyond this device. Writes the
+                same four things persistBeforePdf does before issuing. */}
+            <button
+              type="button"
+              onClick={() =>
+                startTransition(async () => {
+                  try {
+                    await persistBeforePdf();
+                    pushToast({ title: 'Progress saved', variant: 'success' });
+                  } catch (error) {
+                    pushToast({
+                      title: 'Could not save progress',
+                      description: toUserMessage(error, 'Please try again.'),
+                      variant: 'error',
+                    });
+                  }
+                })
+              }
+              disabled={isPending}
+              className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border-[0.5px] border-[var(--color-border-secondary)] bg-transparent text-[14px] text-[var(--color-text-secondary)] disabled:opacity-50"
+            >
+              Save progress
             </button>
             <button
               type="button"

@@ -45,7 +45,12 @@ describe('the SMS the engineer sends', () => {
   it('puts a dialable number in the sms: link', () => {
     // encodeURIComponent turned "+44 7700 900000" into "%2B44%207700%20900000",
     // which handsets do not parse as a number.
-    expect(card).toContain("const smsNumber = landlordPhone.replace(/[^\\d+]/g, '')");
+    //
+    // Matched loosely on purpose. Pinning the exact expression broke the moment
+    // the source was trimmed into a `trimmedPhone` local first — the behaviour
+    // was identical and the test failed anyway, which is the test being wrong
+    // about the code rather than the code being wrong.
+    expect(card).toMatch(/const smsNumber = \w+\.replace\(\/\[\^\\d\+\]\/g, ''\)/);
     expect(card).not.toMatch(/sms:\$\{encodeURIComponent/);
   });
 

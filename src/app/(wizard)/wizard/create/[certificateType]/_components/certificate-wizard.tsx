@@ -16,7 +16,6 @@ import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { visibleCp12ApplianceChecks } from '@/lib/cp12/applianceChecks';
 import type { ClientListItem } from '@/types/client';
-import { readSinglePagePreference, writeSinglePagePreference } from '@/lib/wizard/single-page-preference';
 
 /** Answer set for checks that record whether something was done, not tested. */
 const YES_NO_OPTIONS = [
@@ -56,7 +55,6 @@ import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { validateCp12TierOne } from '@/lib/cp12/validation';
 import { UnsafeSituationFields } from '@/components/cp12/unsafe-situation';
 import {
-  GIUSP_ANSWER_KEYS,
   giuspFieldKey,
   readGiuspAnswers,
   type GiuspAnswerKey,
@@ -657,17 +655,16 @@ export function CertificateWizard({
    * screen on this phone, and storing it locally means no migration and no
    * round-trip before the first paint.
    */
-  const [singlePage, setSinglePage] = useState(false);
-  useEffect(() => {
-    setSinglePage(readSinglePagePreference());
-  }, []);
-  const toggleSinglePage = useCallback(() => {
-    setSinglePage((previous) => {
-      const next = !previous;
-      writeSinglePagePreference(next);
-      return next;
-    });
-  }, []);
+  /**
+   * One page is the only layout now.
+   *
+   * The stepped flow and this one were kept side by side while it was an open
+   * question which to keep; it is answered. Held as a constant rather than
+   * deleted inline so the stepped branches below narrow to dead code the
+   * compiler can see, and come out in one reviewable pass rather than by
+   * hand-editing four thousand lines of nested JSX.
+   */
+  const singlePage = true;
 
   /** What the engineer sees and types, and therefore what comes back. */
   const savedLandlordLabel = (client: ClientListItem) =>
@@ -737,15 +734,6 @@ export function CertificateWizard({
     </div>
   ) : null;
 
-  const layoutToggle = (
-    <button
-      type="button"
-      onClick={toggleSinglePage}
-      className="text-[12px] font-medium text-[var(--color-text-secondary)] underline"
-    >
-      {singlePage ? 'Use step-by-step' : 'Show on one page'}
-    </button>
-  );
   // Appliance-hub navigation: null = show the appliance list (hub); a number = the one
   // appliance currently being filled in (its identity on step 2, its checks on step 3).
   // Signatures (step 4) and property checks (step 3, hub mode) are unaffected.
@@ -1898,6 +1886,19 @@ export function CertificateWizard({
     setActiveApplianceIndex(null);
     setStep(2);
   };
+  const removeApplianceAt = (index: number) => {
+    setAppliances((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+    setCombustionOptIn((prev) => {
+      const next: Record<number, boolean> = {};
+      Object.entries(prev).forEach(([key, val]) => {
+        const i = Number(key);
+        if (i < index) next[i] = val;
+        else if (i > index) next[i - 1] = val;
+      });
+      return next;
+    });
+  };
+
   const addAndOpenAppliance = () => {
     if (appliances.length >= MAX_APPLIANCES) {
       pushToast({
@@ -1909,7 +1910,12 @@ export function CertificateWizard({
     }
     const newIndex = appliances.length;
     setAppliances((prev) => [...prev, { ...emptyAppliance }]);
-    openAppliance(newIndex);
+    // Opening the new one sets activeApplianceIndex, which every appliance
+    // block filters on — on one page that collapses the whole list down to the
+    // empty appliance just added, and reads exactly as though the appliances
+    // already filled in had been wiped. There is nothing to open to when they
+    // are all on the page already.
+    if (!singlePage) openAppliance(newIndex);
   };
 
   const handleEvidenceFieldsUpdate = (updates: Record<string, string>) => {
@@ -2475,7 +2481,6 @@ export function CertificateWizard({
   const StepOne = (
     <WizardLayout
       variant={singlePage ? 'section' : 'step'}
-      headerAction={layoutToggle}
       step={offsetStep(1)}
       total={totalSteps}
       title={
@@ -2974,7 +2979,6 @@ export function CertificateWizard({
   const StepTwo = (
     <WizardLayout
       variant={singlePage ? 'section' : 'step'}
-      headerAction={layoutToggle}
       step={offsetStep(2)}
       total={totalSteps}
       title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1}` : 'Appliances'}
@@ -2995,7 +2999,71 @@ export function CertificateWizard({
         </button>
       }
     >
-      {inApplianceDetail ? ApplianceDetailIdentity : ApplianceHub}
+      {/* One page shows every appliance's identity, the way the free tool does.
+          The hub was a list of links into a screen per appliance; with the
+          appliances themselves on the page it is a second copy of the same list
+          that navigates nowhere. Only the control that adds one survives. */}
+      {singlePage ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+              Appliances ({appliances.length})
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 rounded-[8px] px-3 text-xs"
+              onClick={addAndOpenAppliance}
+              disabled={appliances.length >= MAX_APPLIANCES}
+            >
+              + Add appliance
+            </Button>
+          </div>
+          {/* One card per appliance holding its identity and its checks, which
+              is how the free tool reads. They used to be every identity first
+              and then every set of checks, so recording one appliance meant
+              working in two places far apart on the page. */}
+          {appliances.map((appliance, index) => (
+            <div
+              key={`cp12-appliance-${index}`}
+              className="space-y-3 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-secondary)] p-3"
+            >
+              <ApplianceStep
+                appliances={applianceProfiles}
+                onAppliancesChange={handleApplianceProfilesChange}
+                typeOptions={CP12_APPLIANCE_CATEGORIES.map((c) => ({ label: c.label, value: c.value }))}
+                subtypeOptions={CP12_BOILER_SUBTYPES.map((sub) => ({ label: sub.label, value: sub.value }))}
+                subtypeLabel="Boiler type"
+                showSubtypeWhen={(type) => resolveCp12Category(type) === 'boiler'}
+                resolveCatalog={(type) => getApplianceCatalog(resolveCp12Category(type))}
+                allowMultiple
+                showExtendedFields={false}
+                showYear={false}
+                applyExtendedDefaults={false}
+                inlineEditor
+                showTopAddButton={false}
+                onlyIndex={index}
+              />
+              {renderApplianceInspection(appliance, index)}
+              {renderApplianceReadings(appliance, index)}
+              {renderApplianceSafety(appliance, index)}
+              {appliances.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={() => removeApplianceAt(index)}
+                  className="text-[12px] font-medium text-[#a32d2d] underline-offset-2 hover:underline"
+                >
+                  Remove appliance {index + 1}
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : inApplianceDetail ? (
+        ApplianceDetailIdentity
+      ) : (
+        ApplianceHub
+      )}
       {singlePage ? null : (
       <div id="cp12-step2-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
         <button
@@ -3082,66 +3150,8 @@ export function CertificateWizard({
   const checkDotState = ({ filled, total }: { filled: number; total: number }) =>
     total > 0 && filled >= total ? 'all' : filled > 0 ? 'some' : 'none';
 
-  const StepThree = (
-    <WizardLayout
-      variant={singlePage ? 'section' : 'step'}
-      headerAction={layoutToggle}
-      step={offsetStep(3)}
-      total={totalSteps}
-      title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
-      status={inApplianceDetail ? 'On-site checks' : 'Whole-installation checks'}
-      onBack={handleChecksBack}
-    >
-      {offlineDraftBanner}
-      <p className="mb-3 text-[12px] leading-[1.5] text-[var(--color-text-tertiary)]">
-        {inApplianceDetail
-          ? 'Only the Regulation 26(9) confirmation is legally required. Everything else — Readings, Safety and the additional inspection detail — is conventional and prints on the certificate only if you record it.'
-          : 'Whole-installation checks are optional — they appear on the certificate only if you record them. Continue to signatures when ready.'}
-      </p>
-      {inApplianceDetail && !singlePage ? (
-      <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
-        {(
-          [
-            // Rendered only in wizard mode — see the guard on the wrapper below.
-            { id: 'inspection', label: 'Inspection', count: inspectionCount },
-            { id: 'readings', label: 'Readings (optional)', count: readingsCount },
-            { id: 'safety', label: 'Safety (optional)', count: safetyCount },
-          ] as {
-            id: 'inspection' | 'readings' | 'safety' | 'house';
-            label: string;
-            count: { filled: number; total: number };
-          }[]
-        ).map((tab) => {
-          const dotState = checkDotState(tab.count);
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setChecksTab(tab.id)}
-              aria-label={`${tab.label}, ${tab.count.filled} of ${tab.count.total} complete`}
-              className={`subtab-btn flex flex-1 flex-col items-center justify-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
-            >
-              <span>{tab.label}</span>
-              <span
-                aria-hidden="true"
-                className="h-[8px] w-[8px] rounded-full"
-                style={
-                  dotState === 'all'
-                    ? { background: '#1a7a52' }
-                    : dotState === 'some'
-                      ? { background: '#EF9F27' }
-                      : { border: '1.5px solid var(--color-border-primary)', background: 'transparent' }
-                }
-              />
-            </button>
-          );
-        })}
-      </div>
-      ) : null}
-
-      {inApplianceDetail && (singlePage || checksTab === 'inspection') && (
-        <div className="space-y-4">
-          {appliances.map((appliance, index) => {
+  /** One appliance's inspection block. Rendered beside its identity, per appliance. */
+  const renderApplianceInspection = (appliance: Cp12Appliance, index: number) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             return (
@@ -3242,13 +3252,10 @@ export function CertificateWizard({
               </div>
             </div>
             );
-          })}
-        </div>
-      )}
+  };
 
-      {inApplianceDetail && (singlePage || checksTab === 'readings') && (
-        <div className="space-y-4">
-          {appliances.map((appliance, index) => {
+  /** One appliance's readings block. Rendered beside its identity, per appliance. */
+  const renderApplianceReadings = (appliance: Cp12Appliance, index: number) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             const combustionVis = cp12FieldVisibility(category, 'combustion');
@@ -3398,13 +3405,10 @@ export function CertificateWizard({
               </div>
             </div>
             );
-          })}
-        </div>
-      )}
+  };
 
-      {inApplianceDetail && (singlePage || checksTab === 'safety') && (
-        <div className="space-y-4">
-          {appliances.map((appliance, index) => {
+  /** One appliance's safety block. Rendered beside its identity, per appliance. */
+  const renderApplianceSafety = (appliance: Cp12Appliance, index: number) => {
             if (activeApplianceIndex != null && index !== activeApplianceIndex) return null;
             const category = resolveCp12Category(appliance.appliance_type);
             const classification = getApplianceSafetyClassification(appliance);
@@ -3617,9 +3621,66 @@ export function CertificateWizard({
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+  };
+
+  const StepThree = (
+    <WizardLayout
+      variant={singlePage ? 'section' : 'step'}
+      step={offsetStep(3)}
+      total={totalSteps}
+      title={inApplianceDetail ? `Appliance ${(activeApplianceIndex ?? 0) + 1} checks` : 'Property checks'}
+      status={inApplianceDetail ? 'On-site checks' : 'Whole-installation checks'}
+      onBack={handleChecksBack}
+    >
+      {offlineDraftBanner}
+      <p className="mb-3 text-[12px] leading-[1.5] text-[var(--color-text-tertiary)]">
+        {inApplianceDetail
+          ? 'Only the Regulation 26(9) confirmation is legally required. Everything else — Readings, Safety and the additional inspection detail — is conventional and prints on the certificate only if you record it.'
+          : 'Whole-installation checks are optional — they appear on the certificate only if you record them. Continue to signatures when ready.'}
+      </p>
+      {inApplianceDetail && !singlePage ? (
+      <div className="mb-4 flex border-b-[0.5px] border-[var(--color-border-tertiary)]">
+        {(
+          [
+            // Rendered only in wizard mode — see the guard on the wrapper below.
+            { id: 'inspection', label: 'Inspection', count: inspectionCount },
+            { id: 'readings', label: 'Readings (optional)', count: readingsCount },
+            { id: 'safety', label: 'Safety (optional)', count: safetyCount },
+          ] as {
+            id: 'inspection' | 'readings' | 'safety' | 'house';
+            label: string;
+            count: { filled: number; total: number };
+          }[]
+        ).map((tab) => {
+          const dotState = checkDotState(tab.count);
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setChecksTab(tab.id)}
+              aria-label={`${tab.label}, ${tab.count.filled} of ${tab.count.total} complete`}
+              className={`subtab-btn flex flex-1 flex-col items-center justify-center gap-[5px] pb-[10px] pt-[6px] text-[12px] font-medium transition ${checksTab === tab.id ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}
+            >
+              <span>{tab.label}</span>
+              <span
+                aria-hidden="true"
+                className="h-[8px] w-[8px] rounded-full"
+                style={
+                  dotState === 'all'
+                    ? { background: '#1a7a52' }
+                    : dotState === 'some'
+                      ? { background: '#EF9F27' }
+                      : { border: '1.5px solid var(--color-border-primary)', background: 'transparent' }
+                }
+              />
+            </button>
+          );
+        })}
+      </div>
+      ) : null}
+
+
+
 
       {!inApplianceDetail && (
         <div className="space-y-4">
@@ -3788,7 +3849,6 @@ export function CertificateWizard({
   const StepFour = (
     <WizardLayout
       variant={singlePage ? 'section' : 'step'}
-      headerAction={layoutToggle}
       step={offsetStep(4)}
       total={totalSteps}
       title="Signatures & PDF"
@@ -3972,7 +4032,6 @@ export function CertificateWizard({
                 Back
               </button>
               <p className="text-[15px] font-medium text-[var(--color-text-primary)]">CP12</p>
-              {layoutToggle}
             </div>
           </header>
           <main className="mx-auto max-w-2xl px-4 pb-32 pt-6">
@@ -3989,10 +4048,6 @@ export function CertificateWizard({
     );
   }
 
-  if (step === 1) return <>{StepOne}{limitModal}</>;
-  if (step === 2) return <>{StepTwo}{limitModal}</>;
-  if (step === 3) return <>{StepThree}{limitModal}</>;
-  return <>{StepFour}{limitModal}</>;
 }
 
 const hasValue = (val: unknown) => typeof val === 'string' && val.trim().length > 0;

@@ -225,7 +225,6 @@ describe('CP12 renderer audit', () => {
     fs.mkdirSync(outDir, { recursive: true });
     const outPath = path.join(outDir, 'cp12-audit.pdf');
     fs.writeFileSync(outPath, bytes);
-    // eslint-disable-next-line no-console
     console.log('WROTE_PDF', outPath, bytes.byteLength, 'bytes');
   });
 });
