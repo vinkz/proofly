@@ -1343,6 +1343,18 @@ export async function updateField(payload: z.infer<typeof UpdateFieldSchema>) {
   const { user, error } = await getUserWithRetry(readClient, 'updateField');
   if (error || !user) throw new Error('Unauthorized');
 
+  // The write below uses the service-role client so it can work consistently
+  // across older RLS policies. Verify ownership first; authentication alone
+  // must never allow a caller to mutate a guessed job UUID.
+  const { data: ownedJob, error: ownershipErr } = await readClient
+    .from('jobs')
+    .select('id')
+    .eq('id', input.jobId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (ownershipErr) throw new Error(ownershipErr.message);
+  if (!ownedJob) throw new Error('Unauthorized');
+
   const sb = await supabaseServerServiceRole();
   await sb
     .from(JOB_FIELDS_TABLE)
@@ -1450,6 +1462,8 @@ async function scheduleGasWarningReminderRows(params: {
 
 const BoilerServiceJobInfoSchema = z.object({
   jobId: z.string().uuid(),
+  savedClientId: z.string().uuid().optional().or(z.literal('')),
+  savedPropertyId: z.string().uuid().optional().or(z.literal('')),
   data: z.object({
     customer_name: optionalText,
     customer_company: optionalText,
@@ -1629,18 +1643,51 @@ export async function saveBoilerServiceJobInfo(payload: z.infer<typeof BoilerSer
   const sb = await supabaseServerServiceRole();
   const { jobId, data } = input;
   const certificateType: CertificateType = 'gas_service';
+  let linkedClientId = input.savedClientId || null;
+  const linkedPropertyId = input.savedPropertyId || null;
+
+  if (linkedClientId) {
+    const savedClient = await getCustomerById(linkedClientId, { sb, userId: user.id, requireOwner: true });
+    if (!savedClient) throw new Error('Saved client not found');
+  }
+
+  if (linkedPropertyId) {
+    const { data: savedProperty, error: propertyErr } = await sb
+      .from('properties')
+      .select('id, client_id, user_id')
+      .eq('id', linkedPropertyId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (propertyErr) throw new Error(propertyErr.message);
+    if (!savedProperty) throw new Error('Saved property not found');
+
+    if (savedProperty.client_id) {
+      const propertyClient = await getCustomerById(savedProperty.client_id, {
+        sb,
+        userId: user.id,
+        requireOwner: true,
+      });
+      if (!propertyClient) throw new Error('Saved property client not found');
+      linkedClientId = propertyClient.id;
+    }
+  }
+
   const customerAddress = [data.customer_address_line1, data.customer_address_line2, data.customer_city]
     .map((value) => value.trim())
     .filter(Boolean)
     .join(', ');
+  const jobUpdate: Database['public']['Tables']['jobs']['Update'] = {
+    client_name: data.customer_name,
+    address: data.property_address,
+    scheduled_for: data.service_date || null,
+    title: data.customer_name ? `Boiler Service for ${data.customer_name}` : 'Boiler Service draft',
+  };
+  if (linkedClientId) jobUpdate.client_id = linkedClientId;
+  if (linkedPropertyId) jobUpdate.property_id = linkedPropertyId;
+
   const { error: updateErr } = await sb
     .from('jobs')
-    .update({
-      client_name: data.customer_name,
-      address: data.property_address,
-      scheduled_for: data.service_date || null,
-      title: data.customer_name ? `Boiler Service for ${data.customer_name}` : 'Boiler Service draft',
-    })
+    .update(jobUpdate)
     .eq('id', jobId)
     .eq('user_id', user.id);
   if (updateErr) throw new Error(updateErr.message);

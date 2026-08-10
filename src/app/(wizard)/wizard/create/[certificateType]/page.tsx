@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import { createJob, ensureGasWarningNoticeJob, getCertificateWizardState } from '@/server/certificates';
 import { getJobCompletionState } from '@/server/jobs';
-import { listClients } from '@/server/clients';
+import { listClients, listClientsWithCompliance } from '@/server/clients';
 import { ProfileRequiredCard } from '@/components/profile/profile-required-card';
 import { CERTIFICATE_TYPES, CERTIFICATE_LABELS, type CertificateType } from '@/types/certificates';
 import type { Database } from '@/lib/database.types';
@@ -23,6 +23,7 @@ import { GeneralWorksClientStep } from './_components/general-works-client-step'
 import { GasWarningClientStep } from './_components/gas-warning-client-step';
 import { BreakdownClientStep } from './_components/breakdown-client-step';
 import { CommissioningClientStep } from './_components/commissioning-client-step';
+import { arrivedWithBoilerServiceContext } from '@/lib/boiler-service/saved-context';
 
 const pickText = (...values: Array<string | null | undefined>) => {
   for (const value of values) {
@@ -341,12 +342,25 @@ export default async function CertificateWizardPage({
   }
 
   if (normalizedType === 'gas_service') {
+    // Direct-to-certificate service jobs have no preceding /jobs/new form, so
+    // offer the same saved client/property acceleration there. The client
+    // component suppresses it when this job already arrived with that context.
+    const savedClients = arrivedWithBoilerServiceContext(initialInfo)
+      ? []
+      : await listClientsWithCompliance().catch((error) => {
+          console.warn('CertificateWizardPage: saved boiler-service context unavailable', {
+            jobId,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          return [];
+        });
     return (
       <BoilerServiceWizard
         jobId={jobId}
         initialFields={initialInfo}
         initialJobContext={initialJobContext}
         initialPhotoPreviews={wizardState.photoPreviews}
+        savedClients={savedClients}
         stepOffset={stepOffset}
         startStep={requestedStartStep}
       />

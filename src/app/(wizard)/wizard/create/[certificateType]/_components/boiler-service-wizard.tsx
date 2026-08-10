@@ -11,6 +11,7 @@ import { SignatureCard } from '@/components/certificates/signature-card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { CollapsibleSection } from '@/components/wizard/layout/collapsible-section';
 import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/steps/appliance-step';
@@ -43,12 +44,22 @@ import { LimitReachedModal } from '@/components/billing/limit-reached-modal';
 import type { AddressLookupResult, AddressLookupSuggestion } from '@/lib/address-lookup';
 import type { Cp12VoiceReadingsParsed } from '@/lib/cp12/voice-readings';
 import { toUserMessage } from '@/lib/user-errors';
+import {
+  arrivedWithBoilerServiceContext,
+  boilerServiceSavedClientLabel,
+  boilerServiceSavedPropertyLabel,
+  savedClientJobInfoPatch,
+  savedPropertyJobAddressPatch,
+  savedPropertyJobInfoPatch,
+  type BoilerServiceSavedClient,
+} from '@/lib/boiler-service/saved-context';
 
 type BoilerServiceWizardProps = {
   jobId: string;
   initialFields: Record<string, string | null | undefined>;
   initialJobContext?: InitialJobContext | null;
   initialPhotoPreviews?: Record<string, string>;
+  savedClients?: BoilerServiceSavedClient[];
   stepOffset?: number;
   startStep?: number;
 };
@@ -137,6 +148,8 @@ type BoilerServiceDraftState = {
   customerSignaturePath: string;
   addressSearchQuery: string;
   customerAddressSearchQuery: string;
+  selectedSavedClientId: string;
+  selectedSavedPropertyId: string;
 };
 
 const BOILER_SERVICE_DEMO_JOB_ADDRESS: BoilerServiceJobAddress = {
@@ -327,6 +340,7 @@ export function BoilerServiceWizard({
   jobId,
   initialFields,
   initialJobContext = null,
+  savedClients = [],
   stepOffset = 0,
   startStep = 1,
 }: BoilerServiceWizardProps) {
@@ -341,6 +355,11 @@ export function BoilerServiceWizard({
   const [queuedIssue, setQueuedIssue] = useState(false);
   const wasOfflineRef = useRef(false);
   const resolvedFields = mergeJobContextFields(initialFields, initialJobContext);
+  // Keep this decision tied to the server snapshot. Live form state would make
+  // the selector disappear as soon as the engineer chose or typed a value.
+  const arrivedWithSavedContext = arrivedWithBoilerServiceContext(resolvedFields);
+  const [selectedSavedClientId, setSelectedSavedClientId] = useState('');
+  const [selectedSavedPropertyId, setSelectedSavedPropertyId] = useState('');
   const [isAddressLookupPending, setIsAddressLookupPending] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<AddressLookupSuggestion[]>([]);
   const [selectedAddressMatchId, setSelectedAddressMatchId] = useState<string | null>(null);
@@ -408,6 +427,44 @@ export function BoilerServiceWizard({
     job_postcode: resolvedFields.job_postcode ?? resolvedFields.postcode ?? '',
     job_tel: resolvedFields.job_tel ?? resolvedFields.job_phone ?? '',
   });
+
+  const selectedSavedClient = useMemo(
+    () => savedClients.find((client) => client.id === selectedSavedClientId) ?? null,
+    [savedClients, selectedSavedClientId],
+  );
+  const selectedSavedProperties = selectedSavedClient?.properties ?? [];
+
+  const handleSavedClientSelect = (clientId: string) => {
+    setSelectedSavedClientId(clientId);
+    setSelectedSavedPropertyId('');
+    const client = savedClients.find((candidate) => candidate.id === clientId);
+    if (!client) return;
+
+    const patch = savedClientJobInfoPatch(client);
+    setJobInfo((previous) => ({ ...previous, ...patch }));
+    const customerLine1 = patch.customer_address_line1 ?? '';
+    skipCustomerAddressSearchForRef.current = customerLine1.trim() || null;
+    setCustomerAddressSearchQuery(customerLine1);
+    setCustomerAddressSuggestions([]);
+    setCustomerAddressSearchError(null);
+    setSelectedCustomerAddressMatchId(null);
+  };
+
+  const handleSavedPropertySelect = (propertyId: string) => {
+    setSelectedSavedPropertyId(propertyId);
+    const property = selectedSavedProperties.find((candidate) => candidate.id === propertyId);
+    if (!property) return;
+
+    const infoPatch = savedPropertyJobInfoPatch(property);
+    const addressPatch = savedPropertyJobAddressPatch(property);
+    setJobInfo((previous) => ({ ...previous, ...infoPatch }));
+    setJobAddress((previous) => ({ ...previous, ...addressPatch }));
+    skipAddressSearchForRef.current = addressPatch.job_address_line1.trim() || null;
+    setAddressSearchQuery(addressPatch.job_address_line1);
+    setAddressSuggestions([]);
+    setAddressSearchError(null);
+    setSelectedAddressMatchId(null);
+  };
 
   const [details, setDetails] = useState<BoilerServiceDetails>({
     boiler_make: resolvedFields.boiler_make ?? '',
@@ -481,6 +538,8 @@ export function BoilerServiceWizard({
       customerSignaturePath,
       addressSearchQuery,
       customerAddressSearchQuery,
+      selectedSavedClientId,
+      selectedSavedPropertyId,
     }),
     [
       addressSearchQuery,
@@ -495,6 +554,8 @@ export function BoilerServiceWizard({
       engineerSignaturePath,
       jobAddress,
       jobInfo,
+      selectedSavedClientId,
+      selectedSavedPropertyId,
       step,
     ],
   );
@@ -510,8 +571,10 @@ export function BoilerServiceWizard({
       jobAddress,
       details,
       checks,
+      selectedSavedClientId,
+      selectedSavedPropertyId,
     }),
-    [checks, completionDate, details, jobAddress, jobInfo],
+    [checks, completionDate, details, jobAddress, jobInfo, selectedSavedClientId, selectedSavedPropertyId],
   );
 
   const {
@@ -539,6 +602,8 @@ export function BoilerServiceWizard({
       setCheckComments(draft.checkComments ?? {});
       setAddressSearchQuery(draft.addressSearchQuery ?? '');
       setCustomerAddressSearchQuery(draft.customerAddressSearchQuery ?? '');
+      setSelectedSavedClientId(draft.selectedSavedClientId ?? '');
+      setSelectedSavedPropertyId(draft.selectedSavedPropertyId ?? '');
     },
   });
 
@@ -558,6 +623,8 @@ export function BoilerServiceWizard({
 
     return {
       info: nextInfo,
+      savedClientId: selectedSavedClientId,
+      savedPropertyId: selectedSavedPropertyId,
       jobFields: {
         job_reference: jobAddress.job_reference,
         job_address_name: jobAddress.job_address_name,
@@ -574,7 +641,17 @@ export function BoilerServiceWizard({
         customer_signature_path: customerSignaturePath,
       },
     };
-  }, [completionDate, customerSignature, customerSignaturePath, engineerSignature, engineerSignaturePath, jobAddress, jobInfo]);
+  }, [
+    completionDate,
+    customerSignature,
+    customerSignaturePath,
+    engineerSignature,
+    engineerSignaturePath,
+    jobAddress,
+    jobInfo,
+    selectedSavedClientId,
+    selectedSavedPropertyId,
+  ]);
 
   const syncBoilerServiceOfflineDraft = useCallback(async () => {
     if (isOfflineDraftSyncing) return;
@@ -583,7 +660,12 @@ export function BoilerServiceWizard({
 
     try {
       const payload = buildBoilerServiceDraftPersistencePayload();
-      await saveBoilerServiceJobInfo({ jobId, data: payload.info });
+      await saveBoilerServiceJobInfo({
+        jobId,
+        data: payload.info,
+        savedClientId: payload.savedClientId,
+        savedPropertyId: payload.savedPropertyId,
+      });
       await saveJobFields({ jobId, fields: payload.jobFields });
       await saveBoilerServiceDetails({ jobId, data: details });
       await saveBoilerServiceChecks({ jobId, data: checks });
@@ -979,7 +1061,12 @@ export function BoilerServiceWizard({
       postcode: jobAddress.job_postcode || jobInfo.postcode,
       service_date: serviceDate,
     };
-    await saveBoilerServiceJobInfo({ jobId, data: infoToSave });
+    await saveBoilerServiceJobInfo({
+      jobId,
+      data: infoToSave,
+      savedClientId: selectedSavedClientId,
+      savedPropertyId: selectedSavedPropertyId,
+    });
     await saveJobFields({
       jobId,
       fields: {
@@ -1055,7 +1142,12 @@ export function BoilerServiceWizard({
         }
         await persistBeforePdf();
         const finalInfo = { ...jobInfo, service_date: completionDate || jobInfo.service_date };
-        await saveBoilerServiceJobInfo({ jobId, data: finalInfo });
+        await saveBoilerServiceJobInfo({
+          jobId,
+          data: finalInfo,
+          savedClientId: selectedSavedClientId,
+          savedPropertyId: selectedSavedPropertyId,
+        });
         const result = await generateGasServicePdf({ jobId, previewOnly: false });
         if ('error' in result && result.error === 'limit_reached') {
           setLimitReachedMessage(result.message ?? 'You have reached your monthly certificate limit.');
@@ -1192,17 +1284,7 @@ export function BoilerServiceWizard({
     add('engineer-signature', 'Engineer signature', hasValue(engineerSignature) || hasValue(engineerSignaturePath), 4);
     return items;
   }, [
-    checks.appliance_flueing_safe,
-    checks.appliance_operating_correctly,
-    checks.appliance_safe,
-    checks.appliance_ventilation_safe,
-    checks.boiler_working_correctly,
-    checks.defects_details,
-    checks.defects_found,
-    checks.heat_input,
-    checks.operating_pressure_mbar,
-    checks.service_flue_checked,
-    checks.service_ventilation_checked,
+    checks,
     completionDate,
     details.boiler_location,
     details.boiler_make,
@@ -1412,6 +1494,68 @@ export function BoilerServiceWizard({
                 <Button type="button" variant="outline" className="rounded-[6px] text-xs" onClick={handleDemoFill} disabled={isPending}>
                   Autofill test Boiler Service
                 </Button>
+              </div>
+            ) : null}
+            {savedClients.length > 0 && !arrivedWithSavedContext ? (
+              <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
+                <p className="text-[13px] font-medium text-[var(--color-text-primary)]">Use saved details</p>
+                <p className="mt-1 text-[12px] text-[var(--color-text-tertiary)]">
+                  Choose an existing client and property, then edit anything below.
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="boiler-saved-client" className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                      Client / landlord
+                    </label>
+                    <Select
+                      id="boiler-saved-client"
+                      value={selectedSavedClientId}
+                      onChange={(event) => handleSavedClientSelect(event.target.value)}
+                      className="mt-1"
+                      disabled={isPending}
+                    >
+                      <option value="">Select saved client</option>
+                      {savedClients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {boilerServiceSavedClientLabel(client)}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <label htmlFor="boiler-saved-property" className="text-[11px] tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                      Property
+                    </label>
+                    <Select
+                      id="boiler-saved-property"
+                      value={selectedSavedPropertyId}
+                      onChange={(event) => handleSavedPropertySelect(event.target.value)}
+                      className="mt-1"
+                      disabled={isPending || !selectedSavedClientId || selectedSavedProperties.length === 0}
+                    >
+                      <option value="">
+                        {!selectedSavedClientId
+                          ? 'Select client first'
+                          : selectedSavedProperties.length
+                            ? 'Select saved property'
+                            : 'No saved properties'}
+                      </option>
+                      {selectedSavedProperties.map((property) => (
+                        <option key={property.id} value={property.id}>
+                          {[
+                            boilerServiceSavedPropertyLabel(property),
+                            property.nextServiceDue
+                              ? `Due ${new Date(`${property.nextServiceDue}T00:00:00`).toLocaleDateString('en-GB')}`
+                              : null,
+                            property.status !== 'unknown' ? property.status : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
               </div>
             ) : null}
             <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
