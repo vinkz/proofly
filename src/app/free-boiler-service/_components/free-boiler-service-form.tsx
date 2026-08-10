@@ -285,16 +285,14 @@ export function FreeBoilerServiceForm() {
         </h2>
         <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
           {emailed
-            ? 'A copy is on its way to your inbox as well.'
-            : 'The file has saved to your device. We could not email a copy this time.'}
+            ? 'Also sent to your inbox.'
+            : 'Saved to your device. Email delivery failed.'}
           {reference ? ` Reference ${reference}.` : ''}
         </p>
 
         <div className="mt-5 rounded-[12px] bg-[var(--color-background-secondary)] p-4">
           <p className="text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
-            We did not keep this record — you re-type everything next time. A CertNow account keeps
-            every record you issue, lets you reissue them, and gives each one a shareable link for
-            the customer.
+            Save customer details and service records for next time with a CertNow account.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button asChild variant="primary">
@@ -347,17 +345,16 @@ export function FreeBoilerServiceForm() {
           onSubmit={handleDownload}
           className="mt-6 rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4 sm:p-5"
         >
-          <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">Download it</h3>
+          <h3 className="text-[15px] font-semibold text-[var(--color-text-primary)]">Email and download</h3>
           <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
-            Where should we send a copy? Your email address is the only thing we keep — the record
-            itself is not stored.{' '}
+            Enter your email to receive a copy.{' '}
             <a
               href="/legal/privacy#free-tools"
               target="_blank"
               rel="noreferrer"
               className="underline"
             >
-              How we use it
+              Privacy
             </a>
             .
           </p>
@@ -384,7 +381,7 @@ export function FreeBoilerServiceForm() {
 
   return (
     <div>
-      <Section title="You" hint="Required — this identifies who carried out the work.">
+      <Section title="Engineer">
         <Grid>
           <FieldLabel label="Engineer name">
             <Input value={payload.engineer_name} onChange={(e) => set('engineer_name', e.target.value)} />
@@ -401,7 +398,7 @@ export function FreeBoilerServiceForm() {
             in the collapsed business section, where it read as missing. */}
         <FieldLabel
           label="Gas Safe ID card number (optional)"
-          hint="Your licence number — the one on your own ID card, not the business registration above."
+          hint="Your licence number from your own ID card."
         >
           <Input
             value={payload.engineer_id_card_number}
@@ -413,7 +410,7 @@ export function FreeBoilerServiceForm() {
       <Section
         title="Your business details"
         collapsible
-        hint="Appears in the record header. Omitted from the PDF if left blank."
+        hint="Optional. Shown in the record header."
       >
         <Grid>
           <FieldLabel label="Business name">
@@ -433,7 +430,7 @@ export function FreeBoilerServiceForm() {
         </FieldLabel>
       </Section>
 
-      <Section title="Customer" collapsible hint="A service record is not a landlord document.">
+      <Section title="Customer" collapsible>
         <Grid>
           <FieldLabel label="Name">
             <Input value={payload.customer_name} onChange={(e) => set('customer_name', e.target.value)} />
@@ -551,7 +548,7 @@ export function FreeBoilerServiceForm() {
 
       <Section
         title="Safety examination"
-        hint="Regulation 26(9) — the outcomes that must be recorded after working on the appliance."
+        hint="Required Regulation 26(9) outcomes."
       >
         <EnumChips
           label="Flue safe"
@@ -645,7 +642,7 @@ export function FreeBoilerServiceForm() {
         </FieldLabel>
       </Section>
 
-      <Section title="Service tasks" collapsible hint="Benchmark convention — never blocks the record.">
+      <Section title="Service tasks" collapsible hint="Optional service checklist.">
         <EnumChips
           label="Visual inspection"
           value={payload.service_visual_inspection}
@@ -684,7 +681,7 @@ export function FreeBoilerServiceForm() {
         />
       </Section>
 
-      <Section title="Combustion readings" collapsible hint="Mandatory at commissioning under Benchmark, optional for a service.">
+      <Section title="Combustion readings" collapsible hint="Optional for a service.">
         <div className="grid gap-3 sm:grid-cols-3">
           <FieldLabel label="High CO (ppm)">
             <Input inputMode="decimal" value={payload.high_co_ppm} onChange={(e) => set('high_co_ppm', e.target.value)} />
@@ -744,7 +741,7 @@ export function FreeBoilerServiceForm() {
       {issues.length ? (
         <div className="mb-4 rounded-[12px] border-[0.5px] border-[var(--color-border-secondary)] bg-[var(--color-background-secondary)] p-4">
           <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
-            A service record needs these before it can be issued:
+            Complete these fields:
           </p>
           <ul className="mt-2 list-disc pl-5 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
             {issues.map((issue) => (

@@ -198,7 +198,7 @@ export function FreeGasRateClient() {
                   onChange={(e) => setCalorificValue(e.target.value)}
                 />
                 <span className="mt-1 block text-[12px] text-[var(--color-text-tertiary)]">
-                  From the gas bill or supplier. UK natural gas is usually 38–41.
+                  Usually 38 to 41 for UK natural gas.
                 </span>
               </label>
               <label className="block">

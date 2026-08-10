@@ -49,12 +49,10 @@ export function FreeToolFooter({ currentRoute }: { currentRoute: string }) {
 
       <div className="mt-8 rounded-[16px] bg-[var(--color-background-secondary)] p-5">
         <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">
-          Doing more than one of these a month?
+          Need to save your work?
         </h2>
         <p className="mt-2 max-w-[62ch] text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
-          These tools keep nothing — every certificate starts from a blank form, and we cannot
-          re-send one you have lost. An account remembers your details and your customers, keeps
-          every certificate you issue, and gives each one a link you can send to the landlord.
+          Reuse customer details and keep your certificates together with a CertNow account.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Link

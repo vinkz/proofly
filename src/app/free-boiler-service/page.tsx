@@ -8,8 +8,7 @@ import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 
 export const metadata: Metadata = {
   title: 'Free boiler service record generator | CertNow',
-  description:
-    'Fill in a gas appliance service record and download a complete PDF. No account, no watermark.',
+  description: 'Create and download a gas appliance service record PDF.',
   // Discoverability is controlled by the single FREE_BOILER_SERVICE_NOINDEX flag
   // in @/lib/boiler-service/free-tool. robots.ts reads the same flag.
   ...(FREE_BOILER_SERVICE_NOINDEX ? { robots: { index: false, follow: false } } : {}),
@@ -26,8 +25,7 @@ export default function FreeBoilerServicePage() {
           Boiler service record
         </h1>
         <p className="mt-3 max-w-[62ch] text-[15px] leading-relaxed text-[var(--color-text-secondary)]">
-          Fill this in and get a complete gas appliance service record as a PDF. No account, no
-          watermark, nothing held back.
+          Create and download a gas appliance service record PDF.
         </p>
         {/* Reads as the next sentence of the paragraph above. It sits outside the
             <p> because a paragraph may only contain phrasing content. */}
@@ -37,7 +35,7 @@ export default function FreeBoilerServicePage() {
           viewedEvent={ANALYTICS_EVENTS.freeBoilerServiceSampleViewed}
         />
         <p className="mt-3 max-w-[62ch] text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
-          Nothing you type here is saved. Close the tab and it is gone — so finish in one sitting.
+          Complete it in one sitting. This form does not autosave.
         </p>
       </header>
       <FreeBoilerServiceForm />

@@ -5,8 +5,7 @@ import { FREE_TOOLS, FREE_TOOLS_HUB_NOINDEX, indexableFreeTools } from '@/lib/fr
 
 export const metadata: Metadata = {
   title: 'Free tools for Gas Safe engineers | CertNow',
-  description:
-    'Free certificate generators and calculators for Gas Safe engineers. No account, no watermark.',
+  description: 'Free certificate generators and calculators for Gas Safe engineers.',
   ...(FREE_TOOLS_HUB_NOINDEX ? { robots: { index: false, follow: false } } : {}),
 };
 
@@ -28,8 +27,7 @@ export default function FreeToolsPage() {
           Free tools for Gas Safe engineers
         </h1>
         <p className="mt-3 max-w-[62ch] text-[15px] leading-relaxed text-[var(--color-text-secondary)]">
-          Real, complete documents. No account, no watermark, nothing held back. Built by the team
-          behind CertNow because we needed them ourselves.
+          Create certificates and calculate gas rate. No account needed.
         </p>
       </header>
 
@@ -53,13 +51,10 @@ export default function FreeToolsPage() {
 
       <div className="mt-10 rounded-[16px] bg-[var(--color-background-secondary)] p-5">
         <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">
-          What the free tools do not do
+          Save your work with CertNow
         </h2>
         <p className="mt-2 max-w-[62ch] text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
-          They keep nothing. Every certificate starts from a blank form, we cannot re-send one you
-          have lost, and there is no record to reissue. That is fine for the occasional job. If you
-          are doing several a week, an account remembers your details and your customers, keeps
-          every certificate, and gives each one a link for the landlord.
+          Reuse customer details and keep your certificates together.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Link

@@ -7,9 +7,8 @@ import { SampleDocumentPreview } from '@/app/_components/sample-document-preview
 import { ANALYTICS_EVENTS } from '@/lib/analytics/events';
 
 export const metadata: Metadata = {
-  title: 'Free CP12 generator — Landlord Gas Safety Record | CertNow',
-  description:
-    'Fill in a Landlord Gas Safety Record and download a complete CP12 PDF. No account, no watermark.',
+  title: 'Free CP12 generator | Landlord Gas Safety Record | CertNow',
+  description: 'Create and download a complete Landlord Gas Safety Record PDF.',
   // Discoverability is controlled by the single FREE_CP12_NOINDEX flag in
   // @/lib/cp12/free-tool. robots.ts reads the same flag.
   ...(FREE_CP12_NOINDEX ? { robots: { index: false, follow: false } } : {}),
@@ -26,8 +25,7 @@ export default function FreeCp12Page() {
           CP12 generator
         </h1>
         <p className="mt-3 max-w-[62ch] text-[15px] leading-relaxed text-[var(--color-text-secondary)]">
-          Fill this in and get a complete Landlord Gas Safety Record as a PDF. No account, no
-          watermark, nothing held back. It covers every gas appliance type, not just boilers.
+          Create and download a complete Landlord Gas Safety Record PDF for any gas appliance.
         </p>
         {/* Reads as the next sentence of the paragraph above. It sits outside the
             <p> because a paragraph may only contain phrasing content. */}
@@ -37,9 +35,7 @@ export default function FreeCp12Page() {
           viewedEvent={ANALYTICS_EVENTS.freeCp12SampleViewed}
         />
         <p className="mt-3 max-w-[62ch] text-[13px] leading-relaxed text-[var(--color-text-tertiary)]">
-          Nothing is sent to us until you ask for the PDF, and we keep no copy of the certificate
-          afterwards. Your answers are held in this browser so you cannot lose them, and are cleared
-          once you download.
+          Your progress is saved in this browser until you download.
         </p>
       </header>
       <FreeCp12Form />
