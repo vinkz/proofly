@@ -1,12 +1,16 @@
 'use server';
 
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
 import { z } from 'zod';
 
-import type { Database } from '@/lib/database.types';
-import { supabaseServerReadOnly } from '@/lib/supabaseServer';
-import { env, assertSupabaseEnv } from '@/lib/env';
+// Anon key, not the service-role key: these are GoTrue sign-in/sign-up calls,
+// which never needed elevated rights, and a service-role client would be one
+// `.from()` away from bypassing every RLS policy in the database.
+//
+// This used to be a second, locally-declared client identical to
+// supabaseServerAction except that its cookie writes were unguarded — which is
+// what filled Sentry with "Cookies can only be modified in a Server Action or
+// Route Handler" from /login. One adapter now, so the two cannot drift again.
+import { supabaseServerAction, supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 const CredentialsSchema = z.object({
   email: z.string().email(),
@@ -16,27 +20,6 @@ const SignupCredentialsSchema = CredentialsSchema.extend({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
-async function createAuthedSupabaseClient() {
-  assertSupabaseEnv();
-  const cookieStore = await cookies();
-
-  // Anon key, not the service-role key. These are GoTrue sign-in/sign-up calls,
-  // which never needed elevated rights -- but the client was one `.from()` away
-  // from silently bypassing every RLS policy in the database.
-  return createServerClient<Database>(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
-      },
-      set(name: string, value: string, options) {
-        cookieStore.set({ name, value, ...options });
-      },
-      remove(name: string, options) {
-        cookieStore.set({ name, value: '', expires: new Date(0), ...options });
-      },
-    },
-  });
-}
 
 /**
  * Expected outcomes are returned, not thrown.
@@ -86,7 +69,7 @@ function authMessage(raw: string | undefined, fallback: string): string {
 
 export async function signInWithPassword(payload: unknown): Promise<AuthActionResult> {
   const body = CredentialsSchema.parse(payload);
-  const sb = await createAuthedSupabaseClient();
+  const sb = await supabaseServerAction();
   const { error } = await sb.auth.signInWithPassword({
     email: body.email,
     password: body.password,
@@ -105,7 +88,7 @@ export async function signInWithMagicLink(
   nextPath?: string,
 ): Promise<AuthActionResult> {
   const parsed = z.string().email().parse(email);
-  const sb = await createAuthedSupabaseClient();
+  const sb = await supabaseServerAction();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
   const safeNext = safeNextPath(nextPath);
   const emailRedirectTo = siteUrl
@@ -125,7 +108,7 @@ export async function signUpWithPassword(
   payload: unknown,
 ): Promise<AuthActionResult<{ needsEmailConfirmation: boolean; existingAccount: boolean }>> {
   const body = SignupCredentialsSchema.parse(payload);
-  const sb = await createAuthedSupabaseClient();
+  const sb = await supabaseServerAction();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
   const emailRedirectTo = siteUrl ? `${siteUrl}/auth/callback?next=${encodeURIComponent('/signup/step2')}` : undefined;
 
@@ -166,7 +149,7 @@ export async function signUpWithPassword(
 // Mirrors the emailRedirectTo used at signup so the link lands back in onboarding.
 export async function resendSignupConfirmation(email: unknown): Promise<AuthActionResult> {
   const parsed = z.string().email().parse(email);
-  const sb = await createAuthedSupabaseClient();
+  const sb = await supabaseServerAction();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? '';
   const emailRedirectTo = siteUrl ? `${siteUrl}/auth/callback?next=${encodeURIComponent('/signup/step2')}` : undefined;
 
