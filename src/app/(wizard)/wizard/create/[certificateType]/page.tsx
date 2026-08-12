@@ -421,7 +421,11 @@ export default async function CertificateWizardPage({
 
   // Offered as prefill at the top of the single-page layout, so choosing a
   // saved landlord no longer needs a screen of its own before the form.
-  const wizardClients = await listClients().catch(() => []);
+  // With compliance, so the saved-landlord picker can offer that landlord's
+  // saved properties too — the boiler service already loads them this way.
+  // ClientWithCompliance extends ClientListItem, so the landlord picker is
+  // unaffected by the richer shape.
+  const wizardClients = await listClientsWithCompliance().catch(() => []);
 
   return (
     <CertificateWizard
