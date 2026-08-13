@@ -15,7 +15,11 @@ import { ApplianceStep, type ApplianceStepValues } from '@/components/wizard/ste
 import { SearchableSelect } from '@/components/wizard/inputs/searchable-select';
 import { PassFailToggle } from '@/components/wizard/inputs/pass-fail-toggle';
 import { visibleCp12ApplianceChecks } from '@/lib/cp12/applianceChecks';
-import type { ClientListItem } from '@/types/client';
+import type { ClientWithCompliance } from '@/server/clients';
+import {
+  savedPropertyJobAddressPatch,
+  type BoilerServiceSavedProperty,
+} from '@/lib/boiler-service/saved-context';
 
 /** Answer set for checks that record whether something was done, not tested. */
 const YES_NO_OPTIONS = [
@@ -95,7 +99,7 @@ type WizardProps = {
    * before the form. It is not a different way of making a certificate, only a
    * faster way of filling one in, so on one page it belongs on the page.
    */
-  clients?: ClientListItem[];
+  clients?: ClientWithCompliance[];
   stepOffset?: number;
   startStep?: number;
   hideBillingCustomerStep?: boolean;
@@ -667,7 +671,7 @@ export function CertificateWizard({
   const singlePage = true;
 
   /** What the engineer sees and types, and therefore what comes back. */
-  const savedLandlordLabel = (client: ClientListItem) =>
+  const savedLandlordLabel = (client: ClientWithCompliance) =>
     [client.landlord_name || client.name, client.organization].filter(Boolean).join(' · ');
 
   /**
@@ -688,6 +692,7 @@ export function CertificateWizard({
     // same reason.
     const client = clients.find((candidate) => savedLandlordLabel(candidate) === chosenLabel);
     if (!client) return;
+    setSelectedSavedClientId(client.id);
     const [line1 = '', ...rest] = splitAddressParts(
       String(client.landlord_address ?? client.address ?? ''),
     );
@@ -716,6 +721,53 @@ export function CertificateWizard({
    */
   const arrivedWithLandlord = Boolean(String(resolvedInitialInfo.landlord_name ?? '').trim());
 
+  /**
+   * Which saved landlord was picked, so the property list can be theirs.
+   *
+   * Properties hang off a client, so there is nothing sensible to offer until
+   * one is chosen — the same order the boiler service asks in.
+   */
+  const [selectedSavedClientId, setSelectedSavedClientId] = useState('');
+  const savedPropertiesForClient =
+    clients.find((candidate) => candidate.id === selectedSavedClientId)?.properties ?? [];
+
+  const savedPropertyLabel = (property: BoilerServiceSavedProperty) =>
+    [
+      String(property.name ?? '').trim() || String(property.addressLine1 ?? '').trim(),
+      [property.addressLine1, property.town, property.postcode]
+        .map((part) => String(part ?? '').trim())
+        .filter(Boolean)
+        .join(', '),
+    ]
+      .filter(Boolean)
+      .join(' \u00b7 ');
+
+  /**
+   * Fill the property being certified from one the engineer has already saved.
+   *
+   * Writes the same job-address shape the boiler service writes, and clears the
+   * address lookup so a stale suggestion list cannot reopen over the top of what
+   * was just filled in.
+   */
+  const applySavedProperty = (chosenLabel: string) => {
+    const property = savedPropertiesForClient.find(
+      (candidate) => savedPropertyLabel(candidate) === chosenLabel,
+    );
+    if (!property) return;
+    const patch = savedPropertyJobAddressPatch(property);
+    setJobAddress((prev) => ({ ...prev, ...patch }));
+    setInfo((prev) => ({
+      ...prev,
+      property_address: buildPropertyAddressFromJobAddress({ ...jobAddress, ...patch }),
+      postcode: patch.job_postcode || prev.postcode,
+    }));
+    skipAddressSearchForRef.current = patch.job_address_line1.trim() || null;
+    setAddressSearchQuery(patch.job_address_line1);
+    setPostcodeSuggestions([]);
+    setSelectedPostcodeMatchId(null);
+    setAddressSearchError(null);
+  };
+
   const savedLandlordPicker = clients.length && !arrivedWithLandlord ? (
     <div className="mb-5 rounded-[12px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-4">
       <SearchableSelect
@@ -731,6 +783,28 @@ export function CertificateWizard({
       <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
         Fills the landlord details below. You can edit anything it fills in.
       </p>
+      {/* The property is the other half of what a saved customer knows, and
+          re-typing an address the app already holds is the thing the picker
+          exists to avoid. Appears once a landlord is chosen, because properties
+          belong to one — and stays hidden for a landlord with none rather than
+          offering an empty dropdown. */}
+      {selectedSavedClientId && savedPropertiesForClient.length ? (
+        <div className="mt-4 border-t-[0.5px] border-[var(--color-border-tertiary)] pt-4">
+          <SearchableSelect
+            label="Start from one of their saved properties (optional)"
+            value=""
+            options={savedPropertiesForClient.map((property) => ({
+              label: savedPropertyLabel(property),
+              value: savedPropertyLabel(property),
+            }))}
+            placeholder="Search their properties"
+            onChange={applySavedProperty}
+          />
+          <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-text-tertiary)]">
+            Fills the property address being inspected. You can edit anything it fills in.
+          </p>
+        </div>
+      ) : null}
     </div>
   ) : null;
 

@@ -391,7 +391,25 @@ describe('saved landlords are prefill, not a route', () => {
   });
 
   it('survives a client list that fails to load', () => {
-    expect(wizardPage).toContain('await listClients().catch(() => [])');
+    // The list is prefill, never a dependency: if it fails the form still opens
+    // with an empty picker rather than an error page.
+    expect(wizardPage).toMatch(/await listClients(WithCompliance)?\(\)\.catch\(\(\) => \[\]\)/);
+  });
+
+  it('offers the landlord\'s saved properties, not just the landlord', () => {
+    // Half of what a saved customer knows is the property, and re-typing an
+    // address the app already holds is the thing the picker exists to avoid.
+    // Loaded with compliance because that is what carries the properties.
+    expect(wizardPage).toContain('listClientsWithCompliance()');
+    expect(wizard).toContain('savedPropertiesForClient');
+    expect(wizard).toContain('applySavedProperty');
+    expect(wizard).toContain('savedPropertyJobAddressPatch');
+  });
+
+  it('asks for the landlord before their properties, and hides an empty list', () => {
+    // Properties belong to a client, so there is nothing to offer until one is
+    // picked — and a landlord with none gets no dropdown rather than an empty.
+    expect(wizard).toContain('selectedSavedClientId && savedPropertiesForClient.length ?');
   });
 
   it('stops pointing at a step name that is not on screen', () => {
