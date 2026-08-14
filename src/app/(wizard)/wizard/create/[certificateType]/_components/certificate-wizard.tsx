@@ -644,6 +644,11 @@ export function CertificateWizard({
     Boolean((resolvedInitialInfo.customer_signature ?? '') || (resolvedInitialInfo.customer_signature_path ?? '')),
   );
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  // Why the last issue attempt failed, shown beside the button that failed.
+  // A toast is pinned to the top of the viewport, and this button sits at the
+  // bottom of a long single page — the account of the failure has to be where
+  // the engineer is looking, and has to still be there while they fix it.
+  const [issueError, setIssueError] = useState<string | null>(null);
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [checksTab, setChecksTab] = useState<'inspection' | 'readings' | 'safety' | 'house'>('inspection');
 
@@ -1705,23 +1710,19 @@ export function CertificateWizard({
       return;
     }
     setIsGeneratingPdf(true);
+    setIssueError(null);
     void (async () => {
       try {
-        const { blockingMissing } = checklist;
-        if (blockingMissing > 0) {
-          pushToast({
-            title: 'Complete required items first',
-            description: 'Review the checklist before issuing the certificate.',
-            variant: 'error',
-          });
-          return;
-        }
+        // No guard on checklist.blockingMissing here: the button is disabled
+        // under exactly that condition and the queued-issue effect returns on
+        // it, so the branch that used to sit here could never run.
         if (isCp12) {
           await persistCp12IssueState();
         }
         if (isCp12) {
           const errors = validateCurrentCp12();
           if (errors.length) {
+            setIssueError(`This CP12 is missing: ${errors.join('; ')}`);
             pushToast({
               title: 'CP12 requirements missing',
               description: errors.join('; '),
@@ -1747,7 +1748,16 @@ export function CertificateWizard({
           setLimitReachedMessage(result.message ?? 'You have reached your monthly certificate limit.');
           return;
         }
-        if (!('jobId' in result)) return;
+        if (!('jobId' in result)) {
+          // Previously a bare return: the button stopped and said nothing.
+          setIssueError('The server did not return a certificate. Nothing has been issued — try again.');
+          pushToast({
+            title: 'Could not issue certificate',
+            description: 'The server did not return a certificate. Try again.',
+            variant: 'error',
+          });
+          return;
+        }
         const { jobId: resultJobId } = result;
         clearDraft();
         pushToast({
@@ -1765,6 +1775,7 @@ export function CertificateWizard({
         }
         router.push(`/jobs/${resultJobId}/complete`);
       } catch (error) {
+        setIssueError(toUserMessage(error, 'Something went wrong issuing this certificate. Try again.'));
         pushToast({
           title: 'Could not generate PDF',
           description: toUserMessage(error, 'Try again.'),
@@ -4044,7 +4055,17 @@ export function CertificateWizard({
           </div>
         </div>
       </div>
-      <div id="cp12-step4-footer-actions" className="sticky bottom-0 z-10 mt-6 flex gap-[8px] border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+      <div id="cp12-step4-footer-actions" className="sticky bottom-0 z-10 mt-6 border-t-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+        {issueError ? (
+          <p
+            role="alert"
+            data-testid="cp12-issue-error"
+            className="mb-[8px] rounded-[12px] bg-[var(--color-red-bg)] px-3 py-2 text-[13px] leading-snug text-[var(--color-red)]"
+          >
+            {issueError}
+          </p>
+        ) : null}
+        <div className="flex gap-[8px]">
         <button
           type="button"
           onClick={() => setStep(1)}
@@ -4071,6 +4092,7 @@ export function CertificateWizard({
                     ? 'Issuing…'
                     : 'Issue CP12'}
         </button>
+        </div>
       </div>
     </WizardLayout>
   );
