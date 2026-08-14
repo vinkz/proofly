@@ -889,13 +889,19 @@ export function FreeCp12Form() {
               onChange={(e) => setField('landlord_city', e.target.value)}
             />
           </Field>
-          <Field label="Postcode">
-            <Input
-              autoComplete="postal-code"
-              value={payload.fields.landlord_postcode}
-              onChange={(e) => setField('landlord_postcode', e.target.value)}
-            />
-          </Field>
+          {/* Looks up too. The lookup used to live only on Address line 1, but
+              someone with a postcode in hand goes to the box labelled Postcode
+              — a real visitor tapped exactly this field, typed nothing and
+              left. Same handler, so a pick fills the whole address either way. */}
+          <AddressLookupField
+            label="Postcode"
+            value={payload.fields.landlord_postcode}
+            onValueChange={(value) => setField('landlord_postcode', value)}
+            placeholder="e.g. SW1A 1AA"
+            autoComplete="postal-code"
+            onSelect={applyLandlordAddress}
+            resolveSelectedValue={(address) => address.postcode}
+          />
         </Grid>
         <Field label="Telephone (optional)">
           <Input
@@ -958,13 +964,16 @@ export function FreeCp12Form() {
               onChange={(e) => setField('job_address_city', e.target.value)}
             />
           </Field>
-          <Field label="Postcode">
-            <Input
-              autoComplete="postal-code"
-              value={payload.fields.job_postcode}
-              onChange={(e) => setField('job_postcode', e.target.value)}
-            />
-          </Field>
+          {/* Same reasoning as the landlord postcode above. */}
+          <AddressLookupField
+            label="Postcode"
+            value={payload.fields.job_postcode}
+            onValueChange={(value) => setField('job_postcode', value)}
+            placeholder="e.g. SW1A 1AA"
+            autoComplete="postal-code"
+            onSelect={applyPropertyAddress}
+            resolveSelectedValue={(address) => address.postcode}
+          />
         </Grid>
       </Section>
 
