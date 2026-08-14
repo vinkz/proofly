@@ -1641,32 +1641,28 @@ export function CertificateWizard({
     const companyPostcode = resolvedInitialInfo.company_postcode || CP12_DEMO_INFO.company_postcode || '';
     const companyPhone = resolvedInitialInfo.company_phone || CP12_DEMO_INFO.company_phone || '';
 
-    const data = {
-      ...info,
-      inspection_date: info.inspection_date || completionDate,
-      landlord_address: buildLandlordAddress(info.landlord_address_line1, info.landlord_address_line2, info.landlord_city),
-    };
+    // Issuing is its own save point. On the single-page CP12 there is no step
+    // footer to press Next on, so this is the only thing that writes the
+    // property address to the server. Build the same payload the Next path
+    // built — a hand-rolled subset here omitted the job_address_* fields, and
+    // validateCp12ForIssue reads job_address_line1 / job_postcode from the
+    // saved job, so issuing failed on an address that was filled in on screen.
+    const payload = buildCp12DraftPersistencePayload();
     const jobPayload = {
-      ...data,
+      ...payload.jobPayload,
       engineer_name: engineerName,
       gas_safe_number: gasSafeNumber,
       company_name: companyName,
       company_address: companyAddress,
       company_postcode: companyPostcode,
       company_phone: companyPhone,
-      job_tel: jobAddress.job_tel || info.customer_phone || '',
+      job_tel: payload.jobAddress.job_tel || info.customer_phone || '',
     };
     await saveCp12JobInfo({ jobId, data: jobPayload });
-    setInfo(data);
+    setJobAddress(payload.jobAddress);
+    setInfo(payload.data);
     await saveCp12Appliances({ jobId, appliances, defects });
-    const cp12SafetyFieldsPayload = {
-      emergency_control_accessible: evidenceFields.emergency_control_accessible ?? '',
-      gas_tightness_satisfactory: evidenceFields.gas_tightness_satisfactory ?? '',
-      pipework_visual_satisfactory: evidenceFields.pipework_visual_satisfactory ?? '',
-      equipotential_bonding_satisfactory: evidenceFields.equipotential_bonding_satisfactory ?? '',
-      next_inspection_due: evidenceFields.next_inspection_due ?? '',
-    };
-    await saveJobFields({ jobId, fields: cp12SafetyFieldsPayload });
+    await saveJobFields({ jobId, fields: payload.jobFields });
     await updateField({ jobId, key: 'completion_date', value: completionDate });
   };
 
