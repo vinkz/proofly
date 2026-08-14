@@ -38,6 +38,14 @@ export const ANALYTICS_EVENTS = {
   // The funnel these four form is the point of the tool: the gap between
   // free_cp12_generated and free_cp12_email_submitted is the drop-off at the
   // email wall, and is the number to watch. Keep them in this order.
+  /**
+   * How far down the page a visitor got, at 25/50/75/100%. Once per milestone.
+   *
+   * Sits before form_started because that is the gap it exists to explain: five
+   * real visitors in a week all left without touching a field, and nothing
+   * recorded whether they had read to the form or bounced off the header.
+   */
+  freeCp12ScrollDepth: 'free_cp12_scroll_depth',
   /** Fires on the first edit to the free CP12 form. Once per session. */
   freeCp12FormStarted: 'free_cp12_form_started',
   /** Fires when the free CP12 PDF renders successfully and is previewed. */

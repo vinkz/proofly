@@ -1,6 +1,8 @@
 import * as Sentry from '@sentry/nextjs';
 import posthog from 'posthog-js';
 
+import { browserEnvProperties } from '@/lib/browser-env';
+
 const sampleRate = Number.parseFloat(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? '0.1');
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
@@ -12,6 +14,12 @@ const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 const BENIGN_ERROR_PATTERNS = [
   'ResizeObserver loop completed with undelivered notifications',
   'ResizeObserver loop limit exceeded',
+  // Facebook's in-app browser injects its own navigation logger
+  // (app://navigation_performance_logger_android). Its JS-to-Java bridge is
+  // collected before the page finishes unloading, so the beforeunload handler
+  // throws as the visitor leaves. Third-party code, fires on the way out, and
+  // nothing of ours is involved — the one occurrence reported 0 users affected.
+  'Java object is gone',
 ];
 
 const isBenignBrowserError = (message: unknown): boolean =>
@@ -78,6 +86,16 @@ if (POSTHOG_KEY && !isLocalDevelopment) {
       return event;
     },
   });
+
+  // Registered rather than sent per call-site, so every event carries them —
+  // including autocapture, pageviews and pageleaves, which is where the two
+  // questions these answer actually live: how much of our traffic is a crawler,
+  // and how much of it is stuck inside an app's WebView.
+  //
+  // Super properties live in persistence, which is 'memory' here, so they last
+  // exactly as long as the page load does. That is the same lifetime as the
+  // anonymous person itself, so nothing is lost by it.
+  posthog.register(browserEnvProperties());
 }
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
