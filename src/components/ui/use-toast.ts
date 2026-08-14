@@ -43,6 +43,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const pushToast = useCallback((toast: ToastOptions) => {
     const id = createId();
     setToasts((prev) => [...prev, { ...toast, id }]);
+    // Errors stay until dismissed. Everything else is an acknowledgement the
+    // engineer can miss without losing anything; an error is the only account
+    // of why the thing they asked for did not happen, and four seconds at the
+    // top of the viewport is easy to miss from the bottom of a long form.
+    if (toast.variant === 'error') return;
     setTimeout(() => {
       setToasts((prev) => prev.filter((item) => item.id !== id));
     }, 4000);
