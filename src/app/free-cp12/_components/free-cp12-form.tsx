@@ -26,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { EnumChips } from '@/components/wizard/inputs/enum-chips';
 import { SignaturePad } from '@/components/certificates/signature-pad';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
+import { detectInAppBrowser, type InAppBrowser } from '@/lib/browser-env';
 import {
   CP12_APPLIANCE_CATEGORIES,
   CP12_BOILER_SUBTYPES,
@@ -202,8 +203,15 @@ export function FreeCp12Form() {
   const [emailed, setEmailed] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
+  // Set after mount, never during render: the server has no user agent to read,
+  // so deciding this while rendering would mismatch the hydrated markup.
+  const [inAppBrowser, setInAppBrowser] = useState<InAppBrowser | null>(null);
   const startedRef = useRef(false);
   const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    setInAppBrowser(detectInAppBrowser(window.navigator?.userAgent));
+  }, []);
 
   // Restore anything left in this browser before the first autosave runs, so a
   // refresh, a back button or a trip through signup does not cost the visitor
@@ -594,6 +602,22 @@ export function FreeCp12Form() {
             <span className="text-[12px] text-[var(--color-text-tertiary)]">No card required</span>
           </div>
         </div>
+
+        {/* An in-app browser is a WebView, and WebViews routinely refuse the
+            anchor-triggered blob download below — the tap does nothing and the
+            certificate is silently lost. Most of this tool's traffic arrives
+            from a Facebook link, so say it before they tap, and point at the
+            email form underneath, which does not depend on the download at all. */}
+        {inAppBrowser ? (
+          <p
+            role="status"
+            data-testid="free-cp12-in-app-browser-notice"
+            className="mt-5 rounded-[12px] bg-[var(--color-amber-bg)] px-3 py-2 text-[13px] leading-snug text-[var(--color-amber)]"
+          >
+            You are in the {inAppBrowser.label} browser, where downloads often do not work.
+            Email yourself a copy below, or open this page in Safari or Chrome to download it.
+          </p>
+        ) : null}
 
         {/* Each document individually, so a browser that blocked the automatic
             second download has not cost the engineer their warning notice. */}
