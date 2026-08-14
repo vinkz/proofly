@@ -786,7 +786,7 @@ export function FreeCp12Form() {
       <Section
         title="Your business details"
         collapsible
-        hint="Optional. Shown in the certificate header."
+        hint="Shown in the certificate header."
       >
         <Grid>
           <Field label="Business name">
@@ -1271,7 +1271,7 @@ export function FreeCp12Form() {
         )}
       </div>
 
-      <Section title="Whole-property checks" collapsible hint="Optional.">
+      <Section title="Whole-property checks" collapsible>
         <Grid>
           <EnumChips
             label="CO alarm fitted"
@@ -1327,7 +1327,7 @@ export function FreeCp12Form() {
         hint={
           hasUnsafeAppliance
             ? 'Required for unsafe appliances.'
-            : 'Optional when no defects were found.'
+            : 'Leave blank if you found no defects.'
         }
       >
         <Field
