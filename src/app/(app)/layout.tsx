@@ -9,8 +9,21 @@ import { BottomNav } from '@/components/dashboard/bottom-nav';
 import { ToolsMenu } from '@/components/dashboard/tools-menu';
 import { listPendingJobRequestsForDashboard } from '@/server/job-requests';
 import { getProfile } from '@/server/profile';
+import { IdentifyUser } from '@/components/analytics/identify-user';
+import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  // Analytics identity only. RequireAuth below is what actually gates the page;
+  // a failure here must never keep an engineer out of their own dashboard.
+  let analyticsUser: { id: string; email?: string } | null = null;
+  try {
+    const supabase = await supabaseServerReadOnly();
+    const user = await getSupabaseUser(supabase);
+    if (user) analyticsUser = { id: user.id, email: user.email ?? undefined };
+  } catch {
+    analyticsUser = null;
+  }
+
   let pendingRequestsCount = 0;
   try {
     const requests = await listPendingJobRequestsForDashboard();
@@ -32,6 +45,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <RequireAuth>
+      {analyticsUser ? (
+        <IdentifyUser userId={analyticsUser.id} email={analyticsUser.email} />
+      ) : null}
       <div className="min-h-screen bg-[var(--color-background-secondary)] text-[var(--color-text-primary)] lg:flex">
         {/* Desktop (>=1024px): sidebar nav. Hidden while onboarding (focused flow). */}
         <HideDuringOnboarding active={onboardingIncomplete}>

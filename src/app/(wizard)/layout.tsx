@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { getSupabaseUser, supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { PageFade } from '@/app/(app)/_components/page-fade';
+import { IdentifyUser } from '@/components/analytics/identify-user';
 
 export default async function WizardLayout({ children }: { children: ReactNode }) {
   const supabase = await supabaseServerReadOnly();
@@ -19,6 +20,7 @@ export default async function WizardLayout({ children }: { children: ReactNode }
   // this header stays h-14.
   return (
     <div className="min-h-screen bg-[var(--color-background-secondary)] font-sans text-[var(--color-text-primary)]">
+      <IdentifyUser userId={user.id} email={user.email} />
       <header className="sticky top-0 z-30 h-14 border-b-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)]">
         <div className="flex h-full items-center justify-between gap-4 px-4">
           <Link href="/dashboard" className="flex items-center gap-2">
