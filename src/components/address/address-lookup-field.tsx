@@ -29,6 +29,11 @@ type Props = {
   onValueChange?: (value: string) => void;
   placeholder?: string;
   autoComplete?: string;
+  /**
+   * What this field shows once a suggestion is picked. Defaults to address
+   * line 1, which is right for an address box and wrong for a postcode one.
+   */
+  resolveSelectedValue?: (address: AddressLookupResult) => string;
 };
 
 export function AddressLookupField({
@@ -39,6 +44,7 @@ export function AddressLookupField({
   onValueChange,
   placeholder = 'Start typing a postcode or address',
   autoComplete = 'off',
+  resolveSelectedValue,
 }: Props) {
   const [internalQuery, setInternalQuery] = useState('');
   const [suggestions, setSuggestions] = useState<AddressLookupSuggestion[]>([]);
@@ -167,9 +173,14 @@ export function AddressLookupField({
       if (data.address) {
         const resolvedLine1 =
           data.address.line1 || data.address.summary || suggestion.address || suggestion.label;
-        skipSearchForRef.current = resolvedLine1.trim();
+        // What this particular field keeps. Line 1 for an address box; a
+        // postcode box has to keep the postcode, or picking a suggestion writes
+        // a street into it and the skip-search guard below stops matching the
+        // value actually on screen, which reopens the list on its own.
+        const kept = (resolveSelectedValue?.(data.address) || resolvedLine1).trim();
+        skipSearchForRef.current = kept;
         setSuggestions([]);
-        updateQuery(resolvedLine1);
+        updateQuery(kept);
         // updateQuery treats input as "show me matches"; here the value came
         // from a pick, so keep it dismissed.
         dismissedRef.current = true;
