@@ -571,13 +571,27 @@ export function FreeCp12Form() {
   if (stage === 'done') {
     return (
       <div className="rounded-[16px] border-[0.5px] border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] p-5 sm:p-6">
+        {/* Only claim the download happened where it plausibly did. A WebView can
+            refuse the blob download silently and there is no callback that says
+            so, so telling someone inside one that their certificate is "saved to
+            your device" is a false success of exactly the kind this codebase has
+            already been bitten by. Say what is actually known — the email, which
+            the server confirms — and what to do about the rest. */}
         <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
-          {documents.length > 1 ? 'Your documents are downloaded' : 'Your CP12 is downloaded'}
+          {inAppBrowser
+            ? documents.length > 1
+              ? 'Your documents are ready'
+              : 'Your CP12 is ready'
+            : documents.length > 1
+              ? 'Your documents are downloaded'
+              : 'Your CP12 is downloaded'}
         </h2>
         <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-secondary)]">
-          {emailed
-            ? 'Also sent to your inbox.'
-            : 'Saved to your device. Email delivery failed.'}
+          {inAppBrowser
+            ? `${emailed ? 'Sent to your inbox.' : 'Email delivery failed.'} The ${inAppBrowser.label} browser often blocks downloads, so it may not have saved to this device — open this page in Safari or Chrome to download it.`
+            : emailed
+              ? 'Also sent to your inbox.'
+              : 'Saved to your device. Email delivery failed.'}
           {reference ? ` Reference ${reference}.` : ''}
         </p>
         {documents.some((d) => d.kind === 'gas_warning_notice') ? (
@@ -603,21 +617,6 @@ export function FreeCp12Form() {
           </div>
         </div>
 
-        {/* An in-app browser is a WebView, and WebViews routinely refuse the
-            anchor-triggered blob download below — the tap does nothing and the
-            certificate is silently lost. Most of this tool's traffic arrives
-            from a Facebook link, so say it before they tap, and point at the
-            email form underneath, which does not depend on the download at all. */}
-        {inAppBrowser ? (
-          <p
-            role="status"
-            data-testid="free-cp12-in-app-browser-notice"
-            className="mt-5 rounded-[12px] bg-[var(--color-amber-bg)] px-3 py-2 text-[13px] leading-snug text-[var(--color-amber)]"
-          >
-            You are in the {inAppBrowser.label} browser, where downloads often do not work.
-            Email yourself a copy below, or open this page in Safari or Chrome to download it.
-          </p>
-        ) : null}
 
         {/* Each document individually, so a browser that blocked the automatic
             second download has not cost the engineer their warning notice. */}
@@ -712,6 +711,24 @@ export function FreeCp12Form() {
               under RIDDOR within 14 days.
             </p>
           </div>
+        ) : null}
+
+        {/* An in-app browser is a WebView, and WebViews routinely refuse the
+            anchor-triggered blob download — the tap does nothing and the
+            certificate is silently lost. Most of this tool's traffic arrives
+            from a Facebook link, so say it here, immediately above the email
+            form, which is server-side and does not depend on the download at
+            all. It has to sit on this step: by the done step the email has
+            already been sent or failed, and there is nothing left to point at. */}
+        {inAppBrowser ? (
+          <p
+            role="status"
+            data-testid="free-cp12-in-app-browser-notice"
+            className="mt-6 rounded-[12px] bg-[var(--color-amber-bg)] px-3 py-2 text-[13px] leading-snug text-[var(--color-amber)]"
+          >
+            You are in the {inAppBrowser.label} browser, where downloads often do not work.
+            Email yourself a copy below, or open this page in Safari or Chrome to download it.
+          </p>
         ) : null}
 
         <form
