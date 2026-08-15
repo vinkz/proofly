@@ -3,13 +3,14 @@ import { notFound, redirect } from 'next/navigation';
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { isUUID } from '@/lib/ids';
 import { getInvoice } from '@/server/invoices';
+import { safeInternalPath } from '@/lib/safe-redirect';
 import { InvoiceEditor } from './_components/invoice-editor';
 
-// Only allow internal, single-leading-slash return paths to avoid open redirects.
+// Only internal return paths, so ?returnTo= cannot bounce someone off-site.
+// See @/lib/safe-redirect: the leading-slash check this used to do here let
+// `/\evil.com` through, because the URL parser reads that backslash as a slash.
 function resolveReturnTo(value: string | undefined, fallback: string): string {
-  if (!value) return fallback;
-  if (!value.startsWith('/') || value.startsWith('//')) return fallback;
-  return value;
+  return safeInternalPath(value, fallback);
 }
 
 export default async function InvoiceEditorPage({
