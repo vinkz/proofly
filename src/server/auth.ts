@@ -2,6 +2,8 @@
 
 import { z } from 'zod';
 
+import { safeInternalPath } from '@/lib/safe-redirect';
+
 // Anon key, not the service-role key: these are GoTrue sign-in/sign-up calls,
 // which never needed elevated rights, and a service-role client would be one
 // `.from()` away from bypassing every RLS policy in the database.
@@ -80,8 +82,7 @@ export async function signInWithPassword(payload: unknown): Promise<AuthActionRe
   return { ok: true };
 }
 
-const safeNextPath = (nextPath: unknown) =>
-  typeof nextPath === 'string' && nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : null;
+const safeNextPath = (nextPath: unknown) => safeInternalPath(nextPath, null);
 
 export async function signInWithMagicLink(
   email: string,

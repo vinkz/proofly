@@ -3,14 +3,15 @@ import { redirect } from 'next/navigation';
 
 import { supabaseServerReadOnly } from '@/lib/supabaseServer';
 import { createInvoiceForJob } from '@/server/invoices';
+import { safeInternalPath } from '@/lib/safe-redirect';
 import { CreateInvoiceButton } from './_components/create-invoice-button';
 import { CreateBlankInvoiceButton } from './_components/create-blank-invoice-button';
 
-// Only allow internal, single-leading-slash return paths to avoid open redirects.
+// Only internal return paths, so ?returnTo= cannot bounce someone off-site.
+// See @/lib/safe-redirect for why the leading-slash check that used to live
+// here was not enough.
 function resolveReturnTo(value: string | undefined): string | null {
-  if (!value) return null;
-  if (!value.startsWith('/') || value.startsWith('//')) return null;
-  return value;
+  return safeInternalPath(value, null);
 }
 
 type JobSummary = {

@@ -12,6 +12,7 @@ import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
+import { safeInternalPath } from '@/lib/safe-redirect';
 
 export function LoginClient() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export function LoginClient() {
   const [authMode, setAuthMode] = useState<'password' | 'magic'>('password');
   const [isPending, startTransition] = useTransition();
   const nextPathParam = searchParams.get('next');
-  const nextPath = nextPathParam?.startsWith('/') && !nextPathParam.startsWith('//') ? nextPathParam : '/';
+  const nextPath = safeInternalPath(nextPathParam, '/');
 
   const handlePasswordLogin = () => {
     startTransition(async () => {
