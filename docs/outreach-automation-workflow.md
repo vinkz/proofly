@@ -69,18 +69,18 @@ Do not use a five-day Sleep module. The delay is represented by the Airtable
 | `Town` | Single-line text | CSV/manual |
 | `Region` | Single-line text | CSV/manual |
 | `Postcode area` | Single-line text | CSV/manual |
-| `Search status` | Single select: `Ready`, `Complete`, `Error` | Manual initially |
-| `Last searched` | Date with time | Optional automation |
-| `Results found` | Number | Optional automation |
+| `Search status` | Single select: `Ready`, `Searching`, `Complete`, `Failed`, `Search again` | Set by Scenario 1 |
+| `Last searched` | Date with time | Set by Scenario 1 |
+| `Results found` | Number | Set by Scenario 1 |
 
-Create a view named `Discovery queue` filtered to:
+Two notes on the live field:
 
-```text
-Search status is Ready
-```
+- `Results found` is configured with one decimal place, so a count of five reads
+  `5.0`. Set its precision to integer.
+- The base contains two overlapping views, `Discovery queue` and
+  `Ready to search`. Scenario 1 no longer reads either — see below.
 
-Scenario 1 should use this view with its Formula field blank. The equivalent
-formula, when needed, is:
+Scenario 1 selects its town with an explicit formula and a **blank** View field:
 
 ```text
 {Search status}="Ready"
@@ -88,6 +88,28 @@ formula, when needed, is:
 
 Use straight quotes, include the equals sign, and do not begin the Airtable
 formula with an additional `=`.
+
+Do not drive this search from a view. On 2026-08-15 the `Discovery queue` view
+was observed returning `Bath`, a town already marked `Complete`, so every run
+re-searched the same town: the upsert matched the same five Place IDs, updated
+them instead of inserting, and produced no new leads while still spending
+Google Places quota on identical queries. Three consecutive runs returned
+byte-identical payloads.
+
+The failure is silent in every log. The scenario reports success, the write-back
+dutifully re-stamps `Complete` and `Last searched` on a town that was already
+complete, and the only visible symptom is that the Leads table stops growing.
+
+A view filter is a UI setting that can be edited, duplicated or renamed by
+anyone with base access, and nothing in Make revalidates it. The formula is
+stored with the scenario, so it fails loudly rather than quietly selecting the
+wrong record. The same reasoning applies to the `BLANK()` clause in Scenario 2.
+
+To confirm the queue is advancing, sort Locations by `Last searched` descending
+after a run. A different town each time is correct. The same town twice means
+the selection is wrong, whatever the execution status says.
+
+To re-search a town deliberately, set its `Search status` back to `Ready`.
 
 ### Leads table
 
@@ -212,7 +234,24 @@ view.
 
 ### Recommended Airtable views
 
-#### Manual review
+#### Manual entry
+
+Named `Manual entry` in the base — this document previously called it
+`Manual review`.
+
+Filter on what is **outstanding**, not on what is unqualified:
+
+```text
+Approved to send is unchecked
+AND Do not contact is unchecked
+AND Qualification status is not Rejected
+```
+
+Filtering on `Qualification status` being an early value (`Discovered`,
+`Enriching`) removes a record from the view the instant you mark it `Qualified`
+— before you can tick `Approved to send`, which is the very next thing the
+process asks you to do. The filter above keeps a qualified lead in front of you
+until you approve it, then drops it on its own.
 
 Show:
 
@@ -402,22 +441,63 @@ Merge field: Google Place ID
 Map only discovery fields:
 
 ```text
-Business_name  ← places.displayName.text
+Business_name   ← places.displayName.text
 Google Place ID ← places.id
 Google Maps URL ← places.googleMapsUri
 Address         ← places.formattedAddress
 Town            ← Locations.Town
-Region          ← Locations.Region
-Postcode area   ← Locations.Postcode area
-Lead source     ← Google Places
-Outreach status ← New
 ```
 
-Do not map approval, qualification, reply or suppression fields in the upsert.
+**Do not map approval, qualification, outreach status, reply or suppression
+fields in the upsert.** This rule is load-bearing and was violated in the live
+build for some time. An upsert that matches an existing Place ID *updates* that
+record, so mapping
 
-While the workflow is small, inspect the run and manually change the processed
-Location from `Ready` to `Complete`. This avoids adding an aggregator solely to
-update one location after several iterator bundles.
+```text
+Qualification status ← "Discovered"
+Outreach status      ← "New"
+Approved to send     ← false
+Test record          ← false
+```
+
+meant every re-run of a town silently reset leads a human had already qualified,
+rejected or approved, and pushed them back into the review queue looking new.
+It also stranded leads that had already been emailed: their status was
+overwritten to a value no send scenario writes, so the follow-up query stopped
+matching them. Discovery must only ever write what Google told it.
+
+Because those defaults are no longer written by the automation, set them as
+Airtable **field defaults** instead, so newly created leads still land in the
+review queue:
+
+```text
+Qualification status  default → Discovered
+Outreach status       default → New
+```
+
+Checkboxes default to unchecked already, so `Approved to send` and `Test record`
+need no configuration.
+
+### Module 3: Airtable — Update Record (Locations write-back)
+
+Sits between the HTTP module and the Iterator, so it runs once per town rather
+than once per returned place.
+
+```text
+Record ID:     Locations → ID
+Search status: Complete
+Last searched: now
+Results found: length(places)
+```
+
+Without this the town is never moved off `Ready`. The search reads the
+`Discovery queue` view with a limit of 1, so the *same* town is returned on
+every run — which is what turned the upsert problem above from a one-off into a
+repeating reset every 15 minutes, and quietly burned Google Places quota on
+identical queries.
+
+Confirm the `Search status` single select actually contains `Complete`;
+typecast is off, so a missing option fails the run rather than inventing one.
 
 ### Discovery operating pattern
 
@@ -425,8 +505,15 @@ update one location after several iterator bundles.
 2. Run Scenario 1 manually.
 3. Inspect the five returned businesses.
 4. Confirm Google Place IDs were upserted rather than duplicated.
-5. Change the Location to `Complete`.
+5. Confirm the Location moved to `Complete` with `Last searched` and
+   `Results found` populated. The scenario does this itself now; if it is still
+   `Ready` afterwards, the write-back failed and the town will be searched again
+   on the next run.
 6. Research the new Leads manually.
+
+To re-search a town later, set it back to `Ready` deliberately. Re-running is
+now safe for leads you have already judged — the upsert no longer touches their
+qualification, approval or outreach status.
 
 ---
 
@@ -457,15 +544,22 @@ Production Search Records formula:
 ```text
 AND(
   {Live send eligible}=1,
-  OR({Outreach status}="Ready", {Outreach status}="New"),
+  OR({Outreach status}="Ready", {Outreach status}="New", {Outreach status}=BLANK()),
   OR({Sequence step}=0, {Sequence step}=BLANK()),
   {Gmail thread ID}=""
 )
 ```
 
-`New` is accepted as well as `Ready` because discovery leaves qualified leads at
-`New` and nothing promotes them to `Ready` automatically. Every other gate still
-applies through `Live send eligible`.
+`New` is accepted as well as `Ready` because nothing promotes a lead to `Ready`
+automatically. Every other gate still applies through `Live send eligible`.
+
+`BLANK()` matters. Since discovery stopped writing `Outreach status` — see
+Scenario 1, where writing it was resetting human decisions — every newly
+discovered lead arrives with that field **empty**. Empty matches neither
+`"Ready"` nor `"New"`, so without this clause a lead you had qualified and
+approved would sit there fully eligible and never be emailed, with nothing in
+any log to say why. Setting an Airtable field default of `New` would also solve
+it, but the formula should not depend on a UI setting staying configured.
 
 Note the two-argument `OR()` around the status. Writing it as
 `{Outreach status}="Ready", "New"` is not a wider match — it is a syntax error,
@@ -590,7 +684,7 @@ Logo/signature HTML:
     src="https://certnow.uk/certnow-email-logo.png"
     width="150"
     alt="CertNow"
-    style="display:block;width:150px;max-width:150px;height:auto;border:0;"
+    style="display:block;width:150px;max-width:150px;height:auto;border:0;margin-top:12px;"
   >
 </a>
 ```
@@ -598,6 +692,28 @@ Logo/signature HTML:
 Make does not automatically append the signature configured in the Gmail web
 interface. Put the signature or logo in Make's Signature content field or in the
 HTML body.
+
+This block sits in the body of **both** emails, directly below the sign-off and
+above the small-print privacy paragraph. The asset is served from
+`public/certnow-email-logo.png` in this repo, so it ships with a normal deploy;
+if the logo ever stops rendering, check that path is still deployed before
+touching the scenarios.
+
+Never paste the version Gmail shows you back into Make. Gmail rewrites the
+markup it renders, so "copy the logo out of a received email" yields something
+like:
+
+```html
+<img src="https://ci3.googleusercontent.com/meips/…#https://certnow.uk/certnow-email-logo.png"
+     class="CToWUd" data-bit="iit">
+```
+
+plus a `data-saferedirecturl` wrapper on the anchor. Those are Gmail's caching
+proxy and click-tracking artefacts, valid only inside that one mailbox. Sent to
+a real recipient they point at a Google URL scoped to someone else's session,
+so the image is liable to break for everyone but you — and it will still look
+correct while you are testing in your own inbox, which is the trap. Always
+author from the clean source above.
 
 ### Module 4: Airtable — Update Record (success)
 
@@ -1050,6 +1166,38 @@ Recommended starting configuration:
 Start Scenario 2 manually. Increase only after checking actual delivery,
 replies, suppression handling and domain reputation.
 
+### Current live configuration
+
+As of 2026-08-15 all four scenarios are active and unattended:
+
+| Scenario | Schedule (Make org TZ = Europe/Berlin) | UK time | Limit |
+|---|---|---|---:|
+| 01 Discovery | Daily 08:00 | 07:00 | 1 town / 5 Places |
+| 02 Initial outreach | Weekly, Mon–Fri 11:00 | 10:00 | 3 |
+| 03 Reply detection | Every 15 minutes | — | 20 |
+| 04 Follow-up | Weekly, Mon–Fri 11:30 | 10:30 | 3 |
+
+Make interprets the `time` field in the organisation timezone, which is
+Europe/Berlin, not UK time. A schedule written as `10:00` fires at 09:00 UK.
+Check `nextExec` after any schedule change to confirm the real firing time.
+
+Scenario 2's limit of 3 means the search returns up to three bundles and the
+reserve → send → record chain runs once per bundle, so the cap is three initial
+emails per weekday. The daily ceiling is only ever reached if three leads are
+actually approved and eligible; the approved queue, not the schedule, is the
+binding constraint on volume.
+
+Keep Scenario 4's limit equal to Scenario 2's. They were briefly 3 and 1, which
+does not hold: three leads emailed on the same day all fall due on the same day,
+and a follow-up limit of 1 drains that backlog one per weekday, so the second
+and third contacts slip to six and nine days instead of five. The gap compounds
+every day more leads are approved than can be followed up. Raise both together,
+never one alone.
+
+The worst case is bounded at six emails on a weekday — three initial at 10:00
+and three follow-ups at 10:30 — which is still a low, consistent volume from a
+single mailbox. Check delivery and reputation before going beyond that.
+
 ### Daily routine
 
 1. Check Make execution errors.
@@ -1162,6 +1310,64 @@ twice. Send a new reply in the same conversation to generate a new Message ID.
 
 4. Re-authorise or recreate the Gmail connection if the blank search returns
    nothing.
+
+### Airtable error: `Field "Sequence step" cannot accept the provided value`
+
+The single most damaging failure mode this system has had. It is a type error,
+not a value error, and it fails **after** Gmail has already sent.
+
+`Sequence step` is a Number field. If the Make mapper supplies the value as a
+quoted string and the module has **Smart links (typecast) off**, Airtable
+rejects the whole update with a 422:
+
+```text
+"fldpAFSX6cLDi3Z9n": "1"     ← string, rejected
+"fldpAFSX6cLDi3Z9n": 1       ← number, accepted
+```
+
+Both send scenarios shipped with this defect and both were repaired on
+2026-08-15 by writing the value as a number and enabling typecast on the
+module.
+
+Why it matters more than an ordinary error:
+
+- In **Scenario 2** the failing module is the final one, so the email is sent
+  and nothing is recorded. The record is left parked at `Sending` with approval
+  already consumed by the reservation step. No thread ID is stored, so a reply
+  can never be matched and no follow-up can ever fire. This is fail-closed —
+  it does not re-send — but the contact is invisible to the rest of the system.
+- In **Scenario 4** it is worse. The failed update never clears `Next action`
+  and never advances the status past `Email 1 sent`, so the record still
+  matches the follow-up search on the next run. Left scheduled, that sends the
+  same business a follow-up **every single day**.
+
+Symptoms to check for:
+
+```text
+AND({Outreach status}="Sending", {Gmail thread ID}="")
+```
+
+Any record matching that was probably emailed. Confirm against the Gmail Sent
+folder before deciding what to do with it — the Airtable record cannot tell
+you, because the write that would have told you is the one that failed.
+
+An execution that fails this way still bills the Gmail operation. A four
+operation run on Scenario 2 that ends in an Airtable error means all four
+modules ran, including the send. Compare against a clean run in the execution
+list before assuming nothing went out.
+
+### A lead reads `Ready` but has a thread ID and `Sequence step` 1
+
+The same stranding described above, seen from the data side. The record was
+emailed but its status was never advanced. Scenario 4 matches only
+`Email 1 sent`, so no follow-up fires however overdue `Next action` is, and
+Scenario 2 skips it because `Gmail thread ID` is not empty. The lead is inert.
+
+Repair by setting the status to `Email 1 sent` and clearing `Next action` in
+the same edit, which records the true state without arming a surprise
+follow-up. Uncheck `Approved to send`, since the approval was already spent.
+Re-arm the follow-up deliberately, by setting a fresh `Next action`, only if
+the contact is still worth pursuing.
 
 ### `Next action` remains blank after email 1
 
