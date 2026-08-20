@@ -4,11 +4,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import posthog from 'posthog-js';
 import { useToast } from '@/components/ui/use-toast';
-import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
+import { ANALYTICS_EVENTS, trackBeforeNavigating } from '@/lib/analytics/events';
 import { supabaseBrowser } from '@/lib/supabaseClient';
 import { toUserMessage } from '@/lib/user-errors';
 
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
+
+/**
+ * How recently an account must have been created for this sign-in to count as
+ * the signup that created it. Generous enough to absorb clock skew between the
+ * browser and Supabase; far shorter than any returning user's account age.
+ */
+const NEW_ACCOUNT_WINDOW_MS = 2 * 60 * 1000;
 
 // Minimal typing for the Google Identity Services global we use.
 type GoogleCredentialResponse = { credential: string };
@@ -106,15 +113,22 @@ export function GoogleAuthButton({
         if (user) {
           posthog.identify(user.id, { email: user.email });
         }
-        // Funnel step 3: account created via Google. Only count this on the signup
-        // flow (nextPath into signup), not ordinary Google sign-ins on /login.
-        // posthog flushes queued events via sendBeacon on pagehide, so the event
-        // survives the window.location redirect below.
-        if (nextPath?.includes('signup')) {
-          track(ANALYTICS_EVENTS.signupCompleted, { method: 'google' });
-        } else {
-          track(ANALYTICS_EVENTS.userLoggedIn, { method: 'google' });
-        }
+        // Funnel step 3. Signup vs sign-in is decided by whether the account was
+        // just created, not by which page the button was on. signInWithIdToken
+        // creates the account when it doesn't exist, so a first-time Google user
+        // who started from /login is a signup — the old nextPath check recorded
+        // those as ordinary logins and lost them from the funnel.
+        const isNewAccount = user
+          ? Date.now() - new Date(user.created_at).getTime() < NEW_ACCOUNT_WINDOW_MS
+          : nextPath?.includes('signup') === true;
+        // Sent via sendBeacon rather than queued: the redirect below happens in
+        // the same tick as the capture, and a queued request can be discarded
+        // with the page — which is how completed Google signups reached
+        // Supabase but never reached PostHog.
+        trackBeforeNavigating(
+          isNewAccount ? ANALYTICS_EVENTS.signupCompleted : ANALYTICS_EVENTS.userLoggedIn,
+          { method: 'google' },
+        );
         // Session cookies are now set by the SSR browser client; reuse the existing
         // callback route for onboarding/next routing (it no-ops without a `code`).
         const dest = new URL('/auth/callback', window.location.origin);

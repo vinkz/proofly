@@ -6,6 +6,7 @@ import { Suspense, useEffect, useRef, useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
 import { resendSignupConfirmation } from '@/server/auth';
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -17,6 +18,17 @@ function VerifyEmailInner() {
   const [isPending, startTransition] = useTransition();
   const [cooldown, setCooldown] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const trackedRef = useRef(false);
+
+  // Reaching this screen means the account was created and is waiting on email
+  // confirmation. That is the last thing we can observe on the email signup
+  // path — signup_completed deliberately does not fire here, so without this
+  // the funnel shows signup_started and then nothing, for every such signup.
+  useEffect(() => {
+    if (trackedRef.current) return;
+    trackedRef.current = true;
+    track(ANALYTICS_EVENTS.signupPendingConfirmation);
+  }, []);
 
   useEffect(() => {
     if (cooldown <= 0) {

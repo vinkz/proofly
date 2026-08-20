@@ -17,6 +17,13 @@ export const ANALYTICS_EVENTS = {
   signupStarted: 'signup_started',
   /** Fires when an account is successfully created (email or Google). */
   signupCompleted: 'signup_completed',
+  /**
+   * Fires when an email/password signup reaches the verify screen. The account
+   * exists but is unusable until confirmed, so this deliberately is not
+   * signup_completed. Without it every confirmation-gated signup is invisible:
+   * signup_started is recorded, nothing after it ever is.
+   */
+  signupPendingConfirmation: 'signup_pending_confirmation',
   /** Fires when a user creates a job. The funnel uses the first occurrence. */
   jobCreated: 'job_created',
   /** Fires when a job certificate or report PDF is generated. */
@@ -105,6 +112,28 @@ export function track(event: AnalyticsEvent, properties?: AnalyticsProps): void 
     if (typeof window === 'undefined') return;
     if (!posthog.__loaded) return;
     posthog.capture(event, properties);
+  } catch {
+    // Analytics must never break a user flow.
+  }
+}
+
+/**
+ * Capture an event that is immediately followed by a full-page navigation.
+ *
+ * `track()` puts the event on a batching queue. When the very next statement
+ * tears the page down — `window.location.assign`, a form post, an OAuth
+ * redirect — that queued request can be discarded before it is ever sent,
+ * which silently loses precisely the events worth having: the ones fired at
+ * the moment someone converts.
+ *
+ * `send_instantly` skips the queue and `sendBeacon` hands the request to the
+ * browser, which is obliged to deliver it even after the page is gone.
+ */
+export function trackBeforeNavigating(event: AnalyticsEvent, properties?: AnalyticsProps): void {
+  try {
+    if (typeof window === 'undefined') return;
+    if (!posthog.__loaded) return;
+    posthog.capture(event, properties, { send_instantly: true, transport: 'sendBeacon' });
   } catch {
     // Analytics must never break a user flow.
   }
