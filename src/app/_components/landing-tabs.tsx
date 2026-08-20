@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+
+import { FREE_TIER_MONTHLY_LIMIT } from "@/lib/plan";
 import Link from "next/link";
 
 type Tab = "engineers" | "landlords";
@@ -220,7 +222,7 @@ const proofPoints = [
 ];
 
 const includedFeatures = [
-  "10 free certificates each month",
+  `${FREE_TIER_MONTHLY_LIMIT} free certificates each month`,
   "Engineer renewal prompts",
   "Shareable property links",
   "Pre-filled return jobs",
@@ -268,7 +270,7 @@ function EngineersContent() {
           </Link>
         </div>
         <p className="mt-3 text-[12px] text-[var(--color-text-tertiary)]">
-          10 certificates free each month · No card required
+          {FREE_TIER_MONTHLY_LIMIT} certificates free each month · No card required
         </p>
       </section>
 
@@ -425,7 +427,7 @@ function EngineersContent() {
           </Link>
         </div>
         <p className="mt-4 text-center text-[12px] text-[var(--color-text-tertiary)]">
-          Start with 10 free certificates each month. Upgrade when you need unlimited.
+          Start with {FREE_TIER_MONTHLY_LIMIT} free certificates each month. Upgrade when you need unlimited.
         </p>
       </section>
 
@@ -441,7 +443,7 @@ function EngineersContent() {
           href="/signup/step1"
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-[28px] bg-[#111] text-[16px] font-medium text-white"
         >
-          Create free account — 10 certificates/month
+          Create free account — {FREE_TIER_MONTHLY_LIMIT} certificates/month
           <IconArrowRight />
         </Link>
         <p className="mt-4 text-[13px] text-[var(--color-text-secondary)]">

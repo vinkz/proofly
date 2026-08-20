@@ -4,7 +4,10 @@ import Stripe from 'stripe';
 
 export const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID ?? '';
 export const STRIPE_YEARLY_PRICE_ID = process.env.STRIPE_YEARLY_PRICE_ID ?? '';
-export const FREE_TIER_MONTHLY_LIMIT = 10;
+
+// Defined in @/lib/plan so client components and email copy can import it too;
+// re-exported here so server-side billing callers keep their existing import.
+export { FREE_TIER_MONTHLY_LIMIT } from '@/lib/plan';
 
 let stripeClient: Stripe | null = null;
 

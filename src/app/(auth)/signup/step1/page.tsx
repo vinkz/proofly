@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import posthog from 'posthog-js';
 import { ANALYTICS_EVENTS, track } from '@/lib/analytics/events';
+import { FREE_TIER_MONTHLY_LIMIT } from '@/lib/plan';
 import { supabaseBrowser } from '@/lib/supabaseClient';
 import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 import { Button } from '@/components/ui/button';
@@ -99,7 +100,7 @@ export default function SignupStep1Page() {
     <div className="pt-10">
       <h1 className="text-[24px] font-medium text-[var(--color-text-primary)]">Create your account</h1>
       <p className="mt-2 text-[13px] text-[var(--color-text-tertiary)]">
-        10 certificates free each month · No card required
+        {FREE_TIER_MONTHLY_LIMIT} certificates free each month · No card required
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '16px 0 24px' }}>
