@@ -60,8 +60,27 @@ Goal: see whether the problem is **traffic** (few people arrive) or
 | --- | --- | --- | --- |
 | 1 | Landing page view | `$pageview` (auto) on `/` | `posthog-provider.tsx` (route-change tracker) |
 | 2 | Signup started | `signup_started` | `src/app/(auth)/signup/step1/page.tsx` (mount) |
+| 3a | Awaiting email confirmation | `signup_pending_confirmation` | `src/app/(auth)/signup/verify/page.tsx` (mount) |
 | 3 | Signup completed | `signup_completed` `{ method: 'email' \| 'google' }` | step1 email success + `src/components/auth/google-auth-button.tsx` |
 | 4 | First job created | `job_created` `{ job_type, client_mode }` | `src/components/jobs/solo-job-form.tsx` (submit success) |
+
+**Step 3a is not an alternative spelling of step 3.** When Supabase requires
+email confirmation, step1 returns early: the account exists but is unusable, so
+`signup_completed` deliberately does not fire. Before `signup_pending_confirmation`
+existed, every confirmation-gated signup showed `signup_started` and then nothing
+at all, which reads identically to abandonment. Treat 3a as the real end of the
+email path until the account is confirmed.
+
+**Signup vs sign-in on the Google path** is decided by how recently the account
+was created, not by which page the button was on. `signInWithIdToken` creates the
+account when it doesn't exist, so a first-time Google user who started at `/login`
+is a signup; the earlier `nextPath.includes('signup')` check filed those as
+ordinary logins.
+
+**Events fired immediately before a navigation must use `trackBeforeNavigating`,**
+not `track`. `track` queues onto a batch that a page teardown can discard, which
+loses exactly the conversions worth counting. The helper sends via `sendBeacon`,
+which the browser delivers even after the page is gone.
 
 **"First job created":** PostHog funnels count the *first* occurrence per person,
 so `job_created` doubles as "first job created" — no separate event needed.
