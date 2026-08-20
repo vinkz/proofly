@@ -1242,9 +1242,24 @@ export function SoloJobForm({
             // is the only place left that asks for them. Skipping it here would
             // produce a certificate with no landlord on it.
             const handedOverEarly = timing === 'now' && path === 'self';
+            // An upcoming CP12 skips step one because this form asks for the
+            // landlord itself. Nothing here makes those fields mandatory though,
+            // so the job can be created with them blank — and step one is the
+            // only other place that asks. Skipping it then is the worst of both:
+            // the engineer fills in every appliance, presses Issue, and is told
+            // the certificate is missing a landlord nothing ever asked them for,
+            // with the screen that collects it behind a Back button they have no
+            // reason to press. Require exactly what step one would have demanded
+            // before agreeing to skip it.
+            const cp12LandlordCaptured =
+              isCp12Upcoming
+              && Boolean(landlordName.trim())
+              && Boolean(landlordAddressLine1.trim())
+              && Boolean(landlordCity.trim())
+              && Boolean(landlordPostcode.trim());
             const shouldSkipFirstWizardStep =
               !handedOverEarly &&
-              (Boolean(selectedPropertyKey) || isCp12Upcoming || jobType === 'warning_notice');
+              (Boolean(selectedPropertyKey) || cp12LandlordCaptured || jobType === 'warning_notice');
             const href = shouldSkipFirstWizardStep
               ? `/wizard/create/${wizardRoute}?jobId=${jobId}&startStep=2`
               : `/wizard/create/${wizardRoute}?jobId=${jobId}`;
