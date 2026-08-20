@@ -293,14 +293,12 @@ export async function updateProfileBasics(payload: {
     await upsertProfile(profileSb, user.id, { onboarding_complete: profileComplete });
   }
 
-  // Onboarding just became complete for the first time — send the trial welcome
+  // Onboarding just became complete for the first time — send the welcome
   // email. Best-effort; sendWelcomeEmail never throws.
   if (!wasOnboardingComplete && profileComplete) {
     await sendWelcomeEmail({
       email: user.email,
       fullName: (savedProfile as { full_name?: string | null } | null)?.full_name ?? parsed.full_name,
-      profileSb,
-      userId: user.id,
     });
   }
 

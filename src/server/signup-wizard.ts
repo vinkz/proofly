@@ -179,8 +179,6 @@ export async function completeSignupWizard(payload: unknown) {
     await sendWelcomeEmail({
       email: userEmail,
       fullName: profile.full_name,
-      profileSb,
-      userId,
     });
   }
 
